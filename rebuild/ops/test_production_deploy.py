@@ -8,6 +8,7 @@ import ast
 from decimal import Decimal, ROUND_HALF_UP
 import functools
 import hashlib
+import importlib.util
 import io
 import ipaddress
 import json
@@ -26,10 +27,12 @@ try:
     from . import deployment_profile
     from . import release_artifact
     from . import render_production_environment as renderer
+    from . import service_launcher as launcher
 except ImportError:
     import deployment_profile
     import release_artifact
     import render_production_environment as renderer
+    import service_launcher as launcher
 
 REBUILD = Path(__file__).resolve().parents[1]
 PRODUCTION = REBUILD / 'deploy' / 'production'
@@ -634,20 +637,191 @@ def attribute_path(node):
     return node, parts[::-1]
 
 
-def provider_caps(path):
-    """[(where, cap)] for every provider call in one file. Fails closed, naming the call, on anything it cannot trace:
-    a provider-shaped call whose receiver is not a client constructed and bound to a name in this file; a client
-    constructed anywhere else (returned, passed on, called inline); a client name bound any other way or used any
-    other way; a view (with_options, with_raw_response, with_streaming_response, copy); extra_body, extra_query,
-    extra_headers, `**` or positional arguments; not exactly one output cap; a cap that is not one number."""
-    tree = ast.parse(path.read_text())
-    constants = int_constants(tree)
-    counts, _ = bindings(tree)
-    name = path.relative_to(REBUILD.parent)
+PROFILE_CAP_KEY = 'max_output_tokens'
+PROFILE_SOURCE = 'job_request_profile'
+
+
+def parent_map(tree):
     parents = {}
     for node in ast.walk(tree):
         for child in ast.iter_child_nodes(node):
             parents[child] = node
+    return parents
+
+
+def enclosing_function(node, parents):
+    while node in parents:
+        node = parents[node]
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            return node
+    return None
+
+
+def is_profile_cap(node):
+    """Exactly `profile['max_output_tokens']`: the output cap of the job's request profile."""
+    return (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == 'profile'
+            and isinstance(node.slice, ast.Constant) and node.slice.value == PROFILE_CAP_KEY)
+
+
+def int_tables(tree, constants):
+    """Module-level names whose ONLY binding is one assignment of a dict literal whose values are all ints."""
+    counts, _ = bindings(tree)
+    tables = {}
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Dict) and counts.get(node.targets[0].id) == 1
+                and node.value.keys and all(key is not None for key in node.value.keys)):
+            try:
+                tables[node.targets[0].id] = frozenset(resolve(value, constants, '') for value in node.value.values)
+            except Unresolved:
+                continue
+    return tables
+
+
+def profile_cap_values(tree, constants, where):
+    """Every output cap a request profile in this module can carry: the value under 'max_output_tokens' in every dict
+    literal, each an int, a constant name, or a module-level table of ints indexed by anything (every value counts).
+    Fails closed on any other way to write that key: a dict value it cannot resolve, a subscript store or delete, a
+    keyword argument outside a provider call, or a method call naming the key other than a `.get` read."""
+    tables = int_tables(tree, constants)
+    values = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if not (isinstance(key, ast.Constant) and key.value == PROFILE_CAP_KEY):
+                    continue
+                if (isinstance(value, ast.Subscript) and isinstance(value.value, ast.Name)
+                        and value.value.id in tables):
+                    values |= tables[value.value.id]
+                else:
+                    values.add(resolve(value, constants, f'{where}: a request profile cap'))
+        elif (isinstance(node, ast.Subscript) and isinstance(node.ctx, (ast.Store, ast.Del))
+              and isinstance(node.slice, ast.Constant) and node.slice.value == PROFILE_CAP_KEY):
+            raise Unresolved(f'{where}: line {node.lineno} writes a request profile cap outside a profile literal')
+        elif isinstance(node, ast.Call):
+            method = node.func.attr if isinstance(node.func, ast.Attribute) else None
+            if any(keyword.arg == PROFILE_CAP_KEY for keyword in node.keywords) and method not in PROVIDER_METHODS:
+                raise Unresolved(f'{where}: line {node.lineno} passes {PROFILE_CAP_KEY}= outside a provider call')
+            if (any(isinstance(arg, ast.Constant) and arg.value == PROFILE_CAP_KEY for arg in node.args)
+                    and method != 'get'):
+                raise Unresolved(f'{where}: line {node.lineno} names {PROFILE_CAP_KEY} in a call that may write it')
+    if not values:
+        raise Unresolved(f'{where}: no request profile sets {PROFILE_CAP_KEY}')
+    return frozenset(values)
+
+
+def check_profile_source(tree, function, parents, where, depth=0):
+    """`profile` in `function` must be the job's request profile: bound exactly once in the function, by
+    `profile = job_request_profile(...)`, or a parameter never rebound that EVERY call of the function in this module
+    fills with such a name. Anything else — a second binding, a default, another source, the function referenced
+    without being called — fails closed."""
+    counts, _ = bindings(tree)
+    if depth > 3 or isinstance(function, ast.Lambda) or counts.get(PROFILE_SOURCE) != 1:
+        raise Unresolved(f'{where}: the request profile cannot be traced to {PROFILE_SOURCE}')
+    arguments = function.args
+    positional = [arg.arg for arg in arguments.posonlyargs + arguments.args]
+    parameters = positional + [arg.arg for arg in arguments.kwonlyargs]
+    stores = [node for node in ast.walk(function)
+              if isinstance(node, ast.Name) and node.id == 'profile' and isinstance(node.ctx, (ast.Store, ast.Del))]
+    stores += [node for node in ast.walk(function) if isinstance(node, (ast.Global, ast.Nonlocal)) and 'profile' in node.names]
+    if 'profile' in parameters:
+        index = positional.index('profile') if 'profile' in positional else None
+        defaulted = (index >= len(positional) - len(arguments.defaults) if index is not None else
+                     arguments.kw_defaults[[arg.arg for arg in arguments.kwonlyargs].index('profile')] is not None)
+        if stores or defaulted:
+            raise Unresolved(f'{where}: the profile parameter of {function.name} is rebound or has a default')
+        calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name) and node.func.id == function.name]
+        references = [node for node in ast.walk(tree) if isinstance(node, ast.Name) and node.id == function.name]
+        if not calls or len(references) != len(calls) or counts.get(function.name) != 1:
+            raise Unresolved(f'{where}: {function.name} is bound or used other than by direct calls')
+        for call in calls:
+            given = [keyword.value for keyword in call.keywords if keyword.arg == 'profile']
+            if (any(isinstance(arg, ast.Starred) for arg in call.args)
+                    or any(keyword.arg is None for keyword in call.keywords)):
+                raise Unresolved(f'{where}: a call of {function.name} at line {call.lineno} hides its arguments')
+            if index is not None and index < len(call.args):
+                given.append(call.args[index])
+            if len(given) != 1 or not (isinstance(given[0], ast.Name) and given[0].id == 'profile'):
+                raise Unresolved(f'{where}: {function.name} at line {call.lineno} is not given the job profile')
+            caller = enclosing_function(call, parents)
+            if caller is None:
+                raise Unresolved(f'{where}: {function.name} is called at module level')
+            check_profile_source(tree, caller, parents, where, depth + 1)
+        return
+    if len(stores) != 1:
+        raise Unresolved(f'{where}: profile is bound {len(stores)} times in {getattr(function, "name", "?")}')
+    holder = parents.get(stores[0])
+    if not (isinstance(holder, ast.Assign) and holder.targets == [stores[0]] and isinstance(holder.value, ast.Call)
+            and isinstance(holder.value.func, ast.Name) and holder.value.func.id == PROFILE_SOURCE):
+        raise Unresolved(f'{where}: profile is not bound by {PROFILE_SOURCE}(...)')
+
+
+def cap_value(tree, node, constants, parents, where):
+    """('int', {n}) for a cap that is one number; ('profile', {caps}) for the job's request-profile cap."""
+    if is_profile_cap(node):
+        function = enclosing_function(node, parents)
+        if function is None:
+            raise Unresolved(f'{where}: a profile cap outside any function')
+        check_profile_source(tree, function, parents, where)
+        return 'profile', profile_cap_values(tree, constants, where)
+    return 'int', frozenset({resolve(node, constants, where)})
+
+
+def built_request(tree, node, where):
+    """[(keyword, value)] of a provider call written `**builder(...)`. Allowed only when `builder` is a module-level
+    function bound once, whose last statement returns a name bound once, in its body, to a dict literal with
+    constant string keys and no `**`; every other use of that name in the builder must store one constant key that is
+    neither an output cap nor an override (`request['thinking'] = ...`). Anything else fails closed."""
+    counts, _ = bindings(tree)
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+        raise Unresolved(f'{where}: ** of something other than a call of a request builder hides the request')
+    functions = [item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == node.func.id]
+    if len(functions) != 1 or counts.get(node.func.id) != 1:
+        raise Unresolved(f'{where}: the request builder {node.func.id} is not one module-level function')
+    builder = functions[0]
+    returns = [item for item in ast.walk(builder) if isinstance(item, ast.Return)]
+    last = builder.body[-1]
+    if returns != [last] or not isinstance(last.value, ast.Name):
+        raise Unresolved(f'{where}: {builder.name} does not end by returning one name')
+    request = last.value.id
+    literal = None
+    for item in builder.body:
+        if (isinstance(item, ast.Assign) and len(item.targets) == 1 and isinstance(item.targets[0], ast.Name)
+                and item.targets[0].id == request):
+            if literal is not None:
+                raise Unresolved(f'{where}: {builder.name} binds {request} more than once')
+            literal = item.value
+    if not isinstance(literal, ast.Dict) or any(
+            not (isinstance(key, ast.Constant) and isinstance(key.value, str)) for key in literal.keys):
+        raise Unresolved(f'{where}: {builder.name} does not build {request} as a dict literal of constant keys')
+    parents = parent_map(builder)
+    for use in ast.walk(builder):
+        if not (isinstance(use, ast.Name) and use.id == request) or use is last.value:
+            continue
+        holder = parents.get(use)
+        if isinstance(holder, ast.Assign) and holder.value is literal and holder.targets == [use]:
+            continue
+        if (isinstance(holder, ast.Subscript) and holder.value is use and isinstance(holder.ctx, ast.Store)
+                and isinstance(holder.slice, ast.Constant) and isinstance(holder.slice.value, str)
+                and holder.slice.value not in OUTPUT_CAPS and holder.slice.value not in OVERRIDES):
+            continue
+        raise Unresolved(f'{where}: {builder.name} uses {request} at line {use.lineno} in a way that can change the request')
+    return [(key.value, value) for key, value in zip(literal.keys, literal.values)]
+
+
+def provider_caps(path):
+    """[(where, (kind, caps))] for every provider call in one file. Fails closed, naming the call, on anything it
+    cannot trace: a provider-shaped call whose receiver is not a client constructed and bound to a name in this file;
+    a client constructed anywhere else (returned, passed on, called inline); a client name bound any other way or used
+    any other way; a view (with_options, with_raw_response, with_streaming_response, copy); extra_body, extra_query,
+    extra_headers, positional arguments, or `**` other than one request builder `built_request` can read; not exactly
+    one output cap; a cap that is neither one number nor the job's request-profile cap (`cap_value`)."""
+    tree = ast.parse(path.read_text())
+    constants = int_constants(tree)
+    counts, _ = bindings(tree)
+    name = path.relative_to(REBUILD.parent)
+    parents = parent_map(tree)
     imported = {}  # local name -> provider client class, for `from anthropic import Anthropic as A`
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and (node.module or '').split('.')[0] in PROVIDER_MODULES:
@@ -699,15 +873,21 @@ def provider_caps(path):
             raise Unresolved(f'{where}: a provider client call this check does not know')
         if INDIRECTIONS & set(parts):
             raise Unresolved(f'{where}: reached through {sorted(INDIRECTIONS & set(parts))}, which can change options')
-        if any(keyword.arg is None for keyword in node.keywords) or node.args:
-            raise Unresolved(f'{where}: ** or positional arguments hide the request')
-        overriding = sorted(OVERRIDES & {keyword.arg for keyword in node.keywords})
+        if node.args:
+            raise Unresolved(f'{where}: positional arguments hide the request')
+        if any(keyword.arg is None for keyword in node.keywords):
+            if len(node.keywords) != 1:
+                raise Unresolved(f'{where}: ** beside other keywords hides the request')
+            keywords = built_request(tree, node.keywords[0].value, where)
+        else:
+            keywords = [(keyword.arg, keyword.value) for keyword in node.keywords]
+        overriding = sorted(OVERRIDES & {key for key, _ in keywords})
         if overriding:
             raise Unresolved(f'{where}: {overriding} can override the output cap')
-        found = [keyword for keyword in node.keywords if keyword.arg in OUTPUT_CAPS]
+        found = [value for key, value in keywords if key in OUTPUT_CAPS]
         if len(found) != 1:
             raise Unresolved(f'{where}: {len(found)} output caps (exactly one is required)')
-        caps.append((where, resolve(found[0].value, constants, where)))
+        caps.append((where, cap_value(tree, found[0], constants, parents, where)))
     return caps
 
 
@@ -717,7 +897,8 @@ def all_provider_caps():
 
 
 def maximum_cost_terms():
-    """(input overhead tokens, output tokens) in core/generation.py's maximum_cost, each traced to one number."""
+    """(input overhead tokens, (kind, output caps)) in core/generation.py's maximum_cost: the overhead traced to one
+    number, the output term to one number or to the job's request-profile cap (`cap_value`)."""
     tree = ast.parse(GENERATION.read_text())
     constants = int_constants(tree)
     functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == 'maximum_cost']
@@ -738,7 +919,8 @@ def maximum_cost_terms():
         raise Unresolved(f'{where}: input term {ast.unparse(inputs)} is not Decimal(len(request) + overhead)')
     if not (isinstance(output, ast.Call) and chain(output.func) == ['Decimal'] and len(output.args) == 1):
         raise Unresolved(f'{where}: output term {ast.unparse(output)} is not Decimal(tokens)')
-    return resolve(inputs.args[0].right, constants, where), resolve(output.args[0], constants, where)
+    return (resolve(inputs.args[0].right, constants, where),
+            cap_value(tree, output.args[0], constants, parent_map(tree), where))
 
 
 def number(text):
@@ -748,33 +930,40 @@ def number(text):
 class ProductionCostDocumentTests(unittest.TestCase):
     """production-cost.md restates the application's own generation bound; its numbers must be the code's."""
 
-    def test_every_provider_output_cap_is_one_number_and_the_one_the_document_states(self):
+    def test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states(self):
         raw = COST_DOCUMENT.read_text()
         text = ' '.join(raw.split())
-        stated = re.search(r'an output cap of ([0-9,]+) tokens on each provider call', text)
-        self.assertIsNotNone(stated, 'the document no longer states the output cap it assumes')
+        stated = re.search(r'The output caps a request profile can set are ([0-9, and]+?) tokens', text)
+        self.assertIsNotNone(stated, 'the document no longer states the output caps it assumes')
+        stated_caps = frozenset(number(value) for value in re.findall(r'[0-9]{1,3}(?:,[0-9]{3})*', stated.group(1)))
         caps = all_provider_caps()
         self.assertTrue(caps, 'no provider call was found, so nothing was checked')
-        for where, cap in caps:
-            with self.subTest(call=where):
-                self.assertEqual(cap, number(stated.group(1)))
-        bound = re.search(r'\(request bytes \+ ([0-9,]+)\) input tokens plus ([0-9,]+) output tokens', text)
+        bound = re.search(r"\(request bytes \+ ([0-9,]+)\) input tokens plus the request profile's output cap", text)
         self.assertIsNotNone(bound, 'the document no longer states the bound formula')
         overhead, output = maximum_cost_terms()
-        self.assertEqual((overhead, output), (number(bound.group(1)), number(bound.group(2))))
-        # The bound is a bound only if it covers what a call can return.
-        self.assertGreaterEqual(output, max(cap for _, cap in caps))
+        self.assertEqual(overhead, number(bound.group(1)))
+        # The hold prices exactly the cap each call sends: the same number, or the same job's request-profile cap.
+        self.assertEqual(output, ('profile', stated_caps))
+        for where, cap in caps:
+            with self.subTest(call=where):
+                self.assertEqual(cap, output)
 
     def test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code(self):
         raw = COST_DOCUMENT.read_text()
         text = ' '.join(raw.split())
         rates = re.search(r'\$(\d+) per million input tokens, \$(\d+) per million output tokens', text)
         input_rate, output_rate = (Decimal(value) / 1000000 for value in rates.groups())
-        overhead, output = maximum_cost_terms()
-        cap = min(cap for _, cap in all_provider_caps())
-        stated = re.search(r'a 20,000-byte request is bounded at (?:[^.]*?= )?\**\$([0-9]+\.[0-9]+)', text)
-        self.assertIsNotNone(stated)
-        self.assertEqual(Decimal(stated.group(1)), (20000 + overhead) * input_rate + output * output_rate)
+        overhead, (_, caps) = maximum_cost_terms()
+        sentence = re.search(r'a 20,000-byte request is bounded at (.*?)\.(?:\s|$)', text)
+        self.assertIsNotNone(sentence)
+        pairs = re.findall(r'\*\*\$([0-9]+\.[0-9]{3})\*\* \(([0-9]{1,3}(?:,[0-9]{3})*)-token cap', sentence.group(1))
+        self.assertTrue(pairs, 'the document no longer states the bound for any cap')
+        stated_caps = {number(cap) for _, cap in pairs}
+        self.assertLessEqual(stated_caps, caps)
+        self.assertIn(max(caps), stated_caps)  # the worst case is always stated
+        for cost, cap in pairs:
+            with self.subTest(cap=cap):
+                self.assertEqual(Decimal(cost), (20000 + overhead) * input_rate + number(cap) * output_rate)
         lines = raw.splitlines()
         header = lines.index('| Generation | Input tokens | Output tokens | Cost |')
         self.assertTrue(re.fullmatch(r'\|(?: -+:? \|)+', lines[header + 1]), lines[header + 1])
@@ -794,9 +983,82 @@ class ProductionCostDocumentTests(unittest.TestCase):
                 output_calls, _, per_call_output = output_cell.rpartition(' x ')
                 self.assertEqual(calls, output_calls)
                 calls = int(calls or 1)
-                self.assertLessEqual(number(per_call_output), cap)  # no call can return more than the cap
+                self.assertLessEqual(number(per_call_output), max(caps))  # no call can return more than a cap
                 expected = calls * (number(per_call_input) * input_rate + number(per_call_output) * output_rate)
                 self.assertEqual(Decimal(cost), expected.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP))
+
+
+class ApplicationContractTests(unittest.TestCase):
+    """The production launcher and the application agree: what the launcher starts is a configuration the application's
+    own settings accept in real data mode with live payments. (Two streams named the same switches differently:
+    the launcher forced QUILLMD_DATA_MODE=real-patient, which the settings refuse, and QUILLMD_PAYMENT_MODE, which
+    nothing reads; and the renderer could not deliver QUILLMD_STRIPE_MODE, QUILLMD_REGISTRATION or
+    QUILLMD_MFA_REQUIRED_ALL, without which real mode refuses to start.)"""
+
+    SECRET = {
+        'QUILLMD_DEPLOYMENT_PROFILE': 'production', 'QUILLMD_SECRET_KEY': 's' * 50, 'QUILLMD_RELEASE_SHA': 'c' * 40,
+        'QUILLMD_DB_PASSWORD': 'synthetic', 'QUILLMD_HTTPS': '1', 'QUILLMD_TRUST_PROXY': '1',
+        'QUILLMD_EMAIL_MODE': 'resend', 'QUILLMD_EMAIL_FROM': 'QuillMD <no-reply@quillmd.com>',
+        'QUILLMD_EMAIL_VERIFIED_DOMAIN': 'quillmd.com', 'RESEND_API_KEY': 're_synthetic',
+        'QUILLMD_AI_MODE': 'live', 'QUILLMD_AI_PROVIDER': 'anthropic', 'QUILLMD_AI_MODEL': 'claude-sonnet-5',
+        'QUILLMD_AI_INPUT_RATE': '2', 'QUILLMD_AI_OUTPUT_RATE': '10', 'QUILLMD_AI_CACHED_RATE': '0.20',
+        'ANTHROPIC_API_KEY': 'synthetic', 'DEEPGRAM_API_KEY': 'synthetic', 'QUILLMD_DEEPGRAM_RATE_PER_MINUTE': '0.0043',
+        'STRIPE_SECRET_KEY': 'rk_live_synthetic', 'STRIPE_WEBHOOK_SECRET': 'whsec_synthetic',
+    }
+    SETTINGS_PROBE = ("import os; os.environ['DJANGO_SETTINGS_MODULE'] = 'quillmd.settings'; import quillmd.settings as s; "
+                      "print(s.QUILLMD_DATA_MODE, s.QUILLMD_STRIPE_MODE, s.QUILLMD_REGISTRATION, s.QUILLMD_MFA_REQUIRED_ALL)")
+
+    def launched_environment(self, surface='doctor'):
+        profile = deployment_profile.validate(self.profile_raw(), sha256='cd' * 32)
+        secret = dict(self.SECRET, QUILLMD_APP_BASE_URL=profile.doctor_origin, QUILLMD_DB_NAME=profile.database_name,
+                      QUILLMD_DB_USER=profile.roles['runtime'], QUILLMD_DB_HOST=profile.database_host,
+                      QUILLMD_DB_PORT=str(profile.database_port))
+        # Everything the secret carries is a name the renderer may write.
+        self.assertLessEqual(set(secret), deployment_profile.ENVIRONMENT_NAMES)
+        previous_umask, previous_tempdir = os.umask(0o022), tempfile.tempdir
+        try:
+            with patch.dict(os.environ, secret, clear=True):
+                launcher.prepare_production_environment(surface, profile)
+                return dict(os.environ)
+        finally:
+            os.umask(previous_umask)
+            tempfile.tempdir = previous_tempdir
+
+    @staticmethod
+    def profile_raw():
+        raw = json.loads(deployment_profile.PROFILE_PATH.read_text())
+        raw['database']['host'] = HOST
+        raw['database']['tls']['ca_bundle_sha256'] = 'ab' * 32
+        return raw
+
+    def settings_import(self, environment):
+        return subprocess.run([sys.executable, '-c', self.SETTINGS_PROBE], cwd=REBUILD, capture_output=True, text=True,
+                              timeout=60, env=dict(environment, PATH=os.environ.get('PATH', '/usr/bin:/bin')))
+
+    def test_the_launched_environment_starts_the_application_in_real_and_live_mode(self):
+        for surface in ('doctor', 'admin', 'worker'):
+            with self.subTest(surface=surface):
+                started = self.settings_import(self.launched_environment(surface))
+                self.assertEqual(started.returncode, 0, started.stderr[-600:])
+                self.assertEqual(started.stdout.split(), ['real', 'live', 'invite', 'True'])
+
+    def test_the_settings_probe_can_fail(self):
+        # Negative controls: the probe refuses what the application refuses, so its pass above means something.
+        launched = self.launched_environment()
+        for changes in ({'QUILLMD_DATA_MODE': 'real-patient'}, {'QUILLMD_REGISTRATION': 'open'},
+                        {'QUILLMD_MFA_REQUIRED_ALL': '0'}, {'QUILLMD_STRIPE_MODE': 'test'}):
+            with self.subTest(changes=changes):
+                self.assertNotEqual(self.settings_import(dict(launched, **changes)).returncode, 0)
+
+    def test_the_profile_doctor_origin_is_the_host_the_application_links_to(self):
+        spec = importlib.util.spec_from_file_location('application_profile', REBUILD / 'quillmd' / 'application_profile.py')
+        application = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(application)
+        self.assertEqual(PROFILE.doctor_origin, 'https://' + application.DOCTOR_HOST)
+        allowed = ast.literal_eval(re.search(r'^ALLOWED_HOSTS = (\[.*\])$', (REBUILD / 'quillmd' / 'settings.py').read_text(),
+                                             re.M).group(1))
+        self.assertIsNone(application.public_https_origin_problem(PROFILE.doctor_origin, allowed))
+        self.assertIn(PROFILE.admin_origin.removeprefix('https://'), allowed)
 
 
 class BootstrapScriptTests(unittest.TestCase):

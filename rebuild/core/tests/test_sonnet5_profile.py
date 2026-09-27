@@ -616,6 +616,14 @@ class OutcomeFixture(SyntheticFixture):
                                         service_date=original.service_date, notes=original.notes,
                                         answers=original.answers)
 
+    def unreviewed_encounter(self):
+        """A fresh encounter whose draft carries no clinician decision. The page offers generation only then: once a
+        clinician has reviewed, generating is refused before any quote is read (`views.clinician_decided`)."""
+        encounter = self.fresh_encounter()
+        encounter.answers = {key: {**answer, 'reviewed': False} for key, answer in encounter.answers.items()}
+        encounter.save(update_fields=['answers'])
+        return encounter
+
     def run_job(self, encounter, reply):
         with patch('anthropic.Anthropic') as client:
             client.return_value.messages.create.return_value = reply
@@ -726,7 +734,7 @@ class QuoteAcrossAModelSwitch(OutcomeFixture, TestCase):
         return self.client.get(f'/encounters/{encounter.pk}/', **kwargs)
 
     def test_a_page_loaded_under_sonnet_5_cannot_queue_it_after_the_rollback(self):
-        encounter = self.fresh_encounter()
+        encounter = self.unreviewed_encounter()
         with override_settings(**SONNET_5):
             quote = self.page(encounter).context['usage_quote']
         with override_settings(**SONNET_46), patch('anthropic.Anthropic') as client:
@@ -856,7 +864,7 @@ class ModeSwitch(OutcomeFixture, TestCase):
         for label, quoted_under, clicked_under in (('live -> fixture', SONNET_46, self.FIXTURE),
                                                    ('fixture -> live', self.FIXTURE, SONNET_46)):
             with self.subTest(switch=label):
-                encounter = self.fresh_encounter()
+                encounter = self.unreviewed_encounter()
                 answers = encounter.answers
                 with override_settings(**quoted_under):
                     quote = self.page(encounter).context['usage_quote']

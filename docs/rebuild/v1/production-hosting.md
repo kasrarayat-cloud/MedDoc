@@ -48,6 +48,22 @@ validated by `rebuild/ops/deployment_profile.py`:
 | public origins | `https://app.quillmd.com`, `https://admin.quillmd.com` | preview `:9443` |
 | modes | data `real-patient`, payment `stripe-live`, email `resend` (no-PHI fixed templates), AI `anthropic`/`live` | synthetic-only, Stripe test, file or allowlisted Resend |
 
+**The profile's modes become the application's own settings.** The profile's words (`real-patient`,
+`stripe-live`) are not values the application accepts, and `QUILLMD_PAYMENT_MODE` is a name it never
+read. The launcher therefore forces the application's settings from the modes
+(`deployment_profile.application_settings`): `QUILLMD_DATA_MODE=real`, `QUILLMD_STRIPE_MODE=live`,
+and the account policy real data mode requires, `QUILLMD_REGISTRATION=invite` and
+`QUILLMD_MFA_REQUIRED_ALL=1`. A rendered value may only repeat them (refusals `data_mode`,
+`payment_mode`, `account_policy`). The renderer may also write the Sonnet 5 request settings
+(`QUILLMD_AI_THINKING`, `QUILLMD_AI_EFFORT`, `QUILLMD_AI_INFERENCE_GEO`) and `QUILLMD_WELCOME_CREDIT`.
+`ApplicationContractTests` imports the settings module in the environment the launcher produces for
+each surface and requires real data mode and live payments with no refusal; its negative controls
+show the same probe refusing the profile's own word, open registration, optional MFA and test
+payments. Before any surface starts, the launcher runs the read-only
+`manage.py real_mode_payment_check` (refusal `real_mode_payments`), so real data mode never serves a
+database that holds sandbox payment evidence. (Reconciled when the streams were merged into
+`release/v1`; each stream had been correct on its own terms.)
+
 Refusals, all with fixed labels and all tested:
 
 - **Missing or unactivated record.** The RDS endpoint cannot be known before provisioning, and the

@@ -82,31 +82,40 @@ $32.85/month plus $0.045/GB.
 (verified by the model investigation from platform.claude.com on 2026-09-27). Its tokenizer produces
 about 30% more tokens than Sonnet 4.6 for the same text; if the workspace uses US-only inference
 (`inference_geo`), every token costs 1.1x (whether it does is unknown). The application's own bound
-for a form generation is (request bytes + 12,000) input tokens plus 6,000 output tokens
-(`core/generation.py`, `maximum_cost`), so a 20,000-byte request is bounded at
-32,000 x $2/M + 6,000 x $10/M = **$0.124**.
+for a form generation is (request bytes + 12,000) input tokens plus the request profile's output cap
+(`core/generation.py`, `maximum_cost`). At Sonnet 5's rates a 20,000-byte request is bounded at
+**$0.144** (8,000-token cap, thinking disabled) or **$0.224** (16,000-token cap, adaptive thinking):
+32,000 x $2/M + 8,000 x $10/M, and 32,000 x $2/M + 16,000 x $10/M.
 
-**Output cap this table assumes:** this release's code sets an output cap of 6,000 tokens on each
-provider call (`max_tokens=6000` on the Anthropic call, `max_output_tokens=6000` on the OpenAI call,
-`core/generation.py`), and no row of the table exceeds it. A test parses every application Python
-file under `rebuild/` (tests excluded). It fails, naming the call, when a provider call's receiver
-cannot be traced to a client constructed and bound to one name in that file; when the call goes
-through `with_options`, `with_raw_response`, `with_streaming_response` or `copy`; when it carries
-`extra_body`, `extra_query`, `extra_headers`, `**` or positional arguments; when it has not exactly
-one output cap; or when the cap is not an int literal or a module-level name whose only binding
-anywhere in the module is one assignment of an int literal. It also fails when a cap or
-`maximum_cost` differs from what this page states, or any row of the table exceeds the cap. It reads
-source only: a cap changed at run time by other means (a patched SDK, a proxy) is outside it. The
-separate Sonnet 5 migration stream sets 8,000 for its thinking-disabled profile and 16,000 for
-adaptive thinking. If that ships, the output term rises with the cap (and that test fails until this
-page is updated): by the same formula a 20,000-byte request is bounded at $0.144 (8,000) or $0.224
-(16,000), and the High row must be recomputed.
+**Output caps this table assumes:** the output cap of each provider call is the job's request
+profile's `max_output_tokens`, the same value `maximum_cost` prices, so the hold always covers the cap
+that is sent. The output caps a request profile can set are 6,000, 8,000 and 16,000 tokens: 6,000 under
+the legacy profile that serves the rollback models (`claude-sonnet-4-6` and the other listed legacy
+ids, at their own rates), 8,000 under Sonnet 5 with thinking disabled and 16,000 under Sonnet 5 with
+adaptive thinking (`request_profile`). A stored profile is refused before anything is sent if its cap
+is not an int between 1 and 21,333 (`job_request_profile`). Which thinking mode V1 uses is decided on
+the bounded live check; the table assumes the larger cap.
+
+A test parses every application Python file under `rebuild/` (tests excluded). It fails, naming the
+call, when a provider call's receiver cannot be traced to a client constructed and bound to one name
+in that file; when the call goes through `with_options`, `with_raw_response`,
+`with_streaming_response` or `copy`; when it carries `extra_body`, `extra_query`, `extra_headers` or
+positional arguments; when it uses `**` other than on one module-level request builder that returns a
+dict literal with constant keys, extended only by keys that are neither an output cap nor an
+override; when it has not exactly one output cap; or when the cap is neither one number (an int
+literal, or a module-level name whose only binding is one assignment of an int literal) nor exactly
+`profile['max_output_tokens']` with `profile` bound once by `job_request_profile(...)` (or passed, as
+that same name, by every call of the builder). The set of profile caps is read from every
+`'max_output_tokens'` entry of a dict literal in the module; any other way of writing that key fails
+the test. It also fails when `maximum_cost` does not price the same cap the calls send, when the caps
+or the bound differ from what this page states, or when any row of the table exceeds the largest cap.
+It reads source only: a cap changed at run time by other means (a patched SDK, a proxy) is outside it.
 
 | Generation | Input tokens | Output tokens | Cost |
 | --- | ---: | ---: | ---: |
 | Low (short typed note, small form) | 6,000 | 1,500 | $0.027 |
 | Expected (8-minute visit, typical form) | 12,000 | 3,000 | $0.054 |
-| High (narrative form, output at the 6,000-token cap, one repeat) | 2 x 25,000 | 2 x 6,000 | $0.220 |
+| High (narrative form, output at the 16,000-token cap, one repeat) | 2 x 25,000 | 2 x 16,000 | $0.420 |
 
 These token counts are estimates, not measurements: Sonnet 5 has not been run on the production
 workload. Re-baseline on the synthetic set before paid use, as the model migration plan requires.

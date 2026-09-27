@@ -419,8 +419,11 @@ class ProductionProfileSelectionTests(unittest.TestCase):
         def execute(*args):
             calls.append(('exec', args))
             raise ExecSentinel()
+        payment_check = {'command': 'real_mode_payment_check', 'passed': True}
         with patch.object(launcher, 'production_profile', return_value=profile), \
-                patch.object(launcher, 'probe_production', return_value={'passed': True}), \
+                patch.object(launcher, 'probe_production', return_value={'passed': True, 'checks': {}}), \
+                patch.object(launcher, 'real_mode_payments', side_effect=lambda given: calls.append(('payments', given))
+                             or payment_check), \
                 patch.object(launcher, 'probe') as private_probe, \
                 patch.object(launcher, 'save_proof', side_effect=lambda *args: calls.append(('proof',) + args)), \
                 patch.object(launcher.os, 'chdir', side_effect=lambda path: calls.append(('chdir', path))), \
@@ -430,7 +433,9 @@ class ProductionProfileSelectionTests(unittest.TestCase):
         private_probe.assert_not_called()
         command = ['/opt/quillmd-production/rebuild/.venv/bin/python', '-m', 'gunicorn', 'quillmd.wsgi:application',
                    '--bind', '127.0.0.1:9141', '--workers', '1', '--timeout', '120']
-        self.assertEqual(calls, [('proof', 'admin', {'passed': True}, Path('/var/lib/quillmd-production')),
+        self.assertEqual(calls, [('payments', profile),
+                                 ('proof', 'admin', {'passed': True, 'checks': {'real_mode_payments': payment_check}},
+                                  Path('/var/lib/quillmd-production')),
                                  ('chdir', Path('/opt/quillmd-production/rebuild')),
                                  ('exec', (command[0], command))])
 
@@ -447,6 +452,46 @@ class ProductionCommandTests(unittest.TestCase):
             with self.subTest(surface=surface), self.assertRaises(launcher.BoundaryFailure):
                 launcher.production_command(surface, profile)
         self.assertNotEqual(launcher.production_command('doctor', profile), launcher.fixed_command('doctor'))
+
+
+class RealModePaymentCheckTests(unittest.TestCase):
+    """The launcher runs the read-only payment check in the prepared environment and starts nothing unless it passes."""
+
+    def run_check(self, **behaviour):
+        profile = ProductionProfileFixture.profile()
+        with patch.object(launcher.subprocess, 'run', **behaviour) as run:
+            return outcome(lambda: launcher.real_mode_payments(profile)), run, profile
+
+    def test_exit_zero_passes_and_the_command_is_the_profiles(self):
+        result, run, profile = self.run_check(return_value=SimpleNamespace(returncode=0))
+        self.assertEqual(result, ('accepted', {'command': 'real_mode_payment_check', 'passed': True}))
+        argv = run.call_args.args[0]
+        self.assertEqual(argv, [str(profile.python), str(profile.app_root / 'manage.py'), 'real_mode_payment_check'])
+        self.assertEqual(run.call_args.kwargs['cwd'], str(profile.app_root))
+        self.assertIs(run.call_args.kwargs['stdout'], launcher.subprocess.DEVNULL)  # counts are not relayed
+        self.assertIs(run.call_args.kwargs['stderr'], launcher.subprocess.DEVNULL)
+
+    def test_any_failure_refuses_with_one_label(self):
+        for behaviour in ({'return_value': SimpleNamespace(returncode=1)},
+                          {'return_value': SimpleNamespace(returncode=-9)},
+                          {'side_effect': launcher.subprocess.TimeoutExpired('manage.py', 120)},
+                          {'side_effect': FileNotFoundError(2, 'missing')},
+                          {'side_effect': PermissionError(13, 'denied')}):
+            with self.subTest(behaviour=behaviour):
+                self.assertEqual(self.run_check(**behaviour)[0], ('refused', 'real_mode_payments'))
+
+    def test_a_failed_check_saves_no_proof_and_starts_nothing(self):
+        profile = ProductionProfileFixture.profile()
+        output = io.StringIO()
+        with patch.object(launcher, 'production_profile', return_value=profile), \
+                patch.object(launcher, 'probe_production', return_value={'passed': True, 'checks': {}}), \
+                patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(returncode=1)), \
+                patch.object(launcher, 'save_proof') as proof, patch.object(launcher.os, 'execv') as execute, \
+                patch.object(launcher.os, 'chdir'), contextlib.redirect_stdout(output):
+            self.assertEqual(launcher.main(['--surface', 'worker', '--profile', 'production']), 1)
+        proof.assert_not_called()
+        execute.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())['check'], 'real_mode_payments')
 
 
 class ProductionEnvironmentTests(unittest.TestCase):
@@ -467,11 +512,13 @@ class ProductionEnvironmentTests(unittest.TestCase):
         for name, value in {'QUILLMD_ADMIN_SITE': '1', 'QUILLMD_ENV_MANAGED': '1',
                             'QUILLMD_STATE_DIR': '/var/lib/quillmd-production',
                             'TMPDIR': '/var/lib/quillmd-production/tmp', 'PYTHONDONTWRITEBYTECODE': '1',
-                            'QUILLMD_DEPLOYMENT_PROFILE': 'production', 'QUILLMD_DATA_MODE': 'real-patient',
-                            'QUILLMD_PAYMENT_MODE': 'stripe-live', 'PGSSLMODE': 'verify-full',
+                            'QUILLMD_DEPLOYMENT_PROFILE': 'production', 'QUILLMD_DATA_MODE': 'real',
+                            'QUILLMD_STRIPE_MODE': 'live', 'QUILLMD_REGISTRATION': 'invite',
+                            'QUILLMD_MFA_REQUIRED_ALL': '1', 'PGSSLMODE': 'verify-full',
                             'PGSSLROOTCERT': '/etc/quillmd-production/rds-ca-global-bundle.pem'}.items():
             self.assertEqual(environment[name], value)
         self.assertEqual(self.prepare('doctor')[1]['QUILLMD_ADMIN_SITE'], '0')
+        self.assertNotIn('QUILLMD_PAYMENT_MODE', environment)  # a name the application never read
 
     def test_each_mismatch_refuses_with_its_label(self):
         cases = [
@@ -487,7 +534,13 @@ class ProductionEnvironmentTests(unittest.TestCase):
             ({'QUILLMD_DB_PORT': '55438'}, 'database_endpoint'),
             ({'QUILLMD_RELEASE_SHA': 'development-unrecorded'}, 'release_identity'),
             ({'QUILLMD_DATA_MODE': 'synthetic-only'}, 'data_mode'),
-            ({'QUILLMD_PAYMENT_MODE': 'stripe-test'}, 'payment_mode'),
+            ({'QUILLMD_DATA_MODE': 'synthetic'}, 'data_mode'),
+            ({'QUILLMD_DATA_MODE': 'real-patient'}, 'data_mode'),  # the profile's word, which the application refuses
+            ({'QUILLMD_DATA_MODE': 'real '}, 'data_mode'),
+            ({'QUILLMD_STRIPE_MODE': 'test'}, 'payment_mode'),
+            ({'QUILLMD_STRIPE_MODE': ''}, 'payment_mode'),
+            ({'QUILLMD_REGISTRATION': 'open'}, 'account_policy'),
+            ({'QUILLMD_MFA_REQUIRED_ALL': '0'}, 'account_policy'),
             ({'STRIPE_SECRET_KEY': 'sk_test_synthetic'}, 'payment_mode'),
             ({'STRIPE_SECRET_KEY': 'rk_test_synthetic'}, 'payment_mode'),
             ({'STRIPE_SECRET_KEY': 'sk_live_unrestricted'}, 'payment_mode'),
@@ -512,8 +565,8 @@ class ProductionEnvironmentTests(unittest.TestCase):
             with self.subTest(changes=changes):
                 self.assertEqual(self.prepare(**changes)[0], ('refused', label))
         self.assertEqual(self.prepare(STRIPE_SECRET_KEY='rk_live_synthetic')[0], ('accepted', None))
-        self.assertEqual(self.prepare(QUILLMD_DATA_MODE='real-patient', QUILLMD_PAYMENT_MODE='stripe-live')[0],
-                         ('accepted', None))
+        self.assertEqual(self.prepare(QUILLMD_DATA_MODE='real', QUILLMD_STRIPE_MODE='live', QUILLMD_REGISTRATION='invite',
+                                      QUILLMD_MFA_REQUIRED_ALL='1')[0], ('accepted', None))
 
     def test_a_private_environment_file_cannot_start_production(self):
         private = dict(PrivateEnvironmentDifferentialTests.BASE)

@@ -87,7 +87,8 @@ FIXED = {
 # Environment names the production renderer may write. Anything else is refused, so a private-only
 # setting (preview gate credentials, preview auth) cannot be carried into production by copy.
 ENVIRONMENT_NAMES = frozenset({
-    'QUILLMD_DEPLOYMENT_PROFILE', 'QUILLMD_DATA_MODE', 'QUILLMD_PAYMENT_MODE',
+    'QUILLMD_DEPLOYMENT_PROFILE', 'QUILLMD_DATA_MODE', 'QUILLMD_STRIPE_MODE', 'QUILLMD_REGISTRATION',
+    'QUILLMD_MFA_REQUIRED_ALL',
     'QUILLMD_SECRET_KEY', 'QUILLMD_RELEASE_SHA',
     'QUILLMD_DB_NAME', 'QUILLMD_DB_USER', 'QUILLMD_DB_PASSWORD', 'QUILLMD_DB_HOST', 'QUILLMD_DB_PORT',
     'QUILLMD_HTTPS', 'QUILLMD_TRUST_PROXY',
@@ -95,12 +96,39 @@ ENVIRONMENT_NAMES = frozenset({
     'QUILLMD_EMAIL_ALLOWED_RECIPIENTS', 'RESEND_API_KEY',
     'QUILLMD_AI_MODE', 'QUILLMD_AI_PROVIDER', 'QUILLMD_AI_MODEL', 'QUILLMD_AI_INPUT_RATE',
     'QUILLMD_AI_OUTPUT_RATE', 'QUILLMD_AI_CACHED_RATE', 'ANTHROPIC_API_KEY',
+    'QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT', 'QUILLMD_AI_INFERENCE_GEO', 'QUILLMD_WELCOME_CREDIT',
     'DEEPGRAM_API_KEY', 'QUILLMD_DEEPGRAM_RATE_PER_MINUTE', 'QUILLMD_DEEPGRAM_RATE_PER_SECOND',
     'QUILLMD_VOICE_MAX_COST', 'QUILLMD_VOICE_MAX_MINUTES', 'QUILLMD_PROVIDER_DISCOUNT_RATE',
     'QUILLMD_WORD_RUNTIME', 'QUILLMD_WORD_MANIFEST', 'QUILLMD_WORD_MANIFEST_SHA256',
     'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
     'QUILLMD_PAYER_ROLE_GRANTED', 'CPT_LICENSE_ID', 'CPT_LICENSE_EXPIRY',
 })
+# The application settings (quillmd/application_profile.py, docs/rebuild/v1/application-settings.md) that a
+# production profile's fixed modes select. The launcher forces them; a rendered environment may carry them only
+# with exactly these values. The application reads these names and values and no others: a profile word such as
+# 'real-patient' in QUILLMD_DATA_MODE refuses to start.
+APPLICATION_MODE_SETTINGS = {
+    ('data', 'real-patient'): {'QUILLMD_DATA_MODE': 'real'},
+    ('payment', 'stripe-live'): {'QUILLMD_STRIPE_MODE': 'live'},
+}
+# Real data mode refuses to start without these; they are production policy, not configuration.
+APPLICATION_POLICY_SETTINGS = {'QUILLMD_REGISTRATION': 'invite', 'QUILLMD_MFA_REQUIRED_ALL': '1'}
+
+
+def application_settings(production):
+    """{NAME: value} the launcher forces for this profile, labelled by the check that refuses a conflicting value."""
+    settings = {}
+    for (mode, word), values in APPLICATION_MODE_SETTINGS.items():
+        selected = production.data_mode if mode == 'data' else production.payment_mode
+        require(selected in {w for m, w in APPLICATION_MODE_SETTINGS if m == mode}, 'profile_value')
+        if selected == word:
+            settings.update({name: (value, mode + '_mode') for name, value in values.items()})
+    for name, value in APPLICATION_POLICY_SETTINGS.items():
+        settings[name] = (value, 'account_policy')
+    require({'QUILLMD_DATA_MODE', 'QUILLMD_STRIPE_MODE'} <= set(settings), 'profile_value')
+    return settings
+
+
 # Private-preview mechanisms. Present in a production environment means a private file was copied.
 PRIVATE_ONLY_ENVIRONMENT = ('QUILLMD_PREVIEW_AUTH_ENABLED', 'QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME',
                             'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD', 'QUILLMD_RESEND_ENV_FILE',

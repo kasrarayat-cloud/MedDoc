@@ -27,6 +27,7 @@ import re
 import select
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -257,8 +258,11 @@ def prepare_production_environment(surface, profile):
     require(env.get('QUILLMD_DB_HOST') == profile.database_host
             and env.get('QUILLMD_DB_PORT') == str(profile.database_port), 'database_endpoint')
     require(re.fullmatch('[a-f0-9]{40}', env.get('QUILLMD_RELEASE_SHA', '')) is not None, 'release_identity')
-    require(env.get('QUILLMD_DATA_MODE', profile.data_mode) == profile.data_mode, 'data_mode')
-    require(env.get('QUILLMD_PAYMENT_MODE', profile.payment_mode) == profile.payment_mode, 'payment_mode')
+    # The application's own names and values for the profile's modes and account policy: a rendered value may only
+    # repeat them. (The profile's words, 'real-patient' and 'stripe-live', are not values the application accepts.)
+    application = _profile_module().application_settings(profile)
+    for name, (value, label) in application.items():
+        require(env.get(name, value) == value, label)
     # Live mode takes only a restricted live key; a test key here is a sandbox file copied into production.
     stripe_key = env.get('STRIPE_SECRET_KEY', '')
     require(stripe_key == '' or stripe_key.startswith('rk_live_'), 'payment_mode')
@@ -275,8 +279,8 @@ def prepare_production_environment(surface, profile):
     os.environ['QUILLMD_STATE_DIR'] = str(profile.state_root)
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     os.environ['QUILLMD_DEPLOYMENT_PROFILE'] = 'production'
-    os.environ['QUILLMD_DATA_MODE'] = profile.data_mode
-    os.environ['QUILLMD_PAYMENT_MODE'] = profile.payment_mode
+    for name, (value, _) in application.items():
+        os.environ[name] = value
     os.environ['PGSSLMODE'] = profile.sslmode
     os.environ['PGSSLROOTCERT'] = str(profile.ca_bundle)
     os.environ['TMPDIR'] = str(profile.state_root / 'tmp')
@@ -516,6 +520,24 @@ def probe_production(surface, profile):
             'provider_calls': 0}
 
 
+PAYMENT_CHECK_SECONDS = 120
+
+
+def real_mode_payments(profile):
+    """`manage.py real_mode_payment_check` in the prepared environment, before any surface starts: real data mode never
+    serves a database holding sandbox payment evidence (core.billing.real_mode_payment_problems). The command is
+    read-only and prints counts only; its output is not relayed, so the refusal carries a fixed label. Run it by hand
+    as the service identity to see the counts."""
+    try:
+        completed = subprocess.run([str(profile.python), str(profile.app_root / 'manage.py'), 'real_mode_payment_check'],
+                                   cwd=str(profile.app_root), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=PAYMENT_CHECK_SECONDS, check=False)
+    except (OSError, subprocess.SubprocessError):
+        raise BoundaryFailure('real_mode_payments') from None
+    require(completed.returncode == 0, 'real_mode_payments')
+    return {'command': 'real_mode_payment_check', 'passed': True}
+
+
 def save_proof(surface, report, state=None):
     destination = (STATE if state is None else state) / 'proofs' / (surface + '.json')
     if destination.exists() or destination.is_symlink():
@@ -544,6 +566,7 @@ def main(argv=None):
         if args.profile == 'production':
             profile = production_profile()
             report = probe_production(args.surface, profile)
+            report['checks']['real_mode_payments'] = real_mode_payments(profile)
             save_proof(args.surface, report, profile.state_root)
             print(json.dumps(report, sort_keys=True), flush=True)
             os.chdir(profile.app_root)
