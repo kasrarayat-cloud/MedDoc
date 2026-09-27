@@ -1,0 +1,46 @@
+[
+  {
+    "area": "A23",
+    "label": "If accommodation is being changed, please set out the reasons for the changes and what level of support the new accommodation will entail? Please also detail any specific risk assessment/review activity and any changes to risk mitigations. Has there been formal notification through the following process Submit a conditional discharge report or request a change of discharge conditions - GOV.UK (www.gov.uk)?",
+    "length": 409,
+    "slot": "word/document.xml#b/tbl[6]/tr[0]/tc[0]",
+    "assistance_context_exact": true,
+    "assistance_locator_exact": true,
+    "manual_origin": "manual",
+    "request_bytes": 241402,
+    "input_token_bound": 253402,
+    "maximum_cost": "0.70680400000",
+    "request_sha256": "d765e84b59db98e25da3927b82d0f3986b63c9b8edd8885ae287359a365ad88a",
+    "profile": {
+      "profile": "claude-sonnet-5-blank-mapping-v3",
+      "max_output_tokens": 20000,
+      "timeout_seconds": 120,
+      "thinking": {
+        "type": "disabled"
+      },
+      "effort": "medium"
+    }
+  },
+  {
+    "area": "A35",
+    "label": "What structured activities does the patient partake in including employment, study, or other interests? If the patient has no structured activity, how do they occupy their time and will this pose a problem from a risk perspective in the long term? Have they been supported in disclosure of their offending history (where appropriate?)",
+    "length": 334,
+    "slot": "word/document.xml#b/tbl[18]/tr[0]/tc[0]",
+    "assistance_context_exact": true,
+    "assistance_locator_exact": true,
+    "manual_origin": "manual",
+    "request_bytes": 241412,
+    "input_token_bound": 253412,
+    "maximum_cost": "0.70682400000",
+    "request_sha256": "f893128b4f46e13f2b50c915f48a9995a45113fd923047f0b26d1c1ffd56187b",
+    "profile": {
+      "profile": "claude-sonnet-5-blank-mapping-v3",
+      "max_output_tokens": 20000,
+      "timeout_seconds": 120,
+      "thinking": {
+        "type": "disabled"
+      },
+      "effort": "medium"
+    }
+  }
+]
