@@ -59,7 +59,17 @@ class NativeSchemaCompatibility(SimpleTestCase):
                          mapping_assistance.Proposal.model_json_schema())
 
     def test_local_strict_mapping_validation_still_rejects_constraints(self):
-        for key, value in (('label', ''), ('label', 'x' * 301), ('glyph', -1), ('glyph', True)):
+        for key, value in (('label', ''), ('label', 'x' * 1001), ('label', '\U0001f9ea' * 1001),
+                           ('glyph', -1), ('glyph', True)):
             with self.subTest(key=key, value=value), self.assertRaises(ValidationError):
                 mapping_assistance.Target.model_validate({'slot': 'b/p[0]', 'kind': 'text',
                     'label': 'History', 'options': [], 'glyph': None, key: value})
+
+    def test_local_mapping_label_boundary_preserves_complete_unicode_source(self):
+        for character in ('x', '\U0001f9ea'):
+            for length in (301, 1000):
+                label = character * length
+                with self.subTest(character=character, length=length):
+                    target = mapping_assistance.Target.model_validate({'slot': 'b/p[0]', 'kind': 'text',
+                        'label': label, 'options': [], 'glyph': None})
+                    self.assertEqual(target.label, label)
