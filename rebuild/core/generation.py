@@ -202,6 +202,11 @@ def job_request_profile(config):
     """
     provider,model=config.get('provider'),config.get('model')
     profile=config.get('request_profile')
+    # The discount settlement will apply, checked while nothing has been held or sent: a stored config from before the
+    # discount was validated as used can carry '1', which would otherwise be refused only after the provider call.
+    try: discount_rate(config)
+    except ValidationError: _refuse_profile('The provider discount recorded for this request is not a fraction below 1, so it '
+                                            'could not be settled. Nothing was sent.')
     if provider not in PROVIDERS:
         _refuse_profile('QuillMD has no provider named in this request, so it cannot be sent. Nothing was sent.')
     if unprofiled(provider,model):
@@ -298,12 +303,21 @@ def configuration():
 COST_QUANTUM=Decimal('0.00000000001')
 
 def normalized_discount(value):
-    """Configured provider discount fraction: a Decimal in [0, 1), stored as a canonical string."""
+    """Configured provider discount fraction: a Decimal in [0, 1), stored as a canonical string.
+
+    ⚠️ VALIDATED AS IT WILL BE USED, not as it was written. `normalize()` rounds to the context's 28 digits, so
+    0.99999999999999999999999999999 passed the `< 1` check and came back as '1' — which configuration() then stored, the
+    hold priced, and settlement refused only AFTER the provider call, stranding the job in reconciliation. Measured. The
+    canonical string is checked again, so configuration() refuses it and nothing is held or sent.
+    """
+    refused='Provider discount rate must be a decimal fraction between 0 and 1.'
     try: discount=Decimal(str(value if value not in (None,'') else '0'))
-    except (InvalidOperation,ValueError,TypeError): raise ValidationError('Provider discount rate must be a decimal fraction between 0 and 1.')
-    if not discount.is_finite() or discount<0 or discount>=1: raise ValidationError('Provider discount rate must be a decimal fraction between 0 and 1.')
+    except (InvalidOperation,ValueError,TypeError): raise ValidationError(refused)
+    if not discount.is_finite() or discount<0 or discount>=1: raise ValidationError(refused)
     if discount==0: return '0'
-    return format(discount.normalize(),'f')
+    normalized=format(discount.normalize(),'f')
+    if not Decimal(0)<Decimal(normalized)<1: raise ValidationError(refused)
+    return normalized
 
 def discount_rate(config=None):
     config=config or configuration()

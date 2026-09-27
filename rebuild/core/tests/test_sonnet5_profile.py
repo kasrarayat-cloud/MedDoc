@@ -265,6 +265,38 @@ class PricingFingerprint(SimpleTestCase):
             client.assert_not_called()
 
 
+class DiscountValidatedAsUsed(SimpleTestCase):
+    """Extra B. normalize() rounds to 28 digits, so a discount just under 1 passed the `< 1` check, became '1', was
+    stored and held on, and settlement refused it only AFTER the provider call — the job stranded in reconciliation."""
+
+    def test_a_discount_that_rounds_to_one_is_refused_before_any_hold_or_request(self):
+        for value in ('0.' + '9' * 29, '0.' + '9' * 40, '0.' + '9' * 28 + '5'):
+            with self.subTest(value=value):
+                with self.assertRaises(ValidationError):
+                    g.normalized_discount(value)
+                with override_settings(**SONNET_46), \
+                        patch.dict(os.environ, {**PRICE_ENV, 'QUILLMD_PROVIDER_DISCOUNT_RATE': value}), \
+                        patch('anthropic.Anthropic') as client:
+                    for attempt in (g.configuration, lambda: g.maximum_cost(NOTES, FIELDS), lambda: g.generate(NOTES, FIELDS)):
+                        with self.assertRaises(ValidationError):
+                            attempt()
+                    client.assert_not_called()
+        # Positive control: the largest value still below 1 once normalized is accepted, and used exactly as written.
+        self.assertEqual(g.normalized_discount('0.' + '9' * 28), '0.' + '9' * 28)
+        self.assertEqual(g.normalized_discount('0.20'), '0.2')
+
+    def test_a_stored_discount_of_one_is_refused_before_the_request(self):
+        """A config stored before the repair can carry the '1' the old code produced: refused as NoProviderRequest by the
+        check maximum_cost and generate both run first. The worker's release of the hold is StoredDiscountRefusal's."""
+        with override_settings(**SONNET_46), patch.dict(os.environ, PRICE_ENV), patch('anthropic.Anthropic') as client:
+            stored = {**g.configuration(), 'discount_rate': '1'}
+            with self.assertRaises(NoProviderRequest):
+                g.maximum_cost(NOTES, FIELDS, stored)
+            with self.assertRaises(NoProviderRequest):
+                g.generate(NOTES, FIELDS, stored)
+            client.assert_not_called()
+
+
 class RollbackIsByteIdentical(SimpleTestCase):
     def test_the_rollback_kwargs_are_the_pre_profile_call(self):
         client_kwargs, sent, _ = captured(SONNET_46)
@@ -715,3 +747,24 @@ class ProviderSpelling(OutcomeFixture, TestCase):
             openai_client.assert_not_called()
         self.assertFalse(Job.objects.filter(encounter=encounter).exists())
         self.assertFalse(Reservation.objects.filter(job__encounter=encounter).exists())
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES, **SONNET_46)
+class StoredDiscountRefusal(OutcomeFixture, TestCase):
+    def test_a_queued_job_whose_discount_normalized_to_one_is_not_sent_and_its_hold_is_released(self):
+        """Extra B through the worker: a job queued by the previous release with discount_rate '1' is refused before any
+        request, marked not processed, charged nothing, and its hold released — instead of reaching the provider and
+        stranding in reconciliation."""
+        encounter = self.fresh_encounter()
+        config = {**g.configuration(), 'discount_rate': '1'}
+        job = Job.objects.create(encounter=encounter, user=self.user, request_key=f'generation:{encounter.pk}:discount',
+                                 revision=encounter.revision, config=config)
+        reserve(job, Decimal('0.2'))
+        with patch('anthropic.Anthropic') as client:
+            self.assertTrue(run_one())
+            client.assert_not_called()
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertTrue(job.error.startswith('Not processed: '), job.error)
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
