@@ -301,6 +301,22 @@ def open_places(outline_rows, fields, query=''):
     return rows
 
 
+def missing_boxes(fields, outline_rows):
+    """Labels of fields with a glyph box numbered beyond the boxes its place holds (or a place the form lacks)."""
+    counts = {row['slot']: row.get('boxes') or 0 for row in outline_rows or []}
+    found = []
+    for field in fields or []:
+        target = (field.get('locator') or {}).get('target') or {}
+        for box in target.get('boxes') or []:
+            if box.get('kind') != 'glyph':
+                continue
+            count = counts.get(_slot(box.get('part', ''), box.get('slot', '')), 0)
+            if not 0 <= int(box.get('glyph') or 0) < count:
+                found.append(label_of(field))
+                break
+    return found
+
+
 def insert_in_document_order(fields, added, outline_rows):
     """`fields` with `added` placed before the first field that comes later in the document. Existing fields keep
     their order; a field whose place the outline does not list keeps its position."""

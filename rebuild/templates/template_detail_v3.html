@@ -32,13 +32,13 @@
       <form method="post" data-submit-once data-v3-add-form>{% csrf_token %}<input type="hidden" name="action" value="v3_add"><input type="hidden" name="mapping_version" value="{{ version.pk }}">
         <fieldset><legend>Place ({{ places_total }} open{% if find %} matching &ldquo;{{ find }}&rdquo;{% endif %})</legend>
         <div class="table-wrap"><table><thead><tr><th scope="col">Choose</th><th scope="col">On the form</th><th scope="col">Section</th><th scope="col">Place</th></tr></thead><tbody>
-        {% for place in places %}<tr data-v3-place="{{ place.slot }}"><td><input type="radio" id="place-{{ forloop.counter }}" name="slot" value="{{ place.slot }}" {% if place.slot == posted_slot %}checked{% endif %} required></td><td><label for="place-{{ forloop.counter }}">{{ place.preview|default:'(empty)' }}</label></td><td class="small">{{ place.context }}</td><td class="small">{{ place.kind_name }} · {{ place.part|capfirst }}{% if place.control %} · {{ place.control }}{% endif %}</td></tr>{% endfor %}
+        {% for place in places %}<tr data-v3-place="{{ place.slot }}"><td><input type="radio" id="place-{{ forloop.counter }}" name="slot" value="{{ place.slot }}" {% if place.slot == posted_slot %}checked{% endif %} required></td><td><label for="place-{{ forloop.counter }}">{{ place.preview|default:'(empty)' }}</label></td><td class="small">{{ place.context }}</td><td class="small">{{ place.kind_name }} · {{ place.part|capfirst }}{% if place.control %} · {{ place.control }}{% endif %}{% if place.boxes %} · {{ place.boxes }} printed box{{ place.boxes|pluralize:"es" }}{% endif %}</td></tr>{% endfor %}
         </tbody></table></div>
         {% if places_hidden %}<p class="small muted">{{ places_hidden }} more place{{ places_hidden|pluralize }} not shown. Search the form's text to narrow the list.</p>{% endif %}
         </fieldset>
         <p><label for="v3-add-label">Question label</label><input id="v3-add-label" name="label" value="{{ posted_add_label }}" maxlength="300" required></p>
         <p><label for="v3-add-kind">Kind</label><select id="v3-add-kind" name="kind" required>{% for value, name in manual_kinds %}<option value="{{ value }}" {% if value == posted_add_kind %}selected{% endif %}>{{ name }}</option>{% endfor %}</select><span class="helptext">A Word dropdown or legacy dropdown takes its own printed options; a printed box is a checkbox.</span></p>
-        <p><label for="v3-add-box">Printed box number (for a line of boxes, counting from 1)</label><input id="v3-add-box" name="box" type="number" min="1" max="50" value="1"></p>
+        <p><label for="v3-add-box">Printed box number, for a checkbox: which box of the place, counting from 1</label><input id="v3-add-box" name="box" type="number" min="1" max="50" value="1"></p>
         <div class="form-footer"><button type="submit" class="secondary">Add field as a new mapping version</button></div>
       </form>
       {% elif not outline_error %}<p class="small muted">No open places{% if find %} match &ldquo;{{ find }}&rdquo;{% endif %}.</p>{% endif %}

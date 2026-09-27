@@ -710,6 +710,78 @@ class V3PrintedTicks(V3Fixture, TestCase):
         self.assertIn("Consent obtained ☐", text)
 
 
+def smoker_form_bytes():
+    doc = Document()
+    doc.add_paragraph("Synthetic smoking status")
+    doc.add_paragraph("Indication: ____________")
+    doc.add_paragraph("Smoker?  ☐ Yes  ☐ No")
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3BoxNumbers(V3Fixture, TestCase):
+    """F2/F6 end to end: the box the clinician named is the box exported; a box the form lacks never confirms."""
+
+    def setUp(self):
+        super().setUp()
+        self.template, version = self.uploaded(data=smoker_form_bytes(), name="Synthetic smoker")
+        smoker = next(f for f in version.fields if f["label"] == "Smoker?")
+        self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": version.pk,
+                                                             "remove_" + smoker["key"]: "on"})
+        self.version = self.latest(self.template)
+
+    def add(self, slot, box, label):
+        return self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_add", "mapping_version": self.version.pk,
+                                "slot": slot, "kind": "checkbox", "label": label, "box": str(box)})
+
+    def test_box_two_of_a_paragraph_place_is_box_two(self):
+        response = self.add("word/document.xml#b/p[2]", 2, "Non-smoker")
+        self.assertEqual(response.status_code, 302, getattr(response, "context", None) and response.context.get("v3_error"))
+        latest = self.latest(self.template)
+        added = next(f for f in latest.fields if f.get("origin") == "manual")
+        self.assertEqual(added["locator"]["target"]["boxes"][0]["glyph"], 1)
+        rows = self.client.get(f"/templates/{self.template.pk}/").context["v3_rows"]
+        self.assertIn("printed box 2 of 2", next(r for r in rows if r["key"] == added["key"])["location"])
+        latest = self.confirm(self.template, latest)
+        self.assertEqual(self.new_encounter(latest, notes="Indication: synthetic").status_code, 302)
+        encounter = Encounter.objects.get()
+        payload = {"revision": encounter.revision}
+        for f in latest.fields:
+            payload["reviewed_" + f["key"]] = "on"
+        payload["answer_" + added["key"]] = "checked"
+        payload["answer_" + next(f["key"] for f in latest.fields if f["label"] == "Indication")] = "synthetic"
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/save/", payload).status_code, 302)
+        response = self.client.post(f"/encounters/{encounter.pk}/finalize/", {"revision": encounter.revision + 1, "reviewed": "on"}, follow=True)
+        encounter = Encounter.objects.get()
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        self.assertIn("Smoker?  ☐ Yes  ☒ No", part_text(private_path(encounter.export_path).read_bytes()))
+
+    def test_a_box_beyond_the_line_is_refused_when_added(self):
+        response = self.add("word/document.xml#b/p[2]/glyphs", 7, "Pack-years over 20")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("That place has 2 printed boxes; choose a box number from 1 to 2.", response.context["v3_error"])
+        self.assertEqual(self.latest(self.template).pk, self.version.pk)
+
+    def test_a_stored_box_the_form_lacks_can_never_be_confirmed(self):
+        response = self.add("word/document.xml#b/p[2]", 1, "Current smoker")
+        self.assertEqual(response.status_code, 302)
+        latest = self.latest(self.template)
+        fields = [dict(f) for f in latest.fields]
+        for f in fields:
+            if f.get("origin") == "manual":
+                f["locator"] = {**f["locator"], "target": {**f["locator"]["target"], "boxes": [
+                    {**f["locator"]["target"]["boxes"][0], "glyph": 6}]}}
+        stale = TemplateVersion.objects.create(template=self.template, number=latest.number + 1, fields=fields,
+                                               contract="v3", corrections={"base_version": latest.number}, created_by=self.user)
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
+                                                                        "checked_every_field": "on"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("point at a printed box the form does not have: Current smoker.", response.context["v3_error"])
+        self.assertFalse(MappingConfirmation.objects.filter(version=stale).exists())
+
+
 def repeated_option_form_bytes():
     doc = Document()
     doc.add_paragraph("Synthetic swelling check")

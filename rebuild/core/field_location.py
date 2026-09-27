@@ -41,27 +41,32 @@ V3_TARGETS = {
 }
 
 
-def describe_v3(locator):
-    """Contract v3: the part (body, header, footer) and the kind of place the answer is written to."""
+def describe_v3(locator, box_counts=None):
+    """Contract v3: the part (body, header, footer) and the kind of place the answer is written to. A single printed
+    box on a line of boxes says which one: 'printed box 2 of 3' (the count comes from the form's outline)."""
     target = locator.get('target') or {}
     kind = target.get('type', '')
     if kind == 'span':
         what = 'after the printed label' if target.get('shape') == 'after_label' else 'on the printed blank'
     else:
         what = V3_TARGETS.get(kind, 'answer area')
-    if kind == 'checkboxes' and len(target.get('boxes') or []) == 1:
+    boxes = target.get('boxes') or []
+    if kind == 'checkboxes' and len(boxes) == 1:
         what = 'printed box'
+        if boxes[0].get('kind') == 'glyph':
+            count = (box_counts or {}).get('%s#%s' % (boxes[0].get('part', ''), boxes[0].get('slot', '')))
+            what = 'printed box %d' % (int(boxes[0].get('glyph') or 0) + 1) + (' of %d' % count if count else '')
     where = part_name(locator.get('part', 'word/document.xml'))
     copies = len(target.get('copies') or [])
     return f'{where} · {what}' + (f' (and {copies} repeated copy/copies)' if copies else '')
 
 
-def describe(field):
+def describe(field, box_counts=None):
     """One short phrase locating this field's answer area in the original form."""
     locator = field.get('locator') or {}
 
     if locator.get('contract') == 'v3':
-        return describe_v3(locator)
+        return describe_v3(locator, box_counts)
 
     if 'cell' in locator:
         return 'Answer cell in a question/answer table'

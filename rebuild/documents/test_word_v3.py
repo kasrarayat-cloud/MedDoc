@@ -510,5 +510,63 @@ def paragraphs_bytes(data):
     return ["".join(t.text or "" for t in p.iter("{%s}t" % W)) for p in root.iter("{%s}p" % W)]
 
 
+class BoxNumbers(unittest.TestCase):
+    """F2/F6: a manually added checkbox is the box the clinician named, and a box the place lacks is refused."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        doc = Document()
+        doc.add_paragraph("Synthetic smoking status")
+        doc.add_paragraph("Smoker?  ☐ Yes  ☐ No")
+        doc.add_paragraph("Diabetes ")._p.append(_sdt("checkbox"))
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = "Severity"
+        table.cell(0, 1).text = "☐ Mild ☐ Severe"
+        self.form = self.dir / "boxes.docx"
+        self.form.write_bytes(docx_bytes(doc))
+        self.places = {row["slot"]: row for row in outline_template(self.form)["slots"]}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def add(self, slot, box, label="Added box"):
+        return locate_fields(self.form, [{"slot": slot, "kind": "checkbox", "label": label, "glyph": box - 1}])["fields"]
+
+    def test_the_outline_counts_each_places_boxes(self):
+        self.assertEqual(self.places["word/document.xml#b/p[1]"]["boxes"], 2)
+        self.assertEqual(self.places["word/document.xml#b/p[1]/glyphs"]["boxes"], 2)
+        self.assertEqual(self.places["word/document.xml#b/p[2]/sdt[0]"]["boxes"], 1)
+        self.assertEqual(self.places["word/document.xml#b/tbl[0]/tr[0]/tc[1]"]["boxes"], 2)
+        self.assertEqual(self.places["word/document.xml#b/p[0]"]["boxes"], 0)
+
+    def test_a_paragraph_place_takes_the_named_box(self):
+        added = self.add("word/document.xml#b/p[1]", 2, "Non-smoker")
+        self.assertEqual(added[0]["locator"]["target"]["boxes"][0]["glyph"], 1)
+        out = self.dir / "second-box.docx"
+        fill_template(self.form, added, {added[0]["key"]: True}, out)
+        self.assertIn("Smoker?  ☐ Yes  ☒ No", part_text(out))
+
+    def test_a_cell_place_takes_the_named_box(self):
+        try:
+            added = self.add("word/document.xml#b/tbl[0]/tr[0]/tc[1]", 2, "Severe")
+        except DocumentError as refused:
+            self.fail("a cell holding printed boxes was refused as a place: %s" % refused)
+        out = self.dir / "cell-box.docx"
+        fill_template(self.form, added, {added[0]["key"]: True}, out)
+        self.assertIn("☐ Mild ☒ Severe", part_text(out))
+
+    def test_a_box_the_place_does_not_have_is_refused(self):
+        for slot, box, count in (("word/document.xml#b/p[1]", 3, "2 printed boxes"),
+                                 ("word/document.xml#b/p[1]/glyphs", 7, "2 printed boxes"),
+                                 ("word/document.xml#b/p[2]/sdt[0]", 2, "1 printed box;"),
+                                 ("word/document.xml#b/tbl[0]/tr[0]/tc[1]", 3, "2 printed boxes"),
+                                 ("word/document.xml#b/p[1]", 0, "2 printed boxes")):
+            with self.assertRaises(DocumentError) as refused:
+                self.add(slot, box)
+            self.assertEqual(refused.exception.code, "invalid_mapping", slot)
+            self.assertIn(count, str(refused.exception), slot)
+
+
 if __name__ == "__main__":
     unittest.main()

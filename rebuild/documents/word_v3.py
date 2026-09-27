@@ -2870,6 +2870,38 @@ def write_table_rows(index, field, answer):
 MANUAL_KINDS = {"text", "long_text", "date", "time", "checkbox", "choice", "signature", "initials"}
 
 
+def boxes_in_cell(tslot):
+    """[(paragraph slot, glyph number)] for every printed glyph box directly in a table cell, in order."""
+    return [(c, i) for c in tslot.children if c.kind == "p" for i in range(len(glyph_boxes(c.el)))]
+
+
+def place_boxes(slot) -> int:
+    """How many printed boxes a place holds (the numbering a clinician's box number counts in)."""
+    if slot.kind in ("p", "glyphs"):
+        return len(glyph_boxes(slot.el))
+    if slot.kind == "tc":
+        return len(boxes_in_cell(slot))
+    if slot.kind == "sdt":
+        return 1 if slot.info.get("type") == "checkbox" else 0
+    if slot.kind == "ff":
+        return 1 if slot.info.get("field") == "FORMCHECKBOX" else 0
+    return 0
+
+
+def box_number(t, count):
+    """The chosen box (0-based) of a place holding `count` printed boxes, or a refusal naming the count."""
+    try:
+        n = int(t.get("glyph") or 0)
+    except (TypeError, ValueError):
+        n = -1
+    if count == 0:
+        fail("A checkbox must be mapped to a printed box.", "invalid_mapping")
+    if not 0 <= n < count:
+        fail("That place has %d printed box%s; choose a box number from 1 to %d."
+             % (count, "" if count == 1 else "es", count), "invalid_mapping")
+    return n
+
+
 def outline(data: bytes) -> dict:
     """Every place a clinician can map by hand: paragraphs, cells, content controls, legacy fields and glyph
     boxes, with a short preview and where they sit. Nothing is written."""
@@ -2896,7 +2928,7 @@ def outline(data: bytes) -> dict:
                      ("header" if "header" in s.part else "footer"),
                      "preview": re.sub(r"\s+", " ", preview.replace("\x00", "▢")).strip()[:120],
                      "context": detector.heading_before(s)[:120],
-                     "control": s.info.get("type") or s.info.get("field") or ""})
+                     "control": s.info.get("type") or s.info.get("field") or "", "boxes": place_boxes(s)})
     return {"contract": CONTRACT, "slots": rows}
 
 
@@ -2919,15 +2951,20 @@ def locate(data: bytes, targets: list) -> list:
         if slot.kind == "p":
             text = detector.ptext(slot.el)[0]
             if kind == "checkbox":
-                if BOX not in text:
-                    fail("A checkbox must be mapped to a printed box.", "invalid_mapping")
-                target = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": slot.part, "slot": slot.path + "/glyphs", "glyph": 0}]}
+                # ⚠️ THE CLINICIAN'S BOX, NOT THE FIRST ONE: 'Smoker? ☐ Yes ☐ No' mapped as box 2 ticked Yes.
+                n = box_number(t, place_boxes(slot))
+                target = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": slot.part, "slot": slot.path + "/glyphs", "glyph": n}]}
             elif not text.strip(" \t\x00"):
                 target = {"type": "paragraph"}
             else:
                 end = len(text.rstrip())
                 target = {"type": "span", "start": end, "end": end, "shape": "after_label"}
+        elif slot.kind == "tc" and kind == "checkbox" and boxes_in_cell(slot):
+            para, i = boxes_in_cell(slot)[box_number(t, place_boxes(slot))]
+            target = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": para.part, "slot": para.path + "/glyphs", "glyph": i}]}
         elif slot.kind == "tc":
+            if kind == "checkbox":
+                box_number(t, 1)
             if not detector.is_empty_cell(slot):
                 fail("The chosen cell holds printed text. Choose the empty answer cell, or a paragraph to write after.",
                      "invalid_mapping")
@@ -2937,6 +2974,7 @@ def locate(data: bytes, targets: list) -> list:
             typ = slot.info["type"]
             content = slot.el.find(q("w:sdtContent"))
             if typ == "checkbox":
+                box_number(t, 1)
                 target = {"type": "checkboxes", "boxes": [{"kind": "sdt", "part": slot.part, "slot": slot.path}]}
                 kind = "checkbox"
             elif content is not None and wraps_structure(content):
@@ -2949,13 +2987,14 @@ def locate(data: bytes, targets: list) -> list:
         elif slot.kind == "ff":
             field_kind = slot.info["field"]
             if field_kind == "FORMCHECKBOX":
+                box_number(t, 1)
                 target, kind = {"type": "checkboxes", "boxes": [{"kind": "ff", "part": slot.part, "slot": slot.path}]}, "checkbox"
             elif field_kind == "FORMDROPDOWN":
                 target, kind, options = {"type": "ff_dropdown"}, "choice", [o for o in slot.info.get("options", []) if o]
             else:
                 target = {"type": "ff_text"}
         elif slot.kind == "glyphs":
-            n_glyph = int(t.get("glyph") or 0)
+            n_glyph = box_number(t, place_boxes(slot))
             target, kind = {"type": "checkboxes", "boxes": [{"kind": "glyph", "part": slot.part, "slot": slot.path, "glyph": n_glyph}]}, "checkbox"
             slot = slot.parent
         if target is None:

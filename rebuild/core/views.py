@@ -353,6 +353,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         try:outline=v3_outline(t)
         except (ValidationError,DocumentError,OSError) as exc:outline=[];outline_error=error_message(exc) if not isinstance(exc,OSError) else 'The original is unavailable.'
     places=v3_mapping.open_places(outline,version.fields,query)
+    box_counts={row['slot']:row.get('boxes') for row in outline}
     posted=posted or {}
     counts={}
     for f in version.fields:counts[f['label'].strip()]=counts.get(f['label'].strip(),0)+1
@@ -360,7 +361,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
            'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
            'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
            'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
-           'location':field_location.describe(f),'context':f.get('context') or '',
+           'location':field_location.describe(f,box_counts=box_counts),'context':f.get('context') or '',
            'origin':'Manual' if f.get('origin')=='manual' else 'Automatic','max_chars':f.get('max_chars'),
            'remove':posted.get('remove_'+f['key'])=='on','duplicate':counts.get(f['label'].strip(),0)>1}
           for n,f in enumerate(version.fields,1)]
@@ -448,10 +449,12 @@ def v3_add_field(request,t):
     if v3_mapping.is_mapped(slot,v3_mapping.mapped_slots(latest.fields)):
         raise ValidationError('That place already belongs to a field. Correct that field instead of adding another.')
     target={'slot':slot,'kind':kind,'label':label}
-    if place.get('kind')=='glyphs':
+    if kind=='checkbox' or place.get('kind')=='glyphs':
+        # ⚠️ The box the clinician named, for ANY place that holds printed boxes; the engine refuses a number beyond
+        # the boxes the place actually holds (a paragraph place used to take box 1 whatever was asked).
         try:box=int(request.POST.get('box') or 1)
         except ValueError:box=0
-        if not 1<=box<=50:raise ValidationError('Give the number of the printed box, counting from 1.')
+        if box<1:raise ValidationError('Give the number of the printed box, counting from 1.')
         target['glyph']=box-1
     field=locate_fields(v3_original(t),[target])['fields'][0]
     if field.get('kind')=='choice' and not field.get('options'):
@@ -479,6 +482,9 @@ def v3_confirm(request,t):
         if request.POST.get('mapping_version')!=str(latest.pk):
             return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED)
         if not latest.fields:raise ValidationError('This mapping has no fields. Add the form\'s answer areas before confirming it.')
+        # ⚠️ A box that does not exist can never be confirmed (it would only refuse at export, after the review).
+        missing=v3_mapping.missing_boxes(latest.fields,v3_outline(t))
+        if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
         if latest.confirmed:
             messages.info(request,'This mapping version was already confirmed.')
             return redirect('template_detail',pk=t.pk)
