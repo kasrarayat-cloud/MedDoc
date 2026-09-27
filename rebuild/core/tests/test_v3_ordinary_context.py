@@ -481,3 +481,14 @@ class RefutedOwnershipAndCoupling(SimpleTestCase):
         self.assertEqual([unit['quote'] for unit in units], ['Patient presents for medication review.'])
         for unit in units:
             self.assertEqual(case['notes'][unit['start']:unit['end']], unit['quote'])
+
+    def test_medication_complement_guard_reads_invisible_and_compatibility_characters(self):
+        for head in ('Medications are', 'Current medications are', 'Medications:'):
+            for complement in ('f\u200bor', 'fo\u2060r', '\uff46\uff4f\uff52', 'for\u00a0'):
+                quote = head + ' warfarin ' + complement + ' the donor.'
+                notes = 'Allergies: penicillin.\n' + quote + '\nPlan: rest.'
+                with self.subTest(head=head, complement=complement):
+                    answer = run(notes, {'Medications': [quote]}, fields=self.fields)['Medications']
+                    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+                    self.assertIn(complement, answer['held_candidate']['text'])
+                    self.assert_stored_held(notes, 'Medications', quote, answer['held_candidate']['text'])

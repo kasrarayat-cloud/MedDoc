@@ -2140,6 +2140,14 @@ CLINICAL_SUBJECT_FIELDS = frozenset(('examination', 'assessment', 'medications')
 LOCAL_SUBJECT_QUALIFIERS = {'assessment': frozenset(('probable',)), 'examination': frozenset(('today',))}
 
 
+def v3_medication_complement_holds(value):
+    # Withholding uses both literal and visible compatibility readings. This
+    # never rewrites the quotation or supplies a new supported interpretation.
+    return any(re.search(r'\bfor\s+\S', text, re.I)
+               for source in (value, unicodedata.normalize('NFKC', value))
+               for text in readings(source))
+
+
 def v3_field_subjects(units, named, parsed):
     eligible = {label for label, matches in named.items() if label in CLINICAL_SUBJECT_FIELDS
                 and len(matches) == 1 and matches[0].get('kind') in ('text', 'long_text')}
@@ -2158,7 +2166,7 @@ def v3_field_subjects(units, named, parsed):
             # A medication's trailing for-complement can name a beneficiary,
             # indication or duration. This route cannot establish which one;
             # keep the complete statement for review, including parsed subjects.
-            if own[0] == 'medications' and re.search(r'\bfor\s+\S', own[1], re.I):
+            if own[0] == 'medications' and v3_medication_complement_holds(own[1]):
                 unresolved.add(unit['id'])
             continue
         matches = []
@@ -2171,7 +2179,7 @@ def v3_field_subjects(units, named, parsed):
             if not FINITE_STATEMENT_V3.match(bare_predicate): continue
             local_words = LOCAL_SUBJECT_QUALIFIERS.get(label, ())
             if (prefix not in prefixes[label] or not factual_predicate.match(predicate)
-                    or (label == 'medications' and re.search(r'\bfor\s+\S', predicate, re.I))
+                    or (label == 'medications' and v3_medication_complement_holds(predicate))
                     or any(m.group().casefold() not in local_words for text in readings(unit['quote'])
                            for m in UNSETTLED.finditer(text))
                     or any(p.search(unit['quote']) for p in (INHERITED_SCOPE, SELF_CORRECTION))):
