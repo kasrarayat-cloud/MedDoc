@@ -640,6 +640,48 @@ class V3Generation(V3EncounterFixture, TestCase):
         self.assertIn("Laterality: Left", part_text(private_path(encounter.export_path).read_bytes()))
 
 
+def repeated_option_form_bytes():
+    doc = Document()
+    doc.add_paragraph("Synthetic swelling check")
+    doc.add_paragraph("Indication: ____________")
+    doc.add_paragraph("Swelling:  ☐ Left  ☐ Right  ☐ Left")
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3RepeatedOptions(V3Fixture, TestCase):
+    """F7: an option printed twice is two options; the notes naming its words do not say which printing."""
+
+    def setUp(self):
+        super().setUp()
+        self.template, version = self.uploaded(data=repeated_option_form_bytes(), name="Synthetic swelling")
+        self.version = self.confirm(self.template)
+        self.field = next(f for f in self.version.fields if f["label"] == "Swelling")
+
+    def generated(self, notes):
+        from core.jobs import enqueue, run_one
+        if not Encounter.objects.exists():
+            self.assertEqual(self.new_encounter(self.version).status_code, 302)
+        encounter = Encounter.objects.get()
+        saved = self.client.post(f"/encounters/{encounter.pk}/notes/", {"revision": encounter.revision, "notes": notes})
+        self.assertEqual(saved.status_code, 302)
+        enqueue(Encounter.objects.get(), self.user)
+        self.assertTrue(run_one())
+        return Encounter.objects.get().answers[self.field["key"]]
+
+    def test_each_printing_is_offered_and_a_repeated_word_is_held(self):
+        self.assertEqual(self.field["options"], ["Left", "Right", "Left (2)"])
+        right = self.generated("Indication: synthetic\nSwelling: Right")
+        self.assertEqual((right["status"], right["text"]), ("supported", "Right"))
+        left = self.generated("Indication: synthetic\nSwelling: Left")
+        self.assertEqual((left["status"], left["text"], (left.get("held_candidate") or {}).get("text")), ("conflict", "", "Left"),
+                         "Left is printed twice; the notes do not say which printing")
+        page = self.client.get(f"/encounters/{Encounter.objects.get().pk}/").content.decode()
+        self.assertIn('<option value="Left (2)" >Left (2)</option>', page)
+
+
 V3_FIELDS = [
     {"key": "v3_1", "label": "Smoker?", "kind": "choice", "options": ["Yes", "No"], "locator": {"contract": "v3"}},
     {"key": "v3_2", "label": "Allergies", "kind": "text", "locator": {"contract": "v3"}},

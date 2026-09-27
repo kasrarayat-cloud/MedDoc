@@ -1975,6 +1975,32 @@ FIELD_KINDS = {"text", "long_text", "date", "time", "choice", "multi_choice", "c
                "table_rows"}
 
 
+def unique_options(options) -> list:
+    """Option labels the option reader can tell apart: an option printed more than once keeps its words and gets
+    ' (2)', ' (3)' in print order, so every printed option can be chosen (fill maps by position, and writes the
+    printed words, never the suffix)."""
+    taken = {str(o).strip().lower() for o in options}
+    seen, out = set(), []
+    for option in options:
+        label = str(option)
+        key = label.strip().lower()
+        if key in seen:
+            n = 2
+            while ("%s (%d)" % (label.strip(), n)).lower() in taken:
+                n += 1
+            label = "%s (%d)" % (label.strip(), n)
+            taken.add(label.lower())
+        seen.add(label.strip().lower())
+        out.append(label)
+    return out
+
+
+def printed_options(field) -> list:
+    """The option words as printed on the form, by position (the labels may carry a repeat suffix)."""
+    target = (field.get("locator") or {}).get("target") or {}
+    return list(target.get("printed") or field.get("options") or [])
+
+
 def area_to_field(n: int, area: Area) -> dict:
     target = dict(area.target)
     locator = {"contract": CONTRACT, "part": area.slot.part, "slot": area.slot.path, "target": target,
@@ -1984,7 +2010,9 @@ def area_to_field(n: int, area: Area) -> dict:
     field = {"key": "v3_%d" % n, "label": area.label or "Answer", "kind": area.kind, "context": area.context,
              "locator": locator}
     if area.options:
-        field["options"] = list(area.options)
+        field["options"] = unique_options(area.options)
+        if field["options"] != list(area.options):
+            target["printed"] = list(area.options)
     if area.capacity:
         field["max_chars"] = int(area.capacity)
     return field
@@ -2346,16 +2374,18 @@ def _siblings_between(a, b):
     return out
 
 
-def write_ff_dropdown(begin_run, options, answer):
+def write_ff_dropdown(begin_run, answer, occurrence=0):
+    """Select the `occurrence`-th list entry printed as `answer` (0 = its first printing)."""
     data = begin_run.find(FLDCHAR).find(q("w:ffData"))
     dd = data.find(q("w:ddList"))
     entries = [x.get(q("w:val")) for x in dd.findall(q("w:listEntry"))]
-    if answer not in entries:
+    at = [i for i, entry in enumerate(entries) if entry == answer]
+    if len(at) <= occurrence:
         fail("The answer is not one of the dropdown's options.", "invalid_answer")
     for x in dd.findall(q("w:result")):
         dd.remove(x)
     res = _el("w:result")
-    res.set(q("w:val"), str(entries.index(answer)))
+    res.set(q("w:val"), str(at[occurrence]))
     dd.insert(0, res)
     return True
 
@@ -2428,13 +2458,19 @@ def write_cell(tc, answer, replace=False, whole=False):
     return True
 
 
-def mark_option_text(p, option):
+def option_word_match(text, option, occurrence=0):
+    """The `occurrence`-th printing of an option word in a paragraph's text (0 = the first), or None."""
+    found = list(re.finditer(r"(?<![A-Za-z0-9])" + re.escape(option.strip()) + r"(?![A-Za-z0-9])", text))
+    if len(found) > occurrence:
+        return found[occurrence]
+    return re.search(re.escape(clean_label(option)), text) if occurrence == 0 else None
+
+
+def mark_option_text(p, option, occurrence=0):
     """Tick a printed option word ('YES<tab>NO', a lettered list item, a printed option cell): a ☒ goes right
-    before it."""
+    before it. `occurrence` picks a word printed more than once (0 = its first printing)."""
     text, pieces = paragraph_text(p)
-    m = re.search(r"(?<![A-Za-z0-9])" + re.escape(option.strip()) + r"(?![A-Za-z0-9])", text)
-    if not m:
-        m = re.search(re.escape(clean_label(option)), text)
+    m = option_word_match(text, option, occurrence)
     if not m:
         fail("A stored option no longer matches the printed text.", "mapping_mismatch")
     at = m.start()
@@ -2524,7 +2560,7 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
             elif kind in ("cell", "cell_replace"):
                 value = str(answer)
                 if field["kind"] == "choice" and target.get("write") == "option_text":
-                    value = field["options"][_options_chosen(field, answer)[0]]
+                    value = printed_options(field)[_options_chosen(field, answer)[0]]
                 ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"), whole=bool(target.get("all")):
                             write_cell(el, v, rep, whole), part))
             elif kind == "paragraph":
@@ -2537,13 +2573,15 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
             elif kind in ("sdt_text", "sdt_choice"):
                 value = str(answer)
                 if kind == "sdt_choice" and anchor.info.get("type") == "dropDownList":
-                    value = field["options"][_options_chosen(field, answer)[0]]
+                    value = printed_options(field)[_options_chosen(field, answer)[0]]
                 ops.append((anchor.el, 0, lambda el=anchor.el, v=value: write_sdt_text(el, v), part))
             elif kind == "ff_text":
                 ops.append((anchor.el, 0, lambda el=anchor.el, v=str(answer): write_ff_text(el, v), part))
             elif kind == "ff_dropdown":
-                value = field["options"][_options_chosen(field, answer)[0]]
-                ops.append((anchor.el, 0, lambda el=anchor.el, v=value: write_ff_dropdown(el, field["options"], v), part))
+                i = _options_chosen(field, answer)[0]
+                printed = printed_options(field)
+                value, nth = printed[i], printed[:i].count(printed[i])
+                ops.append((anchor.el, 0, lambda el=anchor.el, v=value, k=nth: write_ff_dropdown(el, v, k), part))
             elif kind == "checkboxes":
                 boxes = target["boxes"]
                 for i in _options_chosen(field, answer):
@@ -2566,15 +2604,19 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                         ops.append((slot.el, -1, tick_cell, box["part"]))
                     elif box["kind"] == "cell_text":
                         p0 = slot.el.find(q("w:p"))
-                        ops.append((p0, 0, lambda el=p0, o=field["options"][i]: mark_option_text(el, o), box["part"]))
+                        printed = printed_options(field)
+                        nth = sum(1 for j in range(i) if printed[j].strip() == printed[i].strip() and boxes[j]["slot"] == box["slot"])
+                        ops.append((p0, 0, lambda el=p0, o=printed[i], k=nth: mark_option_text(el, o, k), box["part"]))
             elif kind == "paragraph_options":
                 paths = target["paragraphs"]
                 for i in _options_chosen(field, answer):
                     slot = index.by_id.get("%s#%s" % (anchor.part, paths[i]))
                     ops.append((slot.el, 0, lambda el=slot.el: replace_range(el, 0, 0, "☒ ", plain=False), part))
             elif kind == "text_options":
+                printed = printed_options(field)
                 for i in _options_chosen(field, answer):
-                    ops.append((anchor.el, 0, lambda el=anchor.el, o=field["options"][i]: mark_option_text(el, o), part))
+                    nth = sum(1 for j in range(i) if printed[j].strip() == printed[i].strip())
+                    ops.append((anchor.el, 0, lambda el=anchor.el, o=printed[i], k=nth: mark_option_text(el, o, k), part))
             elif kind == "table_rows":
                 ops.append((anchor.el, 0, lambda f=field, a=answer: write_table_rows(index, f, a), part))
             else:

@@ -1737,6 +1737,12 @@ def v3_option_value(field, text):
     if field.get('kind') == 'checkbox':
         return CHECKED if len(lines) == 1 and lines[0].strip().lower() in CHECKBOX_YES else None
     options = field.get('options') or []
+    # ⚠️ An option printed more than once (labelled 'Left', 'Left (2)') is named by its words at every printing: the
+    # notes saying 'Left' do not say which one, so the answer is held rather than given to the first printing.
+    from documents.word_v3 import printed_options
+    printed = [str(word).strip().lower() for word in printed_options(field)]
+    if any(printed.count(line.strip().lower()) > 1 for line in lines):
+        return None
     chosen = [option_for(options, line) for line in lines]
     if not chosen or None in chosen or (field.get('kind') == 'choice' and len(chosen) != 1):
         return None

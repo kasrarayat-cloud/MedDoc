@@ -47,6 +47,50 @@ def _sdt(kind, *, options=(), placeholder="Choose an item.", nested=None):
     return sdt
 
 
+def ff_field(p, kind, options=(), checked=False, name="F"):
+    """A legacy form field (FORMDROPDOWN or FORMCHECKBOX) appended to python-docx paragraph `p`."""
+    def run(child):
+        r = OxmlElement("w:r")
+        r.append(child)
+        p._p.append(r)
+    begin = OxmlElement("w:fldChar")
+    begin.set(qn("w:fldCharType"), "begin")
+    data = OxmlElement("w:ffData")
+    n = OxmlElement("w:name")
+    n.set(qn("w:val"), name)
+    data.append(n)
+    data.append(OxmlElement("w:enabled"))
+    if kind == "dropdown":
+        dd = OxmlElement("w:ddList")
+        for o in options:
+            e = OxmlElement("w:listEntry")
+            e.set(qn("w:val"), o)
+            dd.append(e)
+        data.append(dd)
+    else:
+        cb = OxmlElement("w:checkBox")
+        cb.append(OxmlElement("w:sizeAuto"))
+        d = OxmlElement("w:default")
+        d.set(qn("w:val"), "1" if checked else "0")
+        cb.append(d)
+        data.append(cb)
+    begin.append(data)
+    run(begin)
+    instr = OxmlElement("w:instrText")
+    instr.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    instr.text = " FORMDROPDOWN " if kind == "dropdown" else " FORMCHECKBOX "
+    run(instr)
+    end = OxmlElement("w:fldChar")
+    end.set(qn("w:fldCharType"), "end")
+    run(end)
+
+
+def ff_result(path):
+    with ZipFile(path) as z:
+        root = etree.fromstring(z.read("word/document.xml"))
+    return [r.get("{%s}val" % W) for r in root.iter("{%s}result" % W)]
+
+
 def build_form(path, *, nested_wrapper=False):
     doc = Document()
     doc.sections[0].header.paragraphs[0].text = "Patient name: ____________"
@@ -256,6 +300,73 @@ class OptionReader(unittest.TestCase):
         added = locate_fields(self.dir / "joint.docx", [{"slot": "word/document.xml#b/p[3]", "kind": "text",
                                                           "label": "Rt. knee aspirate volume"}])["fields"]
         self.assertEqual(added[0]["label"], "Rt. knee aspirate volume")
+
+
+
+def repeated_options_form(path):
+    """F7: one question printing the same option twice (boxes, a dropdown, printed words)."""
+    doc = Document()
+    doc.add_paragraph("Synthetic swelling check")
+    doc.add_paragraph("Swelling:  ☐ Left  ☐ Right  ☐ Left")
+    p = doc.add_paragraph("Answer given: ")
+    p._p.append(_sdt("dropdown", options=["Choose an item.", "Yes", "No", "Yes"]))
+    doc.add_paragraph("Was the dressing changed?")
+    doc.add_paragraph("YES\t\tNO\t\tYES")
+    Path(path).write_bytes(docx_bytes(doc))
+
+
+class RepeatedOptions(unittest.TestCase):
+    """F7: every printed option can be chosen, even one printed twice; fill maps by position."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.form = self.dir / "repeated.docx"
+        repeated_options_form(self.form)
+        self.fields = inspect_template(self.form, engine="v3")["fields"]
+        self.by = fields_by_label(self.fields)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_repeated_options_get_print_order_suffixes(self):
+        self.assertEqual(self.by["Swelling"]["options"], ["Left", "Right", "Left (2)"])
+        self.assertEqual(self.by["Answer given"]["options"], ["Yes", "No", "Yes (2)"])
+        self.assertEqual(self.by["Was the dressing changed?"]["options"], ["YES", "NO", "YES (2)"])
+        self.assertEqual(self.by["Swelling"]["locator"]["target"]["printed"], ["Left", "Right", "Left"])
+
+    def test_the_second_printing_is_the_one_ticked(self):
+        out = self.dir / "second.docx"
+        fill_template(self.form, self.fields, {self.by["Swelling"]["key"]: "Left (2)",
+                                               self.by["Answer given"]["key"]: "Yes (2)",
+                                               self.by["Was the dressing changed?"]["key"]: "YES (2)"}, out)
+        body = part_text(out)
+        self.assertIn("Swelling:  ☐ Left  ☐ Right  ☒ Left", body)
+        self.assertIn("Answer given: Yes", body)
+        self.assertNotIn("Yes (2)", body, "the printed option is written, never the suffix")
+        self.assertIn("YESNO☒ YES", body, "tabs are not text: the words read YES, NO, YES")
+
+    def test_a_legacy_dropdown_selects_the_entry_at_its_printing(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic legacy form")
+        ff_field(doc.add_paragraph("Answer given: "), "dropdown", ["Yes", "No", "Yes"])
+        form = self.dir / "legacy-dd.docx"
+        form.write_bytes(docx_bytes(doc))
+        fields = inspect_template(form, engine="v3")["fields"]
+        self.assertEqual(fields[0]["options"], ["Yes", "No", "Yes (2)"])
+        for answer, index in (("Yes (2)", "2"), ("Yes", "0"), ("No", "1")):
+            out = self.dir / ("dd-%s.docx" % index)
+            fill_template(form, fields, {fields[0]["key"]: answer}, out)
+            self.assertEqual(ff_result(out), [index], answer)
+
+    def test_the_first_printing_stays_the_first(self):
+        out = self.dir / "first.docx"
+        fill_template(self.form, self.fields, {self.by["Swelling"]["key"]: "Left",
+                                               self.by["Was the dressing changed?"]["key"]: "YES"}, out)
+        body = part_text(out)
+        self.assertIn("Swelling:  ☒ Left  ☐ Right  ☐ Left", body)
+        self.assertIn("☒ YESNOYES", body)
+        self.assertEqual(body.count("☒"), 2)
 
 
 if __name__ == "__main__":
