@@ -7,8 +7,11 @@ and `manage.py real_mode_payment_check` (read-only) refuses a database holding s
 
 No provider is called: Stripe Checkout is a mock and every webhook is signed locally with a synthetic secret.
 """
+import tempfile
+import uuid
 from decimal import Decimal
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -22,7 +25,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.recorder import MigrationRecorder
 from django.test import TestCase, TransactionTestCase, override_settings
 
-from core.billing import reserve, sandbox_funded
+from core.billing import apply_pending_reconciliations, reconcile_usage, reserve, sandbox_funded, settle, welcome_credit
 from core.models import AuditEvent, Job, LedgerEntry, Payment, ProviderReceipt, Reservation, Usage, Wallet, WebhookEvent
 from core.tests.test_security import SyntheticFixture
 from core.tests import test_v1_stripe_live as stripe_live  # The module, so its TestCase is not collected twice here.
@@ -435,12 +438,20 @@ class RealModeFundsOnlyWhatItCanSpend(SyntheticFixture, TestCase):
 class RealModeWorkerNeverSpendsAHoldOnSandboxMoney(SyntheticFixture, TestCase):
     """Round-3 refutation F2: a hold taken before the switch to real data mode sits on sandbox money. The worker refuses
     the job before any provider request: not processed, nothing charged, the hold released, audited."""
-    setUp = stripe_live.LiveCheckoutAndSettlement.setUp
     checkout = stripe_live.LiveCheckoutAndSettlement.checkout
     signed = stripe_live.LiveCheckoutAndSettlement.signed
     sandbox_top_up = RealModeNeverSpendsSandboxMoney.sandbox_top_up
     job = RealModeNeverSpendsSandboxMoney.job
     ANSWERS = {'symptoms': {'text': 'no chest pain', 'status': 'supported', 'reviewed': False, 'evidence': []}}
+
+    def setUp(self):
+        stripe_live.LiveCheckoutAndSettlement.setUp(self)
+        # A job the worker sends writes its result file under MEDIA_ROOT: a temporary directory, never the tree's .runtime.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        media = override_settings(MEDIA_ROOT=Path(directory.name))
+        media.enable()
+        self.addCleanup(media.disable)
     REAL_LIVE_AI = dict(REAL_PAYMENTS_OFF, AI_MODE='live')
 
     def run_worker(self, **now):
@@ -524,6 +535,50 @@ class RealModeWorkerNeverSpendsAHoldOnSandboxMoney(SyntheticFixture, TestCase):
         self.assertTrue(generate.called)
         wallet = Wallet.objects.get(user=self.user, kind='paid')
         self.assertEqual((wallet.balance, wallet.reserved), (Decimal('8.5'), 0))
+
+    def split_hold(self, key, promo_first):
+        """reserve() of $3 split $1 promotional / $2 sandbox-funded paid, with the order of the two holds' primary keys
+        chosen: a reader that looks only at the first hold (by primary key) meets the promotional one first when
+        promo_first. Returns the job."""
+        job = self.job(key)
+        reserve(job, Decimal('2'))
+        holds = {r.wallet.kind: r for r in Reservation.objects.filter(job=job).select_related('wallet')}
+        self.assertEqual({kind: (r.amount, r.state) for kind, r in holds.items()},
+                         {'promo': (Decimal('1'), 'held'), 'paid': (Decimal('2'), 'held')})
+        low, high = sorted([uuid.uuid4(), uuid.uuid4()])
+        first, second = ('promo', 'paid') if promo_first else ('paid', 'promo')
+        Reservation.objects.filter(pk=holds[first].pk).update(id=low)
+        Reservation.objects.filter(pk=holds[second].pk).update(id=high)
+        self.assertEqual(Reservation.objects.filter(job=job, state='held').select_related('wallet').first().wallet.kind, first)
+        return job
+
+    def test_R4_3_a_hold_split_between_promotional_credit_and_sandbox_money_is_refused_before_sending(self):
+        """The refuter's R4-3: $1 promotional + $10 sandbox money, and a $3 hold split $1/$2. No test held a split hold,
+        so a reader that looked only at the first hold (H2) or required every hold to be refused (H3) survived. Both
+        orders of the two holds run, so the first hold is the promotional one in one of them."""
+        with override_settings(QUILLMD_WELCOME_CREDIT=Decimal('1')):
+            welcome_credit(self.user)
+        _, wallet = self.sandbox_top_up()
+        promo = Wallet.objects.get(user=self.user, kind='promo')
+        self.assertEqual(promo.balance, 1)
+        for order, promo_first in (('promotional hold first', True), ('paid hold first', False)):
+            with self.subTest(order=order):
+                job = self.split_hold(f'split-{order}', promo_first)
+                generate, transcribe = self.run_worker(**self.REAL_LIVE_AI)
+                generate.assert_not_called()
+                transcribe.assert_not_called()
+                job.refresh_from_db()
+                self.assertEqual(job.state, 'failed')
+                self.assertIn('sandbox (test) payments', job.error)
+                self.assertIn('nothing was charged and the held funds were released', job.error)
+                self.assertEqual(sorted(Reservation.objects.filter(job=job).values_list('wallet__kind', 'state')),
+                                 [('paid', 'released'), ('promo', 'released')])
+                self.assertFalse(Usage.objects.filter(job=job).exists())
+                self.assertFalse(LedgerEntry.objects.filter(job=job).exists())
+                self.assertTrue(AuditEvent.objects.filter(action='usage.sandbox_hold_refused', target=str(job.pk)).exists())
+                wallet.refresh_from_db()
+                promo.refresh_from_db()
+                self.assertEqual((wallet.balance, wallet.reserved, promo.balance, promo.reserved), (10, 0, 1, 0))
 
 
 @override_settings(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES,
@@ -613,9 +668,11 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
             cursor.execute("SELECT count(*) FROM information_schema.columns WHERE column_name = 'livemode' "
                            "AND table_name IN ('core_payment', 'core_webhookevent')")
             columns = cursor.fetchone()[0]
-            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname IN ('payment_livemode_immutable', 'webhook_livemode_immutable')")
+            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname IN ('payment_evidence_immutable', 'webhook_livemode_immutable', "
+                           "'payment_no_truncate', 'webhook_no_truncate', 'ledger_no_truncate')")
             triggers = cursor.fetchone()[0]
-            cursor.execute("SELECT count(*) FROM pg_proc WHERE proname = 'quillmd_livemode_guard'")
+            cursor.execute("SELECT count(*) FROM pg_proc WHERE proname IN ('quillmd_payment_evidence_guard', 'quillmd_livemode_guard', "
+                           "'quillmd_refuse_truncate')")
             functions = cursor.fetchone()[0]
         return columns, triggers, functions
 
@@ -632,7 +689,7 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
             for private in (live.stripe_session, 'pi_live_rb', 'evt_live_rb', str(live.pk), self.user.email):
                 self.assertNotIn(private, str(refused.exception))
             self.assertIn(('core', '0020_payment_livemode'), MigrationRecorder(connection).applied_migrations())
-            self.assertEqual(self.schema(), (2, 2, 1))
+            self.assertEqual(self.schema(), (2, 5, 3))
             self.assertIs(Payment.objects.get(pk=live.pk).livemode, True)
             self.assertIs(WebhookEvent.objects.get(event_id='evt_live_rb').livemode, True)
             with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
@@ -641,18 +698,24 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
         finally:
             self.to_leaf()
 
-    def test_a_live_payment_alone_or_a_live_event_alone_refuses_too(self):
+    def test_a_live_payment_alone_refuses_too(self):
         with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
             self.checkout('live-never-paid')  # A live checkout nobody has paid yet: its row alone is live evidence.
         try:
             with self.assertRaisesRegex(IrreversibleError, r'1 payment row\(s\) and 0 Stripe event row\(s\) are recorded as live'):
                 MigrationExecutor(connection).migrate(self.BEFORE_0020)
-            Payment.objects.all().delete()
-            WebhookEvent.objects.create(event_id='evt_live_unmatched', kind='checkout.session.expired', payload_hash='0' * 64,
-                                        object_data={}, status='reconciliation', livemode=True)
+            self.assertEqual(self.schema(), (2, 5, 3))
+        finally:
+            self.to_leaf()
+
+    def test_a_live_event_alone_refuses_too(self):
+        # (A Payment row can no longer be deleted to leave the event alone: 0020's guard. So no payment is made here.)
+        WebhookEvent.objects.create(event_id='evt_live_unmatched', kind='checkout.session.expired', payload_hash='0' * 64,
+                                    object_data={}, status='reconciliation', livemode=True)
+        try:
             with self.assertRaisesRegex(IrreversibleError, r'0 payment row\(s\) and 1 Stripe event row\(s\) are recorded as live'):
                 MigrationExecutor(connection).migrate(self.BEFORE_0020)
-            self.assertEqual(self.schema(), (2, 2, 1))
+            self.assertEqual(self.schema(), (2, 5, 3))
         finally:
             self.to_leaf()
 
@@ -664,5 +727,219 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
             self.assertEqual(self.schema(), (0, 0, 0))
         finally:
             self.to_leaf()
-        self.assertEqual(self.schema(), (2, 2, 1))
+        self.assertEqual(self.schema(), (2, 5, 3))
         self.assertIsNone(Payment.objects.get(pk=payment.pk).livemode)
+
+
+@override_settings(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES,
+                   QUILLMD_WELCOME_CREDIT=Decimal('0'))
+class RealModeNeverDebitsSandboxMoney(SyntheticFixture, TestCase):
+    """Round-4 refutation R4-2: sandbox money paid a real-mode provider call's reconciled cost.
+
+    The refuter's input: synthetic mode, a $10 welcome credit and a $10 sandbox top-up; a generation job holds $3, all on
+    promotional credit; the database is switched to real data mode (payments off, AI live). The worker checked only the
+    wallets holding the job's funds (promotional: fine) and sent it, and reconcile_usage(usage, 1.8) then debited the
+    $1.20 difference from the payer's sandbox-funded paid wallet; release() -> apply_pending_reconciliations could make
+    the same debit. In real mode no debit of any kind may take money from a balance real_mode_refuses: the worker refuses
+    such a job as reserve() refuses its payer, a reconciled charge stays pending_funds (audited), and settlement debits
+    nothing from such a balance.
+    """
+    setUp = RealModeWorkerNeverSpendsAHoldOnSandboxMoney.setUp
+    checkout = stripe_live.LiveCheckoutAndSettlement.checkout
+    signed = stripe_live.LiveCheckoutAndSettlement.signed
+    sandbox_top_up = RealModeNeverSpendsSandboxMoney.sandbox_top_up
+    job = RealModeNeverSpendsSandboxMoney.job
+    run_worker = RealModeWorkerNeverSpendsAHoldOnSandboxMoney.run_worker
+    ANSWERS = RealModeWorkerNeverSpendsAHoldOnSandboxMoney.ANSWERS
+    REAL_LIVE_AI = RealModeWorkerNeverSpendsAHoldOnSandboxMoney.REAL_LIVE_AI
+
+    def funded(self):
+        """The refuter's balances: a $10 welcome credit and a $10 sandbox top-up, both in synthetic mode."""
+        with override_settings(QUILLMD_WELCOME_CREDIT=Decimal('10')):
+            welcome_credit(self.user)
+        _, wallet = self.sandbox_top_up()
+        return Wallet.objects.get(user=self.user, kind='promo'), wallet
+
+    @staticmethod
+    def holds(job):
+        return sorted(Reservation.objects.filter(job=job).values_list('wallet__kind', 'amount', 'state'))
+
+    def assert_untouched(self, wallet, reserved=Decimal('0')):
+        wallet.refresh_from_db()
+        self.assertEqual((wallet.balance, wallet.reserved), (Decimal('10'), reserved))
+        self.assertFalse(LedgerEntry.objects.filter(wallet=wallet).exclude(kind='payment').exists())
+
+    def settled_on_promotional_credit(self, key):
+        """A generation job holding $3 on promotional credit, sent and settled in synthetic mode ($1.50 charged)."""
+        job = self.job(key)
+        reserve(job, Decimal('2'))
+        self.assertEqual(self.holds(job), [('promo', Decimal('3'), 'held')])
+        generate, _ = self.run_worker(AI_MODE='live')
+        self.assertTrue(generate.called)
+        usage = Usage.objects.get(job=job)
+        self.assertEqual(usage.charged_cost, Decimal('1.5'))
+        return job, usage
+
+    def test_R4_2_the_worker_refuses_a_job_whose_payer_balance_holds_sandbox_money_even_on_a_promotional_hold(self):
+        """The refuter's input, up to the provider request: the hold is wholly promotional, but reserve() refuses this
+        payer in real mode, so the worker refuses the job before sending."""
+        promo, wallet = self.funded()
+        job = self.job('promotional-hold')
+        reserve(job, Decimal('2'))
+        self.assertEqual(self.holds(job), [('promo', Decimal('3'), 'held')])
+        with transaction.atomic(), override_settings(**REAL_PAYMENTS_OFF):
+            with self.assertRaisesRegex(ValidationError, 'sandbox'):
+                reserve(self.job('the-same-payer-in-real-mode'), Decimal('2'))
+            transaction.set_rollback(True)
+        generate, transcribe = self.run_worker(**self.REAL_LIVE_AI)
+        generate.assert_not_called()
+        transcribe.assert_not_called()
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertIn('sandbox (test) payments', job.error)
+        self.assertIn('nothing was charged and the held funds were released', job.error)
+        self.assertEqual(self.holds(job), [('promo', Decimal('3'), 'released')])
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        promo.refresh_from_db()
+        self.assertEqual((promo.balance, promo.reserved), (Decimal('10'), Decimal('0')))
+        self.assert_untouched(wallet)
+        self.assertTrue(AuditEvent.objects.filter(action='usage.sandbox_hold_refused', target=str(job.pk)).exists())
+
+    def test_R4_2_the_refuters_chain_with_the_worker_check_removed_still_takes_no_sandbox_money(self):
+        """Each wall alone: with the worker's check patched out, the refuter's chain reaches reconcile_usage(usage, 1.8),
+        which applied a $1.20 debit to the sandbox-funded wallet. It must leave the charge pending_funds, audited."""
+        promo, wallet = self.funded()
+        job = self.job('refuter-chain')
+        reserve(job, Decimal('2'))
+        with patch('core.jobs.sandbox_hold', return_value=False):
+            generate, _ = self.run_worker(**self.REAL_LIVE_AI)
+        self.assertTrue(generate.called)
+        usage = Usage.objects.get(job=job)  # $1.50, settled wholly on promotional credit: no sandbox money
+        with override_settings(**REAL_PAYMENTS_OFF):
+            row = reconcile_usage(usage, Decimal('1.8'), 'synthetic-invoice-r4-2', self.user)
+        self.assertEqual((row.charge_delta, row.ledger_status), (Decimal('1.2'), 'pending_funds'))
+        self.assert_untouched(wallet)
+        self.assertFalse(LedgerEntry.objects.filter(job=job, kind='reconciliation').exists())
+        refused = AuditEvent.objects.get(action='usage.reconciliation_sandbox_refused')
+        self.assertEqual((refused.actor_id, refused.target, Decimal(refused.details['charge_delta']), refused.details['wallet']),
+                         (self.user.pk, str(job.pk), Decimal('1.2'), str(wallet.pk)))
+
+    def test_R4_2_a_charge_reconciled_in_real_mode_for_a_job_settled_before_the_switch_stays_pending(self):
+        promo, wallet = self.funded()
+        job, usage = self.settled_on_promotional_credit('settled-before-switch')
+        with override_settings(**REAL_PAYMENTS_OFF):
+            row = reconcile_usage(usage, Decimal('1.8'), 'synthetic-invoice-after-switch', self.user)
+        self.assertEqual((row.charge_delta, row.ledger_status), (Decimal('1.2'), 'pending_funds'))
+        self.assert_untouched(wallet)
+        self.assertTrue(AuditEvent.objects.filter(action='usage.reconciliation_sandbox_refused', target=str(job.pk)).exists())
+        # Synthetic mode, unchanged: the charge still waiting is applied from the same balance.
+        self.assertEqual(apply_pending_reconciliations(actor=self.user), [row])
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.balance, Decimal('8.8'))
+
+    def test_R4_2_a_charge_pending_before_the_switch_is_never_applied_from_sandbox_money(self):
+        """release() -> apply_pending_reconciliations: a charge left pending_funds in synthetic mode (the paid balance was
+        all held) must not be applied from sandbox money once real mode releases the hold."""
+        promo, wallet = self.funded()
+        job, usage = self.settled_on_promotional_credit('pending-before-switch')
+        blocker = self.job('holds-the-rest')
+        reserve(blocker, charge_limit=Decimal('18.5'))  # promotional 8.50 and paid 10: nothing left available
+        self.assertEqual(self.holds(blocker), [('paid', Decimal('10'), 'held'), ('promo', Decimal('8.5'), 'held')])
+        row = reconcile_usage(usage, Decimal('1.8'), 'synthetic-invoice-pending', self.user)
+        self.assertEqual(row.ledger_status, 'pending_funds')
+        # Real mode: the worker refuses the blocker (its hold sits on sandbox money) and releases it; the release applies
+        # this payer's pending charges once the transaction commits.
+        with override_settings(**self.REAL_LIVE_AI), self.captureOnCommitCallbacks(execute=True) as callbacks:
+            generate, _ = self.run_worker(**self.REAL_LIVE_AI)
+        generate.assert_not_called()
+        self.assertTrue(callbacks, 'the release queued no pending application')
+        row.refresh_from_db()
+        self.assertEqual(row.ledger_status, 'pending_funds')
+        self.assert_untouched(wallet)
+        with override_settings(**REAL_PAYMENTS_OFF):
+            self.assertEqual(apply_pending_reconciliations(actor=self.user), [])
+        row.refresh_from_db()
+        self.assertEqual(row.ledger_status, 'pending_funds')
+        self.assert_untouched(wallet)
+        self.assertGreaterEqual(AuditEvent.objects.filter(action='usage.reconciliation_sandbox_refused', target=str(job.pk)).count(), 2)
+        # Synthetic mode, unchanged: the pending charge applies from the same balance.
+        self.assertEqual(apply_pending_reconciliations(actor=self.user), [row])
+        wallet.refresh_from_db()
+        self.assertEqual(wallet.balance, Decimal('8.8'))
+
+    def test_R4_2_settlement_in_real_mode_never_debits_sandbox_money(self):
+        """The last wall: a hold on sandbox money that reaches settlement in real mode (the worker's check patched out)
+        is debited nothing. Settlement is held for reconciliation before any write, nothing is charged, the provider's
+        receipt is kept, and the refusal is audited with the job."""
+        _, wallet = self.sandbox_top_up()
+        job = self.job('settlement-wall')
+        reserve(job, Decimal('2'))
+        self.assertEqual(self.holds(job), [('paid', Decimal('3'), 'held')])
+        with override_settings(**REAL_PAYMENTS_OFF), self.assertRaisesRegex(ValidationError, 'sandbox'):
+            settle(job, Decimal('1'), {'input_tokens': 1}, {'rate': '1'}, 'anthropic:probe', 'msg_settlement_wall')
+        self.assertEqual(self.holds(job), [('paid', Decimal('3'), 'held')])
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        with patch('core.jobs.sandbox_hold', return_value=False):
+            generate, _ = self.run_worker(**self.REAL_LIVE_AI)
+        self.assertTrue(generate.called)
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'reconciliation')
+        self.assertIn('nothing is charged', job.error)
+        self.assertEqual(self.holds(job), [('paid', Decimal('3'), 'held')])
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertTrue(ProviderReceipt.objects.filter(job=job).exists())
+        self.assert_untouched(wallet, reserved=Decimal('3'))
+        refused = AuditEvent.objects.get(action='job.reconciliation', target=str(job.pk))
+        self.assertEqual(refused.details['error_class'], 'SandboxFundsRefused')
+
+    def test_real_mode_settles_a_charge_that_promotional_credit_covers_beside_a_sandbox_hold(self):
+        """Refusing only what would take sandbox money: a split hold whose charge promotional credit covers settles in
+        real mode; the sandbox hold is released unspent."""
+        with override_settings(QUILLMD_WELCOME_CREDIT=Decimal('1')):
+            welcome_credit(self.user)
+        _, wallet = self.sandbox_top_up()
+        job = self.job('covered-by-promotional-credit')
+        reserve(job, Decimal('2'))
+        self.assertEqual(self.holds(job), [('paid', Decimal('2'), 'held'), ('promo', Decimal('1'), 'held')])
+        with override_settings(**REAL_PAYMENTS_OFF):
+            usage = settle(job, Decimal('0.5'), {'input_tokens': 1}, {'rate': '1'}, 'anthropic:probe', 'msg_covered')
+        self.assertEqual(usage.charged_cost, Decimal('0.75'))
+        self.assertEqual(self.holds(job), [('paid', Decimal('2'), 'settled'), ('promo', Decimal('1'), 'settled')])
+        promo = Wallet.objects.get(user=self.user, kind='promo')
+        self.assertEqual((promo.balance, promo.reserved), (Decimal('0.25'), Decimal('0')))
+        self.assert_untouched(wallet)
+
+    def test_a_queued_job_with_no_hold_yet_is_judged_by_the_payer_reserve_would_record(self):
+        """A job queued without a recorded payer (no hold taken) is refused when the payer reserve() would record for it
+        holds sandbox money, rather than sent with nothing to check."""
+        _, wallet = self.sandbox_top_up()
+        job = self.job('no-payer-yet')
+        self.assertEqual((job.payer, self.holds(job)), ('', []))
+        generate, _ = self.run_worker(**self.REAL_LIVE_AI)
+        generate.assert_not_called()
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertIn('sandbox (test) payments', job.error)
+        self.assert_untouched(wallet)
+
+    def test_a_hold_on_any_sandbox_funded_balance_is_refused_even_one_that_is_not_the_payers(self):
+        """reserve() only ever holds the payer's own balances, but the worker's rule reads every hold as well as the
+        payer's paid wallet: a hold on another balance holding sandbox money (a state reserve() never makes) is refused
+        before sending too."""
+        other_user = self.make_scope('other-sandbox-balance')[0]
+        other_wallet = Wallet.objects.get(user=other_user, kind='paid')
+        Payment.objects.create(user=other_user, wallet=other_wallet, amount_cents=500, stripe_session='cs_other_sandbox',
+                               stripe_intent='pi_other_sandbox', status='paid', livemode=False)
+        Wallet.objects.filter(pk=other_wallet.pk).update(balance=Decimal('5'), reserved=Decimal('3'))
+        LedgerEntry.objects.create(wallet=other_wallet, amount=Decimal('5'), kind='payment', key='payment:pi_other_sandbox',
+                                   description='Explicit Stripe wallet top-up', balance_after=Decimal('5'))
+        job = self.job('hold-on-another-balance')
+        Job.objects.filter(pk=job.pk).update(payer=f'user:{self.user.pk}')
+        Reservation.objects.create(job=job, wallet=other_wallet, amount=Decimal('3'))
+        self.assertFalse(sandbox_funded(Wallet.objects.get(user=self.user, kind='paid')))
+        generate, _ = self.run_worker(**self.REAL_LIVE_AI)
+        generate.assert_not_called()
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertIn('sandbox (test) payments', job.error)
+        self.assertEqual(self.holds(job), [('paid', Decimal('3'), 'released')])

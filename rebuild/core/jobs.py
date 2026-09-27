@@ -401,8 +401,9 @@ def refuse(kind,detail,job=None):
     return NoProviderRequest(refusal_text(kind))
 
 
-#: A hold taken before the switch to real data mode that sits on sandbox money: refused before any provider request.
-SANDBOX_HOLD_REFUSED='The funds held for this request include sandbox (test) payments, which real data mode never spends. Contact support.'
+#: A job whose held funds or payer's paid balance hold sandbox money in real data mode (billing.sandbox_hold): refused
+#: before any provider request.
+SANDBOX_HOLD_REFUSED='The paid balance for this request holds sandbox (test) payments, which real data mode never spends. Contact support.'
 
 
 def refuse_sandbox_hold(job):
@@ -610,7 +611,8 @@ def run_one():
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
     provider_returned=False
     try:
-        # A hold taken before the switch to real data mode may sit on sandbox money, which real mode never spends.
+        # A hold taken before the switch to real data mode may sit on sandbox money, or its payer's paid balance (which a
+        # reconciled cost would debit) may hold it: real mode never spends it, and refuses the job as reserve() would.
         if sandbox_hold(job): raise refuse_sandbox_hold(job)
         e=job.encounter
         # The operator's mode switch is a stop: a job queued in the other mode is refused here, before anything is sent.
