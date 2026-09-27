@@ -1594,6 +1594,14 @@ POINTING_END = re.compile(r'(?:[\-\u2010-\u2015\u2212]|' + LETTER_BEFORE + r'(?:
 POINTING_START = re.compile(r'^[\s*_~`"\'\u201c\u2018(\[]*see' + LETTER_AFTER, re.I)
 
 
+#: ⚠️ A SELF-CORRECTION INSIDE ONE SENTENCE ('penicillin, sorry, I mean amoxicillin'): no structure can see it, so these
+#: phrases HOLD the value, and only hold. Leak mode, stated: a correction phrased otherwise inside one sentence is
+#: adopted with the correction in its own text (the tab contract's premise: a sentence keeps its own corrections). The
+#: word 'correction' is not here: the tab contract's `; correction,` and the governance reader's errata already read it.
+SELF_CORRECTION = re.compile(LETTER_BEFORE + r'(?:sorry|i\s+mean|i\s+meant|scratch\s+that|strike\s+that|disregard|no\s+wait'
+                             r'|or\s+rather|actually)' + LETTER_AFTER, re.I)
+
+
 def points_elsewhere(text):
     """Whether a value or sentence is shaped as a pointer to other lines (`POINTING_END`, `POINTING_START`)."""
     return bool(POINTING_END.search(text) or POINTING_START.search(text))
@@ -1729,6 +1737,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 if ASKS_OR_TRAILS_OFF.search(own_value[1] if own_value else quote): guarded=True
                 # (e) Nor does one shaped as a pointer to other lines (F7).
                 if points_elsewhere(own_value[1] if own_value else quote): guarded=True
+                # (f) A self-correction inside the sentence (read with invisible characters removed too).
+                if any(SELF_CORRECTION.search(reading) for reading in readings(quote)): guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
             if any(re.search(subject,label,re.I) and not re.search(subject,quote,re.I) for subject in SUBJECTS): guarded=True

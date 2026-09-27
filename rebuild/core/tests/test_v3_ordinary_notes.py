@@ -663,6 +663,17 @@ class RoundTwoRefutation(SimpleTestCase):
             notes = 'Allergies: penicillin.' + gap + 'The patient is well today.'
             self.assertEqual(run(notes, {'Allergies': ['Allergies: penicillin.']})['Allergies']['text'], 'penicillin.', gap)
 
+    def test_a_self_correction_inside_one_sentence_holds_it(self):
+        """Not the refuter's inputs: 'a correction inside the same line must still hold' when it is inside one sentence,
+        where no structure can see it. A short list of self-correction phrases that only ever HOLDS."""
+        for notes, label in (('Allergies: penicillin, sorry, I mean amoxicillin.', 'Allergies'),
+                             ('Medications: warfarin 5 mg daily, actually stopped last month.', 'Medications'),
+                             ('Smoker: yes (scratch that, no).', 'Smoker'),
+                             ('Plan: start lisinopril, or rather amlodipine, 5 mg daily.', 'Plan'),
+                             ('Allergies: penicillin \u2014 no wait, amoxicillin.', 'Allergies')):
+            with self.subTest(notes=notes):
+                self.held(notes, label, notes, notes.split(': ', 1)[1])
+
     def test_f4_an_option_printed_with_a_closing_full_stop_is_named_by_its_value(self):
         form = [field('v3_r', 'Right impression', 'choice', ['reflux positive.', 'is absent.']),
                 field('v3_s', 'Smoker', 'choice', ['Yes.', 'No.'])]
