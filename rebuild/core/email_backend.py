@@ -93,7 +93,7 @@ def private_access_instructions(recipient, purpose):
     validate_resend_recipient(recipient)
     username = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME
     password = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD
-    if purpose not in {"invitation", "recovery"} or not username:
+    if purpose not in {"invitation", "recovery", "owner_invitation"} or not username:
         return ""
     origin = application_origin()
     return (f"\n\nPrivate synthetic preview: first sign in on the private preview access page at {origin}."
