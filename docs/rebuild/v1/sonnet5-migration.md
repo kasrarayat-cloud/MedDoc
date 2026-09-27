@@ -47,10 +47,20 @@ QUILLMD_AI_CACHED_RATE=0.20
 Request profile. The defaults apply when these are unset:
 
 ```
-QUILLMD_AI_THINKING=disabled      # disabled | adaptive
-QUILLMD_AI_EFFORT=medium          # low | medium | high
-QUILLMD_AI_INFERENCE_GEO=         # empty: not sent; us: US-only inference, billed 1.1x
+# Thinking: disabled | adaptive
+QUILLMD_AI_THINKING=disabled
+# Effort: low | medium | high
+QUILLMD_AI_EFFORT=medium
+# Inference geography: empty (inference_geo is not sent), or us (US-only inference, billed 1.1x)
+QUILLMD_AI_INFERENCE_GEO=
 ```
+
+Copy value lines exactly as they are. Comments go on their own line, as in `rebuild/.env.example`, never after a value.
+The services read the private environment through systemd's `EnvironmentFile=`, which treats `#` as a comment only at
+the start of a line and keeps an inline `# …` as part of the value. So `QUILLMD_AI_THINKING=disabled # …` or
+`QUILLMD_AI_INFERENCE_GEO= # …` makes every generation refused. A `manage.py` run outside systemd reads the same file
+with python-dotenv, which strips some inline comments (after a value) and not others (after an empty value), so its
+output can disagree with what the services loaded.
 
 `disabled` / `medium` is the parity choice. Thinking stays off, as on Sonnet 4.6, and the migration guide rates Sonnet 5
 at `medium` as comparable to Sonnet 4.6 at `high`. `adaptive` is **an owner decision**, to be taken on measured quality,
@@ -71,7 +81,8 @@ QUILLMD_AI_MODEL=claude-sonnet-4-6
 QUILLMD_AI_INPUT_RATE=3
 QUILLMD_AI_OUTPUT_RATE=15
 QUILLMD_AI_CACHED_RATE=0.30
-QUILLMD_AI_INFERENCE_GEO=         # unset for the byte-identical request
+# Empty, so inference_geo is not sent: the byte-identical request
+QUILLMD_AI_INFERENCE_GEO=
 ```
 
 `QUILLMD_AI_THINKING` and `QUILLMD_AI_EFFORT` are ignored for claude-sonnet-4-6 and may stay as they are. Rollback is a

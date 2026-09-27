@@ -399,6 +399,60 @@ class Sonnet5RequestProfile(SimpleTestCase):
         self.assertEqual(g.validated(raw)['symptoms']['text'], 'no chest pain')
 
 
+class OperatorValueBlocks(SimpleTestCase):
+    """S5-R4. The note's value blocks are what the owner pastes into the private environment, which the doctor, admin and
+    worker units read through systemd's EnvironmentFile= — where `#` starts a comment only at the start of a line and an
+    inline `# …` stays in the value. `QUILLMD_AI_INFERENCE_GEO=   # unset for the byte-identical request` therefore
+    refused every generation, the rollback included. Every value line is literal, and each block, read the way systemd
+    reads it, selects exactly what the note says it does."""
+    ROOT = Path(__file__).resolve().parents[3]
+    NOTE = ROOT / 'docs' / 'rebuild' / 'v1' / 'sonnet5-migration.md'
+    EXAMPLE = ROOT / 'rebuild' / '.env.example'
+
+    def blocks(self):
+        import re
+        return [block.splitlines() for block in re.findall(r'^```\n(.*?)^```$', self.NOTE.read_text(), re.S | re.M)]
+
+    @staticmethod
+    def assignments(lines):
+        return [line for line in lines if line.strip() and not line.lstrip().startswith(('#', ';'))]
+
+    @classmethod
+    def systemd_values(cls, lines):
+        """EnvironmentFile= as systemd.exec documents it: a line starting with `#` or `;` is a comment; an unquoted value
+        loses its leading and trailing whitespace and keeps everything else, an inline `#` included."""
+        return {name.strip(): value.strip() for name, _, value in (line.partition('=') for line in cls.assignments(lines))}
+
+    def test_no_value_line_carries_an_inline_comment(self):
+        note = [line for block in self.blocks() for line in self.assignments(block)]
+        self.assertEqual(len(note), 12, 'positive control: the switch (4), profile (3) and rollback (5) value lines')
+        for line in note + self.assignments(self.EXAMPLE.read_text().splitlines()):
+            with self.subTest(line=line):
+                self.assertIn('=', line)
+                self.assertNotIn('#', line)
+
+    def block(self, has):
+        as_settings = lambda values: {name[len('QUILLMD_'):]: value for name, value in values.items()}
+        return next(as_settings(values) for values in map(self.systemd_values, self.blocks()) if has(values))
+
+    def test_the_switch_blocks_read_as_systemd_reads_them_select_the_default_sonnet_5_profile(self):
+        switch = self.block(lambda values: values.get('QUILLMD_AI_MODEL') == 'claude-sonnet-5')
+        profile = self.block(lambda values: 'QUILLMD_AI_THINKING' in values)
+        with override_settings(**{**SONNET_46, **switch, **profile}), patch.dict(os.environ, PRICE_ENV):
+            config = g.configuration()
+        self.assertNotIn('invalid', config['request_profile'])
+        self.assertEqual(config['pricing_version'], SONNET_5_DISABLED_MEDIUM)
+
+    def test_the_rollback_block_read_as_systemd_reads_it_is_the_byte_identical_legacy_request(self):
+        rollback = self.block(lambda values: values.get('QUILLMD_AI_MODEL') == 'claude-sonnet-4-6')
+        # Rolling back FROM a Sonnet 5 configuration that had US-only inference and adaptive thinking set.
+        with override_settings(**{**SONNET_5, 'AI_THINKING': 'adaptive', 'AI_INFERENCE_GEO': 'us', **rollback}), \
+                patch.dict(os.environ, PRICE_ENV):
+            config = g.configuration()
+        self.assertEqual(config['request_profile'], g.LEGACY_PROFILE)
+        self.assertEqual(config['pricing_version'], ROLLBACK_FINGERPRINT)
+
+
 class OutcomeFixture(SyntheticFixture):
     """Private media, the pinned price environment and one synthetic scope; shared with test_sonnet5_settlement.py."""
 
