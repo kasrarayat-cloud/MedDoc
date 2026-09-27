@@ -1332,9 +1332,13 @@ def reading():
     ProtectSystem=strict sandbox grants no write to this directory, so an O_CREAT or O_RDWR open
     here would fail there on every tick. flock needs no write access. With no lock file no check
     has ever run in this directory, so there is no writer to be consistent with.
+
+    ⚠️ AND NON-BLOCKING, THEN REFUSED UNLESS A PRIVATE REGULAR FILE (R3-5, round 3). Opening a FIFO
+    for reading blocks until a writer appears: a FIFO in the lock's place hung status(), and every
+    publisher tick with it. lock_file() refuses it, exactly as check() refuses it.
     """
     try:
-        fd = os.open(DIRECTORY / 'monitor.lock', os.O_RDONLY | os.O_NOFOLLOW)
+        fd = os.open(DIRECTORY / 'monitor.lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
         fd = None
     try:
