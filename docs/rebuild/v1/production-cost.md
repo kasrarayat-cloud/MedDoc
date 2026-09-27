@@ -88,13 +88,19 @@ for a form generation is (request bytes + 12,000) input tokens plus 6,000 output
 
 **Output cap this table assumes:** this release's code sets an output cap of 6,000 tokens on each
 provider call (`max_tokens=6000` on the Anthropic call, `max_output_tokens=6000` on the OpenAI call,
-`core/generation.py`), and no row of the table exceeds it. A test reads every provider call's cap
-and `maximum_cost` from the code; it fails if either stops being a single number equal to what this
-page states, or if any row of the table exceeds the cap. The separate Sonnet 5 migration stream sets
-8,000 for its thinking-disabled profile and 16,000 for adaptive thinking. If that ships, the output
-term rises with the cap (and that test fails until this page is updated): by the same formula a
-20,000-byte request is bounded at $0.144 (8,000) or $0.224 (16,000), and the High row must be
-recomputed.
+`core/generation.py`), and no row of the table exceeds it. A test parses every application Python
+file under `rebuild/` (tests excluded). It fails, naming the call, when a provider call's receiver
+cannot be traced to a client constructed and bound to one name in that file; when the call goes
+through `with_options`, `with_raw_response`, `with_streaming_response` or `copy`; when it carries
+`extra_body`, `extra_query`, `extra_headers`, `**` or positional arguments; when it has not exactly
+one output cap; or when the cap is not an int literal or a module-level name whose only binding
+anywhere in the module is one assignment of an int literal. It also fails when a cap or
+`maximum_cost` differs from what this page states, or any row of the table exceeds the cap. It reads
+source only: a cap changed at run time by other means (a patched SDK, a proxy) is outside it. The
+separate Sonnet 5 migration stream sets 8,000 for its thinking-disabled profile and 16,000 for
+adaptive thinking. If that ships, the output term rises with the cap (and that test fails until this
+page is updated): by the same formula a 20,000-byte request is bounded at $0.144 (8,000) or $0.224
+(16,000), and the High row must be recomputed.
 
 | Generation | Input tokens | Output tokens | Cost |
 | --- | ---: | ---: | ---: |

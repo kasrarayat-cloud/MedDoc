@@ -65,15 +65,26 @@ Refusals, all with fixed labels and all tested:
   `PG*` variable. A production environment file cannot start the private units (wrong runtime user).
 - **Mixed host.** The production launcher refuses when Docker exists (a denied socket counts as
   present), when `/opt/meddoc-pro` exists, when the state root is not a mounted volume, or when the
-  CA bundle is not root-owned and byte-identical to the pinned hash. It also refuses unless, at
-  start, the application identity cannot reach the instance metadata service over UDP or TCP on
-  either address: for 169.254.169.254 an empty UDP datagram must fail with EPERM AND a TCP connect
-  must not complete within 1.5 s; fd00:ec2::254 must pass the same test or have no route from this
-  host (no IPv6 path, IPv6 disabled, or no IPv6 stack). That is what the units' `IPAddressDeny=`
-  egress drop produces (UDP fails with EPERM, TCP only times out), and it adds 1.5 s to each start.
-  A UDP-only or TCP-only block, or an open IPv6 path, refuses. It is a check of this process at
-  start, not of every future path: the units' deny line is what keeps it true, and a test fails if
-  any unit but the root secret renderer loses either address.
+  CA bundle is not root-owned and byte-identical to the pinned hash.
+- **Instance metadata.** The primary control is the units' `IPAddressDeny=169.254.169.254/32
+  fd00:ec2::254/128`, a cgroup egress drop on both protocols. A test reads each shipped unit and
+  any drop-in the package ships the way systemd applies `IPAddressAllow=`/`IPAddressDeny=` (in
+  order, an empty assignment resets that list, an allow entry overrides a deny, `any`,
+  `localhost`, `link-local` and `multicast` expand as systemd expands them) and fails if any unit
+  but the root secret renderer could reach either address. It sees only the package: a drop-in or
+  slice configured on the host is outside it. The heartbeat unit has no launcher, so for it this
+  test is the only check.
+- **The launcher's own check** (doctor, admin and worker, at start). For 169.254.169.254 an empty
+  UDP datagram must fail with EPERM AND a TCP connect must not complete within 2.5 s (a connect the
+  kernel completed before the deadline but had not reported counts as completed).
+  fd00:ec2::254 must pass the same test or have no route from this host (no IPv6 path, IPv6
+  disabled, or no IPv6 stack). That is what the units' egress drop produces (UDP fails with EPERM,
+  TCP only times out), and it adds 2.5 s to each start; the whole check takes at most 3 s. A
+  UDP-only or TCP-only block, or an open IPv6 path, refuses. **Its limit:** a TCP handshake that
+  completes only after 2.5 s is not seen, so a UDP-only rule in front of an IMDS that slow would be
+  accepted (measured: accepted when the handshake completed after the window, refused at 1.86 s
+  and at 2.03 s). The check proves what this process could reach at start; the unit deny is what
+  keeps it true.
 
 The private launcher path is proven unchanged by a differential test against a byte-identical copy
 of the launcher as it was before profiles existed (`rebuild/ops/fixtures/`), and the same for the

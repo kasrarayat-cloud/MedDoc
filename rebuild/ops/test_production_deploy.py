@@ -9,6 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import functools
 import hashlib
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -66,6 +67,97 @@ def one(section, key):
     return values[0]
 
 
+METADATA_ADDRESSES = (ipaddress.ip_address('169.254.169.254'), ipaddress.ip_address('fd00:ec2::254'))
+# systemd.resource-control(5): the names IPAddressAllow=/IPAddressDeny= accept besides addresses and prefixes.
+SYSTEMD_IP_NAMES = {'any': ('0.0.0.0/0', '::/0'), 'localhost': ('127.0.0.0/8', '::1/128'),
+                    'link-local': ('169.254.0.0/16', 'fe80::/64'), 'multicast': ('224.0.0.0/4', 'ff00::/8')}
+
+
+class UnreadableUnit(AssertionError):
+    """A unit line this check cannot read exactly as systemd would; failing is the safe answer."""
+
+
+def unit_assignments(path):
+    """(section, key, value) in file order, read as systemd reads a unit file: '#' and ';' comments, a trailing
+    backslash continues the line (comment lines inside a continuation are skipped), whitespace around '=' stripped."""
+    rows, section, carried = [], None, None
+    for raw in path.read_text().splitlines():
+        stripped = raw.strip()
+        if carried is not None and stripped.startswith(('#', ';')):
+            continue
+        line = stripped if carried is None else carried + ' ' + stripped
+        if line.endswith('\\'):
+            carried = line[:-1].rstrip()
+            continue
+        carried = None
+        if not line or line.startswith(('#', ';')):
+            continue
+        if line.startswith('[') and line.endswith(']'):
+            section = line[1:-1]
+            continue
+        key, equals, value = line.partition('=')
+        if not equals:
+            raise UnreadableUnit(f'{path.name}: a line that is neither a section, a comment nor an assignment')
+        rows.append((section, key.strip(), value.strip()))
+    if carried is not None:
+        raise UnreadableUnit(f'{path.name}: a continuation at the end of the file')
+    return rows
+
+
+def drop_ins(path):
+    """Every drop-in systemd would read for this unit from the directory it is shipped in, in the order it applies
+    them (by file name across all directories; a name used twice cannot be ordered here, so it fails)."""
+    name = path.name
+    stem, _, kind = name.rpartition('.')
+    folders = [kind + '.d']
+    parts = stem.split('-')
+    folders += ['-'.join(parts[:index]) + '-.' + kind + '.d' for index in range(1, len(parts))]
+    folders.append(name + '.d')
+    found = {}
+    for folder in folders:
+        for conf in sorted((path.parent / folder).glob('*.conf')):
+            if conf.name in found:
+                raise UnreadableUnit(f'{name}: drop-in {conf.name} exists in two directories')
+            found[conf.name] = conf
+    return [found[key] for key in sorted(found)]
+
+
+def ip_access_lists(path):
+    """(allow, deny) as systemd builds them for this unit: each assignment appends, an empty one resets that list."""
+    lists = {'IPAddressAllow': [], 'IPAddressDeny': []}
+    for source in [path] + drop_ins(path):
+        for section, key, value in unit_assignments(source):
+            if key not in lists:
+                continue
+            if section != 'Service':
+                raise UnreadableUnit(f'{source.name}: {key} in [{section}]')
+            if not value:
+                lists[key] = []
+                continue
+            for word in value.split():
+                if word in SYSTEMD_IP_NAMES:
+                    lists[key] += [ipaddress.ip_network(net) for net in SYSTEMD_IP_NAMES[word]]
+                    continue
+                address, slash, prefix = word.partition('/')
+                try:
+                    parsed = ipaddress.ip_address(address)
+                except ValueError:
+                    raise UnreadableUnit(f'{source.name}: {key} entry {word!r}') from None
+                if slash and not (prefix.isdigit() and int(prefix) <= parsed.max_prefixlen):
+                    raise UnreadableUnit(f'{source.name}: {key} entry {word!r}')
+                length = int(prefix) if slash else parsed.max_prefixlen
+                lists[key].append(ipaddress.ip_network(f'{address}/{length}', strict=False))
+    return lists['IPAddressAllow'], lists['IPAddressDeny']
+
+
+def ip_reachable(address, allow, deny):
+    """systemd's rule: granted if the address matches the allow list; otherwise denied if it matches the deny
+    list; otherwise granted."""
+    if any(address in network for network in allow if network.version == address.version):
+        return True
+    return not any(address in network for network in deny if network.version == address.version)
+
+
 class UnitProfileAgreementTests(unittest.TestCase):
     def test_application_units_are_bound_to_the_profile(self):
         state = PROFILE.state_root
@@ -99,19 +191,67 @@ class UnitProfileAgreementTests(unittest.TestCase):
                 self.assertEqual(environment['QUILLMD_ADMIN_SITE'], '1' if surface == 'admin' else '0')
                 self.assertEqual(environment['TMPDIR'], str(state / 'tmp'))
 
-    def test_every_unit_but_the_secret_renderer_denies_both_metadata_addresses(self):
-        # The launcher refuses unless both addresses are denied; the units are what deny them. Only the root
-        # environment unit may reach IMDS: it reads the secret with the instance role.
+    def test_every_unit_but_the_secret_renderer_cannot_reach_either_metadata_address(self):
+        # Judged the way systemd applies IPAddressAllow=/IPAddressDeny= (systemd.resource-control(5)), over the unit
+        # and every drop-in this package ships. The heartbeat unit has no launcher behind it: this is its only guard.
         units = sorted(PRODUCTION.glob('*.service'))
         self.assertEqual(len(units), 5)
         for path in units:
-            values = unit(path.name)['Service'].get('IPAddressDeny', [])
-            denied = {address for value in values for address in value.split()}
+            allow, deny = ip_access_lists(path)
             with self.subTest(unit=path.name):
                 if path.name == PROFILE.unit_prefix + 'environment.service':
-                    self.assertEqual(denied, set())
+                    # Root, and it must reach IMDS: it reads the secret with the instance role.
+                    self.assertTrue(ip_reachable(METADATA_ADDRESSES[0], allow, deny))
                 else:
-                    self.assertLessEqual({'169.254.169.254/32', 'fd00:ec2::254/128'}, denied)
+                    for address in METADATA_ADDRESSES:
+                        self.assertFalse(ip_reachable(address, allow, deny), f'{path.name} can reach {address}')
+
+    def test_the_access_list_evaluator_reads_units_the_way_systemd_does(self):
+        head = '[Unit]\nDescription=x\n\n[Service]\nExecStart=/bin/true\n'
+        reachable = {  # unit body after [Service] -> can a process in it reach 169.254.169.254 / fd00:ec2::254?
+            'IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128\n': (False, False),
+            'IPAddressDeny=169.254.169.254 fd00:ec2::254\n': (False, False),          # bare address = host prefix
+            'IPAddressDeny=any\n': (False, False),                                      # stricter
+            'IPAddressDeny=link-local\nIPAddressDeny=fd00::/8\n': (False, False),
+            'IPAddressDeny=169.254.169.254/32\nIPAddressDeny=fd00:ec2::254/128\n': (False, False),
+            'IPAddressDeny = 169.254.169.254/32 \\\n  fd00:ec2::254/128\n': (False, False),  # continuation
+            'IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128\nIPAddressAllow=any\n': (True, True),   # allow wins
+            'IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128\nIPAddressAllow=link-local fd00::/8\n': (True, True),
+            'IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128\nIPAddressAllow=169.254.169.254\n': (True, False),
+            'IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128\nIPAddressDeny=\n': (True, True),      # reset
+            'IPAddressDeny=\nIPAddressDeny=169.254.169.254/32 fd00:ec2::254/128\n': (False, False),
+            'IPAddressAllow=any\nIPAddressAllow=\nIPAddressDeny=any\n': (False, False),              # allow reset
+            'IPAddressDeny=169.254.169.254/32\n': (False, True),
+            '# IPAddressDeny=any\n': (True, True),
+            'IPAddressDeny=169.254.0.0/16 fd00:ec2::/64\n': (False, False),
+            'IPAddressDeny=169.254.169.0/24 ::/0\n': (False, False),
+        }
+        for body, expected in reachable.items():
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as temp:
+                path = Path(temp) / 'probe.service'
+                path.write_text(head + body)
+                allow, deny = ip_access_lists(path)
+                self.assertEqual(tuple(ip_reachable(address, allow, deny) for address in METADATA_ADDRESSES), expected)
+        refused = ('IPAddressDeny=169.254.169.254/255.255.255.255\n',  # systemd takes a prefix length only
+                   'IPAddressDeny="169.254.169.254"\n', 'IPAddressDeny=%I\n', 'IPAddressDeny=imds\n')
+        for body in refused + ('',):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as temp:
+                path = Path(temp) / 'probe.service'
+                path.write_text(head + body if body else '[Unit]\nIPAddressAllow=any\n[Service]\nExecStart=/bin/true\n')
+                with self.assertRaises(UnreadableUnit):
+                    ip_access_lists(path)
+        # Drop-ins this package ships are read after the unit, by file name, across every directory systemd uses.
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            path = directory / 'quillmd-production-heartbeat.service'
+            path.write_text(head + 'IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128\n')
+            self.assertEqual([ip_reachable(a, *ip_access_lists(path)) for a in METADATA_ADDRESSES], [False, False])
+            for folder, name, body in (('quillmd-production-.service.d', '10-a.conf', 'IPAddressAllow=any\n'),
+                                       ('quillmd-production-heartbeat.service.d', '20-b.conf', 'IPAddressAllow=\n')):
+                (directory / folder).mkdir()
+                (directory / folder / name).write_text('[Service]\n' + body)
+                allowed = [ip_reachable(a, *ip_access_lists(path)) for a in METADATA_ADDRESSES]
+                self.assertEqual(allowed, [True, True] if name == '10-a.conf' else [False, False], folder)
 
     def test_environment_unit_renders_onto_the_profile_tmpfs_path(self):
         parsed = unit((PROFILE.unit_prefix + 'environment.service'))
@@ -392,9 +532,14 @@ class ReleaseArtifactTests(unittest.TestCase):
 
 PROVIDER_CLIENTS = frozenset({'Anthropic', 'AsyncAnthropic', 'AnthropicBedrock', 'AnthropicVertex',
                               'OpenAI', 'AsyncOpenAI', 'AzureOpenAI', 'AsyncAzureOpenAI'})
+PROVIDER_MODULES = frozenset({'anthropic', 'openai'})
 PROVIDER_METHODS = frozenset({'create', 'parse', 'stream'})
-PROVIDER_RESOURCES = frozenset({'messages', 'responses', 'completions'})
-OUTPUT_CAPS = ('max_tokens', 'max_output_tokens')
+PROVIDER_RESOURCES = frozenset({'messages', 'responses', 'completions', 'batches'})
+OUTPUT_CAPS = ('max_tokens', 'max_output_tokens', 'max_completion_tokens')
+# Request options that can replace any keyword in the body the SDK sends (extra_body={'max_tokens': ...} wins),
+# and client views that carry such options or bypass the typed method.
+OVERRIDES = frozenset({'extra_body', 'extra_query', 'extra_headers'})
+INDIRECTIONS = frozenset({'with_options', 'with_raw_response', 'with_streaming_response', 'copy'})
 SKIPPED_DIRECTORIES = frozenset({'.venv', '.runtime', '.word-sdk', 'node_modules', '__pycache__', 'tests'})
 
 
@@ -411,20 +556,56 @@ class Unresolved(AssertionError):
     """A value the cost document restates could not be traced to one number in the code."""
 
 
-def int_constants(tree):
-    """Names bound exactly once in the module, at module level, to an int literal."""
-    bindings = {}
+def bindings(tree):
+    """How many times each name is bound anywhere in the module, by ANY construct; and whether a star import exists."""
+    counts, star = {}, False
+
+    def bind(name):
+        counts[name] = counts.get(name, 0) + 1
     for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-            bindings[node.id] = bindings.get(node.id, 0) + 1
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            bind(node.id)
         elif isinstance(node, ast.arg):
-            bindings[node.arg] = bindings.get(node.arg, 0) + 1
+            bind(node.arg)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name == '*':
+                    star = True
+                else:
+                    bind(alias.asname or alias.name.split('.')[0])
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bind(node.name)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            bind(node.name)
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
+            bind(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            bind(node.rest)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            for name in node.names:
+                bind(name)
+        elif type(node).__name__ in ('TypeVar', 'ParamSpec', 'TypeVarTuple'):
+            bind(node.name)
+    return counts, star
+
+
+def int_constants(tree):
+    """Names whose ONLY binding anywhere in the module is one module-level assignment of an int literal. A name
+    also bound by an import, a star import, an except/match/for/with target, a def, a global, anything, is not one."""
+    counts, star = bindings(tree)
+    if star:
+        return {}
     values = {}
     for node in tree.body:
-        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
-                and isinstance(node.value, ast.Constant) and type(node.value.value) is int):
-            values[node.targets[0].id] = node.value.value
-    return {name: value for name, value in values.items() if bindings.get(name) == 1}
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            target, value = node.target, node.value
+        else:
+            continue
+        if isinstance(target, ast.Name) and isinstance(value, ast.Constant) and type(value.value) is int:
+            values[target.id] = value.value
+    return {name: value for name, value in values.items() if counts.get(name) == 1}
 
 
 def resolve(node, constants, where):
@@ -444,46 +625,85 @@ def chain(node):
     return [node.id] + parts[::-1] if isinstance(node, ast.Name) else None
 
 
+def attribute_path(node):
+    """(root expression, [attribute names]) for any a.b.c, whatever the root is (a name, a call, a subscript...)."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    return node, parts[::-1]
+
+
 def provider_caps(path):
-    """[(where, cap)] for every provider call in one file. Fails closed on anything it cannot trace:
-    a call without a cap, a cap that is not one number, `**` arguments, or a client used any other way."""
+    """[(where, cap)] for every provider call in one file. Fails closed, naming the call, on anything it cannot trace:
+    a provider-shaped call whose receiver is not a client constructed and bound to a name in this file; a client
+    constructed anywhere else (returned, passed on, called inline); a client name bound any other way or used any
+    other way; a view (with_options, with_raw_response, with_streaming_response, copy); extra_body, extra_query,
+    extra_headers, `**` or positional arguments; not exactly one output cap; a cap that is not one number."""
     tree = ast.parse(path.read_text())
     constants = int_constants(tree)
+    counts, _ = bindings(tree)
     name = path.relative_to(REBUILD.parent)
-    clients = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
-            called = chain(node.value.func) or ['']
-            if called[-1] in PROVIDER_CLIENTS:
-                for target in node.targets:
-                    if not isinstance(target, ast.Name):
-                        raise Unresolved(f'{name}:{node.lineno}: a provider client bound to {ast.unparse(target)}')
-                    clients.add(target.id)
-    calls, parents = [], {}
+    parents = {}
     for node in ast.walk(tree):
         for child in ast.iter_child_nodes(node):
             parents[child] = node
+    imported = {}  # local name -> provider client class, for `from anthropic import Anthropic as A`
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+        if isinstance(node, ast.ImportFrom) and (node.module or '').split('.')[0] in PROVIDER_MODULES:
+            for alias in node.names:
+                if alias.name in PROVIDER_CLIENTS:
+                    imported[alias.asname or alias.name] = alias.name
+
+    def constructs_client(call):
+        root, parts = attribute_path(call.func)
+        if parts:
+            return parts[-1] in PROVIDER_CLIENTS
+        return isinstance(root, ast.Name) and (root.id in PROVIDER_CLIENTS or root.id in imported)
+    clients, client_bindings = set(), {}
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and constructs_client(node)):
             continue
-        called = chain(node.func) or []
-        is_provider = bool(called) and called[-1] in PROVIDER_METHODS and (
-            called[0] in clients or bool(PROVIDER_RESOURCES & set(called[1:-1])))
-        if is_provider or any(keyword.arg in OUTPUT_CAPS for keyword in node.keywords):
-            calls.append(node)
+        holder = parents.get(node)
+        target = (holder.targets[0] if isinstance(holder, ast.Assign) and len(holder.targets) == 1 else
+                  holder.target if isinstance(holder, ast.AnnAssign) else None)
+        if not (isinstance(target, ast.Name) and holder.value is node):
+            raise Unresolved(f'{name}:{node.lineno}: a provider client is constructed but not bound to one name')
+        clients.add(target.id)
+        client_bindings[target.id] = client_bindings.get(target.id, 0) + 1
+    for client in clients:
+        if counts.get(client) != client_bindings[client]:
+            raise Unresolved(f'{name}: the name {client} is bound to something other than a provider client too')
     for node in ast.walk(tree):  # a client may only be the root of a provider call; anything else hides the cap
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in clients:
             top = node
             while isinstance(parents.get(top), ast.Attribute):
                 top = parents[top]
-            if not (isinstance(parents.get(top), ast.Call) and parents[top].func is top and top is not node
-                    and (chain(top) or [''])[-1] in PROVIDER_METHODS):
+            if not (isinstance(parents.get(top), ast.Call) and parents[top].func is top and top is not node):
                 raise Unresolved(f'{name}:{node.lineno}: provider client {node.id} used other than as a provider call')
     caps = []
-    for node in calls:
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        root, parts = attribute_path(node.func)
+        shaped = (len(parts) >= 2 and parts[-1] in PROVIDER_METHODS
+                  and bool(PROVIDER_RESOURCES & set(parts[:-1])))
+        from_client = isinstance(root, ast.Name) and root.id in clients and bool(parts)
+        capped = any(keyword.arg in OUTPUT_CAPS for keyword in node.keywords)
+        if not (shaped or from_client or capped):
+            continue
         where = f'{name}:{node.lineno} {ast.unparse(node.func)}'
-        if any(keyword.arg is None for keyword in node.keywords):
-            raise Unresolved(f'{where}: ** arguments hide the output cap')
+        if shaped and not from_client:
+            raise Unresolved(f'{where}: the receiver cannot be traced to a provider client constructed in this file')
+        if from_client and not shaped:
+            raise Unresolved(f'{where}: a provider client call this check does not know')
+        if INDIRECTIONS & set(parts):
+            raise Unresolved(f'{where}: reached through {sorted(INDIRECTIONS & set(parts))}, which can change options')
+        if any(keyword.arg is None for keyword in node.keywords) or node.args:
+            raise Unresolved(f'{where}: ** or positional arguments hide the request')
+        overriding = sorted(OVERRIDES & {keyword.arg for keyword in node.keywords})
+        if overriding:
+            raise Unresolved(f'{where}: {overriding} can override the output cap')
         found = [keyword for keyword in node.keywords if keyword.arg in OUTPUT_CAPS]
         if len(found) != 1:
             raise Unresolved(f'{where}: {len(found)} output caps (exactly one is required)')
