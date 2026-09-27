@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from core import generation as g
-from core.models import Encounter
+from core.models import Encounter, Job, Reservation
 from .test_word_v3_workflow import V3, V3EncounterFixture
 
 
@@ -382,3 +382,86 @@ class EnqueuedContractAttribution(V3EncounterFixture, TestCase):
         job, smoker = self.run_generation('Smoker: yes\nPatient seen today.', config=quoted)
         self.assertNotIn('v3_evidence_contract', job.config)
         self.assertEqual((smoker['status'], smoker['text'], smoker.get('suggestion')), ('conflict', '', 'Yes'))
+
+
+LARGE_NOTES = (
+    ('short', 'Patient presents with knee pain. Allergies: none.'),
+    ('prose-50k', ('The patient reports mild knee pain after walking today. ' * 1000)[:49990]),
+    ('prose-990-units', 'Pain is 1. ' * 990),
+    ('lines-999', '\n'.join('Pain is %d.' % i for i in range(999))),
+    ('cjk-999', '\n'.join(['\u60a3\u8005\u306f\u819d\u306e\u75db\u307f\u3092\u8a34\u3048\u3066\u3044\u307e\u3059\u3002'] * 999)),
+)
+TEN = [field('v3_%d' % i, 'Question %d' % i) for i in range(1, 11)] + [field('v3_s', 'Clinician signature', 'signature')]
+
+
+class CostBoundCoversTheRequest(SimpleTestCase):
+    """R5: a v3 job is held for the bytes its request carries, and too many units are refused before any hold."""
+
+    def test_the_bytes_sent_never_exceed_the_bytes_held_for(self):
+        config = live_config(input_rate='1', output_rate='1', cached_rate='0.1')
+        for name, notes in LARGE_NOTES:
+            sent = sent_request(notes, TEN, config)
+            sent_bytes = (len(sent['system'].encode()) + len(sent['messages'][0]['content'].encode())
+                          + len(json.dumps(sent['output_config']).encode()))
+            held_bytes = (g.maximum_cost(notes, TEN, config) - g.Decimal(6000) / 1000000) * 1000000
+            self.assertIn('source_units', json.loads(sent['messages'][0]['content']), name)
+            self.assertLessEqual(sent_bytes / held_bytes, 1, name)
+
+    def test_more_than_a_thousand_units_or_a_hundred_questions_are_refused_at_the_quote(self):
+        config = live_config()
+        with self.assertRaisesMessage(g.ValidationError, '1,000 complete statements'):
+            g.maximum_cost(' '.join(['Okay.'] * 1001), TEN, config)
+        many = [field('v3_%d' % i, 'Question %d' % i) for i in range(101)]
+        with self.assertRaisesMessage(g.ValidationError, 'supported limits'):
+            g.maximum_cost('Patient seen.', many, config)
+
+
+LIVE = dict(V3, QUILLMD_AI_MODE='live', AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL='synthetic-no-network',
+            AI_INPUT_RATE='3', AI_OUTPUT_RATE='15', AI_CACHED_RATE='0.3')
+
+
+@override_settings(**LIVE)
+class NothingStrandsAHold(V3EncounterFixture, TestCase):
+    """R5/R8 through enqueue and the worker, live mode, the provider client patched and never reached."""
+
+    def save_notes(self, notes):
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        saved = self.client.post(f"/encounters/{encounter.pk}/notes/", {"revision": encounter.revision, "notes": notes})
+        self.assertEqual(saved.status_code, 302)
+
+    def test_a_note_of_more_than_a_thousand_units_is_refused_at_enqueue_before_any_hold(self):
+        from core.jobs import enqueue
+        self.save_notes('Referring physician: Dr Example\n' + ' '.join(['Okay.'] * 1001))
+        with patch('anthropic.Anthropic') as client:
+            with self.assertRaisesMessage(g.ValidationError, '1,000 complete statements'):
+                enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+            self.assertFalse(client.return_value.messages.create.called)
+        self.assertFalse(Job.objects.filter(encounter=self.encounter).exists())
+        self.assertFalse(Reservation.objects.exists())
+
+    def assert_not_processed_and_released(self, job, client):
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertTrue(job.error.startswith('Not processed: '), job.error)
+        self.assertIn('held funds were released', job.error)
+        self.assertFalse(client.return_value.messages.create.called)
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state', flat=True)), ['released'])
+
+    def test_a_refusal_after_the_hold_ends_not_processed_with_the_hold_released(self):
+        from core.jobs import enqueue, run_one
+        self.save_notes('Referring physician: Dr Example\nPatient seen today.')
+        job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state', flat=True)), ['held'])
+        refusal = g.ValidationError('Source exceeds 1,000 complete statements; split explicitly. Nothing was truncated.')
+        with patch('anthropic.Anthropic') as client, patch.object(g, 'source_units', side_effect=refusal):
+            self.assertTrue(run_one())
+        self.assert_not_processed_and_released(job, client)
+        self.assertIn('1,000 complete statements', job.error)
+
+    def test_a_client_that_cannot_be_built_ends_not_processed_with_the_hold_released(self):
+        from core.jobs import enqueue, run_one
+        self.save_notes('Referring physician: Dr Example')
+        job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+        with patch('anthropic.Anthropic', side_effect=RuntimeError('client could not be built')) as client:
+            self.assertTrue(run_one())
+        self.assert_not_processed_and_released(job, client)
