@@ -136,6 +136,25 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
         notes = 'Findings: small effusion is present.'
         self.assertEqual(run(notes, {'Findings': [notes]}, fields=fields)['Findings']['text'], 'small effusion is present.')
 
+    def test_a_unit_the_notes_label_as_another_questions_answer_is_held_not_a_failed_job(self):
+        """R6: selecting it raised, and the whole job failed with every other answer."""
+        fields = FIELDS + [field('v3_7', 'Findings', 'long_text'), field('v3_8', 'Impression'),
+                           field('v3_9', 'History'), field('v3_10', 'Past medical history', 'long_text')]
+        cases = (('Findings are consistent with a medial meniscus tear.', 'Impression'),
+                 ('History is significant for diabetes and hypertension.', 'Past medical history'),
+                 ('Allergies: penicillin. Plan is rest.', 'Plan'))
+        for notes, label in cases:
+            out = run(notes, {label: [notes], 'Chief complaint': []}, fields=fields)
+            answer = out[label]
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+            self.assertEqual(answer['evidence'], [{'quote': notes, 'start': 0, 'end': len(notes)}], notes)
+        # An unknown unit is still a provider error.
+        asked, context, _ = g.v3_generation_fields(fields)
+        selections = g.UnitSelections(fields=[g.UnitSelection(key=f['key'], unit_ids=[7] if f['label'] == 'Impression' else [],
+                                                              conflict=False) for f in asked])
+        with self.assertRaisesMessage(g.ValidationError, 'unknown source evidence unit'):
+            g.unit_selections('Findings are normal.', asked, selections, context_labels=context)
+
     def test_a_checkbox_is_ticked_only_by_an_explicit_yes(self):
         self.assertEqual(run('Consent obtained: yes.', {'Consent obtained': ['Consent obtained: yes.']})
                          ['Consent obtained']['text'], 'checked')

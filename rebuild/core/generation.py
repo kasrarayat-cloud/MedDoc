@@ -1566,6 +1566,15 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
         for choice in choices:
             quote=choice['quote'] if isinstance(choice,dict) else choice
+            if quote not in allowed and v3 and isinstance(choice,dict):
+                # ⚠️ CONTRACT v3: AN OFFERED UNIT THE NOTES LABEL AS ANOTHER QUESTION'S ANSWER IS HELD, NOT A FAILED JOB
+                # (R6). 'Findings are consistent with a tear.' reads as the Findings question's answer, so selecting it for
+                # Impression failed the whole job and every answer with it. It is shown as this question's conflict.
+                if notes[choice['start']:choice['end']]!=quote: raise ValidationError('Evidence offset mismatch.')
+                evidence.append({k:choice[k] for k in ('quote','start','end')})
+                if quote not in texts: texts.append(quote)
+                guarded=True
+                continue
             if quote not in allowed:
                 raise ValidationError('Evidence must be a complete offered source sentence for this question.')
             unit,value=allowed[quote]
