@@ -1523,7 +1523,14 @@ def governed_decisions(notes, fields, answers, context_labels=()):
     return found
 
 
-def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered_duplicate_holds=False,finite=FINITE_STATEMENT):
+#: ⚠️ A LABELLED VALUE THAT ONLY POINTS ELSEWHERE ANSWERS NOTHING (R4, contract v3): 'Findings: as follows.' was adopted
+#: as the Findings answer, and the findings it introduced were not. Held for the clinician, never adopted.
+POINTER_ONLY_VALUE = re.compile(r'(?:as\s+follows|see\s+below|as\s+below|listed\s+below|below|the\s+following|as\s+listed)'
+                                r'[\s.:;,!?\u2026]*', re.I)
+
+
+def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered_duplicate_holds=False,finite=FINITE_STATEMENT,
+                            v3=False):
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
     governance=heading_governance(notes,labels)
@@ -1535,6 +1542,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
     from .tab_review import clinician_identity
     output={}; used_numbered={}
     by_id={unit['id']:unit for unit in units}
+    parsed_of={unit['id']:parsed for unit,parsed in zip(units,parsed_units)}
     selected={item.key:item for item in selections.fields}
     for field in fields:
         item=selected[field['key']]
@@ -1566,6 +1574,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             evidence.append({k:unit[k] for k in ('quote','start','end')})
             if unit['correction_value'] and corrected_quantity(unit,field) is None: guarded=True
             if ':' not in quote and not finite.search(quote): guarded=True
+            if v3 and (own_value:=parsed_of[unit['id']]) and own_value[1] and POINTER_ONLY_VALUE.fullmatch(own_value[1].strip()):
+                guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
             if any(re.search(subject,label,re.I) and not re.search(subject,quote,re.I) for subject in SUBJECTS): guarded=True
@@ -1614,7 +1624,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         # ⚠️ A v3 form's labels are the form's own words (row — column): a label that ends in a number is not a
         # numbered-slot group the provider was told about, so a repeated statement there is HELD, never a failed job.
         return validate_tab_selections(notes,fields,selections,context_labels=context_labels,numbered_duplicate_holds=True,
-                                       finite=FINITE_STATEMENT_V3)
+                                       finite=FINITE_STATEMENT_V3,v3=True)
     output={}
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     labels=recognized_labels(fields,context_labels)

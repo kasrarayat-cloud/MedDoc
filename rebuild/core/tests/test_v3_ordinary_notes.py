@@ -26,9 +26,10 @@ FIELDS = [field('v3_1', 'Chief complaint'), field('v3_2', 'Allergies'), field('v
           field('v3_6', 'Clinician signature', 'signature')]
 
 
-def run(notes, picks, conflicts=()):
+def run(notes, picks, conflicts=(), fields=None):
     """Simulate the provider selecting unit ids per label, then validate and adopt as the application does."""
-    asked, context, v3_fields = g.v3_generation_fields(FIELDS)
+    fields = FIELDS if fields is None else fields
+    asked, context, v3_fields = g.v3_generation_fields(fields)
     units, _ = g.source_units(notes, asked, context_labels=context)
     by_quote = {u['quote']: u['id'] for u in units}
     selections = g.UnitSelections(fields=[
@@ -37,7 +38,7 @@ def run(notes, picks, conflicts=()):
     selections = g.unit_selections(notes, asked, selections, context_labels=context)
     answers = g.validate_selections(notes, asked, selections, context_labels=context, evidence_contract=g.TAB_CONTRACT)
     adopted = g.v3_adopted(v3_fields, answers, notes, asked, context)
-    return {f['label']: adopted[f['key']] for f in FIELDS}
+    return {f['label']: adopted[f['key']] for f in fields}
 
 
 class OrdinaryNotesOnV3Forms(SimpleTestCase):
@@ -119,6 +120,21 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
             self.assertEqual(run(notes, {'Smoker': [notes]})['Smoker']['text'], text, notes)
         self.assertEqual(run('Consent obtained: yes.', {'Consent obtained': ['Consent obtained: yes.']})
                          ['Consent obtained']['text'], 'checked')
+
+    def test_a_labelled_value_that_only_points_elsewhere_is_held_never_adopted(self):
+        """R4: 'Findings: as follows.' was adopted as the findings; the findings it introduced were not."""
+        fields = FIELDS + [field('v3_7', 'Findings', 'long_text')]
+        for line in ('Findings: as follows.', 'Findings: as follows', 'Findings: see below.', 'Findings: As below!',
+                     'Findings: listed below.', 'Findings: below.', 'Findings: the following.', 'Findings: as listed;'):
+            notes = line + '\nEffusion is present.\nNo fracture is seen.'
+            findings = run(notes, {'Findings': [line]}, fields=fields)['Findings']
+            self.assertEqual((findings['status'], findings['text']), ('conflict', ''), line)
+            self.assertEqual((findings.get('own_evidence') or findings['evidence'])[0]['quote'], line, line)
+        for notes in ('Plan: as follows.\nIce and rest.', 'Plan: see below.'):
+            line = notes.split('\n')[0]
+            self.assertEqual(run(notes, {'Plan': [line]})['Plan']['status'], 'conflict', notes)
+        notes = 'Findings: small effusion is present.'
+        self.assertEqual(run(notes, {'Findings': [notes]}, fields=fields)['Findings']['text'], 'small effusion is present.')
 
     def test_a_checkbox_is_ticked_only_by_an_explicit_yes(self):
         self.assertEqual(run('Consent obtained: yes.', {'Consent obtained': ['Consent obtained: yes.']})
