@@ -48,7 +48,8 @@ class EncounterForm(ScopedForm):
     def __init__(self,*args,user,**kwargs):
         super().__init__(*args,user=user,**kwargs)
         self.fields['patient'].queryset=Patient.objects.filter(department__in=departments(user)).select_related('department')
-        self.fields['template_version'].queryset=TemplateVersion.objects.filter(template__department__in=departments(user)).select_related('template').order_by('template__name','-number')
+        self.fields['template_version'].queryset=TemplateVersion.objects.filter(template__department__in=departments(user)).select_related('template','confirmation').order_by('template__name','-number')
+        self.fields['template_version'].label_from_instance=lambda version:str(version)+(' (not yet confirmed)' if version.needs_confirmation else '')
         self.fields['service_date'].initial=timezone.localdate()
     def clean_service_date(self):
         service_date=self.cleaned_data['service_date']
@@ -57,6 +58,9 @@ class EncounterForm(ScopedForm):
     def clean(self):
         data=super().clean()
         if data.get('patient') and data.get('template_version') and data['patient'].department_id!=data['template_version'].template.department_id: raise forms.ValidationError('Patient and template must belong to the same department.')
+        # ⚠️ An automatically found (contract v3) mapping starts no document until a clinician has confirmed it.
+        if data.get('template_version') and data['template_version'].needs_confirmation:
+            raise forms.ValidationError(f'"{data["template_version"].template.name}" mapping version {data["template_version"].number} has not been confirmed. Open the form, check every field against it, and confirm the mapping before creating a document.')
         return data
 class InvitationForm(ScopedForm):
     department=forms.ModelChoiceField(queryset=Department.objects.none())

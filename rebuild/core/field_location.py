@@ -33,9 +33,35 @@ def part_name(part):
     return name or 'Body'
 
 
+V3_TARGETS = {
+    'cell': 'empty answer cell in a table', 'cell_replace': 'answer cell in a table', 'paragraph': 'empty line',
+    'sdt_text': 'Word content control', 'sdt_choice': 'Word dropdown', 'ff_text': 'legacy Word form field',
+    'ff_dropdown': 'legacy Word dropdown field', 'checkboxes': 'printed boxes', 'paragraph_options': 'printed options',
+    'text_options': 'printed options', 'table_rows': 'rows of a table',
+}
+
+
+def describe_v3(locator):
+    """Contract v3: the part (body, header, footer) and the kind of place the answer is written to."""
+    target = locator.get('target') or {}
+    kind = target.get('type', '')
+    if kind == 'span':
+        what = 'after the printed label' if target.get('shape') == 'after_label' else 'on the printed blank'
+    else:
+        what = V3_TARGETS.get(kind, 'answer area')
+    if kind == 'checkboxes' and len(target.get('boxes') or []) == 1:
+        what = 'printed box'
+    where = part_name(locator.get('part', 'word/document.xml'))
+    copies = len(target.get('copies') or [])
+    return f'{where} · {what}' + (f' (and {copies} repeated copy/copies)' if copies else '')
+
+
 def describe(field):
     """One short phrase locating this field's answer area in the original form."""
     locator = field.get('locator') or {}
+
+    if locator.get('contract') == 'v3':
+        return describe_v3(locator)
 
     if 'cell' in locator:
         return 'Answer cell in a question/answer table'

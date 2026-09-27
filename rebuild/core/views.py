@@ -30,6 +30,7 @@ from .context import integration_status
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
 from .billing import available_balance
 from . import wm_review
+from . import v3_mapping
 
 
 def error_message(exc):
@@ -200,6 +201,7 @@ def dashboard(request):
 @require_http_methods(['GET','POST'])
 def template_upload(request):
     from documents import inspect_template,DocumentError
+    from documents.service import word_engine
     form=UploadForm(request.POST or None,request.FILES or None,user=request.user)
     if request.method=='POST' and form.is_valid():
         relative=None
@@ -209,12 +211,21 @@ def template_upload(request):
             relative=store_upload(form.cleaned_data['file'])
             if private_path(relative).read_bytes()[:8]==OLE_CONTAINER:
                 raise ValidationError('This file is password-protected, encrypted, or an old Word .doc file. Save it as an unprotected Word .docx (or a fillable PDF) and upload that.')
-            info=inspect_template(private_path(relative))
-            if len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
+            # The contract for NEW inspections comes from settings (QUILLMD_WORD_ENGINE). A PDF and the qualified WM
+            # file keep their own paths whatever it says; stored mappings always fill under the contract that made them.
+            info=inspect_template(private_path(relative),engine=word_engine())
+            contract=v3_mapping.CONTRACT if info.get('contract')==v3_mapping.CONTRACT else ''
+            if contract:
+                # ⚠️ The engine maps far more than 100 areas, but generation still refuses more than 100 fields, so a
+                # larger v3 form is refused here, whole and with the count, rather than trimmed or left unusable.
+                answerable=len(v3_mapping.answerable(info['fields']))
+                if answerable>v3_mapping.GENERATION_FIELD_LIMIT:raise ValidationError(v3_mapping.too_many_fields(answerable))
+            elif len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
             with transaction.atomic():
                 t=Template.objects.create(department=department,name=form.cleaned_data['name'],format=info['format'],original_name=Path(form.cleaned_data['file'].name).name[:200],original_path=relative,sha256=info['sha256'],warnings=info.get('warnings',[]),created_by=request.user)
-                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),created_by=request.user)
-                audit(request.user,'template.upload',t.pk,department=department,sha256=t.sha256,field_count=len(info['fields']))
+                TemplateVersion.objects.create(template=t,number=1,fields=info['fields'],review_requirements=info.get('review_requirements',[]),document_backend=document_backend(info),contract=contract,created_by=request.user)
+                audit(request.user,'template.upload',t.pk,department=department,sha256=t.sha256,field_count=len(info['fields']),**({'contract':contract} if contract else {}))
+            if contract:messages.info(request,f'QuillMD found {len(info["fields"])} answer areas automatically. Check every one against your form, correct the mapping, and confirm it before creating a document.')
             return redirect('template_detail',pk=t.pk)
         except (ValidationError,DocumentError) as exc:
             if relative:private_path(relative).unlink(missing_ok=True)
@@ -288,6 +299,7 @@ def statement_guide(version):
 def template_detail(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
     version=t.versions.order_by('-number').first()
+    if v3_mapping.is_v3_version(version):return template_detail_v3(request,t,version)
     form=MappingForm(request.POST or None,initial={'labels':{f['key']:f['label'] for f in version.fields}})
     if request.method=='POST' and form.is_valid():
         try:
@@ -317,6 +329,163 @@ def template_detail(request,pk):
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
     return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
+
+#: At most this many unmapped places are listed at once; the search narrows the rest.
+V3_PLACES_SHOWN=300
+V3_MAPPING_CHANGED='This mapping changed after you opened it. Nothing was saved; the current mapping is shown below. Compare it with your corrections before saving again.'
+
+def v3_original(t):
+    path=private_path(t.original_path)
+    if hashlib.sha256(path.read_bytes()).hexdigest()!=t.sha256:raise ValidationError('Original integrity check failed.')
+    return path
+
+def v3_outline(t):
+    from documents import outline_template
+    return outline_template(v3_original(t))['slots']
+
+def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
+    """The contract v3 mapping review: every field in document order, the places a field could still be added to,
+    the corrections that made this version, and the clinician's confirmation."""
+    from documents import DocumentError
+    query=' '.join(request.GET.get('find','').split())[:120]
+    outline_error=''
+    if outline is None:
+        try:outline=v3_outline(t)
+        except (ValidationError,DocumentError,OSError) as exc:outline=[];outline_error=error_message(exc) if not isinstance(exc,OSError) else 'The original is unavailable.'
+    places=v3_mapping.open_places(outline,version.fields,query)
+    posted=posted or {}
+    counts={}
+    for f in version.fields:counts[f['label'].strip()]=counts.get(f['label'].strip(),0)+1
+    rows=[{'number':n,'key':f['key'],'field':f,'label':posted.get('label_'+f['key'],f['label']),
+           'kind':f.get('kind'),'chosen_kind':posted.get('kind_'+f['key'],f.get('kind')),
+           'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
+           'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
+           'location':field_location.describe(f),'context':f.get('context') or '',
+           'origin':'Manual' if f.get('origin')=='manual' else 'Automatic','max_chars':f.get('max_chars'),
+           'remove':posted.get('remove_'+f['key'])=='on','duplicate':counts.get(f['label'].strip(),0)>1}
+          for n,f in enumerate(version.fields,1)]
+    can_confirm=Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists()
+    return render(request,'template_detail.html',{'template':t,'version':version,'v3':True,'v3_rows':rows,'v3_error':error,
+        'places':places[:V3_PLACES_SHOWN],'places_hidden':max(0,len(places)-V3_PLACES_SHOWN),'places_total':len(places),
+        'find':query,'outline_error':outline_error,'posted_slot':posted.get('slot',''),'posted_add_label':posted.get('label',''),
+        'posted_add_kind':posted.get('kind',''),'text_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
+        'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
+        'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.GENERATION_FIELD_LIMIT,
+        'corrections':version.corrections,'statements':[]},status=status)
+
+def template_detail_v3(request,t,version):
+    from documents import DocumentError
+    if request.method!='POST':return v3_page(request,t,version)
+    action=request.POST.get('action','')
+    handler={'v3_save':v3_save_corrections,'v3_add':v3_add_field,'v3_confirm':v3_confirm}.get(action)
+    if handler is None:
+        return v3_page(request,t,version,status=400,error='This mapping is reviewed field by field on this page. Nothing was saved.')
+    try:
+        return handler(request,t)
+    except (ValidationError,DocumentError) as exc:
+        latest=t.versions.order_by('-number').first()
+        return v3_page(request,t,latest,status=400,error=error_message(exc),posted=request.POST)
+
+def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=None,renamed=()):
+    """A new immutable mapping version, with the corrections that made it recorded beside the fields. Added fields
+    keep origin 'manual'; the new version needs its own confirmation."""
+    kind_changed=kind_changed or {}
+    corrections={'base_version':latest.number,'removed':list(removed),'added':list(added),'kind_changed':kind_changed,'renamed':list(renamed)}
+    version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,
+                                           document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,created_by=request.user)
+    audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number,contract=version.contract,
+          removed=[row['key'] for row in removed],added=list(added),kind_changed=kind_changed,renamed=[row['key'] for row in renamed])
+    return version
+
+def v3_save_corrections(request,t):
+    """Rename, change a text-like kind, or remove fields that are not answers; one new version, corrections recorded."""
+    from .tab_review import signature_label
+    membership(request.user,t.department,roles=['owner','clinician','manager'])
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        latest=t.versions.order_by('-number').first()
+        if request.POST.get('mapping_version')!=str(latest.pk):
+            return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
+        fields=[];removed=[];renamed=[];kind_changed={}
+        for number,f in enumerate(latest.fields,1):
+            key=f['key']
+            if request.POST.get('remove_'+key)=='on':
+                removed.append({'key':key,'label':f['label'],'kind':f.get('kind'),'origin':f.get('origin','automatic')});continue
+            label=str(request.POST.get('label_'+key,f['label'])).strip()
+            if not label or len(label)>300 or '\n' in label:raise ValidationError(f'Give question {number} a one-line label of 1 to 300 characters.')
+            kind=request.POST.get('kind_'+key,f.get('kind'))
+            if kind!=f.get('kind'):
+                if f.get('kind') not in v3_mapping.TEXT_KINDS or kind not in v3_mapping.TEXT_KINDS:
+                    raise ValidationError(f'"{f["label"]}" keeps its kind ({v3_mapping.KIND_NAMES.get(f.get("kind"),f.get("kind"))}): only text, long text, date and time can be changed into one another. Nothing was saved.')
+                kind_changed[key]=[f.get('kind'),kind]
+            if label!=f['label']:
+                # ⚠️ The same protection as every other mapping: the identity check reads this label.
+                if signature_label(f['label']) and not signature_label(label):
+                    raise ValidationError('A signature question keeps a signature label, because the identity check reads it: '+f['label']+'. Rename the other questions and leave this one as the form words it.')
+                renamed.append({'key':key,'from':f['label'],'to':label})
+            fields.append({**f,'label':label,'kind':kind})
+        if not (removed or renamed or kind_changed):
+            messages.info(request,'Nothing changed, so no new mapping version was saved.')
+            return redirect('template_detail',pk=t.pk)
+        version=v3_new_version(request,t,latest,fields,removed=removed,kind_changed=kind_changed,renamed=renamed)
+    messages.success(request,f'Mapping version {version.number} saved with your corrections. Confirm it before creating documents; existing documents keep their original version.')
+    return redirect('template_detail',pk=t.pk)
+
+def v3_add_field(request,t):
+    """A place the engine missed, chosen from the form's outline, located by the engine and recorded as manual."""
+    from documents import locate_fields
+    membership(request.user,t.department,roles=['owner','clinician','manager'])
+    slot=request.POST.get('slot','');kind=request.POST.get('kind','');label=request.POST.get('label','').strip()
+    if kind not in v3_mapping.MANUAL_KINDS:raise ValidationError('Choose what kind of answer the added field takes.')
+    if not label or len(label)>300 or '\n' in label:raise ValidationError('Give the added field a one-line label of 1 to 300 characters.')
+    if not slot:raise ValidationError('Choose the place on the form where the missed answer goes.')
+    latest=t.versions.order_by('-number').first()
+    if request.POST.get('mapping_version')!=str(latest.pk):
+        return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
+    outline=v3_outline(t)
+    place=next((row for row in outline if row['slot']==slot),None)
+    if place is None:raise ValidationError('That place is not in this form. Choose one from the list.')
+    if v3_mapping.is_mapped(slot,v3_mapping.mapped_slots(latest.fields)):
+        raise ValidationError('That place already belongs to a field. Correct that field instead of adding another.')
+    target={'slot':slot,'kind':kind,'label':label}
+    if place.get('kind')=='glyphs':
+        try:box=int(request.POST.get('box') or 1)
+        except ValueError:box=0
+        if not 1<=box<=50:raise ValidationError('Give the number of the printed box, counting from 1.')
+        target['glyph']=box-1
+    field=locate_fields(v3_original(t),[target])['fields'][0]
+    if field.get('kind')=='choice' and not field.get('options'):
+        raise ValidationError('A field with printed options needs a Word dropdown or a legacy dropdown field as its place. Choose the dropdown, or add this answer as text.')
+    if any(f['key']==field['key'] for f in latest.fields):raise ValidationError('That place already belongs to a field with this label.')
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        if t.versions.order_by('-number').first().pk!=latest.pk:
+            return v3_page(request,t,t.versions.order_by('-number').first(),status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
+        fields=v3_mapping.insert_in_document_order(latest.fields,[field],outline)
+        answerable=len(v3_mapping.answerable(fields))
+        if answerable>v3_mapping.GENERATION_FIELD_LIMIT:
+            raise ValidationError(f'Adding this field would give the form {answerable} answer areas; QuillMD can generate answers for at most {v3_mapping.GENERATION_FIELD_LIMIT} per form today. Nothing was saved.')
+        version=v3_new_version(request,t,latest,fields,added=[field['key']])
+    messages.success(request,f'Added "{field["label"]}" ({v3_mapping.KIND_NAMES.get(field["kind"],field["kind"])}) as a manual field in mapping version {version.number}. Confirm the mapping before creating documents.')
+    return redirect('template_detail',pk=t.pk)
+
+def v3_confirm(request,t):
+    """The clinician's statement that every field was checked against the form, recorded with who and when."""
+    membership(request.user,t.department,roles=['owner','clinician'])
+    if request.POST.get('checked_every_field')!='on':raise ValidationError('Tick "I checked every field against the form" to confirm this mapping.')
+    with transaction.atomic():
+        Template.objects.select_for_update().get(pk=t.pk)
+        latest=t.versions.order_by('-number').first()
+        if request.POST.get('mapping_version')!=str(latest.pk):
+            return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED)
+        if not latest.fields:raise ValidationError('This mapping has no fields. Add the form\'s answer areas before confirming it.')
+        if latest.confirmed:
+            messages.info(request,'This mapping version was already confirmed.')
+            return redirect('template_detail',pk=t.pk)
+        MappingConfirmation.objects.create(version=latest,confirmed_by=request.user)
+        audit(request.user,'template.mapping_confirmed',latest.pk,department=t.department,number=latest.number,field_count=len(latest.fields))
+    messages.success(request,f'Mapping version {latest.number} confirmed. You can now create documents with this form.')
+    return redirect('template_detail',pk=t.pk)
 
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)

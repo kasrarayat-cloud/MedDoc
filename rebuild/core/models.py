@@ -104,8 +104,33 @@ class TemplateVersion(Entity):
     review_requirements=models.JSONField(default=list,blank=True)
     document_backend=models.JSONField(default=dict,blank=True)
     created_by=models.ForeignKey(User,on_delete=models.PROTECT)
+    # Contract v3 Word mappings only ('' for every legacy, tab, PDF and qualified WM mapping). Kept OUT of
+    # `document_backend`, whose non-emptiness is how every page recognises the qualified WM form.
+    contract=models.CharField(max_length=12,blank=True,default='')
+    # The clinician's corrections that made THIS version from the previous one (v3 only):
+    # {'base_version', 'removed', 'added', 'kind_changed', 'renamed'}. Automatic fields stay as the engine found them.
+    corrections=models.JSONField(default=dict,blank=True)
     class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
+    @property
+    def confirmed(self):
+        """The clinician's confirmation of this mapping version, or None. Mapping versions are immutable rows (a
+        database trigger refuses UPDATE), so the confirmation is its own append-only record."""
+        try:return self.confirmation
+        except ObjectDoesNotExist:return None
+    @property
+    def needs_confirmation(self):
+        """A contract v3 mapping starts no document until a clinician states they checked every field against the form."""
+        return self.contract=='v3' and self.confirmed is None
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
+class MappingConfirmation(Entity):
+    """A clinician's statement that every field of one contract v3 mapping version was checked against the form.
+    `created_at` is when; append-only like the version it confirms."""
+    version=models.OneToOneField(TemplateVersion,on_delete=models.PROTECT,related_name='confirmation')
+    confirmed_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='mapping_confirmations')
+    def save(self,*args,**kwargs):
+        if not self._state.adding: raise ValidationError('Mapping confirmations are append-only.')
+        super().save(*args,**kwargs)
+    def delete(self,*args,**kwargs): raise ValidationError('Mapping confirmations cannot be deleted.')
 def latest_service_date():
     """The furthest ahead a real date of service can legitimately be.
 
