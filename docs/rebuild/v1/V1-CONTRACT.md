@@ -31,12 +31,12 @@ meet V1 until an item on `V1-BLOCKERS.md` clears; **OFF** — deliberately disab
 |---|---|---|---|
 | Patients (create, list, search) | department-scoped; synthetic attestation removed in real mode | inventory | READY (no patient detail/edit page — OFF, listed) |
 | Typed notes | 1–50,000 characters, revision-checked | tests | READY |
-| Voice (upload/record → transcript review → notes) | consent, signed quote, Deepgram with `mip_opt_out` in real mode; nothing reaches the notes until reviewed | `45f53519` (+ repair pending) | BUILT; BLOCKED on Deepgram BAA + pricing check |
-| **Answers from ordinary (unlabelled) typed or dictated notes on custom forms** | source-unit selection, exact evidence, correction/negation/side guards; bounded whole-paragraph adoption for a unique narrative field | `v1/ordinary-notes`; synthetic worker-to-export checks; final review underway | **BUILT / BLOCKED** — excessive holds and useful positive coverage still need acceptance (B-G1); labelled notes are not a required workaround |
+| Voice (upload/record → transcript review → notes) | consent, signed quote, Deepgram with `mip_opt_out` in real mode; nothing reaches the notes until reviewed | reviewed account/input workflow repairs locally integrated | BUILT; BLOCKED on Deepgram BAA + pricing check |
+| **Answers from ordinary (unlabelled) typed or dictated notes on custom forms** | source-unit selection, exact evidence, correction/negation/side guards; bounded whole-paragraph adoption for a unique narrative field | reviewed ordinary-note repairs locally integrated; additional source-context repairs in progress; synthetic worker-to-export evidence retained | **BUILT / BLOCKED** — excessive holds and useful positive coverage still need acceptance (B-G1); labelled notes are not a required workaround |
 | Answers on the colonoscopy (tab) form | natural sentence-selection contract | tests; live runs in docs | READY |
-| Answers on the WM IOV form | qualified original adapter retained; ordinary dictated/typed narratives require the necessary PR #1287 path and reviewed shared repairs | PR #1287 remains draft and preserved | **BLOCKED** for the promised ordinary-note workflow (B-G1); labelled-only operation does not satisfy V1 |
+| Answers on the WM IOV form | qualified original adapter retained; ordinary dictated/typed narratives require the necessary PR #1287 path and reviewed shared repairs | required subset locally integrated via `v1/wm-required-repairs`; 273 checks and repaired cleared-answer guard with80targeted checks; original PR #1287 preserved | **BLOCKED** for the promised ordinary-note workflow (B-G1); labelled-only operation does not satisfy V1 |
 | Review, correction, held candidates, leave blank | explicit accept by owner/clinician; evidence shown | tests | READY |
-| **Review guards** — no generation over reviewed answers; WM statement decisions kept on an employee save; finalized record not re-reviewed; `&` rewrite blocker | ported from PR #1287 onto `v1/review-guards` | `review-round4-recovery-20260927.md`; 1,224 core tests, 11 skips; independent final review pending | REPAIRED on branch; not installed |
+| **Review guards** — no generation over reviewed answers; WM statement decisions kept on an employee save; finalized record not re-reviewed; `&` rewrite blocker | ported from PR #1287 onto `v1/review-guards` | `review-round4-recovery-20260927.md`; 1,224 core tests, 11 skips plus79finalfocused; independently refuted and locally integrated | REPAIRED locally; not installed |
 | Finalization | owner/clinician, confirmation, revision match, original hash match | tests | READY |
 | Export | original format only, hash-checked | tests | READY |
 | Coding | ICD-10-CM only, explicit codes, by service date | tests | READY; **CPT OFF** (licence) |
@@ -47,8 +47,8 @@ meet V1 until an item on `V1-BLOCKERS.md` clears; **OFF** — deliberately disab
 |---|---|---|---|
 | Upload of blank `.docx` | sandboxed inspection; macros/active content/external links/tracked changes refused by name; `.doc` refused with a save-as-.docx instruction | engine | READY |
 | Detection of every answer area (F1–F10) | contract v3 (`word_v3.py`) behind `QUILLMD_WORD_ENGINE` | historical engine proxy: dev 3/40, **holdout 0/20**; incomplete end-to-end evidence; 44 declared lineages across 60 files | **BLOCKED** (B-W1); not a measured V1 automatic success rate |
-| Visual mapping review + corrections (add / remove / kind / label), manual mapping recorded separately, clinician confirmation before use | Word integration stream; immutable original and mapping versions | synthetic workflow tests; final repairs/review underway | BUILT on branch; corpus workflow qualification pending |
-| Answers for choice / multi-choice / checkbox / table kinds | explicit-option-only filling; everything else held for the clinician | in progress | BUILT (pending) |
+| Visual mapping review + corrections (add / remove / kind / label), manual mapping recorded separately, clinician confirmation before use | Word integration stream; immutable original and mapping versions | 74 combined Word workflow checks; bounded Sonnet5 mapping assistance integrated with flags off and existing financial ledger | BUILT locally; corpus workflow qualification pending |
+| Answers for choice / multi-choice / checkbox / table kinds | explicit-option-only filling; everything else held for the clinician | reviewed deterministic Word repairs and affected tests; corpus qualification pending | BUILT locally |
 | Faithful export | v3 writers: only touched parts change; signatures never filled; bounded capacity where the page cannot grow | historical export proxy 18/20; earlier scorer lacked checkbox correctness and native Word acceptance; H08 control defect repaired | REPAIRED on branch; qualification remains open |
 | Qualified WM IOV and colonoscopy forms | existing pinned / tab paths | tests | READY |
 
@@ -69,7 +69,7 @@ are not broadly excluded to improve a percentage. A detected field is not proof 
 | function | V1 path | evidence | V1 status |
 |---|---|---|---|
 | Wallets, holds, 1.5× charge, ledger, "explain this charge" | unchanged; hold before request, charge ≤ hold | tests | READY |
-| Top-up (Stripe Checkout) | live mode: live keys, `livemode=true` only, public HTTPS return; real mode refuses sandbox payments | `067b381c` + R1/R2 repairs pending | BUILT; BLOCKED on the live Stripe account (external) |
+| Top-up (Stripe Checkout) | live mode: live keys, `livemode=true` only, public HTTPS return; real mode refuses sandbox payments | reviewed real-mode/R5 repairs locally integrated, including independent statement-trigger finding | BUILT; BLOCKED on the live Stripe account (external) |
 | Promotional credit | `QUILLMD_WELCOME_CREDIT` (policy is the owner's) | `cc7413eb` | BUILT |
 | Refunds, credit adjustments | Stripe dashboard only; console read-only | inventory | OFF by design |
 
@@ -85,7 +85,7 @@ are not broadly excluded to improve a percentage. A detected field is not proof 
 |---|---|---|---|
 | Admin console (MFA, overview, users, orgs, jobs, costs, audit) | admin behind the TLS proxy honours the proxy header | `169b0b2f` | BUILT |
 | Audit | append-only rows, hashes not text | tests | READY |
-| Production host (AWS), backups, restore drill, alerts, monitoring, retention/deletion | production profile + hosting package | `v1/prodprofile` | BUILT (package) / BLOCKED (external: accounts, BAA, custodians, counsel) |
+| Production host (AWS), backups, restore drill, alerts, monitoring, retention/deletion | production profile + hosting package | production profile, hash-locked dependencies, RDS role/admin bootstrap and cutover package | BUILT (package) / BLOCKED (external: accounts, BAA, custodians, counsel) |
 
 ## Explicit non-goals for V1 (listed so they are not mistaken for omissions)
 
