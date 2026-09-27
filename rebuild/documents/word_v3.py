@@ -2127,6 +2127,61 @@ class Detector:
         return ""
 
     # 6. a label followed by empty paragraph(s): the answer goes on those lines ------------------------------------
+    def plain_spacing_paragraph(self, slot):
+        """Only unmarked spacing can yield to a separately mapped destination."""
+        text, pieces = self.ptext(slot.el)
+        if text.strip() or self.blank_spans(text, pieces):
+            return False
+        markers = {q("w:sdt"), FLDCHAR, q("w:instrText"), TXBX, q("w:drawing"), q("w:pict"),
+                   q("w:object"), q("w:pBdr"), q("w:framePr"), q("w:u"), q("w:br"), q("w:sectPr"), q("w:tabs")}
+        if any(node.tag in markers for node in slot.el.iter()):
+            return False
+        if "word/styles.xml" in self.package.names:
+            defaults = self.package.tree("word/styles.xml").find(q("w:docDefaults"))
+            if defaults is not None and any(node.tag in markers for node in defaults.iter()):
+                return False
+        parent = slot.parent
+        while parent is not None:
+            if parent.kind == "tbl":
+                ref = parent.el.find("./" + q("w:tblPr") + "/" + q("w:tblStyle"))
+                if ref is not None:
+                    chain, problem = self.question_box_style_chain(ref.get(q("w:val")), "table")
+                    if problem or any(node.tag in markers for style in chain for node in style.iter()):
+                        return False
+            parent = parent.parent
+        ppr = slot.el.find(q("w:pPr"))
+        ref = ppr.find(q("w:pStyle")) if ppr is not None else None
+        if ref is not None:
+            styles, problem = self.question_box_style_chain(ref.get(q("w:val")), "paragraph")
+        else:
+            defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
+                        if s.get(q("w:type")) == "paragraph" and s.get(q("w:default")) in ("1", "true", "on")] \
+                if "word/styles.xml" in self.package.names else []
+            if len(defaults) > 1:
+                return False
+            styles, problem = self.question_box_style_chain(defaults[0].get(q("w:styleId")), "paragraph") \
+                if defaults else ([], "")
+        return not problem and not any(node.tag in markers for style in styles for node in style.iter())
+
+    def mapped_beside_label(self, slot):
+        """A sole plain cell label already has a directly adjacent mapped answer cell.
+
+        This does not infer ownership from an empty neighbour alone, and never
+        borrows an outer table's destination for a nested control or text box.
+        """
+        cell = self.host_cell(slot)
+        if cell is None or slot.parent is not cell or any(c.kind != "p" for c in cell.children):
+            return False
+        named = [p for p in cell.children if self.text(p.el).strip()]
+        if named != [slot] or self.blank_spans(*self.ptext(slot.el)) or "\x00" in self.ptext(slot.el)[0]:
+            return False
+        right = next((c for c in self.grid(cell.parent).get(cell.info["row"], [])
+                      if c.info["col"] == cell.info["col"] + cell.info["span"]
+                      and c.info["vmerge"] != "continue"), None)
+        if right is None or self.row_label(cell.parent, cell.info["row"], right.info["col"]) != clean_label(self.text(slot.el)):
+            return False
+        return any(a.slot is right and a.target.get("type") in ("cell", "cell_replace") for a in self.areas)
+
     def rule_lines_below_label(self):
         containers = [s for s in self.index.slots if s.kind in ("tc", "txbx")]
         seqs = [[c for c in s.children if c.kind == "p"] for s in containers]
@@ -2164,6 +2219,8 @@ class Detector:
                     if not in_container and len(blanks) >= 1:
                         break
                 if not blanks:
+                    continue
+                if in_container and self.mapped_beside_label(ps) and all(self.plain_spacing_paragraph(b) for b in blanks):
                     continue
                 kind = "long_text" if len(blanks) >= 2 and not signing else self.kind_for(label)
                 self.add(Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),

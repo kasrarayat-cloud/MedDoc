@@ -35,6 +35,7 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
     ordinary_notes = 'The patient reports weekly contact with the supervisor.'
     ordinary_correction = 'The patient reports weekly supervised contact.'
     ordinary_status = 'supported'
+    long_correction = ('SYNTHETIC long clinician review of supervised contact. ' * 90).strip()
 
     def source(self):
         doc = Document()
@@ -44,6 +45,9 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
         return data(doc)
 
     def capture(self, mode, template, version, encounter, original, exported):
+        pass
+
+    def check_mapping(self, version):
         pass
 
     def test_long_mapping_review_save_add_and_oversized_post_preserve_versions(self):
@@ -83,7 +87,10 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
     def test_missing_ordinary_long_worker_correction_finalization_and_export(self):
         original = self.source()
         template, version = self.uploaded(data=original, name='SYNTHETIC separate answer box')
+        self.check_mapping(version)
         field = next(f for f in version.fields if f['locator']['slot'] == self.target_slot)
+        download = self.client.get(f'/templates/{template.pk}/original/')
+        self.assertEqual(b''.join(download.streaming_content), original)
         page = self.client.get(f'/templates/{template.pk}/')
         self.assertContains(page, field['label'])
         self.confirm(template, version)
@@ -107,7 +114,7 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
                 self.assertEqual(encounter.answers[field['key']]['text'], notes if mode != 'missing' and self.ordinary_status == 'supported' else '')
                 self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/').status_code, 200)
                 value = {'missing': '', 'ordinary': self.ordinary_correction,
-                         'long': ('SYNTHETIC long clinician review of supervised contact. ' * 90).strip()}[mode]
+                         'long': self.long_correction}[mode]
                 payload = {'revision': encounter.revision}
                 for f in version.fields:
                     payload['reviewed_' + f['key']] = 'on'
@@ -124,12 +131,19 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
                 encounter.refresh_from_db()
                 self.assertEqual(encounter.status, 'finalized')
                 exported = private_path(encounter.export_path).read_bytes()
+                download = self.client.get(f'/encounters/{encounter.pk}/export/')
+                self.assertEqual(b''.join(download.streaming_content), exported)
                 self.assertEqual(hashlib.sha256(exported).hexdigest(), encounter.export_sha256)
                 self.assertEqual(private_path(template.original_path).read_bytes(), original)
                 old = w.SlotIndex(w.open_package(original))
                 new = w.SlotIndex(w.open_package(exported))
                 target = 'word/document.xml#' + self.target_slot
-                self.assertEqual(w.text_of(new.by_id[target].el).strip(), value)
+                expected = value or w.text_of(old.by_id[target].el).strip()
+                self.assertEqual(w.text_of(new.by_id[target].el).strip(), expected)
+                for slot in old.slots:
+                    if slot.part == 'word/document.xml' and slot.id != target and \
+                            not slot.id.startswith(target + '/') and not target.startswith(slot.id + '/'):
+                        self.assertEqual(etree.tostring(slot.el), etree.tostring(new.by_id[slot.id].el), slot.id)
                 for slot in old.roots:
                     if slot.part != 'word/document.xml' or not target.startswith(slot.id + '/'):
                         self.assertEqual(etree.tostring(slot.el), etree.tostring(new.by_id[slot.id].el), slot.id)
@@ -139,3 +153,21 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
                         if part != 'word/document.xml':
                             self.assertEqual(before.read(part), after.read(part), part)
                 self.capture(mode, template, version, encounter, original, exported)
+
+
+class PairedCellWorkflow(QuestionBoxWorkflow):
+    target_slot = 'b/tbl[0]/tr[1]/tc[1]'
+    ordinary_notes = 'The patient reports knee pain.'
+    ordinary_correction = 'The patient reports improving knee pain.'
+
+    def source(self):
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        for row, label in enumerate(('Date of Birth', 'Symptoms:')):
+            table.cell(row, 0).text = label
+            table.cell(row, 0).add_paragraph()
+        return data(doc)
+
+    def check_mapping(self, version):
+        self.assertEqual(len(version.fields), 2)
+        self.assertTrue(all(f['locator']['target']['type'] == 'cell' for f in version.fields))

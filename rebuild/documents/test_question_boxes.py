@@ -31,6 +31,89 @@ def data(doc):
 
 
 class QuestionBoxes(unittest.TestCase):
+    def test_paired_cell_label_spacing_is_not_a_second_answer(self):
+        for layout in ('ordinary', 'merged', 'multicolumn', 'nested'):
+            with self.subTest(layout=layout):
+                doc = Document()
+                owner = doc if layout != 'nested' else doc.add_table(rows=1, cols=1).cell(0, 0)
+                table = owner.add_table(rows=1, cols=4 if layout == 'multicolumn' else 3 if layout == 'merged' else 2)
+                label = table.cell(0, 0)
+                if layout == 'merged': label = label.merge(table.cell(0, 1))
+                label.text = 'Date of Birth'
+                label.add_paragraph()
+                label.add_paragraph()
+                if layout == 'multicolumn':
+                    table.cell(0, 2).text = 'Date of Visit'
+                    table.cell(0, 2).add_paragraph()
+                result = w.inspect(data(doc))
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+                self.assertEqual(len([f for f in result['fields'] if f['locator']['target']['type'] == 'cell']),
+                                 2 if layout == 'multicolumn' else 1)
+
+    def test_paired_cell_keeps_explicit_and_independent_answer_lines(self):
+        for marker in ('underline', 'border', 'inherited_border', 'table_border', 'default_border',
+                       'unknown_style', 'standalone'):
+            with self.subTest(marker=marker):
+                doc = Document()
+                table = doc.add_table(rows=1, cols=1 if marker == 'standalone' else 2)
+                label = table.cell(0, 0)
+                label.text = 'Date of Birth'
+                blank = label.add_paragraph()
+                if marker == 'underline': blank.add_run('     ').underline = True
+                elif marker in ('border', 'inherited_border', 'table_border', 'default_border'):
+                    border = OxmlElement('w:pBdr');edge = OxmlElement('w:bottom')
+                    edge.set(qn('w:val'), 'single');border.append(edge)
+                    if marker == 'border': blank._p.get_or_add_pPr().append(border)
+                    elif marker == 'inherited_border':
+                        style = doc.styles.add_style('Answer Line', WD_STYLE_TYPE.PARAGRAPH)
+                        style.element.get_or_add_pPr().append(border);blank.style = style
+                    elif marker == 'table_border':
+                        style = doc.styles.add_style('Answer Table', WD_STYLE_TYPE.TABLE)
+                        condition = OxmlElement('w:tblStylePr');condition.set(qn('w:type'), 'firstCol')
+                        props = OxmlElement('w:pPr');props.append(border);condition.append(props)
+                        style.element.append(condition);table.style = style
+                    else:
+                        defaults = doc.styles.element.find(qn('w:docDefaults'))
+                        props = defaults.find(qn('w:pPrDefault')).find(qn('w:pPr'))
+                        props.append(border)
+                elif marker == 'unknown_style':
+                    ref = OxmlElement('w:pStyle');ref.set(qn('w:val'), 'UnavailableAnswerStyle')
+                    blank._p.get_or_add_pPr().append(ref)
+                result = w.inspect(data(doc))
+                self.assertTrue([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+
+    def test_paired_cell_spacing_does_not_claim_controls_or_textboxes(self):
+        from .test_word_v3 import _sdt, ff_field
+        doc = Document()
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = 'Date of Birth'
+        table.cell(0, 0).add_paragraph()
+        p = doc.add_paragraph('Laterality: ')
+        p._p.append(_sdt('dropdown', options=['Choose an item.', 'Left', 'Right']))
+        p = doc.add_paragraph('Reviewed ')
+        ff_field(p, 'checkbox', checked=True)
+        p = doc.add_paragraph()
+        pict = OxmlElement('w:pict')
+        shape = etree.SubElement(pict, '{urn:schemas-microsoft-com:vml}shape')
+        shape.set('style', 'width:200pt;height:70pt')
+        textbox = etree.SubElement(shape, '{urn:schemas-microsoft-com:vml}textbox')
+        content = OxmlElement('w:txbxContent');textbox.append(content)
+        inner = OxmlElement('w:p');content.append(inner)
+        run = OxmlElement('w:r');inner.append(run)
+        text = OxmlElement('w:t');text.text = 'Textbox comments: ______';run.append(text)
+        p.add_run()._r.append(pict)
+        original = data(doc)
+        result = w.inspect(original)
+        self.assertEqual(len([f for f in result['fields'] if f['locator']['target']['type'] == 'sdt_choice']), 1)
+        self.assertTrue(any('/txbx[' in f['locator']['slot'] and f['label'] == 'Textbox comments' for f in result['fields']))
+        self.assertTrue(any(f['locator']['target']['type'] == 'checkboxes' for f in result['fields']))
+        target = next(f for f in result['fields'] if f['locator']['slot'] == 'b/tbl[0]/tr[0]/tc[1]')
+        exported = w.fill(original, result['fields'], {target['key']: 'SYNTHETIC date'})
+        before = w.SlotIndex(w.open_package(original));after = w.SlotIndex(w.open_package(exported))
+        for slot in before.roots:
+            if slot.kind != 'tbl':
+                self.assertEqual(etree.tostring(slot.el), etree.tostring(after.by_id[slot.id].el))
+
     def test_complete_long_question_and_section_are_retained(self):
         doc = Document()
         context = 'Clinical section ' + 'complete context ' * 25
