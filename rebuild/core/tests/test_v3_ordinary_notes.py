@@ -70,9 +70,10 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
         out = run(notes, {'Smoker': ['Smoker: No.']})
         self.assertEqual(out['Smoker']['text'], 'No')
         self.assertEqual(out['Smoker']['status'], 'supported')
-        # Round 2 (F2): the next line of its paragraph may change it ('I mean yes.'), so there it is held.
+        # The declared complete ancillary topic is independent of this exact
+        # Smoker question. Other topics and corrections still require review.
         smoker = run('Smoker: No.\nThe patient drinks socially.', {'Smoker': ['Smoker: No.']})['Smoker']
-        self.assertEqual((smoker['status'], smoker['text'], smoker['held_candidate']['text']), ('conflict', '', 'No.'))
+        self.assertEqual((smoker['status'], smoker['text']), ('supported', 'No'))
 
     def test_a_line_that_begins_with_a_form_label_is_one_unit_and_its_answer_is_the_rest_of_the_line(self):
         """R2/R3: split into sentences, the labelled sentence alone ticked the box and dropped what followed it."""
@@ -391,9 +392,10 @@ class QueuedContractAttribution(SimpleTestCase):
         self.assertIn('UnitSelection', sent['output_config']['format']['schema']['$defs'])
         fixture = g.generate('Patient seen today.\nSmoker: yes', FIELDS, {**live_config(), 'mode': 'fixture'})[0]
         self.assertEqual((fixture['v3_4']['status'], fixture['v3_4']['text']), ('supported', 'Yes'))
-        # Round 2 (F2): above an unlabelled line of its paragraph the labelled answer is held under this contract too.
+        # This complete visit-event clause is now a declared ancillary topic for
+        # the exact Smoker question; the current contract keeps its source relation.
         fixture = g.generate('Smoker: yes\nPatient seen today.', FIELDS, {**live_config(), 'mode': 'fixture'})[0]
-        self.assertEqual((fixture['v3_4']['status'], fixture['v3_4']['text']), ('conflict', ''))
+        self.assertEqual((fixture['v3_4']['status'], fixture['v3_4']['text']), ('supported', 'Yes'))
 
 
 @override_settings(**V3)
