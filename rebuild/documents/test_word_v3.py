@@ -727,5 +727,86 @@ class OptionsKeepTheirPrintedText(unittest.TestCase):
         self.assertEqual(option_text("b) Left knee -"), "b) Left knee")
 
 
+def checkbox_control(checked=False, *, states=True, flag=True):
+    """A checkbox content control as Word writes it: the w14:checked flag, the checkedState/uncheckedState glyphs
+    (MS Gothic U+2612 / U+2610) and the glyph the state names as its content."""
+    sdt = _sdt("checkbox")
+    cb = sdt.find(qn("w:sdtPr")).find("{%s}checkbox" % W14)
+    cb.find("{%s}checked" % W14).set("{%s}val" % W14, "1" if checked else "0")
+    if not flag:
+        cb.remove(cb.find("{%s}checked" % W14))
+    if states:
+        for tag, code in (("checkedState", "2612"), ("uncheckedState", "2610")):
+            state = etree.SubElement(cb, "{%s}%s" % (W14, tag))
+            state.set("{%s}val" % W14, code)
+            state.set("{%s}font" % W14, "MS Gothic")
+    sdt.find(qn("w:sdtContent")).find(qn("w:r")).find(qn("w:t")).text = "☒" if checked else "☐"
+    return sdt
+
+
+def text_run(text):
+    r = OxmlElement("w:r")
+    t = OxmlElement("w:t")
+    t.text = text
+    t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    r.append(t)
+    return r
+
+
+def controls_shown(data):
+    """[(glyph shown, w14:checked flag)] for every checkbox content control of an exported package, in order."""
+    root = etree.fromstring(ZipFile(io.BytesIO(data)).read("word/document.xml"))
+    out = []
+    for sdt in root.iter(qn("w:sdt")):
+        cb = sdt.find(".//{%s}checkbox" % W14)
+        if cb is None:
+            continue
+        flag = cb.find("{%s}checked" % W14)
+        out.append(("".join(t.text or "" for t in sdt.find(qn("w:sdtContent")).iter(qn("w:t"))),
+                    flag.get("{%s}val" % W14) if flag is not None else None))
+    return out
+
+
+class ControlReadBack(unittest.TestCase):
+    """R3: a checkbox control reads as ticked or unticked only when its flag AND the glyph it displays agree."""
+
+    def anticoagulated(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic intake")
+        p = doc.add_paragraph("Anticoagulated? ")
+        p._p.append(checkbox_control(checked=True))
+        p._p.append(text_run(" Yes  "))
+        p._p.append(checkbox_control())
+        p._p.append(text_run(" No"))
+        return docx_bytes(doc)
+
+    def test_a_writer_that_leaves_the_ticked_glyph_is_refused(self):
+        from unittest.mock import patch
+        from documents import word_v3
+        data = self.anticoagulated()
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual((fields[0]["label"], fields[0]["options"]), ("Anticoagulated?", ["Yes", "No"]))
+        real = word_v3.set_sdt_checkbox
+
+        def regressed(sdt, ticked):             # the refuter's writer: the flag set, the printed glyph left
+            if ticked:
+                return real(sdt, True)
+            cb = sdt.find(word_v3.q("w:sdtPr")).find(word_v3.q("w14:checkbox"))
+            cb.find(word_v3.q("w14:checked")).set(word_v3.q("w14:val"), "0")
+            return True
+        with patch.object(word_v3, "set_sdt_checkbox", side_effect=regressed):
+            with self.assertRaises(word_v3.V3Failure) as refused:
+                word_v3.fill(data, fields, {fields[0]["key"]: "No"})
+        self.assertEqual(refused.exception.code, "fill_mismatch")
+
+    def test_unticking_a_control_shows_its_unchecked_glyph(self):
+        from documents import word_v3
+        data = self.anticoagulated()
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual(fields[0].get("printed_ticked"), [0])
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "No"})
+        self.assertEqual(controls_shown(out), [("☐", "0"), ("☒", "1")])
+
+
 if __name__ == "__main__":
     unittest.main()
