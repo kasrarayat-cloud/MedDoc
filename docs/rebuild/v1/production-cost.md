@@ -83,13 +83,20 @@ $32.85/month plus $0.045/GB.
 about 30% more tokens than Sonnet 4.6 for the same text; if the workspace uses US-only inference
 (`inference_geo`), every token costs 1.1x (whether it does is unknown). The application's own bound
 for a form generation is (request bytes + 12,000) input tokens plus 6,000 output tokens
-(`core/generation.py`), so a 20,000-byte request is bounded at $0.10.
+(`core/generation.py`, `maximum_cost`), so a 20,000-byte request is bounded at
+32,000 x $2/M + 6,000 x $10/M = **$0.124**.
+
+**Output cap this table assumes:** the cap in this release's code, `max_tokens=6000` on each
+provider call (`core/generation.py`), so no row exceeds 6,000 output tokens per call. The separate
+Sonnet 5 migration stream sets 8,000 for its thinking-disabled profile and 16,000 for adaptive
+thinking. If that ships, the output term rises with the cap: by the same formula a 20,000-byte
+request is bounded at $0.144 (8,000) or $0.224 (16,000), and the High row must be recomputed.
 
 | Generation | Input tokens | Output tokens | Cost |
 | --- | ---: | ---: | ---: |
 | Low (short typed note, small form) | 6,000 | 1,500 | $0.027 |
 | Expected (8-minute visit, typical form) | 12,000 | 3,000 | $0.054 |
-| High (narrative form, 12,000-token output, one repeat) | 2 x 25,000 | 2 x 12,000 | $0.340 |
+| High (narrative form, output at the 6,000-token cap, one repeat) | 2 x 25,000 | 2 x 6,000 | $0.220 |
 
 These token counts are estimates, not measurements: Sonnet 5 has not been run on the production
 workload. Re-baseline on the synthetic set before paid use, as the model migration plan requires.

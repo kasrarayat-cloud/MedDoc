@@ -4,6 +4,8 @@ Nothing here provisions or changes a host: the bootstrap script is exercised onl
 (and, as a non-root user, its refusal to execute), the environment renderer and the artifact
 installer only against temporary directories.
 """
+import ast
+from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import io
 import json
@@ -30,6 +32,8 @@ except ImportError:
 REBUILD = Path(__file__).resolve().parents[1]
 PRODUCTION = REBUILD / 'deploy' / 'production'
 PROFILE = deployment_profile.load_production(require_activation=False)
+COST_DOCUMENT = REBUILD.parent / 'docs' / 'rebuild' / 'v1' / 'production-cost.md'
+GENERATION = REBUILD / 'core' / 'generation.py'
 HOST = 'quillmd-production.c1a2b3c4d5e6.us-east-1.rds.amazonaws.com'
 
 
@@ -369,6 +373,50 @@ class ReleaseArtifactTests(unittest.TestCase):
         again = subprocess.run(['bash', str(PRODUCTION / 'build-release.sh'), commit, str(output)], cwd=repository,
                                env=environment, capture_output=True, text=True, timeout=60)
         self.assertNotEqual(again.returncode, 0)  # never overwrites a recorded artifact
+
+
+def generation_bounds():
+    """From core/generation.py's syntax tree: maximum_cost's input overhead and output tokens, and every provider cap."""
+    tree = ast.parse(GENERATION.read_text())
+    caps = sorted({keyword.value.value for node in ast.walk(tree) if isinstance(node, ast.Call)
+                   for keyword in node.keywords
+                   if keyword.arg in ('max_tokens', 'max_output_tokens') and isinstance(keyword.value, ast.Constant)})
+    function = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == 'maximum_cost')
+    overheads = [node.right.value for node in ast.walk(function)
+                 if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add) and isinstance(node.right, ast.Constant)]
+    outputs = [node.args[0].value for node in ast.walk(function)
+               if isinstance(node, ast.Call) and getattr(node.func, 'id', '') == 'Decimal' and node.args
+               and isinstance(node.args[0], ast.Constant) and type(node.args[0].value) is int]
+    return overheads, outputs, caps
+
+
+class ProductionCostDocumentTests(unittest.TestCase):
+    """production-cost.md restates the application's own generation bound; its numbers must be the code's."""
+
+    def test_the_stated_bound_and_every_generation_row_agree_with_the_code(self):
+        overheads, outputs, caps = generation_bounds()
+        self.assertEqual((overheads, outputs, caps), ([12000], [6000], [6000]))
+        raw = COST_DOCUMENT.read_text()
+        text = ' '.join(raw.split())
+        rates = re.search(r'\$(\d+) per million input tokens, \$(\d+) per million output tokens', text)
+        input_rate, output_rate = (Decimal(value) / 1000000 for value in rates.groups())
+        stated = re.search(r'a 20,000-byte request is bounded at (?:[^.]*?= )?\**\$([0-9]+\.[0-9]+)', text)
+        self.assertIsNotNone(stated)
+        self.assertEqual(Decimal(stated.group(1)), (20000 + overheads[0]) * input_rate + outputs[0] * output_rate)
+        rows = re.findall(r'^\| (Low|Expected|High) \([^|]*\) \| ([0-9x, ]+) \| ([0-9x, ]+) \| \$([0-9.]+) \|$', raw, re.M)
+        self.assertEqual([row[0] for row in rows], ['Low', 'Expected', 'High'])
+
+        def tokens(cell):
+            calls, _, per_call = cell.rpartition(' x ')
+            return int(calls or 1), int(per_call.replace(',', ''))
+        for name, input_cell, output_cell, cost in rows:
+            with self.subTest(row=name):
+                calls, per_call_input = tokens(input_cell)
+                output_calls, per_call_output = tokens(output_cell)
+                self.assertEqual(calls, output_calls)
+                self.assertLessEqual(per_call_output, caps[0])  # no call can return more than the cap
+                expected = calls * (per_call_input * input_rate + per_call_output * output_rate)
+                self.assertEqual(Decimal(cost), expected.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP))
 
 
 class BootstrapScriptTests(unittest.TestCase):
