@@ -220,7 +220,7 @@ class AuthorizationAndPayerRefutation(TestCase):
         from core.jobs import enqueue, run_one
         self.job.state = "failed"
         self.job.save(update_fields=["state"])
-        with override_settings(AI_MODE="live", AI_PROVIDER="anthropic", AI_MODEL="synthetic-original", AI_INPUT_RATE="1", AI_OUTPUT_RATE="5", AI_CACHED_RATE="0.1"):
+        with override_settings(AI_MODE="live", AI_PROVIDER="anthropic", AI_MODEL="claude-sonnet-4-6", AI_INPUT_RATE="1", AI_OUTPUT_RATE="5", AI_CACHED_RATE="0.1"):
             job = enqueue(self.job.encounter, self.user)
         reserved_before = Wallet.objects.get(user=self.user, kind="promo").reserved
         # The operator switches to fixture WHILE the live request is in flight: after the worker's mode check (a switch

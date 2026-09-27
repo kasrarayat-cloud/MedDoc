@@ -75,7 +75,8 @@ ATTESTATION_GUIDANCE = (' Leave consent, attestation, signature and dictated/tra
 # fields therefore changes meaning with the model string. So the profile states them EXPLICITLY for Sonnet 5, is
 # SNAPSHOTTED into Job.config at enqueue (a queued job never changes its request shape), and is hashed into
 # pricing_version (a different request is a different price). The listed Claude models up to 4.6 (`LEGACY_CLAUDE_MODELS`)
-# and every non-Claude model keep the pre-profile request byte for byte; any other Claude id is refused (`unprofiled`).
+# under anthropic, and non-Claude models under openai, keep the pre-profile request byte for byte; every other
+# (provider, model) pair is refused (`unprofiled`).
 # `LEGACY_PROFILE` IS that request, and it hashes as ABSENT so every existing fingerprint — claude-sonnet-4-6 at
 # 3/15/0.30 is configured-v1:fcc80267… — stays exactly what it was. Rollback is a model string, not a code change.
 SONNET_5='claude-sonnet-5'
@@ -138,17 +139,19 @@ LEGACY_CLAUDE_MODELS=frozenset(('claude-sonnet-4-6','claude-haiku-4-5','claude-s
 
 
 def unprofiled(provider,model):
-    """An Anthropic Claude model id that has no request profile, so nothing may be sent to it until it has one.
+    """A (provider, model) pair QuillMD has no request for, so nothing may be sent until it has one.
 
-    Every id containing `claude` (case-insensitively, anywhere — so a misspelling, a capitalised or padded id, a dated
-    variant nobody listed, or a regional prefix all count) is refused unless it is claude-sonnet-5, which has its own
-    profile, or is on `LEGACY_CLAUDE_MODELS` exactly as spelled. A newer model the legacy request is unsafe for — a larger
-    tokenizer from 4.7, adaptive thinking by default from Sonnet 5 / Opus 5 — can therefore never receive it by being
-    named in a shape nobody anticipated. Non-Anthropic providers, and Anthropic ids that are not Claude ids (the
-    synthetic fixtures), keep the legacy request as before.
+    anthropic: DENY BY DEFAULT — only claude-sonnet-5, which has its own profile, and `LEGACY_CLAUDE_MODELS`, each exactly as
+    spelled. A newer model the legacy request is unsafe for (a larger tokenizer from 4.7, adaptive thinking by default from
+    Sonnet 5 / Opus 5) can never receive it by being named in a shape nobody anticipated, and a non-Claude id — the
+    settings default gpt-4.1-mini under the default provider anthropic, measured — is not sent to Anthropic to 404.
+    openai: any id containing `claude` (case-insensitively) is refused; measured, openai + claude-sonnet-4-6 was rated
+    legacy, held, sent to api.openai.com and 404'd into reconciliation with the hold kept.
+    Any other provider is refused separately (`PROVIDERS`).
     """
-    if provider!='anthropic' or not isinstance(model,str) or model==SONNET_5 or model in LEGACY_CLAUDE_MODELS: return False
-    return 'claude' in model.casefold()
+    if provider=='anthropic': return model!=SONNET_5 and model not in LEGACY_CLAUDE_MODELS
+    if provider=='openai': return not isinstance(model,str) or 'claude' in model.casefold()
+    return False
 
 
 def request_profile(provider,model,thinking,effort,inference_geo):
@@ -169,10 +172,13 @@ def request_profile(provider,model,thinking,effort,inference_geo):
                  # can never land in a stored receipt; the returned block carries only an opaque signature.
                  'thinking':{'type':'disabled'} if thinking=='disabled' else {'type':'adaptive','display':'omitted'},
                  'effort':effort}
+    elif unprofiled(provider,model) and provider=='openai':
+        return {'invalid':'QUILLMD_AI_MODEL names a Claude model but QUILLMD_AI_PROVIDER is openai: Claude models are sent '
+                          'only with QUILLMD_AI_PROVIDER=anthropic.'}
     elif unprofiled(provider,model):
-        return {'invalid':'QUILLMD_AI_MODEL has no request profile: QuillMD sends requests only to claude-sonnet-5 and to '
-                          +', '.join(sorted(LEGACY_CLAUDE_MODELS))+', each spelled exactly so; '
-                          'any other Claude model needs its own profile first.'}
+        return {'invalid':'QUILLMD_AI_MODEL has no request profile: with QUILLMD_AI_PROVIDER=anthropic QuillMD sends requests '
+                          'only to claude-sonnet-5 and to '+', '.join(sorted(LEGACY_CLAUDE_MODELS))+', each spelled exactly '
+                          'so; any other model needs its own profile first.'}
     else:
         profile=dict(LEGACY_PROFILE)
     if geo:
@@ -210,7 +216,8 @@ def job_request_profile(config):
     if provider not in PROVIDERS:
         _refuse_profile('QuillMD has no provider named in this request, so it cannot be sent. Nothing was sent.')
     if unprofiled(provider,model):
-        _refuse_profile('QuillMD has no request profile for this model, so the request cannot be built. Nothing was sent.')
+        _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+                        'Nothing was sent.')
     if profile is None:
         if provider=='anthropic' and model==SONNET_5:
             _refuse_profile('This request was quoted before claude-sonnet-5 had a request profile. Nothing was sent; '

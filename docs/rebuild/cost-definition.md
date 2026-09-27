@@ -115,8 +115,11 @@ states `thinking` and `output_config.effort`:
 
 It never sends sampling parameters, `budget_tokens` or a prefill. The Claude models listed
 in `LEGACY_CLAUDE_MODELS` (`claude-sonnet-4-6`, `claude-haiku-4-5`, `claude-sonnet-4-5-20250929`,
-each matched exactly as spelled) and every non-Claude model keep the pre-profile request
-byte for byte. `claude-opus-4-1` is deliberately not on the list: Anthropic marks it
+each matched exactly as spelled) with `QUILLMD_AI_PROVIDER=anthropic`, and non-Claude models
+with `QUILLMD_AI_PROVIDER=openai`, keep the pre-profile request byte for byte. Any other pairing
+is refused before any hold or request: `anthropic` with any other id (a non-Claude id such as
+the settings default `gpt-4.1-mini` included), and `openai` with any id containing `claude`,
+which would otherwise be sent to the wrong API and 404 into reconciliation. `claude-opus-4-1` is deliberately not on the list: Anthropic marks it
 deprecated (retiring 2026-08-05) and this deployment never used it, so it is refused. The profile is
 snapshotted into `Job.config` with the rates and hashed into `pricing_version`, except the
 legacy profile, which hashes as absent. The rollback configuration therefore still

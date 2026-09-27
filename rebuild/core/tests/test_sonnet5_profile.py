@@ -171,12 +171,42 @@ class PricingFingerprint(SimpleTestCase):
                         with self.assertRaises(NoProviderRequest):
                             g.maximum_cost(NOTES, FIELDS, config)
                     client.assert_not_called()
-        # The LISTED Claude models up to 4.6, and anything that is not an Anthropic Claude id, keep the pre-profile request.
+        # The LISTED Claude models up to 4.6 under anthropic, and non-Claude ids under openai, keep the pre-profile request.
+        # ⚠️ This list used to pin ('anthropic', 'synthetic-model') and ('openai', 'claude-opus-5') as LEGACY too — the
+        # wrong behaviour F2 (round 3) measured: each was held, sent to the wrong API, and 404'd into reconciliation.
+        # Both are now refused; see test_the_provider_and_model_must_be_a_pair_quillmd_sends.
         for provider, model in (('anthropic', 'claude-sonnet-4-6'), ('anthropic', 'claude-haiku-4-5'),
-                                ('anthropic', 'claude-sonnet-4-5-20250929'),
-                                ('anthropic', 'synthetic-model'), ('openai', 'gpt-4.1-mini'), ('openai', 'claude-opus-5')):
+                                ('anthropic', 'claude-sonnet-4-5-20250929'), ('openai', 'gpt-4.1-mini')):
             with self.subTest(provider=provider, model=model):
                 self.assertEqual(g.request_profile(provider, model, 'x', 'y', ''), g.LEGACY_PROFILE)
+
+    def test_the_provider_and_model_must_be_a_pair_quillmd_sends(self):
+        """F2 (round 3). anthropic accepts only claude-sonnet-5 and LEGACY_CLAUDE_MODELS; openai refuses any Claude id.
+        Measured before the repair: openai + claude-sonnet-4-6 was rated legacy, held $0.19, was sent to api.openai.com and
+        404'd into reconciliation with the hold kept; anthropic + gpt-4.1-mini — the settings default — was rated legacy.
+        Every mismatched pair is INVALID and refused before any hold or request, from configuration, a stored pre-profile
+        config and a forged legacy snapshot alike."""
+        pairs = [('openai', model) for model in ('claude-sonnet-4-6', 'claude-sonnet-5', 'claude-opus-4-1', 'Claude-Haiku-4-5',
+                                                 'us.anthropic.claude-sonnet-4-6')]
+        pairs += [('anthropic', model) for model in ('gpt-4.1-mini', 'synthetic-model', 'o3', '')]
+        for provider, model in pairs:
+            with self.subTest(provider=provider, model=model):
+                self.assertIn('invalid', g.request_profile(provider, model, 'disabled', 'medium', ''))
+                with override_settings(**dict(SONNET_46, AI_PROVIDER=provider, AI_MODEL=model)), \
+                        patch.dict(os.environ, PRICE_ENV), patch('anthropic.Anthropic') as client, \
+                        patch('openai.OpenAI') as openai_client:
+                    quoted = g.configuration()
+                    old = {k: v for k, v in quoted.items() if k != 'request_profile'}
+                    for config in (None, quoted, old, {**old, 'request_profile': g.LEGACY_PROFILE}):
+                        with self.assertRaises(NoProviderRequest):
+                            g.maximum_cost(NOTES, FIELDS, config)
+                        with self.assertRaises(NoProviderRequest):
+                            g.generate(NOTES, FIELDS, config)
+                    client.assert_not_called()
+                    openai_client.assert_not_called()
+        self.assertEqual(g.request_profile('openai', 'claude-sonnet-4-6', 'disabled', 'medium', ''),
+                         {'invalid': 'QUILLMD_AI_MODEL names a Claude model but QUILLMD_AI_PROVIDER is openai: Claude models '
+                                     'are sent only with QUILLMD_AI_PROVIDER=anthropic.'})
 
     def test_only_the_listed_claude_models_get_the_legacy_request_deny_by_default(self):
         """S5-R1. The version parser read `claude-<family>-<major>[-<minor>]`, so `claude-mythos-preview` — a real id outside
@@ -861,3 +891,30 @@ class ModeSwitch(OutcomeFixture, TestCase):
             enqueue(self.fresh_encounter(), self.user)
             Job.objects.filter(pk=job.pk).update(state='succeeded')
             self.assertTrue(admin_console.language_model_rows()[-1]['value'].startswith('0 queued, 0 running'))
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
+class ProviderModelPairing(OutcomeFixture, TestCase):
+    def test_a_mismatched_pair_is_refused_at_enqueue_and_a_stored_one_is_not_sent(self):
+        """F2 (round 3), through enqueue and the worker: refused before any job or hold; a job stored with a mismatched
+        pair (queued by the previous release) is refused before sending, not processed, hold released."""
+        for provider, model in (('openai', 'claude-sonnet-4-6'), ('anthropic', 'gpt-4.1-mini')):
+            with self.subTest(provider=provider, model=model), \
+                    override_settings(**dict(SONNET_46, AI_PROVIDER=provider, AI_MODEL=model)), \
+                    patch('anthropic.Anthropic') as client, patch('openai.OpenAI') as openai_client:
+                encounter = self.fresh_encounter()
+                with self.assertRaises(NoProviderRequest):
+                    enqueue(encounter, self.user)
+                self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+                stored = {k: v for k, v in g.configuration().items() if k != 'request_profile'}
+                job = Job.objects.create(encounter=encounter, user=self.user, revision=encounter.revision,
+                                         request_key=f'generation:{encounter.pk}:paired', config=stored)
+                reserve(job, Decimal('0.2'))
+                self.assertTrue(run_one())
+                client.assert_not_called()
+                openai_client.assert_not_called()
+                job.refresh_from_db()
+                self.assertEqual(job.state, 'failed')
+                self.assertTrue(job.error.startswith('Not processed: '), job.error)
+                self.assertFalse(Usage.objects.filter(job=job).exists())
+                self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())

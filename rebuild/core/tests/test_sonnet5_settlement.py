@@ -90,7 +90,7 @@ class SettlementFidelity(SimpleTestCase):
                 self.assertIs(g.us_inference_priced(provider), expected)
 
     def test_settlement_and_the_audit_recompute_in_lockstep(self):
-        models = (SONNET_5, SONNET_46, dict(SONNET_46, AI_MODEL='synthetic-model'))
+        models = (SONNET_5, SONNET_46, dict(SONNET_46, AI_MODEL='claude-haiku-4-5'))
         for overrides in models:
             for geo in ('us', 'global', None):
                 for discount in ('0', '0.2', '0.3333333'):
