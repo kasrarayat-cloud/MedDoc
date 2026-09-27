@@ -1004,6 +1004,62 @@ class LegacyDropdownDefault(unittest.TestCase):
                 self.assertEqual(ff_result(Path(tmp, "out.docx")), [shown], answer)
 
 
+def ff_text_field(p, name="Consent"):
+    """A legacy text form field (FORMTEXT) appended to python-docx paragraph `p`, with an empty result."""
+    for kind, child in (("begin", None), ("instr", None), ("separate", None), ("end", None)):
+        r = OxmlElement("w:r")
+        if kind == "instr":
+            node = OxmlElement("w:instrText")
+            node.text = " FORMTEXT "
+        else:
+            node = OxmlElement("w:fldChar")
+            node.set(qn("w:fldCharType"), kind)
+            if kind == "begin":
+                data = OxmlElement("w:ffData")
+                n = OxmlElement("w:name")
+                n.set(qn("w:val"), name)
+                data.append(n)
+                data.append(OxmlElement("w:enabled"))
+                data.append(OxmlElement("w:textInput"))
+                node.append(data)
+        r.append(node)
+        p._p.append(r)
+
+
+class CheckboxNeedsABox(unittest.TestCase):
+    """R7: a manual checkbox on a text content control or a legacy text field is refused when it is added, instead
+    of being accepted, confirmed, and refused at every export."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        doc = Document()
+        doc.add_paragraph("Synthetic consent")
+        doc.add_paragraph("Consent obtained: ")._p.append(_sdt("rich", placeholder="Click or tap here to enter text."))
+        ff_text_field(doc.add_paragraph("Witness: "), name="Witness")
+        self.form = self.dir / "consent.docx"
+        self.form.write_bytes(docx_bytes(doc))
+        self.places = {row["slot"]: row for row in outline_template(self.form)["slots"]}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_checkbox_on_a_text_control_or_text_field_is_refused(self):
+        for slot in ("word/document.xml#b/p[1]/sdt[0]", "word/document.xml#b/p[2]/ff[0]"):
+            self.assertIn(slot, self.places)
+            with self.assertRaises(DocumentError) as refused:
+                locate_fields(self.form, [{"slot": slot, "kind": "checkbox", "label": "Consent obtained", "glyph": 0}])
+            self.assertEqual(refused.exception.code, "invalid_mapping", slot)
+            self.assertIn("is not a checkbox", str(refused.exception), slot)
+
+    def test_the_same_places_still_take_text(self):
+        for n, slot in enumerate(("word/document.xml#b/p[1]/sdt[0]", "word/document.xml#b/p[2]/ff[0]")):
+            field = locate_fields(self.form, [{"slot": slot, "kind": "text", "label": "Consent note"}])["fields"][0]
+            out = self.dir / ("text-%d.docx" % n)
+            fill_template(self.form, [field], {field["key"]: "Signed by synthetic patient"}, out)
+            self.assertIn("Signed by synthetic patient", part_text(out))
+
+
 def fever_cell_bytes():
     """A cell 'Yes' printed box and a legacy checkbox 'No': the cell's text shows the printed box only."""
     doc = Document()

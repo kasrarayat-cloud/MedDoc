@@ -1029,6 +1029,50 @@ class V3RepeatedQuestions(V3Fixture, TestCase):
                                  "Right knee comments": "settled", "Left knee comments": "swollen"})
 
 
+def consent_control_form_bytes():
+    doc = Document()
+    doc.add_paragraph("Synthetic consent")
+    doc.add_paragraph("Consent obtained: ")._p.append(_sdt("rich", placeholder="Click or tap here to enter text."))
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3CheckboxNeedsABox(V3Fixture, TestCase):
+    """R7 end to end: a checkbox placed on a text control is refused when added, and a stored one is never confirmed
+    (it was accepted, confirmed, and then refused at every export)."""
+
+    def setUp(self):
+        super().setUp()
+        self.template, version = self.uploaded(data=consent_control_form_bytes(), name="Synthetic consent")
+        self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": version.pk,
+                                                             **{"remove_" + f["key"]: "on" for f in version.fields}})
+        self.version = self.latest(self.template)
+        self.assertEqual(self.version.fields, [])
+
+    def test_a_checkbox_on_a_text_control_is_refused_when_added(self):
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_add", "mapping_version": self.version.pk,
+                                    "slot": "word/document.xml#b/p[1]/sdt[0]", "kind": "checkbox", "label": "Consent obtained", "box": "1"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("is not a checkbox", response.context["v3_error"])
+        self.assertEqual(self.latest(self.template).pk, self.version.pk)
+
+    def test_a_stored_checkbox_on_a_text_control_is_never_confirmed(self):
+        from documents import locate_fields
+        from core.views import v3_original
+        field = locate_fields(v3_original(self.template), [{"slot": "word/document.xml#b/p[1]/sdt[0]", "kind": "text",
+                                                           "label": "Consent obtained"}])["fields"][0]
+        field = {**field, "kind": "checkbox", "options": ["Consent obtained"]}   # the shape locate stored before R7
+        stale = TemplateVersion.objects.create(template=self.template, number=self.version.number + 1, fields=[field],
+                                               contract="v3", corrections={"base_version": self.version.number}, created_by=self.user)
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm", "mapping_version": stale.pk,
+                                                                        "checked_every_field": "on"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("checkbox fields point at a place that is not a box: Consent obtained.", response.context["v3_error"])
+        self.assertFalse(MappingConfirmation.objects.filter(version=stale).exists())
+
+
 def left_effusion_form_bytes():
     """The refuter's p9 input: a left-only question whose side is written as a list marker."""
     doc = Document()
