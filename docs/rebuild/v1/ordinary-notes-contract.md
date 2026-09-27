@@ -45,5 +45,15 @@ Very little of it is tab-specific:
 
 ## Status
 
-Designed, not built. It is scheduled on top of the Word integration's generation phase, so `core/generation.py`
-changes land once instead of conflicting three ways with the Sonnet 5 profile and the v3 kinds.
+The generic natural contract, reviewed correction repairs and required WM path are implemented and locally
+integrated into `release/v1`. Further ordinary source-context repair is isolated in `v1/ordinary-context`
+and remains unmerged while finished-diff refutation finds concrete counterexamples. The unchanged retained
+known selections are 10/12 and 18/77 at the last frozen source; these are internal usefulness probes, not
+Sonnet 5 quality or corpus qualification. The seven-answer retained note9 completes a mocked-provider Word
+workflow, but that single case does not close B-G1.
+
+Age/sex patient onset, pronoun/topic context and unrelated-tail false holds still need bounded engineering
+or exact-model source-evidence qualification. Invalid whole-note/wrong-destination selections are recorded
+separately and cannot be counted as expected automatic positives. No mandatory labelled-note workaround
+has been substituted. See the current ordinary-context report after its reviewed integration and the
+append-only runtime checkpoint for exact active source ownership.

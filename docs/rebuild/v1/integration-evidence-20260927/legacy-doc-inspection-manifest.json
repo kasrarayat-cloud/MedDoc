@@ -1,0 +1,14 @@
+{
+  "inspect-d19.py": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-retention-readiness/rebuild/.runtime/legacy-doc-readiness-20260927/inspect-d19.py",
+    "sha256": "ccb15231c3d090c5e628384d2e1f93f225d7cbc76bb40e534a625052e769438d"
+  },
+  "d19-current-inspection.json": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-retention-readiness/rebuild/.runtime/legacy-doc-readiness-20260927/d19-current-inspection.json",
+    "sha256": "970f459275cfeec60685ce5cea6b27f90733398c558a0475c79eca2148561d89"
+  },
+  "d19-structure.json": {
+    "path": "/opt/meddoc-pro/.worktrees/v1-retention-readiness/rebuild/.runtime/legacy-doc-readiness-20260927/d19-structure.json",
+    "sha256": "62831f42af5d2649d37fc305134ab9d7ee1bb789ade71c8f249e8b85c37bc23d"
+  }
+}
