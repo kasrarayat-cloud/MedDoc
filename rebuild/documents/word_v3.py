@@ -301,7 +301,8 @@ class Piece:
 def paragraph_pieces(p):
     """The paragraph's own visible content, in order, as positioned pieces. Text boxes and fallback copies are left
     out (separate slots); an inline content control or a legacy form field is ONE object piece whose text is BOX for
-    a checkbox and NUL otherwise (its content is its own answer area)."""
+    a checkbox and NUL otherwise (its content is its own answer area) - except a control wrapping a checkbox control,
+    whose content is read as part of the line so the checkbox inside is a box like any other."""
     pieces, pos = [], [0]
     stack = []                          # open complex fields: [kind, separated]
 
@@ -316,6 +317,12 @@ def paragraph_pieces(p):
                 continue
             if tag == SDT:
                 info = sdt_info(ch)
+                if info["type"] != "checkbox" and checkbox_nodes(ch.find(q("w:sdtContent"))):
+                    # ⚠️ A CONTROL WRAPPING A CHECKBOX CONTROL IS READ THROUGH: as one opaque object it hid the
+                    # checkbox inside it from every box reader, so a printed tick there was never read, never
+                    # unticked and never checked by the read-back (round 3 F1).
+                    walk(ch)
+                    continue
                 add("obj", 1, node=ch, obj="sdt_checkbox" if info["type"] == "checkbox" else "sdt")
                 continue
             if tag == R:
@@ -358,6 +365,34 @@ def paragraph_pieces(p):
                 walk(ch)
     walk(p)
     return pieces
+
+
+def checkbox_nodes(el, own=True) -> list:
+    """Every checkbox control inside `el`, found by walking the whole subtree (never through the box readers): the
+    w:sdt of a checkbox content control and the begin run of a legacy checkbox field, in document order. Fallback
+    copies are left out, and with `own` text boxes too (each is a place of its own)."""
+    out = []
+    if el is None:
+        return out
+
+    def walk(node):
+        for ch in node:
+            tag = ch.tag
+            if not isinstance(tag, str) or tag == FALLBACK or (own and tag == TXBX):
+                continue
+            if tag == SDT:
+                pr = ch.find(q("w:sdtPr"))
+                if pr is not None and pr.find(q("w14:checkbox")) is not None:
+                    out.append(ch)
+            elif tag == R:
+                fc = ch.find(FLDCHAR)
+                if fc is not None and fc.get(q("w:fldCharType")) == "begin":
+                    data = fc.find(q("w:ffData"))
+                    if data is not None and data.find(q("w:checkBox")) is not None:
+                        out.append(ch)
+            walk(ch)
+    walk(el)
+    return out
 
 
 def piece_text(pc: Piece) -> str:
@@ -969,6 +1004,10 @@ class Detector:
     def cell_has_claim(self, tc) -> bool:
         return any(id(x) in self.claimed for x in tc.iter())
 
+    def region_hidden(self, region) -> bool:
+        """hidden_boxes, once per region (a paragraph or a table cell)."""
+        return region_hidden(self.index, region)
+
     # -- adding ----------------------------------------------------------------------------------------------------
     def add(self, area: Area):
         self._order += 1
@@ -1124,6 +1163,12 @@ class Detector:
                 continue
             txt = self.ptext(s.el)[0]
             if BOX not in txt and CHECKED not in txt:
+                continue
+            if self.region_hidden(box_region(s.el)):
+                # ⚠️ Its boxes cannot all be seen: no question is read from it (round 3 F1).
+                self.notes.append("A line holds a checkbox QuillMD cannot read in place, so it was left for manual "
+                                  "mapping: %s" % clean_label(txt)[:60])
+                self.claimed.add(id(s.el))
                 continue
             units = self.box_units(s)
             cell = self.host_cell(s)
@@ -1361,6 +1406,8 @@ class Detector:
         if self.cell_has_claim(c.el):
             return False
         txt = self.cell_text(c)
+        if self.region_hidden(c.el):
+            return False                # a checkbox its reading does not show (round 3 F1)
         return is_blank_text(txt) and self.is_empty_cell(c) or txt in (BOX, CHECKED)
 
     def rule_tables(self):
@@ -1371,7 +1418,8 @@ class Detector:
             box_cols = {}
             for r in ordered:
                 for c in rows[r]:
-                    if c.info["vmerge"] != "continue" and not self.cell_has_claim(c.el) and self.cell_text(c) in (BOX, CHECKED):
+                    if c.info["vmerge"] != "continue" and not self.cell_has_claim(c.el) and self.cell_text(c) in (BOX, CHECKED) \
+                            and not self.region_hidden(c.el):
                         box_cols.setdefault(c.info["col"], []).append((r, c))
             # empty cells in a column whose answers are boxes are filler (a sub-heading row), not answers
             filler = set()
@@ -2295,6 +2343,53 @@ def cell_boxes(tc):
     return [(kind, node) for p in tc.iter(q("w:p")) for kind, node, _ in box_pieces(p)]
 
 
+def box_region(el):
+    """Where a box is read and checked: the table cell holding it (through content controls, never out of a text box),
+    else its paragraph. `el` is a paragraph, a table cell or a checkbox control."""
+    if el.tag == q("w:tc"):
+        return el
+    host = el if el.tag == q("w:p") else next(el.iterancestors(q("w:p")), None)
+    if host is None:
+        return el
+    for anc in host.iterancestors():
+        if anc.tag == TXBX:
+            return host
+        if anc.tag == q("w:tc"):
+            return anc
+    return host
+
+
+def hidden_boxes(region) -> list:
+    """⚠️ THE CHECKBOX CONTROLS A REGION HOLDS THAT ITS BOX READING DOES NOT SHOW: every checkbox control found by
+    walking the region's whole subtree (checkbox_nodes) that box_pieces does not show. Not empty means the region's
+    boxes cannot be accounted for - it is refused where it would be read, written or numbered, and read back as
+    unread - so a ticked box nobody can see can never pass as the chosen one's neighbour (round 3 F1)."""
+    if region.tag == q("w:tc"):
+        nodes = checkbox_nodes(region, own=False)
+        seen_nodes = [node for p in region.iter(q("w:p")) for _, node, _ in box_pieces(p) if node is not None]
+    elif region.tag == q("w:p"):
+        nodes = checkbox_nodes(region)
+        seen_nodes = [node for _, node, _ in box_pieces(region) if node is not None]
+    else:
+        return checkbox_nodes(region)          # a control outside any paragraph: whatever it holds is not shown
+    seen = {id(node) for node in seen_nodes}   # (seen_nodes keeps every proxy alive while its id is compared)
+    return [node for node in nodes if id(node) not in seen]
+
+
+def region_hidden(index, el) -> bool:
+    """Whether the box region of `el` holds a checkbox its reading does not show (hidden_boxes), once per region for
+    one package read: the index keeps the answer, and every region is an element the package keeps alive."""
+    region = box_region(el)
+    cache = index.__dict__.setdefault("_hidden", {})
+    if id(region) not in cache:
+        cache[id(region)] = bool(hidden_boxes(region))
+    return cache[id(region)]
+
+
+HIDDEN_BOX = ("This place holds a checkbox QuillMD cannot read in place (for example a checkbox inside another checkbox), "
+              "so which box an answer means is not known and nothing there is filled.")
+
+
 RADIO_CODES = (0x81, 0xF081, 0xA1, 0xF0A1)
 
 
@@ -2400,6 +2495,8 @@ def set_cell_box(tc, ticked):
     ⚠️ A CONTROL IS NEVER WRITTEN OVER: an X over a checkbox control refused every answer, and an untick left a
     printed tick the reader could not see. A cell holding a control beside another box is refused: which box its
     answer means is not known."""
+    if hidden_boxes(tc):
+        fail(HIDDEN_BOX, "unsupported_layout")
     boxes = cell_boxes(tc)
     if any(kind != "glyph" for kind, _ in boxes):
         if len(boxes) != 1:
@@ -2691,6 +2788,8 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                     slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
                     if slot is None:
                         fail("The stored mapping no longer matches this form. Review the mapping again.", "mapping_mismatch")
+                    if box["kind"] in ("sdt", "ff", "glyph", "cell") and region_hidden(index, slot.el):
+                        fail(HIDDEN_BOX, "unsupported_layout")
                     if box["kind"] == "sdt":
                         ops.append((slot.el, -1, lambda el=slot.el, w=want: set_sdt_checkbox(el, w), box["part"]))
                     elif box["kind"] == "ff":
@@ -2792,6 +2891,8 @@ def box_state(index, box):
     slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
     if slot is None:
         return None
+    if box["kind"] in ("sdt", "ff", "glyph", "cell") and region_hidden(index, slot.el):
+        return None                     # a checkbox the region's reading does not show: nothing there is read
     if box["kind"] == "sdt":
         return sdt_checkbox_state(slot.el)
     if box["kind"] == "ff":
@@ -3032,6 +3133,9 @@ def place_box_refs(index, slot):
     numbered as shown. A cell's preview is its text, which does not show a legacy checkbox and does show boxes nested
     inside the cell: a cell is numbered only when its preview shows exactly its own paragraphs' boxes, each control
     once; otherwise None, and the cell refuses a box number (its line, or the checkbox itself, is the place)."""
+    boxy = slot.kind in ("p", "glyphs", "tc") or slot.info.get("type") == "checkbox" or slot.info.get("field") == "FORMCHECKBOX"
+    if boxy and region_hidden(index, slot.el):
+        return None                     # a checkbox its preview does not show: no number can name a box there
     if slot.kind in ("p", "glyphs"):
         return _paragraph_refs(index, slot if slot.kind == "p" else slot.parent)
     if slot.kind == "tc":
@@ -3129,6 +3233,8 @@ def locate(data: bytes, targets: list) -> list:
             # ⚠️ THE CLINICIAN'S BOX, NOT THE FIRST ONE ('Smoker? ☐ Yes ☐ No' mapped as box 2 ticked Yes), counted among
             # EVERY box the preview shows - a checkbox control included - and written as whatever kind of box it is.
             refs = place_box_refs(detector.index, slot)
+            if refs is None:
+                fail(HIDDEN_BOX, "invalid_mapping")
             box = box_number(t, len(refs))
             if refs[box] is None:
                 fail("Box %d of that place is a checkbox control QuillMD cannot address there, so it cannot be filled."
@@ -3146,7 +3252,7 @@ def locate(data: bytes, targets: list) -> list:
         elif slot.kind == "tc":
             refs = place_box_refs(detector.index, slot) if kind == "checkbox" else []
             if refs is None:
-                fail(UNNUMBERED_CELL, "invalid_mapping")
+                fail(HIDDEN_BOX if region_hidden(detector.index, slot.el) else UNNUMBERED_CELL, "invalid_mapping")
             if refs:
                 target = {"type": "checkboxes", "boxes": [refs[box_number(t, len(refs))]]}
             else:
@@ -3162,6 +3268,8 @@ def locate(data: bytes, targets: list) -> list:
             content = slot.el.find(q("w:sdtContent"))
             if typ == "checkbox":
                 box_number(t, 1)
+                if place_box_refs(detector.index, slot) is None:
+                    fail(HIDDEN_BOX, "invalid_mapping")
                 target = {"type": "checkboxes", "boxes": [{"kind": "sdt", "part": slot.part, "slot": slot.path}]}
                 kind = "checkbox"
             elif content is not None and wraps_structure(content):
@@ -3177,6 +3285,8 @@ def locate(data: bytes, targets: list) -> list:
             field_kind = slot.info["field"]
             if field_kind == "FORMCHECKBOX":
                 box_number(t, 1)
+                if place_box_refs(detector.index, slot) is None:
+                    fail(HIDDEN_BOX, "invalid_mapping")
                 target, kind = {"type": "checkboxes", "boxes": [{"kind": "ff", "part": slot.part, "slot": slot.path}]}, "checkbox"
             elif field_kind == "FORMDROPDOWN":
                 target, kind, options = {"type": "ff_dropdown"}, "choice", [o for o in slot.info.get("options", []) if o]
