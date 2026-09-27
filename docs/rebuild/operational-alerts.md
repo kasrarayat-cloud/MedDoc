@@ -25,22 +25,32 @@ One alert is attempted when an unhealthy incident opens, with a 24-hour interval
 between the first notices of successive incidents, so a condition flapping between
 healthy and unhealthy cannot send more than once a day. Inside an open incident:
 
-- a change to a condition the incident has not yet announced is a new notice
-  (subject `ESCALATION`) with its own identity and receipt, stating the new
-  condition and whether severity rose, held or fell. It is sent at once when it is
-  more severe than anything the incident has announced (at most once per
-  incident: warning to failure), otherwise no sooner than one hour after the
-  incident's previous notice;
-- a condition the incident has already announced is never announced again, so
-  flapping between announced conditions sends nothing more;
-- a still-open incident is re-announced 24 hours after its last notice (subject
-  `REMINDER`), naming how long it has been open and its current condition.
+- a condition more severe than the incident's LAST notice is announced at once,
+  whether or not the incident announced it before, as a new notice (subject
+  `ESCALATION`) with its own identity and receipt, stating the condition and that
+  severity rose. A failure that returns after a notice said the severity
+  decreased is therefore never left standing on "decreased";
+- any other change to a condition the incident has not yet announced is a new
+  `ESCALATION` notice stating whether severity held or fell, sent no sooner than
+  one hour after the incident's previous notice;
+- nothing else is announced before the reminder: a still-open incident is
+  re-announced 24 hours after its last notice (subject `REMINDER`), naming how
+  long it has been open and its current condition.
+
+This cannot loop. Once the last notice is the more severe one, flapping between
+conditions already announced sends nothing until the reminder. A rise needs a
+notice at a lower severity first, and such a notice is either a newly announced
+condition (at most once per condition, an hour after the previous notice) or the
+daily reminder.
 
 When an incident has ended and a new one opens inside the 24-hour interval, its
 first notice is still sent (subject `ESCALATION`) if it is more severe than every
 notice of the last 24 hours; otherwise the interval holds. A notice the state
 records but the sidecar does not describe counts as a failure for this purpose,
-so it can only hold the interval. Flapping at the same or a lower severity
+so it can only hold the interval. The converse is never trusted: a notice the
+sidecar stamps but the state records no request for (a check that stopped
+between writing the two files, before any request began) counts as not sent, so
+it can never hold anything. Flapping at the same or a lower severity
 therefore sends nothing extra, and healthy/failure flapping after a warning sends
 at most one extra notice a day.
 
@@ -50,8 +60,14 @@ must not be retried automatically, even after provider idempotency expires. An
 uncertain attempt requires operator review, and it also stops every later
 escalation and reminder for that incident. The JSON status carries an `incident`
 summary (opened, notices, last notice and its condition, next reminder, any
-deferred escalation) without identities. The monitor's own status becomes
-stale after 15 minutes without a check. A broken monitor or lost email credential
+deferred escalation) without identities; `status` reports the deferred
+escalation the last check decided, recomputed by the same rule. `status` reads
+the state under the check's own lock, held shared and opened read-only, so a
+check running at the same moment cannot make it report the monitor broken, and
+a reader never makes a check refuse. A recorded time later than the monitor's
+clock (a clock that ran fast and was corrected) is read as the moment it is first
+seen, so it never delays a notice and an incident's age is never negative. The
+monitor's own status becomes stale after 15 minutes without a check. A broken monitor or lost email credential
 cannot reliably notify through that same broken channel: inspect its service
 failure and status locally, and keep outside-host detection separately gated.
 
@@ -121,6 +137,15 @@ first need, refused if malformed). A release without the sidecar never opens it,
 so reverting `backup_alerts.py` is a complete rollback: no state repair. The
 current monitor adopts whatever an earlier release leaves behind, reading what an
 unrecorded first notice announced from that notice's own receipt.
+
+While an incident is open the sidecar is written before `status.json`, and a
+write that makes a notice also keeps, until the next write, the exact
+`status.json` it began from and what the sidecar said about it. A check stopped
+between the two files therefore leaves `status.json` exactly as kept: the
+monitor reads the kept record and discards the newer notice, which provably
+never began (no request record exists, and a request only follows both writes),
+and the next check sends whatever is owed. `status.json` is the commit point: a
+notice it names with no request record still fails closed for operator review.
 An in-flight send stopped during rollback remains uncertain. If source has moved
 since installation, the exact-source gate requires a new reviewed scope; do not
 bypass it or apply an old declaration to different source.
