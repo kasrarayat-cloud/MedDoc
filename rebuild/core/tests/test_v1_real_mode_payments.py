@@ -641,6 +641,21 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
         finally:
             self.to_leaf()
 
+    def test_a_live_payment_alone_or_a_live_event_alone_refuses_too(self):
+        with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
+            self.checkout('live-never-paid')  # A live checkout nobody has paid yet: its row alone is live evidence.
+        try:
+            with self.assertRaisesRegex(IrreversibleError, r'1 payment row\(s\) and 0 Stripe event row\(s\) are recorded as live'):
+                MigrationExecutor(connection).migrate(self.BEFORE_0020)
+            Payment.objects.all().delete()
+            WebhookEvent.objects.create(event_id='evt_live_unmatched', kind='checkout.session.expired', payload_hash='0' * 64,
+                                        object_data={}, status='reconciliation', livemode=True)
+            with self.assertRaisesRegex(IrreversibleError, r'0 payment row\(s\) and 1 Stripe event row\(s\) are recorded as live'):
+                MigrationExecutor(connection).migrate(self.BEFORE_0020)
+            self.assertEqual(self.schema(), (2, 2, 1))
+        finally:
+            self.to_leaf()
+
     def test_a_database_without_live_rows_still_reverses_and_reapplies(self):
         payment, _ = self.sandbox_top_up()
         try:

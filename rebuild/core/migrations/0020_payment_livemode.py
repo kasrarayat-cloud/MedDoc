@@ -5,9 +5,14 @@ Rows recorded before this migration read NULL (sandbox only existed then). Once 
 a database trigger refuses any UPDATE that changes livemode on either table, like 0008's signed-evidence guard,
 so no statement can relabel sandbox evidence as live (which real_mode_payment_check and reserve() would believe)
 or live evidence as sandbox.
+
+The reverse refuses while any row is recorded as live: dropping the column erases that evidence, and re-applying
+this migration records every row NULL, which real data mode treats as sandbox money it never spends. A database
+with no live rows still reverses.
 """
 
 from django.db import migrations, models
+from django.db.migrations.exceptions import IrreversibleError
 
 LIVEMODE_GUARD = """
 CREATE FUNCTION quillmd_livemode_guard() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -24,6 +29,18 @@ DROP TRIGGER webhook_livemode_immutable ON core_webhookevent;
 DROP TRIGGER payment_livemode_immutable ON core_payment;
 DROP FUNCTION quillmd_livemode_guard();
 """
+
+
+def refuse_to_erase_live_evidence(apps, schema_editor):
+    """Reverse only: refuse while any row is recorded as live. Counts only, never an identifier or amount."""
+    alias = schema_editor.connection.alias
+    payments = apps.get_model('core', 'Payment').objects.using(alias).filter(livemode=True).count()
+    events = apps.get_model('core', 'WebhookEvent').objects.using(alias).filter(livemode=True).count()
+    if payments or events:
+        raise IrreversibleError(
+            f'0020_payment_livemode cannot be reversed: {payments} payment row(s) and {events} Stripe event row(s) are '
+            'recorded as live. Reversing drops their recorded mode, and re-applying records every row NULL, which real '
+            'data mode treats as sandbox money it never spends. Nothing was changed.')
 
 
 class Migration(migrations.Migration):
@@ -44,4 +61,6 @@ class Migration(migrations.Migration):
             field=models.BooleanField(null=True),
         ),
         migrations.RunSQL(LIVEMODE_GUARD, DROP_LIVEMODE_GUARD),
+        # Last, so that on the way back it runs FIRST, before the trigger or either column is dropped.
+        migrations.RunPython(migrations.RunPython.noop, refuse_to_erase_live_evidence),
     ]
