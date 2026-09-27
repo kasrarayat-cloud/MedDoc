@@ -96,7 +96,7 @@ OFFLINE_KEY = 'offline-mock-provider-no-credential'
 LIVE_ROOT = Path('/opt/meddoc-pro/rebuild/.runtime/wm-narrative-campaign')
 KEY_SHAPE = re.compile(r'sk-ant-[A-Za-z0-9_\-]{8,}')
 
-EXIT = {'PASS': 0, 'FAIL': 3, 'STOPPED': 4, 'INCOMPLETE': 5}
+EXIT = {'PASS': 0, 'FAIL': 3, 'STOPPED': 4, 'INCOMPLETE': 5, 'OPEN': 6}
 
 
 class Refused(Exception):
@@ -114,7 +114,7 @@ def money(value):
 
 # ── private files ────────────────────────────────────────────────────────────────────────────────────────────────
 
-def write_new(path, document):
+def write_new(path, document, raw=False):
     """Written once and never rewritten, and published whole: the bytes go to a private temporary file (O_EXCL, synced),
     which is then hard-linked to its name — a link fails if the name exists, and a kill leaves either no record or a
     complete one (round 19's focused pass: a kill between create and write left a 0-byte outcome, and every restart
@@ -124,7 +124,7 @@ def write_new(path, document):
     fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as handle:
-            handle.write(json.dumps(document, indent=2, sort_keys=True, default=str) + '\n')
+            handle.write(document if raw else json.dumps(document, indent=2, sort_keys=True, default=str) + '\n')
             handle.flush()
             os.fsync(handle.fileno())
         os.link(temporary, path)
@@ -181,7 +181,7 @@ def install_request_capture(campaign_dir):
     Messages.create = create
 
 
-def write_manifest(campaign_dir, attempt, outcome, notes=None):
+def write_manifest(campaign_dir, attempt, outcome, notes=None, completed_later=False):
     """The replay manifest: one O_EXCL entry per attempt linking its case, job, notes (by sha256), request, response,
     replay file, model, usage, costs and failure — every file named with its own sha256, so the set can be re-checked
     offline after the database is gone."""
@@ -205,6 +205,11 @@ def write_manifest(campaign_dir, attempt, outcome, notes=None):
         if request else None,
         'response': response, 'replay': named(outcome.get('replay_file')), 'replay_written_by_this_attempt':
         bool(outcome.get('replay_written')),
+        # (the replay's own sha256 against the answer's text: a replay another attempt wrote for the same notes may
+        # differ, and says so here — round 20, a 0-byte replay was certified as present and hash-matched)
+        'replay_matches_response': bool(outcome.get('replay_file')) and (campaign_dir / outcome['replay_file']).exists()
+        and file_sha256(campaign_dir / outcome['replay_file']) == outcome.get('response_sha256'),
+        'completed_after_interruption': completed_later,
         'response_model': outcome.get('response_model', ''), 'stop_reason': outcome.get('stop_reason', ''),
         'usage': body.get('usage'), 'provider_request_id': outcome.get('provider_request_id', ''),
         'maximum_cost': attempt['maximum_cost'], 'provider_bound': attempt['provider_bound'], 'hold': attempt['hold'],
@@ -385,9 +390,11 @@ def declared(args):
     require(path.parent == root / 'docs' / 'foundation' / 'mutations',
             'The declaration must be in this checkout\'s docs/foundation/mutations/.')
     relative = str(path.relative_to(root))
-    tracked = subprocess.run(['git', '-C', str(root), 'ls-files', '--error-unmatch', relative],
+    # (the path as a LITERAL pathspec: as a glob, an untracked `*.md` matched every tracked declaration — round 20)
+    tracked = subprocess.run(['git', '--literal-pathspecs', '-C', str(root), 'ls-files', '--error-unmatch', '--', relative],
                              capture_output=True).returncode == 0
-    clean = subprocess.run(['git', '-C', str(root), 'diff', '--quiet', 'HEAD', '--', relative]).returncode == 0
+    clean = subprocess.run(['git', '--literal-pathspecs', '-C', str(root), 'diff', '--quiet', 'HEAD', '--',
+                            relative]).returncode == 0
     require(tracked and clean, 'The declaration must be tracked, committed and unmodified.')
     text = path.read_text(encoding='utf-8')
     plan = STAGES[args.stage]
@@ -399,13 +406,16 @@ def declared(args):
     # placeholders, and refused ordinary approvals. The authorization is now ONE EXACT LINE, written by the session only
     # from the owner's own approval; the owner's words go on their own `owner_words:` line, recorded and never parsed. A
     # revocation is a `revoked:` line, or the declaration removed.)
-    lines = re.findall(r'^authorization:.*$', text, re.M)
+    # (round 20: every line that reads as an authorization counts, in any case or markdown decoration — `Authorization:
+    # REVOKED …` was invisible to the exact count — and a revocation is refused wherever it is written: a heading, a
+    # numbered or `+` item, a table row, emphasis. The declaration therefore never uses those words for anything else.)
+    lines = re.findall(r'^[ \t>*_#+|0-9.)-]*authori[sz]ation\b.*$', text, re.M | re.I)
     authorization = re.fullmatch(r'authorization: owner (\d{4}-\d{2}-\d{2}) approved stage (\d) at the stated limits',
                                  lines[0].rstrip()) if len(lines) == 1 else None
     require(authorization and authorization.group(2) == str(args.stage),
             'The declaration names no owner authorization of this stage (exactly one line, exactly `authorization: owner '
             '<YYYY-MM-DD> approved stage <n> at the stated limits`, nothing after it).')
-    require(not re.search(r'^[ \t>*-]*revok', text, re.M | re.I), 'The declaration carries a revocation.')
+    require(not re.search(r'revok|rescind|withdr[ae]w|cancel', text, re.I), 'The declaration carries a revocation.')
     words = re.search(r'^owner_words:(.*)$', text, re.M)
     return {'declaration': str(path), 'sha256': hashlib.sha256(text.encode()).hexdigest(),
             'authorization': lines[0].split(':', 1)[1].strip(), 'owner_words': words.group(1).strip() if words else ''}
@@ -533,6 +543,10 @@ def inner():
         except Exception as error:
             report['stops'].append(f'recording the attempt in flight failed: {type(error).__name__}')
             verdict = 'STOPPED'
+        try:
+            complete_manifest(campaign_dir)      # (an outcome recorded just before a kill still gets its entry)
+        except Exception as error:
+            report['stops'].append(f'completing the manifest failed: {type(error).__name__}')
         rows = load_ledger(ledger)
         report['totals_stage'] = {k: (money(v) if isinstance(v, Decimal) else v) for k, v in totals(rows, stage).items()}
         report['totals_campaign'] = {k: (money(v) if isinstance(v, Decimal) else v) for k, v in totals(rows).items()}
@@ -540,24 +554,35 @@ def inner():
         report['limits'] = {'stage_provider': str(STAGES[stage]['provider_limit']),
                             'stage_wallet': str(STAGES[stage]['wallet_limit']),
                             'campaign_provider': str(CAMPAIGN_PROVIDER_LIMIT), 'campaign_wallet': str(CAMPAIGN_WALLET_LIMIT)}
+        gaps = evidence_gaps(campaign_dir, rows, stage)
         try:
             export_records(campaign_dir, stage)
-        except Exception as error:  # the verdict still stands; the missing export is itself reported
+        except Exception as error:
             report['stops'].append(f'record export failed: {type(error).__name__}')
-            verdict = 'STOPPED' if verdict == 'PASS' else verdict
+            gaps.append('the database records were not exported')
         secret = key if mode == 'live' else ''
         leaks = leaked(campaign_dir, secret)
         if leaks:
             report['stops'].append('KEY FOUND IN EVIDENCE: ' + ', '.join(leaks))
             verdict = 'STOPPED'
+        elif gaps:
+            # (no verdict while the record is incomplete: an attempt with no outcome, no manifest entry, an adopted draft
+            # not scored, or no export — round 20: a verdict written over a lost database, a missing manifest entry or an
+            # unscored wrong draft closed the stage for good. The next start records them from the product and the
+            # durable ledger, and re-derives every stop before anything could be sent.)
+            report['open'] = gaps
+            verdict = 'OPEN'
         report['verdict'] = verdict
         text = json.dumps(report, default=str)
         if (secret and secret in text) or KEY_SHAPE.search(text):
             report = {'verdict': 'STOPPED', 'stops': ['The report itself carried a key-shaped value; withheld.']}
             verdict = 'STOPPED'
-        write_new(campaign_dir / f'stage-{stage}-verdict.json', {'verdict': verdict, 'stops': report['stops'],
-                                                                 'record': record})
-        write_new(campaign_dir / f'report-stage-{stage}.json', report)
+        if verdict == 'OPEN':
+            write_new(campaign_dir / f'report-stage-{stage}-open-{time.time_ns()}.json', report)
+        else:
+            write_new(campaign_dir / f'stage-{stage}-verdict.json', {'verdict': verdict, 'stops': report['stops'],
+                                                                     'record': record})
+            write_new(campaign_dir / f'report-stage-{stage}.json', report)
         late = leaked(campaign_dir, secret)
         if late:
             write_new(campaign_dir / f'KEY-LEAK-stage-{stage}.json', {'files': late})
@@ -594,6 +619,15 @@ def campaign_record(campaign_dir, context):
     stored = read_json(path)
     for name in ('campaign', 'mode', 'candidate', 'runner_sha256', 'expected_pricing_version'):
         require(stored[name] == record[name], f'This campaign directory belongs to another {name}.')
+    rows = load_ledger(campaign_dir / 'ledger')
+    if rows:
+        # (bound to its database by its first attempt's encounter, a random id: a campaign resumed against another
+        # database read the absence of its job there as proof that nothing was sent — round 20)
+        from core.models import Encounter
+        first = rows[0][0]
+        require(first.get('encounter') and Encounter.objects.filter(pk=first['encounter']).exists(),
+                'This database does not hold the campaign\'s first encounter: a campaign is never resumed against '
+                'another database.')
     return stored
 
 
@@ -607,18 +641,31 @@ def recover_interrupted(ledger, world=None, report=None, context=None):
     outcome, counted at its maximum."""
     from django.db import transaction
     from core.jobs import cancel
-    from core.models import AuditEvent, Job, LedgerEntry, ProviderReceipt
+    from core.models import AuditEvent, Encounter, Job, LedgerEntry, ProviderReceipt
     for attempt, outcome in load_ledger(ledger):
         if outcome is not None:
             continue
-        job = Job.objects.filter(encounter_id=attempt.get('encounter')).first() if attempt.get('encounter') else None
+        found = Encounter.objects.filter(pk=attempt['encounter']).first() if attempt.get('encounter') else None
+        job = Job.objects.filter(encounter=found).first() if found else None
+        captured = (Path(ledger).parent / 'requests' / f'{attempt["number"]:03d}-{attempt["case"]}-request.json').exists()
         record = {'recovered': True, 'recorded_at': now(), 'job': str(job.pk) if job else None,
                   'note': 'Recorded after an interruption from the product\'s own job record.'}
         if job is not None and job.state == 'queued':
             with transaction.atomic():
                 cancel(job, job.user)        # (never run: the product's own cancellation, its hold released)
             job.refresh_from_db()
-        if job is None or job.state == 'cancelled':
+        if captured and (job is None or job.state == 'cancelled') or found is None:
+            # (its request was captured, or this database does not hold its encounter: the product cannot prove that
+            # nothing was sent, so it is an unknown provider outcome at its maximum, its wallet at its hold, and the
+            # stage stops — round 20: a resume against another database recorded a captured request `not_run`, at $0)
+            record.update({'class': 'interrupted_unknown', 'state': job.state if job else None, 'worker_ran': None,
+                           'provider_actual_cost': None, 'error': job.error if job else '',
+                           'wallet_charged': attempt['hold'] if job is None else
+                           str(-sum((e.amount for e in LedgerEntry.objects.filter(job=job)), Decimal('0'))),
+                           'stop': f'Attempt {attempt["number"]}: ' + ('its request was captured, and this database holds '
+                                   'no run of its job' if found is not None else 'this database does not hold its '
+                                   'encounter') + '; counted at its maximum, and nothing further is sent.'})
+        elif job is None or job.state == 'cancelled':
             record.update({'class': 'not_run', 'state': job.state if job else None, 'worker_ran': False,
                            'provider_actual_cost': None, 'wallet_charged': '0', 'error': job.error if job else ''})
         else:
@@ -633,13 +680,43 @@ def recover_interrupted(ledger, world=None, report=None, context=None):
                            'provider_actual_cost': str(receipt.actual_cost) if receipt else None,
                            'wallet_charged': str(-sum((e.amount for e in LedgerEntry.objects.filter(job=job)), Decimal('0')))})
             if job.result_path:
-                record.update(retain_response(world, job, job.encounter))
+                record.update(retain_response(world, job, job.encounter, attempt['number']))
             if record['class'] == 'adopted' and not record.get('response_model'):
                 record['stop'] = f'Attempt {attempt["number"]}: the recovered answer carries no provider model to check.'
         write_new(ledger / f'{attempt["number"]:03d}-{attempt["case"]}-outcome.json', record)
-        from core.models import Encounter
-        encounter = Encounter.objects.filter(pk=attempt.get('encounter')).first() if attempt.get('encounter') else None
-        write_manifest(Path(ledger).parent, attempt, record, encounter.notes if encounter else None)
+        write_manifest(Path(ledger).parent, attempt, record, found.notes if found else frozen_notes(attempt['case']))
+
+
+def frozen_notes(case_id):
+    """A case's notes from the frozen benchmark files (the encounter's own, checked when it was made), readable with no
+    database."""
+    frozen = REBUILD / 'core' / 'tests' / 'benchmarks' / 'wm_narrative'
+    return next(c['notes'] for name in ('cases.json', 'heldout-cases.json')
+                for c in json.loads((frozen / name).read_text(encoding='utf-8'))['cases'] if c['id'] == case_id)
+
+
+def complete_manifest(campaign_dir):
+    """The manifest entry of every attempt that has an outcome and none (round 20: a kill between the outcome and its
+    entry left the attempt without one for good)."""
+    campaign_dir = Path(campaign_dir)
+    for attempt, outcome in load_ledger(campaign_dir / 'ledger'):
+        if outcome is not None and not (campaign_dir / 'manifest' / f'{attempt["number"]:03d}-{attempt["case"]}.json').exists():
+            write_manifest(campaign_dir, attempt, outcome, frozen_notes(attempt['case']), completed_later=True)
+
+
+def evidence_gaps(campaign_dir, rows, stage):
+    """What the record of the run still lacks: an attempt's outcome, its manifest entry, an adopted draft's score."""
+    campaign_dir, gaps = Path(campaign_dir), []
+    for attempt, outcome in rows:
+        name = f'{attempt["number"]:03d}-{attempt["case"]}'
+        if outcome is None:
+            gaps.append(f'attempt {attempt["number"]} has no outcome')
+            continue
+        if not (campaign_dir / 'manifest' / f'{name}.json').exists():
+            gaps.append(f'attempt {attempt["number"]} has no manifest entry')
+        if attempt['stage'] == stage and outcome['class'] == 'adopted' and not (campaign_dir / 'scores' / f'{name}.json').exists():
+            gaps.append(f'attempt {attempt["number"]}: its adopted draft is not scored')
+    return gaps
 
 
 def now():
@@ -647,10 +724,17 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def offline_crash():
+    """The offline validation's fault injection, or None: never read outside offline mode."""
+    return os.environ.get('WMN_OFFLINE_CRASH') if os.environ.get('WMN_CAMPAIGN_MODE') == 'offline' else None
+
+
 class Synthetic:
     """The campaign's synthetic world, created through the product's own pages."""
 
     def __init__(self, campaign_dir, stage):
+        if offline_crash() == 'term_at_world' and load_ledger(Path(campaign_dir) / 'ledger'):
+            os.kill(os.getpid(), signal.SIGTERM)    # (offline validation only: a restart ended before its world exists)
         from django.test import Client
         from django.utils import timezone
         from core.models import Department, Membership, Organization, Patient, Template, User, Wallet, LedgerEntry
@@ -854,6 +938,8 @@ def run_stage(world, ledger, stage, context, report):
         finally:
             CURRENT_ATTEMPT.clear()
         write_new(ledger / f'{number:03d}-{case_id}-outcome.json', outcome)
+        if offline_crash() == 'term_before_manifest':
+            os.kill(os.getpid(), signal.SIGTERM)    # (offline validation only: a Ctrl-C between the two records)
         write_manifest(Path(ledger).parent, attempt, outcome, encounter.notes)
         if outcome['class'] == 'transport_failure':
             used = totals(load_ledger(ledger), stage)['retries']
@@ -878,7 +964,7 @@ def one_request(world, encounter, token, revision, quoted):
     if job.config.get('pricing_version') != quoted['pricing_version'] or job.config.get('model') != EXPECTED_MODEL:
         return {'class': 'not_sent', 'job': str(job.pk), 'held': str(held), 'recorded_at': now(),
                 'stop': 'The queued job does not carry the quoted model and pricing; the worker was not run.'}
-    crash = os.environ.get('WMN_OFFLINE_CRASH') if os.environ.get('WMN_CAMPAIGN_MODE') == 'offline' else None
+    crash = offline_crash()
     if crash == 'before_worker':
         os._exit(137)                # (offline validation only: a kill after Generate queued the job, before the worker)
     queued = list(Job.objects.filter(state='queued').values_list('pk', flat=True))
@@ -913,26 +999,31 @@ def one_request(world, encounter, token, revision, quoted):
     }
     outcome['class'] = classify(job.state, outcome['error_class'], receipt is not None, outcome['billing'])
     if job.result_path:
-        outcome.update(retain_response(world, job, encounter))
+        outcome.update(retain_response(world, job, encounter, CURRENT_ATTEMPT['number']))
     return outcome
 
 
-def retain_response(world, job, encounter):
-    """The provider's answer, kept as evidence and as an offline replay file for exactly these notes."""
+def retain_response(world, job, encounter, number):
+    """The provider's answer, kept as evidence and as an offline replay file for exactly these notes: named by its attempt
+    and job, and kept once — a recovery that retains it again finds the same record (round 20: a second record was
+    minted for the same job), and a record that differs stops the stage. Both files are published whole (`write_new`'s
+    temporary file and link: round 20, a kill left a 0-byte replay that the manifest certified)."""
     from core.security import private_path
     saved = json.loads(private_path(job.result_path).read_bytes())
     output = saved.get('provider_output') or {}
     text = ''.join(block.get('text', '') for block in output.get('content', []) if block.get('type') == 'text')
     base = Path(os.environ['QUILLMD_STATE_DIR']).parent
     digest = hashlib.sha256(encounter.notes.encode()).hexdigest()
-    number = len([p for p in (base / 'responses').glob('*.json') if not p.name.startswith('.')]) + 1
-    write_new(base / 'responses' / f'{number:03d}-{job.pk}.json', output)
+    response = base / 'responses' / f'{number:03d}-{job.pk}.json'
+    if response.exists():
+        if read_json(response) != json.loads(json.dumps(output, default=str)):
+            raise Stop(f'Attempt {number}: its retained response differs from the job\'s own record.')
+    else:
+        write_new(response, output)
     replay = base / 'replay' / f'{digest}.json'
     written = bool(text) and not replay.exists()
-    if text and not replay.exists():
-        fd = os.open(replay, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
-            handle.write(text)
+    if written:
+        write_new(replay, text, raw=True)
     return {'response_model': output.get('model', ''), 'stop_reason': output.get('stop_reason', ''),
             'response_sha256': hashlib.sha256(text.encode()).hexdigest() if text else '',
             'response_file': f'responses/{number:03d}-{job.pk}.json', 'replay_file': f'replay/{digest}.json' if text else None,
@@ -1048,7 +1139,8 @@ def main(argv=None):
     parser.add_argument('--offline-timeout', type=float, default=5.0)
     parser.add_argument('--offline-retry-wait', type=float, default=1.0)
     parser.add_argument('--expectation-override', type=json.loads, default=None)
-    parser.add_argument('--offline-crash', choices=['before_worker', 'after_worker', 'term_after_worker'], default=None,
+    parser.add_argument('--offline-crash', choices=['before_worker', 'after_worker', 'term_after_worker', 'term_before_manifest',
+                                                    'term_at_world'], default=None,
                         help='offline validation only')
     args = parser.parse_args(argv)
     try:

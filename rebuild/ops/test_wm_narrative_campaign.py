@@ -232,6 +232,32 @@ class Credentials(unittest.TestCase):
         with patch.object(c, 'REBUILD', rebuild), self.assertRaisesRegex(c.Refused, 'committed and unmodified'):
             c.declared(args)
 
+    def test_a_revocation_is_refused_however_it_is_written(self):
+        # (round 20: a heading, a numbered or `+` item, a table row, emphasis, a capitalised `Authorization:` line and an
+        # indented `revoked:` were all accepted as the authorization)
+        line = 'authorization: owner 2026-09-26 approved stage 1 at the stated limits'
+        for refused in ('## REVOKED 2026-09-27', '1. Revoked by the owner 2026-09-27.', '+ revoked 2026-09-27',
+                        '| revoked | 2026-09-27 |', '_Revoked 2026-09-27 by the owner._',
+                        'Authorization: REVOKED 2026-09-27 by the owner', ' revoked: 2026-09-27',
+                        'The owner rescinded this approval.', 'Approval withdrawn 2026-09-27.', 'Cancelled by the owner.',
+                        '**Authorization:** owner 2026-09-27 approved stage 1 at the stated limits',
+                        '# AUTHORISATION', '2) authorization: pending'):
+            with self.subTest(refused), self.assertRaisesRegex(c.Refused, 'authorization|revocation'):
+                self.declared(line + '\n' + refused)
+        self.assertEqual(self.declared(line)['authorization'], 'owner 2026-09-26 approved stage 1 at the stated limits')
+
+    def test_the_declaration_is_named_literally(self):
+        # (round 20: as a glob pathspec, an untracked file named `*.md` beside the tracked declarations read as tracked
+        # and committed)
+        line = 'authorization: owner 2026-09-26 approved stage 1 at the stated limits'
+        args, rebuild = self.declaration(line)
+        star = Path(args.declaration).with_name('*.md')
+        star.write_text(Path(args.declaration).read_text())
+        with patch.object(c, 'REBUILD', rebuild), self.assertRaisesRegex(c.Refused, 'committed and unmodified'):
+            c.declared(SimpleNamespace(declaration=str(star), stage=1))
+        with patch.object(c, 'REBUILD', rebuild):
+            self.assertTrue(c.declared(args)['authorization'])
+
     def test_every_request_is_captured_before_it_is_sent(self):
         """The owner's stage-1 condition: the original requests survive. The capture sits at the SDK boundary in the
         campaign process only; its record is written BEFORE the call goes through, a second request inside one attempt
@@ -282,6 +308,84 @@ class Credentials(unittest.TestCase):
         (ledger / '.partial-999-001-C14-outcome.json').write_text('{"class": "adopted"}')
         rows = c.load_ledger(ledger)
         self.assertEqual([(a['number'], o) for a, o in rows], [(1, None)])
+
+    def test_no_verdict_while_the_record_is_incomplete(self):
+        """Round 20: a verdict written while an attempt had no outcome (its database lost), no manifest entry (a kill
+        between the two records) or an unscored adopted draft (a kill before the world was built) closed the stage for
+        good. What is missing is named, and completed from the durable ledger and the frozen notes where it can be."""
+        d = Path(tempfile.mkdtemp())
+        for name in ('ledger', 'manifest', 'scores', 'requests', 'responses', 'replay'):
+            (d / name).mkdir()
+        c.write_new(d / 'ledger' / '001-C14-attempt.json', {'number': 1, 'stage': 1, 'case': 'C14', 'kind': 'initial',
+                                                           'maximum_cost': '0.3', 'provider_bound': '0.33', 'hold': '0.45'})
+        self.assertEqual(c.evidence_gaps(d, c.load_ledger(d / 'ledger'), 1), ['attempt 1 has no outcome'])
+        c.write_new(d / 'ledger' / '001-C14-outcome.json', {'class': 'adopted', 'job': 'j', 'provider_actual_cost': '0.1'})
+        self.assertEqual(c.evidence_gaps(d, c.load_ledger(d / 'ledger'), 1),
+                         ['attempt 1 has no manifest entry', 'attempt 1: its adopted draft is not scored'])
+        c.complete_manifest(d)
+        entry = json.loads((d / 'manifest' / '001-C14.json').read_text())
+        self.assertTrue(entry['completed_after_interruption'])
+        self.assertEqual(entry['notes_sha256'], hashlib.sha256(c.frozen_notes('C14').encode()).hexdigest())
+        self.assertEqual(c.evidence_gaps(d, c.load_ledger(d / 'ledger'), 1), ['attempt 1: its adopted draft is not scored'])
+        c.write_new(d / 'scores' / '001-C14.json', {'outcome': 'adopted'})
+        self.assertEqual(c.evidence_gaps(d, c.load_ledger(d / 'ledger'), 1), [])
+        c.complete_manifest(d)                                        # (idempotent: an entry is never rewritten)
+        self.assertEqual(json.loads((d / 'manifest' / '001-C14.json').read_text()), entry)
+
+    def test_a_captured_request_is_never_counted_as_not_run(self):
+        """Round 20: resumed against another database, an attempt whose request the runner had captured found no job and
+        was recorded `not_run` at $0, its case resent. Only the product's own record of an attempt with no request is
+        zero; a captured request, or an encounter the database does not hold, is an unknown outcome at its maximum."""
+        import sys
+
+        class Query:
+            def __init__(self, found):
+                self.found = found
+
+            def filter(self, **kwargs):
+                return self
+
+            def first(self):
+                return self.found
+
+        def recovered(encounter, captured):
+            d = Path(tempfile.mkdtemp())
+            for name in ('ledger', 'requests', 'manifest', 'responses', 'replay'):
+                (d / name).mkdir()
+            c.write_new(d / 'ledger' / '001-C14-attempt.json', {
+                'number': 1, 'stage': 1, 'case': 'C14', 'kind': 'initial', 'maximum_cost': '0.2999',
+                'provider_bound': '0.33', 'hold': '0.44985', 'encounter': '00000000-0000-4000-8000-000000000001'})
+            if captured:
+                c.write_new(d / 'requests' / '001-C14-request.json', {'arguments': {}, 'arguments_sha256': 'x'})
+            models = SimpleNamespace(Encounter=SimpleNamespace(objects=Query(encounter)), Job=SimpleNamespace(objects=Query(None)),
+                                     AuditEvent=None, LedgerEntry=None, ProviderReceipt=None)
+            with patch.dict(sys.modules, {'core.models': models, 'core.jobs': SimpleNamespace(cancel=None)}):
+                c.recover_interrupted(d / 'ledger')
+            (a, o), = c.load_ledger(d / 'ledger')
+            return a, o, json.loads((d / 'manifest' / '001-C14.json').read_text())
+
+        held = SimpleNamespace(notes=c.frozen_notes('C14'))
+        for encounter, captured in ((None, True), (None, False), (held, True)):
+            with self.subTest(encounter=bool(encounter), captured=captured):
+                a, o, entry = recovered(encounter, captured)
+                self.assertEqual((o['class'], o['wallet_charged']), ('interrupted_unknown', a['hold']))
+                self.assertEqual(c.exposure(a, o), c.attempt_bound(a['maximum_cost']))
+                self.assertIn('nothing further is sent', o['stop'])
+                self.assertEqual(entry['class'], 'interrupted_unknown')
+        a, o, _ = recovered(held, False)      # (the control: its encounter here, no job and no request — Generate queued none)
+        self.assertEqual((o['class'], c.exposure(a, o)), ('not_run', Decimal('0')))
+
+    def test_a_replay_is_published_whole_and_matched_to_its_answer(self):
+        """Round 20: the replay was created, then written — a kill between left a 0-byte replay that the manifest
+        certified as present and hash-matched."""
+        d = Path(tempfile.mkdtemp())
+        target = d / 'replay.json'
+        with patch.object(c.os, 'link', side_effect=OSError('killed')), self.assertRaises(OSError):
+            c.write_new(target, '{"fields": []}', raw=True)
+        self.assertEqual(list(d.iterdir()), [])
+        c.write_new(target, '{"fields": []}', raw=True)
+        self.assertEqual(target.read_text(), '{"fields": []}')
+        self.assertEqual(c.file_sha256(target), hashlib.sha256(b'{"fields": []}').hexdigest())
 
     def test_offline_takes_only_the_provider_fields_from_its_file(self):
         value = c.offline_provider(self.private(json.dumps({

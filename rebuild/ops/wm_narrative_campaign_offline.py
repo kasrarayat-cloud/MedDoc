@@ -248,6 +248,8 @@ def evidence_checks(scenario, label=''):
             bad.append((name, 'adopted without model, usage or request'))
         if entry.get('request') and entry.get('request_arguments_sha256') not in {r['arguments_sha256'] for r in captured}:
             bad.append((name, 'request hash'))
+        if entry.get('replay_written_by_this_attempt') and not entry.get('replay_matches_response'):
+            bad.append((name, 'a replay this attempt wrote differs from its answer'))
     out.append((f'{label}every manifest file present and hash-matched', not bad, bad[:5]))
     outcomes = {a['number']: o for a, o in rows}
     disagree = [n for n, e in ((e['attempt'], e) for e in entries.values())
@@ -441,6 +443,123 @@ def special_cases(args, admin, number):
          lambda c, r, f, v, s: sorted(p.name for p in (s.campaign / 'scores').glob('*.json'))),
         ('nothing further sent', lambda c, r, f, v, s: len(s.requests()) == 1, lambda c, r, f, v, s: len(s.requests())),
     ]})
+    # Round 20's focused pass over the runner: no verdict while the record is incomplete, and never a resume against
+    # another database.
+    def record_of(s):
+        opened = sorted(s.campaign.glob('report-stage-1-open-*.json'))
+        return ((s.campaign / 'stage-1-verdict.json').exists(),
+                json.loads(opened[-1].read_text()) if opened else None)
+
+    def scenario(name, offset, body):
+        s = Scenario(args.out, admin, args.engine, name, number + offset)
+        checks = []
+        try:
+            checks += body(s)
+            checks += evidence_checks(s)
+        except Exception as error:
+            checks.append(('scenario ran', False, f'{type(error).__name__}: {error}'))
+        finally:
+            s.finish()
+        results.append({'scenario': name, 'passed': all(ok for _, ok, _ in checks),
+                        'checks': [{'check': n, 'passed': ok, 'detail': str(d)[:300]} for n, ok, d in checks]})
+        print(f'{"PASS" if results[-1]["passed"] else "FAIL"}  {name}')
+
+    def killed_in_flight(s):
+        runner = subprocess.Popen(s.command(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                  start_new_session=True, env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'})
+        CHILDREN.append(runner)
+        for _ in range(600):
+            if s.requests():
+                break
+            time.sleep(0.2)
+        os.killpg(runner.pid, signal.SIGKILL)
+        runner.wait(timeout=30)
+
+    def another_database(s):
+        s.start([{'kind': 'hang', 'seconds': 60}])
+        killed_in_flight(s)
+        other = s.db_name + 'b'
+        admin_sql(admin, f'DROP DATABASE IF EXISTS {other}')
+        admin_sql(admin, f'CREATE DATABASE {other}')
+        try:
+            original = (s.dir / 'db.json').read_text()
+            (s.dir / 'db.json').write_text(json.dumps({**json.loads(original), 'name': other}))
+            s.restart_mock(replay(*ALL))
+            code, _ = s.run()
+            log = (s.dir / 'runner-stage1-offline.log').read_text()
+            verdict, opened = record_of(s)
+            out = [('a resume against another database is refused', code == 2 and 'never resumed against another database'
+                    in log, (code, log[-200:])),
+                   ('nothing further was sent', len(s.requests()) == 1, len(s.requests())),
+                   ('no verdict was written', not verdict, verdict)]
+            (s.dir / 'db.json').write_text(original)
+        finally:
+            admin_sql(admin, f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{other}'")
+            admin_sql(admin, f'DROP DATABASE IF EXISTS {other}')
+        code, _ = s.run()
+        rows = campaign.load_ledger(s.campaign / 'ledger')
+        first = rows[0][1] or {}
+        return out + [
+            ('resumed against its own database, the killed attempt is an unknown outcome',
+             first.get('class') == 'interrupted_unknown' and first.get('job'), first.get('class')),
+            ('counted at its maximum', campaign.exposure(*rows[0]) == campaign.attempt_bound(rows[0][0]['maximum_cost']),
+             str(campaign.exposure(*rows[0]))),
+            ('its case retried, and the stage passed', code == 0 and rows[1][0]['kind'] == 'retry', (code, len(rows)))]
+
+    def between_the_records(s):
+        s.start(replay(*ALL))
+        code, _ = s.run(extra=['--offline-crash', 'term_before_manifest'])
+        verdict = json.loads((s.campaign / 'stage-1-verdict.json').read_text())
+        entry = json.loads((s.campaign / 'manifest' / '001-C14.json').read_text())
+        return [('the run stopped on the signal', code == 4 and verdict['verdict'] == 'STOPPED', (code, verdict['stops'])),
+                ('the attempt still has its manifest entry, completed after the interruption',
+                 entry['completed_after_interruption'] and entry['class'] == 'adopted', entry.get('class')),
+                ('nothing further was sent', len(s.requests()) == 1, len(s.requests()))]
+
+    def database_lost(s):
+        s.start([{'kind': 'hang', 'seconds': 8}] + replay(*ALL))
+        runner = subprocess.Popen(s.command(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                  start_new_session=True, env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8'})
+        CHILDREN.append(runner)
+        for _ in range(600):
+            if s.requests():
+                break
+            time.sleep(0.2)
+        admin_sql(admin, f"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{s.db_name}'")
+        runner.communicate(timeout=600)
+        verdict, opened = record_of(s)
+        out = [('the run ended OPEN, with no verdict', runner.returncode == 6 and not verdict and opened
+                and opened.get('verdict') == 'OPEN', (runner.returncode, verdict, (opened or {}).get('open'))),
+               ('the open report names the attempt with no outcome',
+                any('no outcome' in gap for gap in (opened or {}).get('open', [])), (opened or {}).get('open'))]
+        code, _ = s.run()
+        rows = campaign.load_ledger(s.campaign / 'ledger')
+        first = rows[0][1] or {}
+        return out + [
+            ('the next start recorded it from the product, at its maximum',
+             first.get('recovered') and campaign.exposure(*rows[0]) == campaign.attempt_bound(rows[0][0]['maximum_cost']),
+             (first.get('class'), str(campaign.exposure(*rows[0])))),
+            ('and the stage completed', code == 0, code)]
+
+    def before_the_world(s):
+        s.start([{'kind': 'replay', 'case': 'C18'}] + replay(*ALL))         # (C14 answered with C18's response: wrong)
+        first_code, _ = s.run(extra=['--offline-crash', 'after_worker'])
+        code, _ = s.run(extra=['--offline-crash', 'term_at_world'])
+        verdict, opened = record_of(s)
+        out = [('the first run died after the worker', first_code == 137, first_code),
+               ('the restart ended before its world: OPEN, no verdict, the unscored draft named', code == 6 and not verdict
+                and any('not scored' in gap for gap in (opened or {}).get('open', [])), (code, (opened or {}).get('open')))]
+        code, _ = s.run()
+        verdict = json.loads((s.campaign / 'stage-1-verdict.json').read_text())
+        rows = campaign.load_ledger(s.campaign / 'ledger')
+        return out + [('the next start scored it and stopped FAIL', code == 3 and any('WRONG' in x for x in verdict['stops']),
+                       (code, verdict['stops'])),
+                      ('nothing resent', len(s.requests()) == 1 and len(rows) == 1, (len(s.requests()), len(rows)))]
+
+    scenario('resumed-against-another-database', 9, another_database)
+    scenario('killed-between-outcome-and-manifest', 10, between_the_records)
+    scenario('database-lost-in-flight', 11, database_lost)
+    scenario('killed-before-the-world-on-restart', 12, before_the_world)
     # Gates that refuse (exit 2) before any database, configuration or request is touched.
     s = Scenario(args.out, admin, args.engine, 'gates-refuse', number + 4)
     checks = []
