@@ -25,6 +25,46 @@ class SdkUnavailable(ValueError):
     pass
 
 
+# The private synthetic service's launcher-fixed state root and its reviewed Word installation.
+PRIVATE_MANAGED_STATE = Path('/var/lib/quillmd')
+PRIVATE_MANAGED_WORD = Path('/opt/meddoc-pro/rebuild/.word-sdk')
+
+
+def _production_managed_roots():
+    """(state root, Word root) of the ACTIVATED production profile, or None.
+
+    Read only when the launcher-fixed state root is not the private one, so the private service
+    never depends on the production record. Any refusal of the record is simply 'not production'.
+    """
+    try:
+        from ops import deployment_profile
+        profile = deployment_profile.load_production()
+    except Exception:  # noqa: BLE001 - a missing/unactivated/mixed record is not a managed root
+        return None
+    return profile.state_root, profile.word_sdk_root
+
+
+def _managed_state(state):
+    if state == PRIVATE_MANAGED_STATE:
+        return True
+    roots = _production_managed_roots()
+    return roots is not None and state == roots[0]
+
+
+def _managed_word_root():
+    """The reviewed Word installation paired with the launcher-fixed state root.
+
+    Only the production state root selects the production installation; every other value keeps the
+    private installation exactly as before, so a private service can never be pointed elsewhere.
+    """
+    state = os.getenv('QUILLMD_STATE_DIR', '')
+    if state and Path(state) != PRIVATE_MANAGED_STATE:
+        roots = _production_managed_roots()
+        if roots is not None and Path(state) == roots[0]:
+            return roots[1]
+    return PRIVATE_MANAGED_WORD
+
+
 @contextmanager
 def _processing_slot():
     """One native helper across doctor/admin/worker; bound aggregate memory."""
@@ -33,7 +73,7 @@ def _processing_slot():
         raise SdkUnavailable('The Word processing state directory is invalid.')
     root = state / 'proofs'
     if os.getenv('QUILLMD_ENV_MANAGED') == '1':
-        if state != Path('/var/lib/quillmd') or not root.is_dir():
+        if not _managed_state(state) or not root.is_dir():
             raise SdkUnavailable('The managed Word processing state is unavailable.')
     else:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -75,7 +115,7 @@ def configuration():
     # The systemd launcher fixes this managed flag; operator qualification and
     # CI use their isolated local artifacts. Production never uses app-owned code.
     if os.getenv('QUILLMD_ENV_MANAGED') == '1':
-        approved = Path('/opt/meddoc-pro/rebuild/.word-sdk')
+        approved = _managed_word_root()
         if not runtime.is_relative_to(approved) or not manifest.is_relative_to(approved):
             raise SdkUnavailable('The managed Word processor must use the reviewed application installation.')
         for path in (approved, runtime, manifest):

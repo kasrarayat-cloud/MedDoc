@@ -1,0 +1,12 @@
+#cloud-config
+# QuillMD PRODUCTION first boot (EC2 user data, Ubuntu 24.04 LTS). It carries NO secret and NO
+# release: user data is readable through the instance metadata service by any local process. It only
+# brings the host to a patched, SSM-reachable, SSH-less state; the reviewed release is installed
+# afterwards by an operator running rebuild/deploy/production/bootstrap-host.sh through SSM.
+package_update: true
+package_upgrade: true
+ssh_pwauth: false
+disable_root: true
+runcmd:
+  - [systemctl, disable, --now, ssh.socket, ssh.service]
+  - [snap, start, --enable, amazon-ssm-agent]
