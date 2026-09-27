@@ -78,6 +78,31 @@ $32.85/month plus $0.045/GB.
 
 ## 3. Per-encounter provider costs (variable, passed through at 1.5x)
 
+### Continuation: monitoring/security unit prices checked, September 27
+
+The original $15–25 allowance above is retained as the original estimate. The principal unit rates are now
+verified from official pages; **usage volumes and selected protection plans remain assumptions**:
+
+| Addition | Worked expected-month assumption | Estimate |
+|---|---|---:|
+| WAF | one $5 ACL, three $1 rules/groups, 1 million requests at $0.60/million; ordinary capacity/body limits, no paid Bot/Fraud/Marketplace groups | $8.60 |
+| GuardDuty foundation | 0.1 million management events at $4/million plus 2 GB flow/DNS analysis at $1/GB | $2.40 |
+| Config | 300 continuously recorded items at $0.003, plus 3,000 evaluations at $0.001 | $3.90 |
+| CloudWatch custom metrics | seven distinct metric series at $0.30/month, without free-tier credit | $2.10 |
+| **Worked additions / base plus these additions** | $17.00 / $179.34 + $17.00 | **$196.34** |
+
+Sources: [WAF](https://aws.amazon.com/waf/pricing/),
+[GuardDuty](https://aws.amazon.com/guardduty/pricing/),
+[Config](https://aws.amazon.com/config/pricing/),
+[CloudWatch](https://aws.amazon.com/cloudwatch/pricing/). Extra GuardDuty protection plans may activate
+by default and carry additional charges; declare the exact enabled plans before provisioning. Higher logs,
+request volume, metric dimensions and Config evaluations increase cost. This worked estimate does not
+include optional health checks, extra API/log charges, tax, support, provider usage, payment fees or
+temporary cutover/recovery resources. It is not a spending cap. The original source snapshots and hashes
+are durably copied under `rebuild/.runtime/v1-astra-recovery-20260927/hosting-source-snapshots/`.
+
+### Per-encounter assumptions
+
 **Claude Sonnet 5** (`claude-sonnet-5`): $2 per million input tokens, $10 per million output tokens
 (verified by the model investigation from platform.claude.com on 2026-09-27). Its tokenizer produces
 about 30% more tokens than Sonnet 4.6 for the same text; if the workspace uses US-only inference

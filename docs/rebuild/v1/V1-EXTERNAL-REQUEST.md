@@ -1,56 +1,78 @@
-# V1 — the one consolidated request for inputs only the owner, counsel or a vendor can provide
+# V1 — consolidated external dependencies
 
-Prepared 2026-09-27, after the engineering that does not depend on these inputs was done or is in flight.
-Nothing here is assumed, clicked or accepted on the owner's behalf.
+Updated 2026-09-27 during the Astra continuation. **This is a prepared request, not approval or a new
+allowance.** Engineering repairs, WM narrative integration and offline mapping work continue independently.
+The V1 Word gate is unchanged. No contract was accepted, infrastructure bought or provider generation sent.
 
-## 1. Spending authority (Anthropic API, synthetic or blank inputs only — no patient data)
+## 1. Covered production account and budget
 
-| purpose | bound | unblocks |
-|---|---|---|
-| Sonnet 5 live check (`sonnet5-migration.md`, ≤ 10 generation requests on fresh synthetic encounters) | **$5** | B-M1: Sonnet 5 configured and verified, and the thinking/effort ruling |
-| Model-assisted Word mapping on blank forms (`model-assisted-mapping.md`) | **$25** | B-W1: the only realistic route to the Word gate; judged on the qualification cohort |
-| Ordinary-notes path evaluation on synthetic notes, after it is built and refuted | **$10** | B-G1 |
-| **total cap** | **$40** | each run stops at its own cap; every attempt is reported |
+Review the minimal AWS us-east-1 package in `production-hosting.md`, `production-cost.md`,
+`production-security-checklist.md` and `cutover-plan.md`: retain the Django application/worker, EC2 m7i.large,
+encrypted EBS, private RDS PostgreSQL, ALB, and separately controlled backup account/vault. No architecture
+rewrite or shared-tenant change is proposed. Expected base infrastructure is **$179.34/month**, with
+**$15–25/month** additional monitoring/security allowance in the original estimate; low/high base cases are
+$152.08/$453.40. A subsequently checked worked monitoring/security case totals **$196.34/month** (see the cost addendum).
+These are usage estimates, not a hard bill limit. Taxes, support, payment fees, provider
+usage and temporary recovery/cutover overlap are separate. Confirm the account and approved operating
+budget before provisioning. Production uses a new data/configuration boundary, not copied synthetic users,
+patients, credits, legacy records or development secrets.
 
-## 2. Configuration only the owner can apply (the environment file is never read by sessions)
+The legal representative must provide actual executed agreement/account evidence for:
 
-- After the Sonnet 5 check passes: set the values in `sonnet5-migration.md` (model, three rates, profile), then
-  restart doctor, admin and worker. Rollback values are in the same file.
-- Decide `QUILLMD_WORD_ENGINE=v3` for new uploads once the Word review screens are installed.
+- AWS BAA in Artifact for the intended production and backup accounts and eligible services.
+- Anthropic agreement/HIPAA-ready organization covering **`claude-sonnet-5`**, structured output and the
+  selected processing geography/retention. Model metadata access is verified; agreement status is not.
+- Deepgram agreement and account-wide data-use opt-out, including the actual contracted transcription rate.
+- Covered backup storage. The prepared AWS route uses the AWS agreement; an alternative needs its own
+  actual subcontractor coverage. Encrypted data still needs the applicable arrangement.
 
-## 3. Agreements (legal representative — each is a signature only the owner's company can give)
+`V1-AGREEMENTS.md` records each route. Ordinary email and payment metadata remain PHI-free. Hostinger stays
+synthetic-only under its published terms. The account consoles/signatures are external dependencies, not
+engineering decisions an assistant can accept for the company.
 
-| agreement | where | note |
-|---|---|---|
-| AWS BAA | AWS Artifact, by the management-account admin (for the Organization) | prerequisite for the production host, backups and SES |
-| Anthropic BAA + HIPAA-ready organization | Anthropic Console | accept after 2026-04-01 so structured outputs are covered; keep development in a separate organization |
-| Deepgram BAA | sales (Enterprise) | also confirm the `mip_opt_out` price effect and account-wide opt-out |
-| Backup storage | AWS Backup/S3 under the AWS BAA (proposed), or a Backblaze subcontractor BAA | Backblaze's wording names covered entities only |
+## 2. Bounded synthetic verification spending, only after a frozen eligible candidate
 
-## 4. Accounts and money (owner)
+The old Stage 1 grant names a different revision/model and cannot fund this work. Metadata retrieval and
+four native token-count requests were free; no generation validation has run. The earlier proposed caps are
+retained as a single **unapproved** request:
 
-- AWS Organization with management, production and backup accounts. Infrastructure budget at verified
-  us-east-1 prices (`production-cost.md`): **$152.08 low / $179.34 expected / $453.40 high per month**, plus
-  about $15–25/month of unverified allowances (WAF, GuardDuty, Config, custom metrics). Capacity assumption
-  (expected): 10 invited doctors, 15 encounters per doctor per working day. Provider usage (model,
-  transcription) is passed through to doctors at 1.5×. This is an approval, not a purchase made here.
-- Stripe live: verified account, restricted live key, webhook endpoint registration, and one bounded live payment
-  (≤ $5) to prove crediting.
-- An outside-host heartbeat account (for example Healthchecks.io) and its check URL.
-- A second key custodian or an offline break-glass copy of the backup and storage credentials.
+| purpose | proposed provider-cost ceiling | admission conditions |
+|---|---:|---|
+| Sonnet 5 actual served-worker/request/usage check | $5; at most 10 generation requests | reviewed candidate, fresh synthetic encounters, exact model/profile/rates and per-request holds recorded first |
+| Blank-form mapping development and one unseen qualification first pass | $25 | offline implementation and scorers complete; frozen corpus/provenance/candidate; separate development and qualification records, all failures retained |
+| Ordinary notes, including required WM narratives | $10 | reviewed implementation, finite positive/correction/negation/side/row cases; exact candidate and model |
+| **Total** | **$40** | approval is required; each purpose stops at its own cap |
 
-## 5. People (owner, counsel, vendor)
+This proposal does not authorize automatic retries, new cohorts/campaigns, a subscription, real patient data
+or reuse of consumed tickets. Before a send, reconcile receipts, unknown outcomes, reservations and remaining
+approved balance; record the immutable attempt and actual hard bound. An unresolved prior attempt stops its
+case. A holdout-informed repair requires a separately predeclared unseen qualification cohort; reruns do not
+restore unseen status. The amount is a ceiling for review, not a promise that it will buy compatibility.
 
-- Counsel: the retention schedule, deletion procedure, breach-notification procedure and downstream-BAA
-  documents.
-- An independent penetration-test vendor for the production host and release.
-- The owner: one desktop Microsoft Word session to open the holdout/qualification exports and record native
-  acceptance.
+Sonnet 5 is already selected by the owner. The prepared default is disabled thinking / medium effort,
+with the approved 1.5× retail multiplier. No repeat model or labelled-note product decision is requested.
+Configuration and restart use the deployment gate and approved credential procedure once eligible.
 
-## 6. Product decisions (owner)
+## 3. Live payment and operational access
 
-- The promotional credit at signup (amount, or none) for invited clinicians.
-- Sonnet 5 thinking mode and effort, taken on the measured check.
-- Whether custom Word upload may go live as **assisted completion** (every mapping reviewed and confirmed by a
-  clinician) while automatic compatibility is below the gate. As declared, V1 is not complete while the gate is
-  unmet. This decision only governs what may be offered in the meantime.
+- A verified Stripe live account, restricted credentials and webhook registration; separately approve the
+  bounded **≤$5 live payment** and its processing fee. Existing sandbox receipts/balances stay historical.
+- An approved outside-host heartbeat endpoint, named incident recipient, and confirmation of actual delivered
+  alerts. Existing accepted/uncertain sends must be reconciled; no repeat single-use test is assumed.
+- A second recovery custodian or independently retrievable break-glass material, with a witnessed recovery
+  exercise. The Sep27 local restore passed; it does not establish independent custody or offsite recovery.
+- If retaining the current synthetic B2 schedule during transition: the existing supported account-observation
+  renewal through the authorized desktop, without extending an expired lease or recreating allowance.
+
+## 4. Required human work and precise access gap
+
+- Authorized native Microsoft Word desktop access for final qualified outputs and their controls. The current
+  connected-document query found **no Word sessions**; both registered remote devices were **offline**.
+  The VPS/repository is accessible. This is a desktop gap, not a missing project/VPS session.
+- Independent security review of the actual production target/candidate and retest of serious findings.
+- Counsel's retention/deletion schedule, breach-notification procedure and downstream agreement requirements.
+
+No launch date is promised while account/contracts and these sessions are unscheduled. The critical path is
+engineering qualification → account/contract/budget admission → isolated target installation and restore/
+alert/payment/security/native-Word acceptance → reviewed cutover → invited real-patient admission. Independent
+preparation continues while external inputs are pending; no launch switch relaxes the Word or clinical gates.

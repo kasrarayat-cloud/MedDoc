@@ -51,11 +51,15 @@ synthetic stand-in.
 
 Times are working estimates for the act itself; G0 and G7 are dominated by third parties.
 
-### G0 Decisions and contracts (2 to 6 weeks, external)
+### G0 Decisions and contracts (unscheduled; duration unknown)
 
 Record in `docs/foundation/RULINGS.md`: AWS us-east-1, RDS Single-AZ, ALB/ACM, Resend with no-PHI
 rule, V1 registration policy, second custodian. **Go** when P1, P2 (at least signed-ready), P3, P4,
 P7 and P9 are in hand or scheduled with dates. **No-go** if any BAA is refused.
+
+No launch date is inferred from the implementation-time estimates below. Contract/account availability,
+independent review and native Word sessions need actual dates before the critical path can be scheduled.
+Necessary Word and ordinary-narrative engineering remains ahead of qualification and real-data admission.
 
 ### G1 AWS foundation (1 to 2 days)
 
