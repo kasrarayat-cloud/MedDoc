@@ -319,11 +319,16 @@ class DiscountValidatedAsUsed(SimpleTestCase):
         """A config stored before the repair can carry the '1' the old code produced: refused as NoProviderRequest by the
         check maximum_cost and generate both run first. The worker's release of the hold is StoredDiscountRefusal's."""
         with override_settings(**SONNET_46), patch.dict(os.environ, PRICE_ENV), patch('anthropic.Anthropic') as client:
-            stored = {**g.configuration(), 'discount_rate': '1'}
-            with self.assertRaises(NoProviderRequest):
-                g.maximum_cost(NOTES, FIELDS, stored)
-            with self.assertRaises(NoProviderRequest):
-                g.generate(NOTES, FIELDS, stored)
+            profiled = {**g.configuration(), 'discount_rate': '1'}
+            # F3 (round 3): the population the running release actually writes has NO request_profile key — a check that
+            # only ran for profiled configs survived every test. Both shapes are refused.
+            pre_profile = {k: v for k, v in profiled.items() if k != 'request_profile'}
+            for label, stored in (('profiled', profiled), ('pre-profile', pre_profile)):
+                with self.subTest(config=label):
+                    with self.assertRaises(NoProviderRequest):
+                        g.maximum_cost(NOTES, FIELDS, stored)
+                    with self.assertRaises(NoProviderRequest):
+                        g.generate(NOTES, FIELDS, stored)
             client.assert_not_called()
 
 
@@ -784,9 +789,11 @@ class StoredDiscountRefusal(OutcomeFixture, TestCase):
     def test_a_queued_job_whose_discount_normalized_to_one_is_not_sent_and_its_hold_is_released(self):
         """Extra B through the worker: a job queued by the previous release with discount_rate '1' is refused before any
         request, marked not processed, charged nothing, and its hold released — instead of reaching the provider and
-        stranding in reconciliation."""
+        stranding in reconciliation. F3 (round 3): the previous release writes configs WITHOUT a request_profile key, so
+        that is the shape tested here."""
         encounter = self.fresh_encounter()
-        config = {**g.configuration(), 'discount_rate': '1'}
+        config = {**{k: v for k, v in g.configuration().items() if k != 'request_profile'}, 'discount_rate': '1'}
+        self.assertNotIn('request_profile', config)
         job = Job.objects.create(encounter=encounter, user=self.user, request_key=f'generation:{encounter.pk}:discount',
                                  revision=encounter.revision, config=config)
         reserve(job, Decimal('0.2'))
