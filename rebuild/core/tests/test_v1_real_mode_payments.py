@@ -80,9 +80,14 @@ class RealModeNeverSpendsSandboxMoney(SyntheticFixture, TestCase):
         self.assertFalse(AuditEvent.objects.filter(action='usage.reserve').exists())
 
     def test_a_payment_recorded_before_the_mode_was_stored_is_sandbox(self):
-        """Rows from before this change carry NULL: live mode did not exist then, so they count as sandbox."""
-        payment, wallet = self.sandbox_top_up()
-        Payment.objects.filter(pk=payment.pk).update(livemode=None)
+        """Rows from before this change carry NULL: live mode did not exist then, so they count as sandbox. (Recorded as
+        NULL here: a recorded mode cannot be changed afterwards, 0020's trigger.)"""
+        wallet = Wallet.objects.get(user=self.user, kind='paid')
+        Payment.objects.create(user=self.user, wallet=wallet, amount_cents=1000, stripe_session='cs_legacy',
+                               stripe_intent='pi_legacy', status='paid', livemode=None)
+        Wallet.objects.filter(pk=wallet.pk).update(balance=Decimal('10'))
+        LedgerEntry.objects.create(wallet=wallet, amount=Decimal('10'), kind='payment', key='payment:pi_legacy',
+                                   description='Explicit Stripe wallet top-up', balance_after=Decimal('10'))
         with override_settings(**REAL_PAYMENTS_OFF), self.assertRaises(ValidationError):
             reserve(self.job('legacy'), Decimal('2'))
         from core.billing import sandbox_funded
