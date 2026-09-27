@@ -1231,5 +1231,171 @@ class MixedBoxNumbers(unittest.TestCase):
         self.assertEqual(places["word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"]["boxes"], 2)
 
 
+def wrapper_control(inner, kind="richText"):
+    """An inline content control (a rich text or a group control) wrapping `inner`, as Word nests them."""
+    sdt = OxmlElement("w:sdt")
+    pr = OxmlElement("w:sdtPr")
+    pr.append(OxmlElement("w:" + kind))
+    sdt.append(pr)
+    content = OxmlElement("w:sdtContent")
+    content.append(inner)
+    sdt.append(content)
+    return sdt
+
+
+def own_controls_shown(data):
+    """[(glyph shown, flag)] for every checkbox content control of an export - the control itself, never a control that
+    only wraps one - in document order."""
+    root = etree.fromstring(ZipFile(io.BytesIO(data)).read("word/document.xml"))
+    out = []
+    for sdt in root.iter(qn("w:sdt")):
+        cb = sdt.find(qn("w:sdtPr") + "/{%s}checkbox" % W14)
+        if cb is None:
+            continue
+        flag = cb.find("{%s}checked" % W14)
+        out.append(("".join(t.text or "" for t in sdt.find(qn("w:sdtContent")).iter(qn("w:t"))),
+                    flag.get("{%s}val" % W14) if flag is not None else None))
+    return out
+
+
+def wrapped_grid_bytes(kind="richText"):
+    """The refuter's F1 grid: Chest pain's Yes cell holds a checkbox control printed ticked INSIDE another control."""
+    doc = Document()
+    doc.add_paragraph("Synthetic review of systems")
+    table = doc.add_table(rows=3, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        table.cell(0, c).text = h
+    table.cell(1, 0).text = "Chest pain"
+    table.cell(2, 0).text = "Dyspnea"
+    table.cell(1, 1).paragraphs[0]._p.append(wrapper_control(checkbox_control(checked=True), kind))
+    for r, c in ((1, 2), (2, 1), (2, 2)):
+        table.cell(r, c).paragraphs[0]._p.append(checkbox_control())
+    return docx_bytes(doc)
+
+
+def wrapped_checklist_bytes():
+    """The refuter's F1 check-all column: Warfarin's box, printed ticked, is a checkbox control inside a control."""
+    doc = Document()
+    doc.add_paragraph("Synthetic medication reconciliation")
+    table = doc.add_table(rows=4, cols=2)
+    table.cell(0, 0).text = "Medication"
+    table.cell(0, 1).text = "Continue (check all that apply)"
+    for r, name in ((1, "Warfarin"), (2, "Metformin"), (3, "Aspirin")):
+        table.cell(r, 0).text = name
+        box = checkbox_control(checked=(r == 1))
+        table.cell(r, 1).paragraphs[0]._p.append(wrapper_control(box) if r == 1 else box)
+    return docx_bytes(doc)
+
+
+def wrapped_line_bytes(legacy=False):
+    """The refuter's F1 line: 'Smoker? [wrapped ☒] Yes ☐ No' (or its Yes a legacy checkbox inside a control)."""
+    doc = Document()
+    doc.add_paragraph("Synthetic intake")
+    p = doc.add_paragraph("Smoker? ")
+    if legacy:
+        inner = Document().add_paragraph()
+        ff_field(inner, "checkbox", checked=True, name="SmokerYes")
+        wrapper = wrapper_control(inner._p[0])
+        for run in list(inner._p)[1:]:
+            wrapper.find(qn("w:sdtContent")).append(run)
+    else:
+        wrapper = wrapper_control(checkbox_control(checked=True))
+    p._p.append(wrapper)
+    p._p.append(text_run(" Yes ☐ No"))
+    return docx_bytes(doc)
+
+
+class NestedCheckboxControls(unittest.TestCase):
+    """Round 3 F1: a checkbox control nested inside another control is read and written as that control, end to end -
+    detection, the printed state, the writer and the read-back - or its place is refused; never invisible."""
+
+    def test_a_wrapped_control_in_a_grid_cell_is_read_and_written_as_that_control(self):
+        from documents import word_v3
+        for kind in ("richText", "group"):
+            data = wrapped_grid_bytes(kind)
+            fields = word_v3.inspect(data)["fields"]
+            chest = fields_by_label(fields)["Chest pain"]
+            self.assertEqual((chest["kind"], chest["options"], chest.get("printed_ticked"), chest.get("printed_unread")),
+                             ("choice", ["Yes", "No"], [0], None), kind)
+            self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {chest["key"]: "No"})),
+                             [("☐", "0"), ("☒", "1"), ("☐", "0"), ("☐", "0")], kind)
+            self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {}))[:2], [("☒", "1"), ("☐", "0")],
+                             "left blank it stays as printed - and the page was told it is printed ticked")
+
+    def test_a_wrapped_control_in_a_checklist_is_unticked_when_not_chosen(self):
+        from documents import word_v3
+        data = wrapped_checklist_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        field = next(f for f in fields if f["kind"] == "multi_choice")
+        self.assertEqual((field["options"], field.get("printed_ticked")), (["Warfarin", "Metformin", "Aspirin"], [0]))
+        self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {field["key"]: ["Metformin"]})),
+                         [("☐", "0"), ("☒", "1"), ("☐", "0")])
+
+    def test_a_wrapped_control_on_a_line_is_one_of_the_questions_options(self):
+        from documents import word_v3
+        data = wrapped_line_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual([(f["label"], f["kind"], f["options"], f.get("printed_ticked")) for f in fields],
+                         [("Smoker?", "choice", ["Yes", "No"], [0])])
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "No"})
+        self.assertEqual(own_controls_shown(out), [("☐", "0")])
+        self.assertEqual(glyphs_shown(out, "Smoker"), "Smoker? ☐ Yes ☒ No")
+        places = {row["slot"]: row for row in word_v3.outline(data)["slots"]}
+        self.assertEqual((places["word/document.xml#b/p[1]"]["preview"], places["word/document.xml#b/p[1]"]["boxes"]),
+                         ("Smoker? ☐ Yes ☐ No", 2))
+
+    def test_a_wrapped_legacy_checkbox_is_read_and_written_too(self):
+        from documents import word_v3
+        data = wrapped_line_bytes(legacy=True)
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual([(f["label"], f["options"], f.get("printed_ticked")) for f in fields],
+                         [("Smoker?", ["Yes", "No"], [0])])
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "No"})
+        root = etree.fromstring(ZipFile(io.BytesIO(out)).read("word/document.xml"))
+        self.assertEqual([c.get(qn("w:val")) for c in root.iter(qn("w:checked"))], ["0"])
+        self.assertIn("☒ No", glyphs_shown(out, "Smoker"))
+
+    def test_the_read_back_sees_a_control_the_writer_missed(self):
+        """Belt and braces: a reader that loses a nested control (the round-3 shape) can never pass an export."""
+        from unittest.mock import patch
+        from documents import word_v3
+        data = wrapped_grid_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        chest = fields_by_label(fields)["Chest pain"]
+        real = word_v3.box_pieces
+
+        def blind(p):                              # the round-3 reader: a control inside a control is not seen
+            return [(kind, node, n) for kind, node, n in real(p) if node is None or node.getparent().tag != qn("w:sdtContent")]
+        with patch.object(word_v3, "box_pieces", side_effect=blind):
+            with self.assertRaises(word_v3.V3Failure) as refused:
+                word_v3.fill(data, fields, {chest["key"]: "No"})
+        self.assertIn(refused.exception.code, ("fill_mismatch", "unsupported_layout"))
+
+    def test_a_control_that_cannot_be_read_in_place_refuses_its_line(self):
+        """A checkbox control inside a checkbox control: the line shows one box where the package holds two, so the
+        line is not read as a question, its boxes are not numbered, and no box on it is ever called unticked."""
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic intake")
+        p = doc.add_paragraph("Allergy? ")
+        outer = checkbox_control()
+        outer.find(qn("w:sdtContent")).append(checkbox_control(checked=True))
+        p._p.append(outer)
+        p._p.append(text_run(" Yes ☐ No"))
+        data = docx_bytes(doc)
+        info = word_v3.inspect(data)
+        self.assertEqual([f["label"] for f in info["fields"] if f["kind"] in ("choice", "checkbox")], [])
+        self.assertTrue(any("cannot read in place" in note for note in info["notes"]), info["notes"])
+        places = {row["slot"]: row for row in word_v3.outline(data)["slots"]}
+        self.assertEqual((places["word/document.xml#b/p[1]"]["boxes"], places["word/document.xml#b/p[1]"].get("unnumbered_boxes")),
+                         (0, True))
+        index = word_v3.SlotIndex(word_v3.open_package(data))
+        glyph = {"kind": "glyph", "part": "word/document.xml", "slot": "b/p[1]/glyphs", "glyph": 0}
+        self.assertIsNone(word_v3.box_state(index, glyph))
+        with self.assertRaises(word_v3.V3Failure) as refused:
+            word_v3.locate(data, [{"slot": "word/document.xml#b/p[1]", "kind": "checkbox", "label": "No", "glyph": 1}])
+        self.assertEqual(refused.exception.code, "invalid_mapping")
+
+
 if __name__ == "__main__":
     unittest.main()
