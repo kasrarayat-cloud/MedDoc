@@ -14,10 +14,13 @@ import re
 import tempfile
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+import threading
+
+from django.db import connection
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from core import wm_review
+from core import views, wm_review
 from core.jobs import run_one
 from core.security import private_path
 from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter, Job, Membership, TemplateVersion, User
@@ -314,6 +317,14 @@ class AnUntouchedNotesSaveRoundTrips(OrdinaryDraft, TestCase):
         self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': notes[4:]})
         self.assertEqual(encounter.answers, {})                    # (both dropped: the doctor removed a line — a change)
 
+    def test_lone_carriage_returns_are_line_breaks_too(self):
+        """R2-3 A6: notes stored with lone CRs come back from a browser as CRLF — the same notes."""
+        notes = self.EDITED.replace('\n', '\r')
+        encounter = self.reviewed_with_notes(notes)
+        content = textarea(self.client.get(f'/encounters/{encounter.pk}/'), 'source-notes-edit')
+        self.assertEqual(as_browser_posts(content), self.EDITED.replace('\n', '\r\n'))   # (the control: what is posted)
+        self.untouched_save(encounter, as_browser_posts(content))
+
     def test_the_transcript_textarea_keeps_a_leading_line_break_too(self):
         encounter, _keys = self.reviewed_draft()
         self.transcript_awaiting_review(encounter, '\nSynthetic words.')
@@ -423,10 +434,11 @@ class ClearAnswersAndReviewToGenerateAgain(OrdinaryDraft, TestCase):
     def test_clearing_is_refused_while_a_job_is_pending_on_a_stale_page_or_once_finalized(self):
         encounter, _keys = self.reviewed_draft()
         before = (encounter.answers, encounter.revision)
-        job = Job.objects.create(encounter=encounter, user=self.user, kind='generation', revision=encounter.revision,
-                                 request_key='synthetic-pending-' + str(encounter.pk), state='queued')
-        self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 409)
-        job.state = 'failed'; job.request_key = 'synthetic-ended-' + str(encounter.pk); job.save()
+        for state in ('queued', 'running', 'reconciliation'):                     # (R2-3 A7: every pending state)
+            job = Job.objects.create(encounter=encounter, user=self.user, kind='generation', revision=encounter.revision,
+                                     request_key='synthetic-pending-' + state + str(encounter.pk), state=state)
+            self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 409, state)
+            job.state = 'failed'; job.request_key = 'synthetic-ended-' + state + str(encounter.pk); job.save()
         stale = self.client.post(f'/encounters/{encounter.pk}/clear-review/', {'revision': encounter.revision - 1, 'confirm_clear': 'on'})
         self.assertEqual(stale.status_code, 409)
         Encounter.objects.filter(pk=encounter.pk).update(status='finalized', finalized_by=self.user, finalized_at=timezone.now())
@@ -434,6 +446,56 @@ class ClearAnswersAndReviewToGenerateAgain(OrdinaryDraft, TestCase):
         self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 409)
         self.assertEqual((encounter.answers, encounter.revision), before)
         self.assertFalse(AuditEvent.objects.filter(action='encounter.review_cleared').exists())
+
+
+@override_settings(**TEST_SETTINGS)
+class ClearingOutsideTheTestTransaction(OrdinaryDraft, TransactionTestCase):
+    """R2-3 A1 and A8, where each request commits on its own (no test-case transaction to hide behind)."""
+
+    def test_a_clear_runs_in_its_own_transaction(self):
+        """A8: clear_review locks the row, which needs a transaction of its own."""
+        encounter, _keys = self.reviewed_draft()
+        self.client.raise_request_exception = False
+        response = self.client.post(f'/encounters/{encounter.pk}/clear-review/',
+                                    {'revision': encounter.revision, 'confirm_clear': 'on'})
+        encounter.refresh_from_db()
+        self.assertEqual((response.status_code, encounter.answers), (302, {}))
+
+    def test_a_colleagues_save_waits_for_the_clear_and_is_then_refused_as_stale(self):
+        """A1: a colleague's save arriving while a clear is between its checks and its write waits on the row lock, then
+        meets the new revision and is refused — never saved and then silently wiped by the clear."""
+        encounter, keys = self.reviewed_draft()
+        colleague = self.member('guards-race-colleague', 'clinician')
+        revision = encounter.revision
+        outcome = {}
+
+        def colleague_save():
+            try:
+                client = Client(); client.force_login(colleague); client.raise_request_exception = False
+                payload = {'revision': revision, **{'answer_' + k: encounter.answers[k]['text'] for k in keys},
+                           **{'reviewed_' + k: 'on' for k in keys}}
+                outcome['status'] = client.post(f'/encounters/{encounter.pk}/save/', payload).status_code
+            finally:
+                connection.close()
+
+        thread = threading.Thread(target=colleague_save)
+        real = views.review_state_counts
+
+        def between_checks_and_write(e, codes=True):
+            if not codes:                                  # (the clear's own call: its checks passed, its write is next)
+                thread.start(); thread.join(timeout=3)
+                outcome['colleague_finished_first'] = not thread.is_alive()
+            return real(e, codes=codes)
+
+        self.client.raise_request_exception = False
+        with patch.object(views, 'review_state_counts', between_checks_and_write):
+            response = self.client.post(f'/encounters/{encounter.pk}/clear-review/', {'revision': revision, 'confirm_clear': 'on'})
+        if thread.ident is not None:                       # (started only once the clear reached its write)
+            thread.join(timeout=60)
+        encounter.refresh_from_db()
+        self.assertEqual((response.status_code, outcome.get('colleague_finished_first'), outcome.get('status')), (302, False, 409))
+        self.assertEqual((encounter.answers, encounter.revision), ({}, revision + 1))
+        self.assertFalse(AuditEvent.objects.filter(action='encounter.answers_saved', actor=colleague).exists())
 
 
 # ── the qualified Word form, offline ─────────────────────────────────────────────────────────────────────────────
@@ -658,6 +720,23 @@ class WordNotesSaveAndClear(OfflineWordForm):
         self.assertEqual((self.encounter.answers, self.encounter.template_review), ({}, {}))
         event = last_event('encounter.notes_saved', self.encounter)
         self.assertEqual(event.get('cleared'), cleared(reviewed_unedited=4, statements_reviewed=3))
+
+    def test_mixed_review_states_are_each_counted_in_their_own_category(self):
+        """R2-3 A2-A5: reviewed and unreviewed answers and statement choices, accepted and unaccepted codes."""
+        self.clinician_reviews()
+        payload = BrowserSaveForm.of(self.page())                    # (the same clinician; the ticks re-posted as rendered)
+        self.assertEqual((payload.pop('claim_reviewed_claim_32'), payload.pop('reviewed_patient_name')), ('on', 'on'))
+        self.client.post(f'/encounters/{self.encounter.pk}/save/', payload)
+        self.encounter.refresh_from_db()
+        self.assertEqual(sum(bool(a.get('reviewed')) for a in self.encounter.answers.values()), 3)          # (the controls)
+        self.assertEqual(sum(bool(d['reviewed']) for d in self.encounter.template_review['decisions'].values()), 2)
+        code = OrdinaryDraft.accepted_code(self, self.encounter)
+        unaccepted = Code.objects.create(release=code.terminology.release, code='R00.1', description='Synthetic fixture')
+        CodeSuggestion.objects.create(encounter=self.encounter, terminology=unaccepted, explanation='Synthetic', evidence='x')
+        self.client.post(f'/encounters/{self.encounter.pk}/notes/', {'revision': self.encounter.revision,
+                                                                     'notes': self.encounter.notes + '\nSynthetic addendum.'})
+        self.assertEqual(last_event('encounter.notes_saved', self.encounter).get('cleared'),
+                         cleared(reviewed_unedited=3, statements_reviewed=2, statements_chosen_unreviewed=1, codes=1))
 
     def test_clearing_counts_the_statement_decisions_it_clears(self):
         self.clinician_reviews()
