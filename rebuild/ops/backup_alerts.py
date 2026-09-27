@@ -1070,31 +1070,64 @@ def named_notice(state):
     return record
 
 
-def restart_held_until(at):
-    """When the next restart notice may be sent, if one was sent in the RESTART_INTERVAL before
-    `at`; None if it may be sent now.
+def restart_marker(path):
+    """A restart marker's (reason, reserved_at), or None for anything that is not one: nothing read
+    from it but a fixed label and a time ever leaves this function."""
+    try:
+        marker = json.loads(backup.read_private(path, 4096))
+        backup.require(type(marker) is dict and set(marker) == {'format', 'reason', 'reserved_at'}
+                       and type(marker['format']) is int and marker['format'] == 1
+                       and marker['reason'] in UNREADABLE, 'Invalid restart marker.')
+        return marker['reason'], timestamp(marker['reserved_at'])
+    except Exception:
+        return None
+
+
+def restart_hold(at):
+    """The restart notice that holds the next one: the LAST sent in the RESTART_INTERVAL before `at`,
+    as {'until': when the next may be sent, 'condition': what it announced}; None if none holds.
 
     A restart counts once a request record for its notice exists: a restart that stopped before its
-    request began sent nothing and holds nothing. A marker that cannot be read holds nothing either,
-    and a time later than now (a clock that ran fast) is not within the interval: each can cost a
-    duplicate at most, never a day of silence more.
+    request began sent nothing and holds nothing. A marker or request record that cannot be read
+    holds nothing either, and a time later than now (a clock that ran fast) is not within the
+    interval: each can cost a duplicate at most, never a day of silence more.
+
+    ⚠️ AND IT HOLDS ONLY WHAT IT ANNOUNCED (R3-1, round 3). What that notice announced is read from
+    its own request record, and restart_held() never holds a condition more severe than that. The
+    limit used to hold everything: a restart notice that announced a healthy backup held a failure
+    that followed two hours later for the rest of the day, with no email and no report of it.
     """
     latest = None
     for path in DIRECTORY.glob('monitor-restart-*.json'):
         match = RESTART_MARKER.fullmatch(path.name)
         if not match or not requested('incident-' + match[1]):
             continue
+        marker = restart_marker(path)
+        if marker is None:
+            continue
+        when = marker[1]
+        if not 0 <= (at - when).total_seconds() < RESTART_INTERVAL_SECONDS or latest and when <= latest[0]:
+            continue
         try:
-            marker = json.loads(backup.read_private(path, 4096))
-            backup.require(type(marker) is dict and set(marker) == {'format', 'reason', 'reserved_at'}
-                           and type(marker['format']) is int and marker['format'] == 1
-                           and marker['reason'] in UNREADABLE, 'Invalid restart marker.')
-            when = timestamp(marker['reserved_at'])
+            announced = attempt_record('incident-' + match[1])['condition']
         except Exception:
             continue
-        if 0 <= (at - when).total_seconds() < RESTART_INTERVAL_SECONDS and (latest is None or when > latest):
-            latest = when
-    return latest + timedelta(seconds=RESTART_INTERVAL_SECONDS) if latest else None
+        latest = (when, announced)
+    if latest is None:
+        return None
+    return {'until': latest[0] + timedelta(seconds=RESTART_INTERVAL_SECONDS), 'condition': latest[1]}
+
+
+def rank(condition):
+    return SEVERITY_RANK.get(severity(condition), 0)
+
+
+def restart_held(hold, condition):
+    """Whether `hold` holds a restart notice for `condition`: the incident rule (plan_notice, 1),
+    applied to restarts. It is measured against the LAST restart notice, so the same or a lower
+    severity is held for the day and only a strict rise is announced; a rise needs a lower notice
+    first, so at most one restart notice per severity is sent inside a day."""
+    return hold is not None and rank(condition) <= rank(hold['condition'])
 
 
 def replace_status(value):
@@ -1620,25 +1653,27 @@ def check(at=None):
             except Exception:
                 if unreadable_state:
                     # Nothing can be sent, so nothing is restarted: the state stays exactly as found.
-                    return state_unavailable(unreadable_state, at), 1
+                    # The backup condition is still computed and reported (R3-1).
+                    return state_unavailable(unreadable_state, at, observed(at)), 1
                 state.update(last_check_at=at.isoformat(), condition='alert_configuration_unavailable')
                 write_state(state)
                 return report(state['condition'], checked_at=state['last_check_at']), 1
-            restart = None
-            if unreadable_state:
-                held_until = restart_held_until(at)
-                if held_until:
-                    # One restart notice a day: inside that day, refuse (and say why) without a change.
-                    return state_unavailable(unreadable_state, at, held_until=held_until), 1
-                restart = secrets.token_hex(16)
-            condition = backup_condition(at)
-            recovery = recovery_status(at)
-            local_capture = local_capture_status(at)
-            if condition == 'healthy':
-                condition = recovery['condition']
-            external = external_heartbeat(at, healthy=condition == 'healthy' or condition in WARNINGS, execute=True)
-            if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
-                condition = 'external_monitor_unconfirmed'
+            # ⚠️ THE BACKUP CONDITION IS COMPUTED WHATEVER THE MONITOR'S OWN STATE (R3-1, round 3): the
+            # once-a-day restart limit is decided by it, and a held restart still reports it.
+            condition, recovery, local_capture = current_condition(at)
+            hold = restart_hold(at) if unreadable_state else None
+            # A held restart sends nothing, so it pings nothing either: an outside heartbeat that
+            # stops while the monitor cannot read its state is itself an alert.
+            held = restart_held(hold, condition)
+            external = external_heartbeat(at, healthy=condition == 'healthy' or condition in WARNINGS,
+                                          execute=not held)
+            condition = heartbeat_condition(condition, external)
+            if held and restart_held(hold, condition):
+                # Inside the day, no more severe than the last restart notice: refuse without a change,
+                # and say what is held, what the backup is now and when the next may be sent.
+                return state_unavailable(unreadable_state, at, (condition, recovery, local_capture, external),
+                                         hold=hold), 1
+            restart = secrets.token_hex(16) if unreadable_state else None
             if restart:
                 restart_record(restart, unreadable_state, at)
             state.update(last_check_at=at.isoformat(), condition=condition)
@@ -1713,12 +1748,44 @@ def check(at=None):
         return report('monitoring_state_unavailable'), 1
 
 
-def state_unavailable(reason, at, *, held_until=None):
-    """The report of a check that could not read its state and did not restart it: why (a label),
-    and when the next restart notice may be sent (None where nothing can be sent at all)."""
-    result = report('monitoring_state_unavailable', checked_at=at.isoformat())
-    result.update(state_unreadable=reason, state_restarted=False,
-                  next_state_notice_at=held_until.isoformat() if held_until else None)
+def current_condition(at):
+    """The backup condition now, before the outside heartbeat: (condition, recovery, local_capture)."""
+    condition = backup_condition(at)
+    recovery = recovery_status(at)
+    local_capture = local_capture_status(at)
+    if condition == 'healthy':
+        condition = recovery['condition']
+    return condition, recovery, local_capture
+
+
+def heartbeat_condition(condition, external):
+    if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {
+            'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
+        return 'external_monitor_unconfirmed'
+    return condition
+
+
+def observed(at):
+    """The backup condition and its evidence, read-only (the heartbeat is never sent from here):
+    (condition, recovery, local_capture, external)."""
+    condition, recovery, local_capture = current_condition(at)
+    external = external_heartbeat(at)
+    return heartbeat_condition(condition, external), recovery, local_capture, external
+
+
+def state_unavailable(reason, at, observation, *, hold=None, checked=True):
+    """The report of a monitor that could not read its own state and did not restart it: why (a
+    label), what the backup condition is now (R3-1: always computed, never held back), when the next
+    restart notice may be sent (None where nothing holds it, or nothing can be sent at all) and what
+    the last restart notice announced."""
+    condition, recovery, local_capture, external = observation
+    result = report('monitoring_state_unavailable', checked_at=at.isoformat() if checked else None,
+                    recovery=recovery, local_capture=local_capture, external=external)
+    result.update(state_unreadable=reason, backup_condition=condition, backup_severity=severity(condition),
+                  next_state_notice_at=hold['until'].isoformat() if restart_held(hold, condition) else None,
+                  last_state_notice_condition=hold['condition'] if hold else None)
+    if checked:
+        result['state_restarted'] = False
     return result
 
 
@@ -1785,9 +1852,13 @@ def status(at=None):
                       stale_after_seconds=STALE_SECONDS, check_running=not held)
         return result, 0 if result['healthy'] or condition in WARNINGS | {'offsite_renewal_in_progress'} else 1
     except Unreadable as failure:
-        # Read-only: the next check restarts the record and announces it (FAIL CLOSED MEANS ALERT).
-        result = report('monitoring_state_unavailable')
-        result['state_unreadable'] = failure.reason
+        # Read-only: the next check restarts the record and announces it (FAIL CLOSED MEANS ALERT),
+        # unless the last restart notice holds it. The backup condition is reported either way (R3-1).
+        try:
+            result = state_unavailable(failure.reason, at, observed(at), hold=restart_hold(at), checked=False)
+        except Exception:
+            result = report('monitoring_state_unavailable')
+            result['state_unreadable'] = failure.reason
         return result, 1
     except Exception:
         return report('monitoring_state_unavailable'), 1
