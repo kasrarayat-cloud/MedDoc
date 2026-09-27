@@ -1283,6 +1283,24 @@ class IncidentLedgerTests(unittest.TestCase):
             a.check(self.at + timedelta(hours=hours))
         self.assertEqual(self.sender.call_count, 3, 'and it is sent once')
 
+    def test_crash_between_the_two_writes_of_a_fresh_monitors_first_notice_recovers(self):
+        """R3's first-notice form: on a fresh directory status.json does not exist yet, so the lost-state
+        guard (status.json missing while incident evidence remains) saw the ledger alone and refused
+        forever. The ledger kept the pristine state it began from, and no request record exists."""
+        self.health.return_value = 'backup_failed'
+        crash, calls = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at)
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'])
+        self.assertFalse((self.alerts / 'status.json').exists())
+        self.assertEqual(sorted(path.name for path in self.alerts.glob('incident-*')), [a.NOTICES_FILE])
+        result, code = a.check(self.at + timedelta(minutes=5))
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_failed', 1),
+                         'a crash that sent nothing wedged a fresh monitor')
+        self.assertTrue(result['alert']['provider_accepted'])
+        a.check(self.at + timedelta(minutes=10))
+        self.sender.assert_called_once()
+
     def test_a_request_record_for_the_discarded_notice_refuses(self):
         """The recovery discards a notice only because nothing can have been sent for it. If a request
         record exists for it anyway, that premise is false: fail closed and send nothing."""
