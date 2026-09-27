@@ -286,15 +286,30 @@ def absent_socket(path, label):
 
 
 def denied_instance_metadata():
-    """The service identity must not reach IMDS, which would hand it the instance role's credentials."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+    """The service identity must not reach IMDS, which would hand it the instance role's credentials.
+
+    The verdict comes from ONE empty datagram sent on a connected UDP socket, never from TCP. The
+    unit's IPAddressDeny= is a cgroup egress BPF drop. A dropped UDP send fails at once with EPERM.
+    A dropped TCP SYN does not: the kernel ignores the egress error, retries the SYN, and connect()
+    only times out, which cannot be told apart from an unreachable network. Measured on kernel 6.8
+    with that egress program attached to the process's cgroup: TCP connect timed out after 2 s,
+    the UDP send failed with EPERM.
+
+    EPERM from the send is the only accepted denial. A send that succeeds means the datagram left
+    this process, so the service is refused as accessible. Anything else (connect failing, no route,
+    a timeout, EACCES) proves nothing and is refused as inconclusive.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
         client.settimeout(2)
         try:
-            client.connect(INSTANCE_METADATA)  # No request bytes are sent.
+            client.connect(INSTANCE_METADATA)  # UDP: a route lookup only; nothing is sent.
+        except OSError:
+            raise BoundaryFailure('instance_metadata_inconclusive') from None
+        try:
+            client.send(b'')  # Zero payload bytes; no reply is read.
         except OSError as exc:
-            # systemd IPAddressDeny answers EPERM at once; a timeout or unreachable network proves nothing.
-            require(exc.errno in DENIED, 'instance_metadata_inconclusive')
-            return {'denied': True, 'errno': exc.errno}
+            require(exc.errno == errno.EPERM, 'instance_metadata_inconclusive')
+            return {'denied': True, 'errno': exc.errno, 'method': 'connected_udp_send'}
         raise BoundaryFailure('instance_metadata_accessible')
 
 

@@ -64,9 +64,11 @@ Refusals, all with fixed labels and all tested:
   origin, fixture AI mode, HTTPS or trusted proxy off, any private-preview setting, or any inherited
   `PG*` variable. A production environment file cannot start the private units (wrong runtime user).
 - **Mixed host.** The production launcher refuses when Docker exists (a denied socket counts as
-  present), when the instance metadata service is reachable from the application identity, when
-  `/opt/meddoc-pro` exists, when the state root is not a mounted volume, or when the CA bundle is not
-  root-owned and byte-identical to the pinned hash.
+  present), when `/opt/meddoc-pro` exists, when the state root is not a mounted volume, or when the
+  CA bundle is not root-owned and byte-identical to the pinned hash. It also refuses unless the
+  instance metadata service is provably denied to the application identity: an empty UDP datagram
+  to it must fail with EPERM, which is what the unit's `IPAddressDeny=` egress drop returns. Under
+  that drop a TCP connect only times out, so TCP is not used.
 
 The private launcher path is proven unchanged by a differential test against a byte-identical copy
 of the launcher as it was before profiles existed (`rebuild/ops/fixtures/`), and the same for the

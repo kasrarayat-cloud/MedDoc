@@ -547,22 +547,53 @@ class ProductionHelperTests(unittest.TestCase):
                     with self.subTest(label=label), self.assertRaisesRegex(launcher.BoundaryFailure, '^' + label + '$'):
                         launcher.absent_socket(path, 'docker_socket')
 
-    def test_instance_metadata_must_be_refused_by_policy_not_by_timeout(self):
-        for failure, expected in ((PermissionError(errno.EPERM, 'x'), {'denied': True, 'errno': errno.EPERM}),
-                                  (socket.timeout('timed out'), 'instance_metadata_inconclusive'),
-                                  (OSError(errno.ENETUNREACH, 'x'), 'instance_metadata_inconclusive'),
-                                  (None, 'instance_metadata_accessible')):
-            with self.subTest(failure=failure), patch.object(launcher.socket, 'socket') as factory:
+    def test_instance_metadata_is_judged_by_one_connected_udp_send_never_tcp(self):
+        # IPAddressDeny= is a cgroup egress drop: a UDP send fails with EPERM, a TCP connect only times out
+        # (measured in a throwaway container on kernel 6.8; the launcher's docstring records it). So the
+        # send's EPERM is the one accepted denial, and TCP is never opened.
+        denied = {'denied': True, 'errno': errno.EPERM, 'method': 'connected_udp_send'}
+        cases = (  # (connect failure, send failure, expected)
+            (None, PermissionError(errno.EPERM, 'x'), denied),
+            (None, None, 'instance_metadata_accessible'),
+            (None, PermissionError(errno.EACCES, 'x'), 'instance_metadata_inconclusive'),
+            (None, socket.timeout('timed out'), 'instance_metadata_inconclusive'),
+            (None, OSError(errno.ENETUNREACH, 'x'), 'instance_metadata_inconclusive'),
+            (None, ConnectionRefusedError(errno.ECONNREFUSED, 'x'), 'instance_metadata_inconclusive'),
+            (OSError(errno.ENETUNREACH, 'x'), None, 'instance_metadata_inconclusive'),
+            (PermissionError(errno.EPERM, 'x'), None, 'instance_metadata_inconclusive'),
+        )
+        for connect_failure, send_failure, expected in cases:
+            with self.subTest(connect=connect_failure, send=send_failure), \
+                    patch.object(launcher.socket, 'socket') as factory:
                 client = factory.return_value.__enter__.return_value
-                client.connect.side_effect = failure
+                client.connect.side_effect = connect_failure
+                client.send.side_effect = send_failure
+                client.send.return_value = 0
                 if isinstance(expected, dict):
                     self.assertEqual(launcher.denied_instance_metadata(), expected)
                 else:
                     with self.assertRaisesRegex(launcher.BoundaryFailure, '^' + expected + '$'):
                         launcher.denied_instance_metadata()
+                factory.assert_called_once_with(socket.AF_INET, socket.SOCK_DGRAM)
                 client.connect.assert_called_once_with(('169.254.169.254', 80))
-                client.send.assert_not_called()
+                if connect_failure is None:
+                    client.send.assert_called_once_with(b'')
+                else:
+                    client.send.assert_not_called()
                 client.sendall.assert_not_called()
+                client.sendto.assert_not_called()
+                client.recv.assert_not_called()
+
+    def test_a_real_udp_send_that_leaves_the_process_is_refused_as_accessible(self):
+        # Real sockets, no mock: an address that answers to UDP stands in for a reachable IMDS.
+        receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.addCleanup(receiver.close)
+        receiver.bind(('127.0.0.1', 0))
+        receiver.settimeout(2)
+        with patch.object(launcher, 'INSTANCE_METADATA', receiver.getsockname()), \
+                self.assertRaisesRegex(launcher.BoundaryFailure, '^instance_metadata_accessible$'):
+            launcher.denied_instance_metadata()
+        self.assertEqual(receiver.recv(65536), b'')  # exactly the empty datagram, nothing else
 
     def test_private_installation_must_be_absent(self):
         with tempfile.TemporaryDirectory() as temp:
