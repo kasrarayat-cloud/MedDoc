@@ -538,6 +538,7 @@ def encounter_detail(request,pk):
         codes=list(visible_codes)
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
+    is_v3=v3_mapping.is_v3_version(e.template_version)
     rows=[{**f,**e.answers.get(f['key'],{'text':'','status':'missing','evidence':[],'reviewed':False})} for f in e.template_version.fields]
     # ⚠️ A CLINICAL DECISION IS ATTRIBUTED TO THE PERSON WHO MADE IT, NOT TO WHOEVER IS READING.
     # The page told every reader "You accepted this as your answer" — so a second clinician opening
@@ -574,6 +575,14 @@ def encounter_detail(request,pk):
         row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
         row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
         row['identity']=clinician_identity(row)
+        if is_v3:
+            # How the page asks for each kind; the stored answer stays its text form (core/v3_mapping.py).
+            kind=row.get('kind')
+            row['v3_input']=v3_mapping.input_for(row)
+            row['chosen']=[line for line in (row.get('text') or '').split('\n') if line] if kind=='multi_choice' else []
+            row['columns_hint']=' | '.join(v3_mapping.columns(row)) if kind=='table_rows' else ''
+            row['unsupported_choice']=bool(kind=='choice' and row.get('text') and row['text'] not in (row.get('options') or []))
+            if kind in v3_mapping.SIGNING_KINDS:row['blank_eligible']=False
     requirements=[];review_error='';assessment=None;resolved_ok=False;wm_conflicts=[]
     if is_wm:
         decisions=e.template_review.get('decisions',{})
@@ -637,7 +646,7 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
 
@@ -684,6 +693,7 @@ def save_answers(request,pk):
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'Wait until the pending job is resolved.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version before editing.',409)
     is_wm=bool(e.template_version.document_backend)
+    is_v3=v3_mapping.is_v3_version(e.template_version)
     labels=[row['label'] for row in e.template_version.fields+e.template_version.review_requirements]
     if is_wm and any(request.POST.get('claim_reviewed_'+row['key'])=='on' for row in e.template_version.review_requirements):
         membership(request.user,e.department,roles=['owner','clinician'])
@@ -712,6 +722,9 @@ def save_answers(request,pk):
         # refused by every fillable PDF at finalize (a carriage return is not printable), exported
         # to a Word table cell as two breaks per line, and compared unequal to its own unchanged text.
         value=request.POST.get('answer_'+key,'').replace('\r\n','\n').replace('\r','\n')
+        if is_v3 and field.get('kind')=='multi_choice':
+            # Several printed options arrive as several ticked boxes; the text form is one option per line.
+            value='\n'.join(request.POST.getlist('answer_'+key)).replace('\r\n','\n').replace('\r','\n')
         # Refused before it is read character by character (seventh pass: a 20 MB value held the row lock ~10 s).
         if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
         # ⚠️ WHITESPACE IS NOT AN ANSWER. A space counted as an edit, so one keystroke could clear a
@@ -786,6 +799,12 @@ def save_answers(request,pk):
             membership(request.user,e.department,roles=['owner','clinician'])
             withdrawn.append(key)
         if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
+        if is_v3:
+            # ⚠️ ONE READER FOR THE TEXT FORM: an option not printed on the form, an answer longer than its space, a
+            # malformed table row or anything in a hand-signed area is refused here, naming the question, exactly as
+            # finalization and export would refuse it later.
+            try:value=v3_mapping.normalize(field,value)
+            except ValidationError as exc:return document_refusal(request,e,error_message(exc)+' Nothing was saved.',400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
         answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,
@@ -897,7 +916,11 @@ def finalize(request,pk):
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
             if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():raise ValidationError('Resolve pending jobs before finalizing.')
-            unreviewed=[f['label'] for f in e.template_version.fields if not e.answers.get(f['key'],{}).get('reviewed')]
+            is_v3=v3_mapping.is_v3_version(e.template_version)
+            # A v3 signature or initials area holds no answer (it is signed by hand on the printed form), so there is
+            # nothing in it to review; every other field still needs the clinician's review.
+            unreviewed=[f['label'] for f in e.template_version.fields if not e.answers.get(f['key'],{}).get('reviewed')
+                        and not (is_v3 and f.get('kind') in v3_mapping.SIGNING_KINDS)]
             if unreviewed:raise ValidationError('A clinician must review every field, including missing information. Not yet reviewed: '+field_list(unreviewed))
             order=[f['key'] for f in e.template_version.fields]
             names={f['key']:f['label'] for f in e.template_version.fields}
@@ -948,7 +971,12 @@ def finalize(request,pk):
                 # passed the fresh fields as the mapping and the two were equal by construction.
                 version=e.template_version
                 validate_identity(version.fields,e.answers,request.user)
-                fill_template(original,version.fields,{k:v['text'] for k,v in e.answers.items()},out)
+                # A v3 answer is re-read from its text form (the same reader as saving) and converted per kind: an
+                # option label, a list of labels, a ticked box, table rows. The engine checks every anchor's
+                # fingerprint and refuses a stale one; its message is shown as it is.
+                answers=(v3_mapping.fill_answers(version.fields,e.answers) if is_v3
+                         else {k:v['text'] for k,v in e.answers.items()})
+                fill_template(original,version.fields,answers,out)
             out.chmod(0o600)
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)

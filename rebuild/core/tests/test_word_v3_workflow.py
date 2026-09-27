@@ -380,3 +380,184 @@ class V3Confirmation(V3Fixture, TestCase):
         self.assertEqual(legacy.status_code, 302)
         version = Template.objects.get(name="Synthetic legacy table").versions.get()
         self.assertEqual(self.new_encounter(version, notes="Allergies: none documented").status_code, 302)
+
+
+class V3EncounterFixture(V3Fixture):
+    """A confirmed v3 mapping and one draft encounter on it."""
+
+    def setUp(self):
+        super().setUp()
+        self.template, self.version = self.uploaded()
+        self.version = self.confirm(self.template)
+        self.assertEqual(self.new_encounter(self.version).status_code, 302)
+        self.encounter = Encounter.objects.get()
+        self.by = self.by_label(self.version)
+
+    def key(self, label):
+        return self.by[label]["key"]
+
+    def answers_payload(self, values, reviewed=True):
+        payload = {"revision": Encounter.objects.get(pk=self.encounter.pk).revision}
+        for field in self.version.fields:
+            if field["kind"] in ("signature", "initials"):
+                continue
+            if field["label"] in values:
+                payload["answer_" + field["key"]] = values[field["label"]]
+            if reviewed:
+                payload["reviewed_" + field["key"]] = "on"
+        return payload
+
+    def save(self, values, reviewed=True, extra=None):
+        return self.client.post(f"/encounters/{self.encounter.pk}/save/", {**self.answers_payload(values, reviewed), **(extra or {})})
+
+    def stored(self, label):
+        return Encounter.objects.get(pk=self.encounter.pk).answers[self.key(label)]["text"]
+
+    FULL = {"Patient name": "Synthetic Person", "Referring physician": "Dr Example", "Reason for visit": "Knee pain",
+            "Allergies": "None documented", "Date of visit": "03/14/2026", "Smoker?": "Yes", "Laterality": "Left",
+            "Symptoms (check all that apply)": ["Redness", "Pain"], "Diabetes": "checked",
+            "Table": "Aspirin | 81 mg | daily\nMetformin | 500 mg | twice daily"}
+
+    def finalize(self):
+        return self.client.post(f"/encounters/{self.encounter.pk}/finalize/",
+                                {"revision": Encounter.objects.get(pk=self.encounter.pk).revision, "reviewed": "on"}, follow=True)
+
+
+@override_settings(**V3)
+class V3Answers(V3EncounterFixture, TestCase):
+    def test_the_review_page_asks_for_each_kind_in_its_own_way(self):
+        response = self.client.get(f"/encounters/{self.encounter.pk}/")
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        rows = {row["label"]: row for row in response.context["answer_rows"]}
+        self.assertEqual(rows["Laterality"]["v3_input"], "select")
+        self.assertIn(f'<select id="answer-{self.key("Laterality")}" name="answer_{self.key("Laterality")}" data-v3-choice>', body)
+        for option in ("Left", "Right", "Bilateral"):
+            self.assertIn(f'<option value="{option}" >{option}</option>', body)
+        self.assertEqual(body.count(f'name="answer_{self.key("Symptoms (check all that apply)")}"'), 3)
+        self.assertIn(f'name="answer_{self.key("Diabetes")}" value="checked" data-v3-checkbox', body)
+        self.assertIn("in this order: Medication | Dose | Frequency", body)
+        self.assertEqual(body.count("Signed by hand on the printed form &mdash; never filled."), 2)
+        self.assertNotIn(f'name="answer_{self.key("Clinician signature")}"', body)
+        self.assertNotIn(f'name="reviewed_{self.key("Clinician signature")}"', body)
+        self.assertNotIn(f'name="blank_{self.key("Physician initials")}"', body, "nothing to leave blank in a hand-signed area")
+        self.assertIn(f'name="blank_{self.key("Allergies")}"', body)
+        self.assertIn(f'name="answer_{self.key("Patient name")}" rows="4" maxlength="120"', body)
+
+    def test_each_kind_is_saved_in_its_text_form(self):
+        response = self.save(dict(self.FULL, **{"Smoker?": "yes"}))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.stored("Smoker?"), "Yes", "a printed option is stored as printed")
+        self.assertEqual(self.stored("Laterality"), "Left")
+        self.assertEqual(self.stored("Symptoms (check all that apply)"), "Pain\nRedness", "one option per line, printed order")
+        self.assertEqual(self.stored("Diabetes"), "checked")
+        self.assertEqual(self.stored("Table"), "Aspirin | 81 mg | daily\nMetformin | 500 mg | twice daily")
+        self.assertEqual(self.stored("Date of visit"), "03/14/2026", "dates are kept as typed")
+        unticked = self.save({"Diabetes": ""})
+        self.assertEqual(unticked.status_code, 302)
+        self.assertEqual(self.stored("Diabetes"), "")
+
+    def refused(self, values, *expected):
+        before = Encounter.objects.get(pk=self.encounter.pk)
+        response = self.save(values)
+        self.assertEqual(response.status_code, 400)
+        body = response.content.decode()
+        for text in expected:
+            self.assertIn(text, body)
+        after = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual((after.revision, after.answers), (before.revision, before.answers), "nothing was saved")
+
+    def test_an_option_not_printed_on_the_form_is_refused_naming_the_question(self):
+        self.refused({"Smoker?": "Former"}, "&quot;Smoker?&quot;", "not one of the printed options", "Nothing was saved.")
+        self.refused({"Laterality": "Left and right"}, "&quot;Laterality&quot;", "not one of the printed options")
+        self.refused({"Symptoms (check all that apply)": ["Pain", "Fever"]}, "&quot;Symptoms (check all that apply)&quot;",
+                     "&quot;Fever&quot; is not one of the printed options")
+
+    def test_a_checkbox_takes_only_its_ticked_form(self):
+        self.refused({"Diabetes": "yes"}, "&quot;Diabetes&quot; is a checkbox")
+
+    def test_an_answer_longer_than_its_space_is_refused(self):
+        self.refused({"Patient name": "X" * 121}, "&quot;Patient name&quot;", "at most 120 characters", "this answer has 121")
+        self.assertEqual(self.save({"Patient name": "X" * 120}).status_code, 302)
+
+    def test_table_rows_are_checked_against_the_columns(self):
+        self.refused({"Table": "Aspirin | 81 mg | daily | extra"}, "&quot;Table&quot;, row 1: 4 cells",
+                     "3 columns (Medication | Dose | Frequency)")
+
+    def test_a_hand_signed_area_takes_no_answer(self):
+        payload = self.answers_payload({})
+        payload["answer_" + self.key("Clinician signature")] = "Synthetic Alpha Clinician"
+        response = self.client.post(f"/encounters/{self.encounter.pk}/save/", payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("signed by hand on the printed form", response.content.decode())
+
+
+@override_settings(**V3)
+class V3Export(V3EncounterFixture, TestCase):
+    def test_finalize_writes_every_kind_and_copies_every_other_part(self):
+        self.assertEqual(self.save(self.FULL).status_code, 302)
+        response = self.finalize()
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        exported = private_path(encounter.export_path).read_bytes()
+        self.assertEqual(hashlib.sha256(exported).hexdigest(), encounter.export_sha256)
+        body = part_text(exported)
+        for text in ("Dr Example", "Knee pain", "None documented", "Date of visit: 03/14/2026", "Smoker?  ☒ Yes  ☐ No",
+                     "Laterality: Left", "☒ Pain ☐ Swelling ☒ Redness", "Diabetes ☒", "Aspirin81 mgdaily",
+                     "Metformin500 mgtwice daily", "Clinician signature: ____________", "Physician initials: ______"):
+            self.assertIn(text, body)
+        self.assertIn("Patient name: Synthetic Person", part_text(exported, "word/header1.xml"))
+        with ZipFile(io.BytesIO(self.original)) as before, ZipFile(io.BytesIO(exported)) as after:
+            self.assertEqual([i.filename for i in before.infolist()], [i.filename for i in after.infolist()])
+            changed = {"word/document.xml", "word/header1.xml"}
+            for name in before.namelist():
+                if name not in changed:
+                    self.assertEqual(before.read(name), after.read(name), name)
+        download = self.client.get(f"/encounters/{self.encounter.pk}/export/")
+        self.assertEqual(b"".join(download.streaming_content), exported)
+        page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
+        self.assertIn("Box ticked.", page)
+        self.assertIn("Signed by hand on the printed form; never filled.", page)
+
+    def test_signed_areas_need_no_review_but_every_other_field_does(self):
+        self.assertEqual(self.save(self.FULL, reviewed=False).status_code, 302)
+        self.assertEqual(self.save(self.FULL, extra={}).status_code, 302)
+        self.assertEqual(self.finalize().status_code, 200)
+        self.assertEqual(Encounter.objects.get(pk=self.encounter.pk).status, "finalized")
+
+    def test_an_unreviewed_field_still_blocks_finalization(self):
+        payload = self.answers_payload(self.FULL)
+        payload.pop("reviewed_" + self.key("Laterality"))
+        self.assertEqual(self.client.post(f"/encounters/{self.encounter.pk}/save/", payload).status_code, 302)
+        response = self.finalize()
+        self.assertNotEqual(Encounter.objects.get(pk=self.encounter.pk).status, "finalized")
+        self.assertIn("Not yet reviewed: Laterality.", " ".join(str(m) for m in response.context["messages"]))
+
+    def test_finalization_re_reads_every_stored_answer(self):
+        self.assertEqual(self.save(self.FULL).status_code, 302)
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        answers = dict(encounter.answers)
+        answers[self.key("Smoker?")] = {**answers[self.key("Smoker?")], "text": "Former"}
+        Encounter.objects.filter(pk=encounter.pk).update(answers=answers)
+        response = self.finalize()
+        self.assertNotEqual(Encounter.objects.get(pk=self.encounter.pk).status, "finalized")
+        self.assertIn('"Smoker?": "Former" is not one of the printed options',
+                      " ".join(str(m) for m in response.context["messages"]))
+
+    def test_a_stale_anchor_is_refused_with_the_engine_message(self):
+        fields = [dict(f) for f in self.version.fields]
+        for f in fields:
+            if f["label"] == "Referring physician":
+                f["locator"] = {**f["locator"], "fingerprint": "0" * 64}
+        stale = TemplateVersion.objects.create(template=self.template, number=2, fields=fields, contract="v3",
+                                               corrections={"base_version": 1}, created_by=self.user)
+        MappingConfirmation.objects.create(version=stale, confirmed_by=self.user)
+        Encounter.objects.all().delete()
+        self.assertEqual(self.new_encounter(stale).status_code, 302)
+        self.encounter = Encounter.objects.get()
+        self.version = stale
+        self.assertEqual(self.save(self.FULL).status_code, 302)
+        response = self.finalize()
+        self.assertNotEqual(Encounter.objects.get(pk=self.encounter.pk).status, "finalized")
+        self.assertIn("The stored mapping no longer matches this form. Review the mapping again.",
+                      " ".join(str(m) for m in response.context["messages"]))
