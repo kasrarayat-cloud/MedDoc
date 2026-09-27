@@ -79,3 +79,51 @@ sense of `word-compatibility-target.md`, whatever the aggregate.
    with the unverifiable questions listed per document.
 
 Until step 2 is committed, no qualification run is started.
+
+## Step 1 done (2026-09-27): the reader, self-tested on the development set
+
+`word-eval/v2/ticked.py` (sha256 `38f9283f3c5db02efee0695873d234a7af1c9af163758886a3653b8190f9dcbc`) and
+`word-eval/v2/test_ticked.py` (sha256 `ec6b24531c4f2935e18af9fcbaa125a11672527e201f2e9dbb0d4edbbfe734b2`), with
+`README.md` recording every fail-closed reading where this page is silent. Written in scratch, then copied here
+byte-identical; the development results are kept beside the frozen results in the runtime corpus
+(`ticked-v2-dev-results.json`, sha256 `a05d3839…`), not in git.
+
+- 14 self-tests pass; 35 planted mutants (chosen box unticked, neighbour ticked, two ticks, left/right swapped,
+  pre-ticked default left ticked, dropdown showing another entry, hidden ticks, and more) are each detected, every
+  one first proven to have applied; 16 code mutations of the reader are each caught.
+- Information only, candidate 1 on the development set: of 31 documents with option questions, 16 pass, **2 fail**
+  (D03: an unanswered question's "Right" box ticked, because the candidate merged it into the question above; D28:
+  a ☒ inserted beside printed radio circles that stay unticked), 13 are unverifiable. Of 1,132 option questions,
+  538 pass, 2 fail, **592 are unverifiable** — 330 because this page never said how the profile's chosen answer
+  is expressed in ground-truth terms, 262 from box shapes the reader does not yet read.
+
+The reader is not yet the one the qualification run will use: v2.1 below must be implemented and its hashes
+committed first (step 2).
+
+## v2.1 — seven readings fixed now, before any qualification output exists
+
+The builder listed seven places where this page was silent or, read literally, would count the harness's own
+blindness against the candidate. They are settled here. Each keeps the rule that an unknown shape is unverifiable
+and an unverifiable question fails the document.
+
+1. **The chosen answer is fixed in ground-truth terms.** For each ground-truth choice question the profile chooses
+   option index `min(1, n − 1)`; for a multiple choice the first two; a checkbox is ticked. The harness gives that
+   option's ground-truth label, as text, to the candidate field the v1 scorer matches to the question. If no field
+   matches, or the field does not accept the label, the question **fails** (a mapping failure of the candidate),
+   never "unverifiable". The text answers of v1's profiles are unchanged.
+2. **Printed options with no box are read by the inserted mark in both association modes** — one slot per option
+   as well as shared slots (lettered option lists).
+3. **Wingdings and Wingdings 2 characters stored as text** are read through the same fixed table as `w:sym`, keyed
+   by the run's font and character code, each entry checked by a LibreOffice render as the `w:sym` table was.
+4. **Radio circles are boxes:** `○` unticked, `◉` and `●` ticked. A `☒` inserted beside a printed circle that
+   stays `○` is a failure (the reader sees the circle unticked).
+5. **Two questions in one paragraph:** a box tied to another question's option is judged by that question only.
+   Rule 3's "every other box" means the boxes of this question's options that were not chosen, plus boxes tied to
+   no question.
+6. **An answer written as text into a cell** that is empty in the original (Yes / No / NA grids) is a declared box
+   kind: the exported cell text must equal the chosen option's label exactly; any other text is unreadable.
+7. **Legacy dropdowns** are read as declared; no development document has one, so that reader is proven on
+   synthetic files only, and the qualification report says so.
+
+These readings are fixed before the qualification cohort's ground truth is opened by anyone. The first-pass
+results already recorded are not re-scored in place.
