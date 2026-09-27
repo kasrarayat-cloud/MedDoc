@@ -472,12 +472,27 @@ def encounter_detail(request,pk):
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
 
+def clinician_decided(e):
+    """Whether the saved draft carries a clinician's review state, which a generation would replace wholesale.
+    (An acceptance also marks its answer `edited`; it is named for itself so no change to statuses can open this.)"""
+    return (any(isinstance(a,dict) and (a.get('reviewed') or a.get('accepted_suggestion') or a.get('status') in ('edited','left_blank'))
+                for a in (e.answers or {}).values())
+            or bool((e.template_review or {}).get('decisions')))
+
 @require_POST
 def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
+        # ⚠️ ADOPTING A GENERATION REPLACES EVERY ANSWER AND THE WHOLE REVIEW (`jobs.py`). The page offers it only
+        # before any answer exists; a crafted POST at the current revision queued a billed job that erased reviewed,
+        # accepted, edited and left-blank answers and statement decisions. A save renumbers the revision, so a request
+        # raced past this check is refused by `enqueue`'s locked revision check. (Ported from feat/wm-narrative.)
+        if clinician_decided(e):
+            raise ValidationError("These answers include a clinician's review or decisions, and a new draft would replace them. "
+                                  'Nothing was sent or charged. To start again from the notes, save the source notes again '
+                                  '(unchanged is fine): that clears the saved answers and review decisions. Then generate.')
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):
