@@ -31,6 +31,127 @@ def data(doc):
 
 
 class QuestionBoxes(unittest.TestCase):
+    def test_complete_long_question_and_section_are_retained(self):
+        doc = Document()
+        context = 'Clinical section ' + 'complete context ' * 25
+        question = 'What changed? ' + 'Keep every qualifier. ' * 25
+        doc.add_paragraph(context.strip(), style='Heading 1')
+        doc.add_paragraph(question.strip())
+        box(doc)
+        result = w.inspect(data(doc))
+        self.assertEqual(len(result['fields']), 1)
+        self.assertEqual(result['fields'][0]['label'], question.strip())
+        self.assertEqual(result['fields'][0]['context'], context.strip())
+
+    def test_full_source_limits_keep_boundary_and_refuse_after_scope_expansion(self):
+        for length in (1000, 1001):
+            for what in ('label', 'context'):
+                with self.subTest(length=length, what=what):
+                    doc = Document()
+                    context = 'C' * length if what == 'context' else 'Clinical history'
+                    question = 'What ' + 'q' * (length - 6) + '?' if what == 'label' else 'What changed?'
+                    doc.add_paragraph(context, style='Heading 1')
+                    doc.add_paragraph(question)
+                    box(doc)
+                    result = w.inspect(data(doc))
+                    if length == 1000:
+                        self.assertEqual(len(result['fields']), 1)
+                        self.assertEqual(result['fields'][0]['label'], question)
+                        self.assertEqual(result['fields'][0]['context'], context)
+                    else:
+                        self.assertEqual(result['fields'], [])
+                        self.assertTrue(any(question in n and 'limit' in n for n in result['notes']))
+        doc = Document()
+        long_context = 'Clinical ' + 'x' * 981
+        doc.add_paragraph(long_context, style='Heading 1')
+        for _ in range(2):
+            doc.add_paragraph('What changed?')
+            box(doc)
+        result = w.inspect(data(doc))
+        self.assertEqual(result['fields'], [])
+        self.assertEqual(sum('nothing was shortened' in n for n in result['notes']), 2)
+
+    def test_manual_derived_context_is_complete_or_visibly_refused(self):
+        for length in (600, 1001):
+            doc = Document()
+            context = 'Clinical ' + 'c' * (length - 9)
+            doc.add_paragraph(context, style='Heading 1')
+            box(doc)
+            target = {'slot': 'word/document.xml#b/tbl[0]/tr[0]/tc[0]', 'kind': 'long_text', 'label': 'Comments'}
+            with self.subTest(length=length):
+                if length == 600:
+                    self.assertEqual(w.locate(data(doc), [target])[0]['context'], context)
+                else:
+                    with self.assertRaises(w.V3Failure): w.locate(data(doc), [target])
+
+    def test_manual_root_verified_long_donor_scope_is_not_lost(self):
+        doc = Document()
+        context = 'Clinical section ' + 'continued ' * 16 + 'DONOR ONLY'
+        doc.add_paragraph(context, style='Heading 1')
+        doc.add_paragraph('What medications are currently taken?')
+        box(doc)
+        target = {'slot': 'word/document.xml#b/tbl[0]/tr[0]/tc[0]', 'kind': 'long_text', 'label': 'Medications'}
+        self.assertEqual(w.locate(data(doc), [target])[0]['context'], context)
+
+    def test_manual_long_metadata_never_slices_and_oversize_refuses(self):
+        doc = Document()
+        box(doc)
+        source = data(doc)
+        target = {'slot': 'word/document.xml#b/tbl[0]/tr[0]/tc[0]',
+                  'kind': 'long_text', 'label': 'Question ' + 'q' * 491,
+                  'context': 'Section ' + 'c' * 592}
+        field = w.locate(source, [target])[0]
+        self.assertEqual(field['label'], target['label'])
+        self.assertEqual(field['context'], target['context'])
+        for name in ('label', 'context'):
+            with self.subTest(name=name), self.assertRaises(w.V3Failure):
+                w.locate(source, [{**target, name: 'x' * 1001}])
+
+    def test_initial_report_adjective_is_not_a_signing_instruction(self):
+        for phrase, accepted in (
+            ('Please describe the changes since the initial report?', True),
+            ('Please describe changes in the case of the initial report?', True),
+            ('Please notarize the initial report?', False),
+            ('Please describe the changes since the initial report, then initial here?', False),
+            ('Please describe the initial report and provide initials?', False),
+            ('Please describe the initial report and provide signature?', False),
+            ('Please provide Initial?', False), ('Please provide Initials?', False),
+            ('Please sign the initial report here?', False),
+            ('Please countersign the initial report?', False),
+            ('Please counter-sign the initial report?', False),
+            ('Has the initial report been countersigned?', False),
+            ('Please undersign the initial report?', False),
+            ('Please co-sign the initial report?', False),
+            ('Please re-sign the initial report?', False),
+            ('Please provide signoff on the initial report?', False),
+            ('Please describe signing the initial report?', False),
+            ('Please countersign since the initial report?', False),
+            ('Please initial the report here?', False), ('Please initial here?', False)):
+            with self.subTest(phrase=phrase):
+                doc = Document()
+                doc.add_paragraph(phrase)
+                box(doc)
+                result = w.inspect(data(doc))
+                fields = [f for f in result['fields'] if f['locator']['target']['type'] == 'cell']
+                self.assertEqual(len(fields), int(accepted))
+                if accepted:
+                    self.assertEqual(fields[0]['label'], phrase)
+                    exported = w.fill(data(doc), fields, {fields[0]['key']: 'SYNTHETIC'})
+                    self.assertEqual(w.text_of(w.SlotIndex(w.open_package(exported)).by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]'].el), 'SYNTHETIC')
+
+    def test_initial_adjective_cannot_cross_question_section_boundary(self):
+        for heading, question in (('Report', 'Please provide the initial'),
+                                  ('Initial', 'Please describe the initial report?'),
+                                  ('Please countersign the initial report', 'What changed?')):
+            with self.subTest(heading=heading, question=question):
+                doc = Document()
+                doc.add_paragraph(heading, style='Heading 1')
+                doc.add_paragraph(question)
+                box(doc)
+                result = w.inspect(data(doc))
+                self.assertEqual(result['fields'], [])
+                self.assertTrue(any('Signing or consent' in note for note in result['notes']))
+
     def test_inherited_heading_scope_and_unknown_or_cyclic_ancestry(self):
         for ancestor in ('Heading 1', 'Unknown', 'cycle'):
             with self.subTest(ancestor=ancestor):
@@ -158,7 +279,7 @@ class QuestionBoxes(unittest.TestCase):
                 question = {'heading': 'Clinical history', 'option': 'Other (please specify)',
                             'signature': 'Please provide the clinician signature.',
                             'reference': 'In relation to the above question, what changed?',
-                            'long': 'What happened? ' + 'Keep every qualifier. ' * 20}.get(case, 'What changed?')
+                            'long': 'What happened? ' + 'Keep every qualifier. ' * 50}.get(case, 'What changed?')
                 p = doc.add_paragraph(question)
                 if case == 'option':
                     p.style = 'List Bullet'

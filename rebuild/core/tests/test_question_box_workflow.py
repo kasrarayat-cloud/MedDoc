@@ -32,6 +32,9 @@ def selected_answers(notes, fields, selected_key):
 @override_settings(**V3)
 class QuestionBoxWorkflow(V3Fixture, TestCase):
     target_slot = 'b/tbl[0]/tr[0]/tc[0]'
+    ordinary_notes = 'The patient reports weekly contact with the supervisor.'
+    ordinary_correction = 'The patient reports weekly supervised contact.'
+    ordinary_status = 'supported'
 
     def source(self):
         doc = Document()
@@ -43,6 +46,40 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
     def capture(self, mode, template, version, encounter, original, exported):
         pass
 
+    def test_long_mapping_review_save_add_and_oversized_post_preserve_versions(self):
+        doc = Document()
+        labels = ['What ' + 'q' * (length - 6) + '?' for length in (334, 409)]
+        for label in labels:
+            doc.add_paragraph(label)
+            box(doc)
+        box(doc)
+        original = data(doc)
+        template, version = self.uploaded(data=original, name='SYNTHETIC long mapping metadata')
+        before = version.fields
+        page = self.client.get(f'/templates/{template.pk}/')
+        self.assertContains(page, 'maxlength="2000"')
+        for label in labels: self.assertContains(page, label)
+        payload = {'action': 'v3_save', 'mapping_version': version.pk,
+                   'kind_' + version.fields[0]['key']: 'text'}
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/', payload).status_code, 302)
+        latest = self.latest(template)
+        self.assertEqual([f['label'] for f in latest.fields], labels)
+        oversized = {'action': 'v3_save', 'mapping_version': latest.pk,
+                     'label_' + latest.fields[0]['key']: 'x' * 1001}
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/', oversized).status_code, 400)
+        add = {'action': 'v3_add', 'mapping_version': latest.pk, 'kind': 'long_text',
+               'slot': 'word/document.xml#b/tbl[2]/tr[0]/tc[0]', 'label': 'x' * 1001}
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/', add).status_code, 400)
+        self.assertEqual(self.latest(template).pk, latest.pk)
+        add['label'] = labels[1]
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/', add).status_code, 302)
+        final = self.latest(template)
+        self.assertEqual(final.fields[-1]['label'], labels[1])
+        self.assertEqual(final.fields[-1]['origin'], 'manual')
+        version.refresh_from_db()
+        self.assertEqual(version.fields, before)
+        self.assertEqual(private_path(template.original_path).read_bytes(), original)
+
     def test_missing_ordinary_long_worker_correction_finalization_and_export(self):
         original = self.source()
         template, version = self.uploaded(data=original, name='SYNTHETIC separate answer box')
@@ -52,11 +89,11 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
         self.confirm(template, version)
         for mode in ('missing', 'ordinary', 'long'):
             with self.subTest(mode=mode):
-                notes = 'Administrative visit record.' if mode == 'missing' else 'The patient reports weekly contact with the supervisor.'
+                notes = 'Administrative visit record.' if mode == 'missing' else self.ordinary_notes
                 self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
                 encounter = Encounter.objects.latest('created_at')
                 answers = selected_answers(notes, version.fields, None if mode == 'missing' else field['key'])
-                self.assertEqual(answers[field['key']]['status'], 'missing' if mode == 'missing' else 'supported')
+                self.assertEqual(answers[field['key']]['status'], 'missing' if mode == 'missing' else self.ordinary_status)
                 mocked = (answers, Decimal('0'), {}, {}, 'synthetic-unit-selection', '', True)
                 with patch('core.jobs.generation.generate', return_value=mocked) as provider:
                     self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
@@ -67,9 +104,9 @@ class QuestionBoxWorkflow(V3Fixture, TestCase):
                 usage = Usage.objects.get(job__encounter=encounter)
                 self.assertTrue(usage.simulated)
                 self.assertEqual(usage.charged_cost, 0)
-                self.assertEqual(encounter.answers[field['key']]['text'], '' if mode == 'missing' else notes)
+                self.assertEqual(encounter.answers[field['key']]['text'], notes if mode != 'missing' and self.ordinary_status == 'supported' else '')
                 self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/').status_code, 200)
-                value = {'missing': '', 'ordinary': 'The patient reports weekly supervised contact.',
+                value = {'missing': '', 'ordinary': self.ordinary_correction,
                          'long': ('SYNTHETIC long clinician review of supervised contact. ' * 90).strip()}[mode]
                 payload = {'revision': encounter.revision}
                 for f in version.fields:

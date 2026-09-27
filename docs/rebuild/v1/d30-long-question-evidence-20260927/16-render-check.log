@@ -1,0 +1,101 @@
+[
+  {
+    "area": "A23",
+    "mode": "original",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/.runtime/d30-repair-20260927/render-output/original.pdf",
+    "sha256": "76db3a7ff8f2ae4ab18ebd5ec99406da9a3d89514e82134c98ee68b391dc014e",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": true,
+    "long_statement_count": null,
+    "long_statement_expected": null
+  },
+  {
+    "area": "A23",
+    "mode": "ordinary",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A23-ordinary.pdf",
+    "sha256": "ff4ab287861a328d88d88987148bc8a284d9cd6bef37777e51e3c8cf0fb2dc31",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": true,
+    "long_statement_count": null,
+    "long_statement_expected": null
+  },
+  {
+    "area": "A23",
+    "mode": "long",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A23-long.pdf",
+    "sha256": "21b4359899548a6196e3e69b5b3a75939474d6d3c0c3b48269ce3f0ff6bcf3c9",
+    "pages": 13,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": false,
+    "long_statement_count": 89,
+    "long_statement_expected": 90
+  },
+  {
+    "area": "A35",
+    "mode": "original",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/.runtime/d30-repair-20260927/render-output/original.pdf",
+    "sha256": "76db3a7ff8f2ae4ab18ebd5ec99406da9a3d89514e82134c98ee68b391dc014e",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": true,
+    "long_statement_count": null,
+    "long_statement_expected": null
+  },
+  {
+    "area": "A35",
+    "mode": "ordinary",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A35-ordinary.pdf",
+    "sha256": "0224dbb112afdb2bd2b6b46af233b7182b5a88de76ed8f8cf12adf4aa50a739b",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": true,
+    "long_statement_count": null,
+    "long_statement_expected": null
+  },
+  {
+    "area": "A35",
+    "mode": "long",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A35-long.pdf",
+    "sha256": "7a3405919b69e4a4e198efb2f2602df1b189f14f6a435b3053e1c35e3dd925ee",
+    "pages": 13,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": false,
+    "long_statement_count": 89,
+    "long_statement_expected": 90
+  },
+  {
+    "area": "A44",
+    "mode": "original",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-d30/rebuild/.runtime/d30-repair-20260927/render-output/original.pdf",
+    "sha256": "76db3a7ff8f2ae4ab18ebd5ec99406da9a3d89514e82134c98ee68b391dc014e",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": true,
+    "long_statement_count": null,
+    "long_statement_expected": null
+  },
+  {
+    "area": "A44",
+    "mode": "ordinary",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A44-ordinary.pdf",
+    "sha256": "b7efd548c2966297d3e063d1d95f6b18dc5ce6fccc00a3b0e91250a3424bc8e3",
+    "pages": 12,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": true,
+    "long_statement_count": null,
+    "long_statement_expected": null
+  },
+  {
+    "area": "A44",
+    "mode": "long",
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-long-questions/rebuild/.runtime/d30-long-questions-20260927/render-output/A44-long.pdf",
+    "sha256": "c1d60050500bf5336873351bc5e698f41a47d46cd080a8b71cbde60579e7c77c",
+    "pages": 13,
+    "overlap_pairs": 0,
+    "full_answer_contiguous": false,
+    "long_statement_count": 89,
+    "long_statement_expected": 90
+  }
+]

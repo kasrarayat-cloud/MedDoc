@@ -1,0 +1,38 @@
+[
+  {
+    "heading": "Report",
+    "label": "Please provide the initial",
+    "result": {
+      "contract": "v3",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Please provide the initial",
+          "kind": "long_text",
+          "context": "Report",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+          }
+        }
+      ],
+      "notes": []
+    }
+  },
+  {
+    "heading": "Clinical report",
+    "label": "Please provide Initials?",
+    "result": {
+      "contract": "v3",
+      "fields": [],
+      "notes": [
+        "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. Signing or consent context needs explicit review; it is not an ordinary narrative answer. Printed text: Please provide Initials?"
+      ]
+    }
+  }
+]

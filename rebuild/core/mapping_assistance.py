@@ -13,9 +13,10 @@ from documents.service import assistance_outline, locate_fields
 from . import generation, v3_mapping, mapping_wire as wire
 from .security import private_path
 from .tab_review import signature_label
+from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_CONTEXT
 
-VERSION='blank-mapping-v2'
-PROFILE='claude-sonnet-5-blank-mapping-v2'
+VERSION='blank-mapping-v3'
+PROFILE='claude-sonnet-5-blank-mapping-v3'
 MAX_OUTPUT_TOKENS=20000
 TIMEOUT_SECONDS=120
 MAX_PAYLOAD_BYTES=400_000
@@ -35,7 +36,7 @@ class Strict(BaseModel):
 class Target(Strict):
     slot:str=Field(min_length=1,max_length=500)
     kind:Literal['text','long_text','date','time','choice','checkbox','signature','initials']
-    label:str=Field(min_length=1,max_length=300)
+    label:str=Field(min_length=1,max_length=MAX_MAPPING_LABEL)
     options:list[str]=Field(max_length=100)
     glyph:int|None=Field(ge=0,le=199)
 
@@ -149,6 +150,14 @@ def validate_proposal(version,compiled,response):
         located=locate_fields(path,[target.model_dump(exclude_none=True)])
         if located['sha256']!=version.template.sha256:raise ValidationError('Original integrity check failed.')
         field=located['fields'][0]
+        # An unchanged physical destination keeps its complete immutable source
+        # context. The newly resolved locator/fingerprint must match exactly;
+        # a descendant or another destination never inherits this context.
+        if prior and field.get('locator') == prior.get('locator'):
+            context=prior.get('context','')
+            if not isinstance(context,str) or len(context)>MAX_MAPPING_CONTEXT:
+                raise ValidationError('Existing source context exceeds the supported limit; nothing was shortened.')
+            field['context']=context
         if field['label']!=target.label:
             raise ValidationError('Proposed label cannot be preserved exactly; no wording was shortened.')
         if field['kind']!=target.kind or list(field.get('options') or [])!=target.options:

@@ -1,0 +1,35 @@
+convert /in/A23-ordinary.docx as a Writer document -> /out/A23-ordinary.pdf using filter : writer_pdf_Export
+convert /in/A23-long.docx as a Writer document -> /out/A23-long.pdf using filter : writer_pdf_Export
+convert /in/A35-ordinary.docx as a Writer document -> /out/A35-ordinary.pdf using filter : writer_pdf_Export
+convert /in/A35-long.docx as a Writer document -> /out/A35-long.pdf using filter : writer_pdf_Export
+convert /in/A44-ordinary.docx as a Writer document -> /out/A44-ordinary.pdf using filter : writer_pdf_Export
+convert /in/A44-long.docx as a Writer document -> /out/A44-long.pdf using filter : writer_pdf_Export
+
+
+(process:21): dconf-CRITICAL **: 21:44:23.635: unable to create directory '/home/gotenberg/.cache/dconf': Read-only file system.  dconf will not work properly.
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+
+(process:26): dconf-CRITICAL **: 21:44:24.065: unable to create directory '/home/gotenberg/.cache/dconf': Read-only file system.  dconf will not work properly.
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories

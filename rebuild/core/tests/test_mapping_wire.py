@@ -15,6 +15,25 @@ class MappingWire(SimpleTestCase):
         ref=payload['text_refs'].index([sid,0,0])
         return [fid,sid,0,ref,2,6,-1]
 
+    def test_complete_long_label_spans_and_target_schema_share_the_limit(self):
+        from core.mapping_assistance import Target
+        for length in (334, 409, 1000, 1001):
+            payload = self.payload(1, 0)
+            label = ('🏥' if length >= 1000 else 'Q') * length
+            payload['slots'][0]['text'] = label
+            payload['text_refs'] = wire.catalog(payload)
+            body = wire.fixture(payload)
+            body['x'] = [[-1, 0, 1, payload['text_refs'].index([0, 0, 0]), 0, length, -1]]
+            target = dict(slot=payload['slots'][0]['slot'], kind='long_text', label=label, options=[], glyph=None)
+            with self.subTest(length=length):
+                if length <= 1000:
+                    expanded, _ = wire.expand(payload, body)
+                    self.assertEqual(expanded['additions'][0]['label'], label)
+                    self.assertEqual(Target.model_validate(target).label, label)
+                else:
+                    with self.assertRaises(ValidationError): wire.expand(payload, body)
+                    with self.assertRaises(ValueError): Target.model_validate(target)
+
     def test_minimum_empty_complete_and_unicode_source_expansion(self):
         payload=self.payload(0,0)
         result,exhausted=wire.expand(payload,wire.fixture(payload))
