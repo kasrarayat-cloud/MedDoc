@@ -1037,6 +1037,18 @@ notes, so that needs a compromised parent.
   path is a literal pathspec. Each repair is pinned by tests that fail on `86a1e52c` (the reader's 29 of 31 held rows, 3
   statements and 2 reasons; the runner's 4 new tests), and my own probes of the new rules found one over-hold of my first
   paragraph rule (`RIGHT LEG:` / `All segments were imaged, unlike the left.` / …), narrowed before commit.
+  Measured on `1335f780`, row for row against `f01107aa`: benchmarks, all six batteries, both generators, the
+  wrapped-leg mirror (0 wrong-leg of 16,655) and the row mirror (0 wrong-row of 34,466) are IDENTICAL — every hold
+  round 20 adds is on an input the harnesses never had. 27 mutants over the round-20 repairs (reader 15, page 3, runner
+  9), the unmutated baselines first: all 27 killed by an assertion (one first killed by a crash, whose test now asserts
+  the missing entry explicitly), every restore checked by hash. The offline campaign validation passes 22 of 22 scenarios
+  and 356 checks, the four new ones included. Suites: core 1,357 with one failure — `ReviewCost.test_round_13…`'s 5.0 s
+  wall guard at 5.17 s under this shared host's contention, the reconciled failure (the module alone: 191 OK; the
+  guard's own workload in interleaved fresh processes, 4.35–4.64 s CPU against `86a1e52c`'s 4.33–4.54 s); documents 101,
+  ops 945, the real-engine workflow 31. My own probes of the new rules found two quadratic reads of my own before commit
+  (a whole-unit slice compared per value; the paragraph's reading taken for every sentence of a note that sets no side
+  apart). ⚠️ **Round 20's own repairs have had no independent pass.** Evidence:
+  `docs/deploy-reports/wm-narrative-round20-evidence-20260927.md`.
 - **Cost.** The reader answers every per-place question by bisection over positions read once per text (sides, clause
   breaks, digits, words, numbers, quantities by unit, relatives, paragraphs, lines), the backtracking patterns are
   atomic, a correction's reach, its struck spans and the governors' blocks are read once per unit or note, what a
