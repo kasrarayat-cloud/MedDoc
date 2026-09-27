@@ -1,0 +1,9 @@
+test_published_schema_and_unset_policy_match_runtime_exactly (core.tests.test_retention_readiness.RetentionPublishedPolicy.test_published_schema_and_unset_policy_match_runtime_exactly) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.005s
+
+OK
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

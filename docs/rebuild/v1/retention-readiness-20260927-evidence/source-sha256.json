@@ -1,0 +1,7 @@
+{
+  "rebuild/core/retention_readiness.py": "17f3dcb86c0e83874b33707ab1e042f5e4df3e6e2263603acd44614f0f579818",
+  "rebuild/core/management/commands/retention_readiness.py": "a4fc2d293e107a027d186e9a91c82cfc35d6e68996e03fb9a5d5970b6135f1e0",
+  "rebuild/core/tests/test_retention_readiness.py": "59eecd32346a10b85590eb92ec279c38624ef2e51cb5f4679baa540c452ce310",
+  "rebuild/ops/retention/policy.schema.json": "c07368c1d9b50eb1021019c8f5b028ac7d9e3018a3f19ae3070d11afe40aca8d",
+  "rebuild/ops/retention/policy.unset.json": "03d57724152ae67505eff80266c648ef86229c9b370cecbfa413ac2b7b2abd28"
+}

@@ -1,0 +1,206 @@
+{
+  "contract": "retention-readiness-v1",
+  "schedule_document_sha256": null,
+  "coverage": {
+    "legal_hold_registry": "unresolved",
+    "state_file_inventory": "unresolved",
+    "rds_pitr": "unresolved",
+    "aws_backup_rds": "unresolved",
+    "aws_backup_ebs": "unresolved",
+    "cross_account_locked_copies": "unresolved",
+    "legacy_encrypted_offsite": "unresolved",
+    "anthropic_account": "unresolved",
+    "deepgram_account": "unresolved",
+    "invitation_recovery_email": "unresolved",
+    "stripe_records": "unresolved",
+    "host_ssm_security_logs": "unresolved",
+    "downloaded_exports": "unresolved"
+  },
+  "classes": {
+    "accounts": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "organizations": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "departments": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "memberships": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "department_invitations": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "clinic_invitations": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "verification_tokens": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "sessions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "mfa_devices": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "login_throttles": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "patient_identity": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "template_original_references": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "mapping_versions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "mapping_confirmations": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "draft_clinical_records": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "finalized_clinical_records": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "clinical_records_other_status": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "final_export_references": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "jobs": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "recording_references": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "job_result_references": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "receipt_result_references": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "code_suggestions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "wallets": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "ledger": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "reservations": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "usage": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "payments": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "payment_events": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "refunds": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "provider_receipts": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "reconciliations": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "platform_costs": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "audit": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "service_status": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "terminology_releases": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "terminology_codes": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    }
+  }
+}

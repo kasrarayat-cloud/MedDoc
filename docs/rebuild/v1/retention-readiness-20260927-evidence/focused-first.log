@@ -1,0 +1,27 @@
+Using existing test database for alias 'default' ('test_quillmd_ci')...
+test_counts_are_aggregate_only_and_unknown_policy_is_blocked (core.tests.test_retention_readiness.RetentionCounts.test_counts_are_aggregate_only_and_unknown_policy_is_blocked) ... ok
+test_declared_windows_produce_only_review_counts_never_deletion_authority (core.tests.test_retention_readiness.RetentionCounts.test_declared_windows_produce_only_review_counts_never_deletion_authority) ... ok
+test_nested_transaction_and_partial_query_failure_return_no_report (core.tests.test_retention_readiness.RetentionCounts.test_nested_transaction_and_partial_query_failure_return_no_report) ... ok
+test_postgresql_refuses_real_write_inside_count_transaction_and_restores_connection (core.tests.test_retention_readiness.RetentionCounts.test_postgresql_refuses_real_write_inside_count_transaction_and_restores_connection) ... ok
+test_successful_command_has_no_execution_option_or_mutating_side_effect (core.tests.test_retention_readiness.RetentionCounts.test_successful_command_has_no_execution_option_or_mutating_side_effect) ... ok
+test_bad_windows_booleans_arbitrary_anchors_and_protected_classes_refuse (core.tests.test_retention_readiness.RetentionPolicy.test_bad_windows_booleans_arbitrary_anchors_and_protected_classes_refuse) ... ok
+test_complete_unset_example_is_valid_but_has_no_windows (core.tests.test_retention_readiness.RetentionPolicy.test_complete_unset_example_is_valid_but_has_no_windows) ... ok
+test_missing_unknown_duplicate_and_overlong_policy_refuse (core.tests.test_retention_readiness.RetentionPolicy.test_missing_unknown_duplicate_and_overlong_policy_refuse) ... ok
+test_partial_policy_and_paths_never_leak_or_query_database (core.tests.test_retention_readiness.RetentionPolicy.test_partial_policy_and_paths_never_leak_or_query_database) ... ok
+test_validate_only_never_queries_database_and_never_grants_authority (core.tests.test_retention_readiness.RetentionPolicy.test_validate_only_never_queries_database_and_never_grants_authority) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 2.527s
+
+OK
+Preserving test database for alias 'default' ('test_quillmd_ci')...
+Found 10 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).
