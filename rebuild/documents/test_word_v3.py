@@ -807,6 +807,24 @@ class ControlReadBack(unittest.TestCase):
         out = word_v3.fill(data, fields, {fields[0]["key"]: "No"})
         self.assertEqual(controls_shown(out), [("☐", "0"), ("☒", "1")])
 
+    def test_an_added_flag_keeps_the_schema_order(self):
+        """R5: w14:checked precedes w14:checkedState and w14:uncheckedState (CT_SdtCheckbox is a sequence)."""
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic intake")
+        p = doc.add_paragraph("Smoker? ")
+        p._p.append(checkbox_control(flag=False))      # an unticked control written without its optional flag
+        p._p.append(text_run(" Yes  "))
+        p._p.append(checkbox_control(flag=False))
+        p._p.append(text_run(" No"))
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "Yes"})
+        root = etree.fromstring(ZipFile(io.BytesIO(out)).read("word/document.xml"))
+        orders = [[etree.QName(c).localname for c in cb] for cb in root.iter("{%s}checkbox" % W14)]
+        self.assertEqual(orders, [["checked", "checkedState", "uncheckedState"]] * 2)
+        self.assertEqual(controls_shown(out), [("☒", "1"), ("☐", "0")])
+
 
 if __name__ == "__main__":
     unittest.main()
