@@ -9,15 +9,17 @@ No provider is called: Stripe Checkout is a mock and every webhook is signed loc
 """
 from decimal import Decimal
 from io import StringIO
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import DatabaseError, transaction
 from django.test import TestCase, override_settings
 
-from core.billing import reserve
+from core.billing import reserve, sandbox_funded
 from core.models import AuditEvent, Job, LedgerEntry, Payment, Reservation, Wallet, WebhookEvent
 from core.tests.test_security import SyntheticFixture
 from core.tests import test_v1_stripe_live as stripe_live  # The module, so its TestCase is not collected twice here.
@@ -240,3 +242,181 @@ class RealModePaymentCheckCommand(SyntheticFixture, TestCase):
         self.assertIn('1 payment row(s) not recorded as live', message)
         self.assertIn('1 Stripe event row(s) not recorded as live', message)
         self.assertNotIn('paid wallet(s)', message)
+
+
+@override_settings(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES,
+                   QUILLMD_WELCOME_CREDIT=Decimal('0'))
+class RealModeFundsOnlyWhatItCanSpend(SyntheticFixture, TestCase):
+    """Round-3 refutation F1.
+
+    (a) Real data mode never takes live money into a paid balance reserve() will always refuse: checkout is refused
+        before any Payment row or Stripe call, tells the payer to contact support, names nothing, and is audited.
+    (b) Only a payment that FUNDED the wallet makes it sandbox-funded. A sandbox checkout nobody paid holds no money,
+        and every way sandbox money can reach a wallet is still caught.
+    """
+    setUp = stripe_live.LiveCheckoutAndSettlement.setUp
+    checkout = stripe_live.LiveCheckoutAndSettlement.checkout
+    signed = stripe_live.LiveCheckoutAndSettlement.signed
+    sandbox_top_up = RealModeNeverSpendsSandboxMoney.sandbox_top_up
+    job = RealModeNeverSpendsSandboxMoney.job
+
+    def checkout_for(self, nonce, payer):
+        token = signing.dumps({'user': str(self.user.pk), 'nonce': nonce}, salt='checkout-authorization')
+        session = SimpleNamespace(id=f'cs_{nonce}', url='https://checkout.stripe.com/c/pay/synthetic')
+        with patch('stripe.checkout.Session.create', return_value=session) as api:
+            response = self.client.post('/billing/checkout/', {'amount': '10.00', 'consent': 'on', 'checkout_token': token,
+                                                               'payer': payer})
+        return response, api
+
+    def owner_of_organization(self):
+        membership = self.user.membership_set.first()
+        membership.role = 'owner'
+        membership.save(update_fields=['role'])
+        return membership.department
+
+    def live_top_up(self, nonce, payer='personal'):
+        with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
+            response, api = self.checkout_for(nonce, payer)
+            self.assertTrue(api.called, 'the live checkout was refused')
+            payment = Payment.objects.get(stripe_session=f'cs_{nonce}')
+            self.assertEqual(self.signed(event(True, paid_session(payment, True, f'pi_{nonce}'), f'evt_{nonce}')).status_code, 200)
+        return payment
+
+    def recorded(self, wallet, key, *, status, livemode, credit):
+        """A Payment row as some earlier deployment left it, optionally with the 'payment' credit it produced."""
+        payment = Payment.objects.create(user=self.user, wallet=wallet, amount_cents=500, stripe_session=f'cs_{key}',
+                                         stripe_intent=f'pi_{key}', status=status, livemode=livemode)
+        if credit:
+            balance = Wallet.objects.get(pk=wallet.pk).balance + Decimal('5')
+            Wallet.objects.filter(pk=wallet.pk).update(balance=balance)
+            LedgerEntry.objects.create(wallet=wallet, amount=Decimal('5'), kind='payment', key=f'payment:pi_{key}',
+                                       description='Explicit Stripe wallet top-up', balance_after=balance)
+        return payment
+
+    # (a) Checkout ---------------------------------------------------------------------------------------------------
+
+    def assert_refused_before_stripe(self, response, api, nonce):
+        self.assertEqual(response.status_code, 302)
+        api.assert_not_called()
+        self.assertFalse(Payment.objects.filter(stripe_session=f'cs_{nonce}').exists())
+        message = str(list(response.wsgi_request._messages)[0])
+        self.assertIn('Contact support', message)
+        self.assertIn('No charge was made', message)
+        return message
+
+    def test_P1_real_mode_refuses_a_live_checkout_into_a_sandbox_funded_personal_balance(self):
+        """The refuter's P1: sandbox top-up, then a live checkout in real mode took $10 of live money into a wallet
+        reserve() refuses forever."""
+        payment, wallet = self.sandbox_top_up()
+        with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
+            response, api = self.checkout('live-into-sandbox')
+        message = self.assert_refused_before_stripe(response, api, 'live-into-sandbox')
+        self.assertEqual(list(Payment.objects.values_list('pk', flat=True)), [payment.pk])
+        for private in (str(wallet.pk), str(payment.pk), self.user.email, 'pi_sandbox-top-up', 'cs_sandbox-top-up', '10', '$'):
+            self.assertNotIn(private, message)
+        refused = AuditEvent.objects.get(action='payment.checkout_refused_sandbox_balance')
+        self.assertEqual((refused.actor_id, refused.target), (self.user.pk, str(wallet.pk)))
+        wallet.refresh_from_db()
+        self.assertEqual((wallet.balance, wallet.reserved), (10, 0))
+
+    def test_real_mode_refuses_a_live_checkout_into_a_sandbox_funded_organization_balance_only(self):
+        department = self.owner_of_organization()
+        with override_settings(STRIPE_SECRET_KEY='rk_test_synthetic_adapter'):
+            self.assertTrue(self.checkout_for('org-sandbox', f'organization:{department.organization_id}')[1].called)
+        payment = Payment.objects.get(stripe_session='cs_org-sandbox')
+        self.assertEqual(self.signed(event(False, paid_session(payment, False, 'pi_org_sandbox'), 'evt_org_sandbox')).status_code, 200)
+        with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
+            response, api = self.checkout_for('org-live', f'organization:{department.organization_id}')
+        self.assert_refused_before_stripe(response, api, 'org-live')
+        # The owner's personal paid balance holds no sandbox money: its live checkout proceeds.
+        self.live_top_up('personal-live')
+
+    def test_real_mode_checks_out_into_a_balance_a_sandbox_checkout_never_funded(self):
+        with override_settings(STRIPE_SECRET_KEY='rk_test_synthetic_adapter'):
+            self.checkout('abandoned-before-live')
+        self.live_top_up('live-after-abandoned')
+
+    def test_synthetic_mode_checks_out_into_a_sandbox_funded_balance_as_before(self):
+        self.sandbox_top_up()
+        with override_settings(STRIPE_SECRET_KEY='rk_test_synthetic_adapter'):
+            response, api = self.checkout('second-sandbox')
+        self.assertTrue(api.called)
+        self.assertFalse(AuditEvent.objects.filter(action='payment.checkout_refused_sandbox_balance').exists())
+
+    # (b) Which payments count ---------------------------------------------------------------------------------------
+
+    def test_P7_an_unpaid_sandbox_checkout_does_not_freeze_a_balance_live_money_funded(self):
+        """The refuter's P7: one abandoned sandbox checkout (pending, no money, no credit) made a live-only wallet
+        unspendable in real mode."""
+        with override_settings(STRIPE_SECRET_KEY='rk_test_synthetic_adapter'):
+            self.checkout('abandoned-sandbox')
+        abandoned = Payment.objects.get(stripe_session='cs_abandoned-sandbox')
+        self.assertEqual((abandoned.status, abandoned.livemode), ('pending', False))
+        self.live_top_up('live-only-money')
+        wallet = Wallet.objects.get(user=self.user, kind='paid')
+        self.assertEqual(list(LedgerEntry.objects.filter(wallet=wallet, kind='payment').values_list('key', 'amount')),
+                         [('payment:pi_live-only-money', Decimal('10'))])
+        self.assertFalse(sandbox_funded(wallet))
+        with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
+            job = self.job('live-money-only')
+            reserve(job, Decimal('2'))
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('wallet__kind', 'amount')), [('paid', Decimal('3'))])
+
+    def test_no_payment_that_never_funded_the_wallet_makes_it_sandbox_funded(self):
+        wallet = Wallet.objects.get(user=self.user, kind='paid')
+        for status in ('creating', 'pending', 'processing', 'uncertain', 'failed', 'expired'):
+            for livemode in (False, None):
+                self.recorded(wallet, f'unfunded-{status}-{livemode}', status=status, livemode=livemode, credit=False)
+        self.assertFalse(sandbox_funded(wallet))
+
+    def test_every_way_sandbox_money_reaches_a_wallet_is_still_caught(self):
+        cases = {
+            # A paid sandbox or pre-mode Payment, even if its credit were somehow absent.
+            'paid sandbox, no credit': dict(status='paid', livemode=False, credit=False),
+            'paid legacy NULL, no credit': dict(status='paid', livemode=None, credit=False),
+            'paid sandbox with its credit': dict(status='paid', livemode=False, credit=True),
+            'paid legacy NULL with its credit': dict(status='paid', livemode=None, credit=True),
+            # A credit whose Payment is not live, whatever that Payment's status says.
+            'credit, Payment NULL and not paid': dict(status='processing', livemode=None, credit=True),
+            'credit, Payment sandbox and not paid': dict(status='expired', livemode=False, credit=True),
+        }
+        for index, (name, case) in enumerate(cases.items()):
+            with self.subTest(case=name):
+                wallet = Wallet.objects.get(user=self.make_scope(f'caught{index}')[0], kind='paid')
+                self.recorded(wallet, f'caught-{index}', **case)
+                self.assertTrue(sandbox_funded(wallet))
+        with self.subTest(case='credit whose Payment is missing'):
+            wallet = Wallet.objects.get(user=self.make_scope('orphan-credit')[0], kind='paid')
+            Wallet.objects.filter(pk=wallet.pk).update(balance=Decimal('5'))
+            LedgerEntry.objects.create(wallet=wallet, amount=Decimal('5'), kind='payment', key='payment:pi_orphan_credit',
+                                       description='Explicit Stripe wallet top-up', balance_after=Decimal('5'))
+            self.assertTrue(sandbox_funded(wallet))
+        with self.subTest(case='a live payment beside a sandbox credit'):
+            self.live_top_up('live-beside-sandbox')
+            wallet = Wallet.objects.get(user=self.user, kind='paid')
+            self.assertFalse(sandbox_funded(wallet))
+            self.recorded(wallet, 'sandbox-beside-live', status='paid', livemode=False, credit=True)
+            self.assertTrue(sandbox_funded(wallet))
+
+    def test_organization_and_promotional_wallets_are_judged_by_their_own_money(self):
+        department = self.owner_of_organization()
+        organization_wallet, _ = Wallet.objects.get_or_create(organization_id=department.organization_id, kind='paid')
+        personal = Wallet.objects.get(user=self.user, kind='paid')
+        promo = Wallet.objects.get(user=self.user, kind='promo')
+        self.recorded(organization_wallet, 'org-sandbox-money', status='paid', livemode=False, credit=True)
+        self.assertEqual((sandbox_funded(organization_wallet), sandbox_funded(personal), sandbox_funded(promo)),
+                         (True, False, False))
+        self.live_top_up('personal-live-money')
+        with override_settings(**REAL_PAYMENTS_OFF):
+            reserve(self.job('personal-payer'), Decimal('2'))  # The department pays personally: live money only.
+            department.organization_pays = True
+            department.save(update_fields=['organization_pays'])
+            with self.assertRaisesRegex(ValidationError, 'sandbox'):
+                reserve(self.job('organization-payer'), Decimal('2'))
+        # And the other way round: sandbox money in the personal wallet leaves the organization's live money spendable.
+        other = self.make_scope('org-live-owner')
+        other_org_wallet, _ = Wallet.objects.get_or_create(organization=other[1], kind='paid')
+        self.recorded(Wallet.objects.get(user=other[0], kind='paid'), 'personal-sandbox-money', status='paid', livemode=False,
+                      credit=True)
+        self.assertFalse(sandbox_funded(other_org_wallet))
+        self.assertFalse(sandbox_funded(Wallet.objects.get(user=other[0], kind='promo')))
