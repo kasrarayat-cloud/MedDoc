@@ -1659,6 +1659,89 @@ class ConcurrentStatusReadTests(unittest.TestCase):
                          'a held lock made status() report the monitor broken')
         self.assertEqual(shown['incident']['last_notice_condition'], 'backup_failed')
 
+    def running_check(self, at, blocking):
+        """A real check at `at`, stopped inside `blocking` (patched onto the module) until released,
+        with the monitor lock held throughout, exactly as a check running past status()'s wait."""
+        entered, release, results = threading.Event(), threading.Event(), {}
+        real = getattr(a, blocking)
+
+        def stopped(*args, **kwargs):
+            entered.set()
+            release.wait(30)
+            return real(*args, **kwargs)
+
+        def running():
+            with patch.object(a, blocking, side_effect=stopped):
+                results['check'] = a.check(at)
+        worker = threading.Thread(target=running, name='check-running')
+        worker.start()
+        self.assertTrue(entered.wait(30))
+        return worker, release, results
+
+    def test_a_pending_notice_a_dead_check_left_is_unconfirmed_while_the_next_check_runs(self):
+        """⚠️ R3-2, round 3, the refuter's exact sequence. The first notice (backup_stale) was accepted;
+        a later escalation (backup_failed) was killed mid-request by the unit's 60 s limit, leaving
+        only its pending record. With the lock free, status() reports alert_delivery_unconfirmed. While
+        the NEXT check runs past status()'s wait, status() read that dead check's notice as one "in
+        flight" and hid it: backup_stale, provider_accepted, last notice the initial backup_stale."""
+        self.health.return_value = 'backup_stale'
+        a.check(self.at)                                                   # first notice, accepted
+        a.check(self.at + timedelta(hours=1, minutes=55))                  # the last check to complete
+        self.health.return_value = 'backup_failed'
+        self.sender.side_effect = KeyboardInterrupt                        # killed mid-request
+        with self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=2))
+        self.sender.side_effect = None
+
+        def seen(shown):
+            return (shown['condition'], shown['alert'] and shown['alert']['outcome'], shown['incident']['last_notice'],
+                    shown['incident']['last_notice_condition'], shown['incident']['notices_attempted'])
+        unconfirmed = ('alert_delivery_unconfirmed', 'pending', 'escalation', 'backup_failed', 2)
+        free, _ = a.status(self.at + timedelta(hours=2, minutes=1))
+        self.assertEqual(seen(free) + (free.get('check_running'),), unconfirmed + (False,))
+        worker, release, results = self.running_check(self.at + timedelta(hours=2, minutes=5), 'backup_condition')
+        try:
+            with patch.object(a, 'READ_WAIT_SECONDS', 0.3):
+                shown, code = a.status(self.at + timedelta(hours=2, minutes=6))
+        finally:
+            release.set()
+            worker.join(30)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(seen(shown) + (code, shown.get('check_running')), unconfirmed + (1, True),
+                         "a running check made status() hide a notice a dead check left unconfirmed")
+        self.assertEqual(results['check'][0]['condition'], 'alert_delivery_unconfirmed')
+        self.assertEqual(self.sender.call_count, 2)
+
+    def test_a_restart_in_flight_is_reported_as_the_unreadable_state_it_replaces(self):
+        """⚠️ R3-2, round 3, second variant. While a restart's notice is in flight, status() read the
+        fresh record the restart had just written: monitoring_stale, checked_at None and no label. The
+        last completed state is the unreadable one, and that is what it must report, marked running."""
+        for local in ('healthy', 'backup_failed'):         # the notice on its own; the incident's first notice
+            with self.subTest(local=local):
+                for path in self.alerts.iterdir():
+                    path.unlink()
+                self.health.return_value = local
+                a.backup.write_private(self.alerts / 'status.json', b'not json')
+                free, _ = a.status(self.at)
+                self.assertEqual((free['condition'], free.get('state_unreadable')),
+                                 ('monitoring_state_unavailable', 'state_invalid'))
+                worker, release, results = self.running_check(self.at + timedelta(minutes=5), 'email_transport')
+                try:
+                    with patch.object(a, 'READ_WAIT_SECONDS', 0.3):
+                        shown, code = a.status(self.at + timedelta(minutes=6))
+                finally:
+                    release.set()
+                    worker.join(30)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual((code, shown['condition'], shown.get('state_unreadable'), shown.get('check_running')),
+                                 (1, 'monitoring_state_unavailable', 'state_invalid', True),
+                                 'a restart in flight was reported as a fresh, never-checked monitor')
+                self.assertEqual((results['check'][0]['condition'], results['check'][0].get('state_restarted')),
+                                 (local, True))
+                after, _ = a.status(self.at + timedelta(minutes=7))
+                self.assertEqual((after['condition'], after.get('check_running'), after.get('state_unreadable')),
+                                 (local, False, None))
+
     def test_status_takes_the_lock_without_creating_or_writing_anything(self):
         """The publisher runs status() in a sandbox with no write grant to this directory, so the
         reader's lock is opened read-only and never created: a writable open would fail there."""
