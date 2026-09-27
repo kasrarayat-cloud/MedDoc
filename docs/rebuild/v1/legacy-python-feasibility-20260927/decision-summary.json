@@ -1,0 +1,161 @@
+{
+  "decision": "reject Aspose.Words FOSS for Python26.7.0 for faithful legacy conversion",
+  "package": "aspose-words-foss==26.7.0",
+  "upstream_commit": "2d2efee2787cb9e56d071d17f8d7b740dce8b784",
+  "wheel_sha256": "bca18c134f03e15d32c247d99ec6dee97c07e565e2c9d126a9c65f0e1b29b82f",
+  "input_identity": {
+    "original_path": "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/dev/originals/D19-46f4c7cffa95.doc",
+    "bytes": 156672,
+    "sha256": "46f4c7cffa95fa64e34e51a6ced30857084b4f5b3baf3626c0be9c8a6dd8d84d",
+    "leading8": "d0cf11e0a1b11ae1",
+    "first_zip_offset": 116538,
+    "normalized_sha256": "394eaa6eb6fc4e33ab21eac78d635cb68c6d687baeb7827fef7d58ded5814219"
+  },
+  "executions": {
+    "synthetic": {
+      "input_sha256": "c0a2788947662e10b73e724c6177dfceb16dc687f3f1b1520b7899af6cec6cea",
+      "sandbox": "copied release Landlock+seccomp",
+      "sandbox_controls": {
+        "network": "denied",
+        "outside_read": "denied",
+        "process": "denied"
+      },
+      "outcome": "converted",
+      "output_sha256": "dd457efc9dbd293b67b52d8d191de8a339e376855ac2168ee54e4f5ade4f5933",
+      "output_bytes": 15487,
+      "warnings": [],
+      "elapsed_s": 0.16952112701255828,
+      "input_unchanged": true
+    },
+    "d19": {
+      "input_sha256": "46f4c7cffa95fa64e34e51a6ced30857084b4f5b3baf3626c0be9c8a6dd8d84d",
+      "sandbox": "copied release Landlock+seccomp",
+      "sandbox_controls": {
+        "network": "denied",
+        "outside_read": "denied",
+        "process": "denied"
+      },
+      "outcome": "converted",
+      "output_sha256": "d0b2ef8528146cbcb3c7f292d1026d211f96817291bffb1665f6738771364a8b",
+      "output_bytes": 8200,
+      "warnings": [],
+      "elapsed_s": 0.1002777160028927,
+      "input_unchanged": true
+    }
+  },
+  "structure": {
+    "synthetic_input": {
+      "sha256": "c0a2788947662e10b73e724c6177dfceb16dc687f3f1b1520b7899af6cec6cea",
+      "bytes": 38040,
+      "counts": {
+        "paragraphs": 10,
+        "tables": 1,
+        "rows": 2,
+        "cells": 4,
+        "anchors": 0,
+        "inline_shapes": 0,
+        "wsp_shapes": 0,
+        "vml_shapes": 0,
+        "textboxes": 0,
+        "tabs": 31,
+        "underlined_runs": 1,
+        "ffData": 1,
+        "checked_legacy": 1,
+        "fieldChars": 2,
+        "content_controls": 0,
+        "sections": 1,
+        "gridSpan": 0,
+        "vMerge": 0
+      },
+      "media_count": 0,
+      "header_parts": [
+        "word/header1.xml"
+      ]
+    },
+    "synthetic_output": {
+      "sha256": "dd457efc9dbd293b67b52d8d191de8a339e376855ac2168ee54e4f5ade4f5933",
+      "bytes": 15487,
+      "counts": {
+        "paragraphs": 10,
+        "tables": 1,
+        "rows": 2,
+        "cells": 4,
+        "anchors": 0,
+        "inline_shapes": 0,
+        "wsp_shapes": 0,
+        "vml_shapes": 0,
+        "textboxes": 0,
+        "tabs": 15,
+        "underlined_runs": 1,
+        "ffData": 0,
+        "checked_legacy": 0,
+        "fieldChars": 2,
+        "content_controls": 0,
+        "sections": 1,
+        "gridSpan": 0,
+        "vMerge": 0
+      },
+      "media_count": 0,
+      "header_parts": [
+        "word/header1.xml"
+      ]
+    },
+    "d19_retained": {
+      "sha256": "394eaa6eb6fc4e33ab21eac78d635cb68c6d687baeb7827fef7d58ded5814219",
+      "bytes": 78324,
+      "counts": {
+        "paragraphs": 48,
+        "tables": 1,
+        "rows": 8,
+        "cells": 24,
+        "anchors": 10,
+        "inline_shapes": 0,
+        "wsp_shapes": 8,
+        "vml_shapes": 0,
+        "textboxes": 0,
+        "tabs": 104,
+        "underlined_runs": 7,
+        "ffData": 0,
+        "checked_legacy": 0,
+        "fieldChars": 0,
+        "content_controls": 0,
+        "sections": 1,
+        "gridSpan": 0,
+        "vMerge": 0
+      },
+      "media_count": 2,
+      "header_parts": [
+        "word/header1.xml"
+      ]
+    },
+    "d19_output": {
+      "sha256": "d0b2ef8528146cbcb3c7f292d1026d211f96817291bffb1665f6738771364a8b",
+      "bytes": 8200,
+      "counts": {
+        "paragraphs": 49,
+        "tables": 7,
+        "rows": 14,
+        "cells": 30,
+        "anchors": 0,
+        "inline_shapes": 0,
+        "wsp_shapes": 0,
+        "vml_shapes": 0,
+        "textboxes": 0,
+        "tabs": 19,
+        "underlined_runs": 0,
+        "ffData": 0,
+        "checked_legacy": 0,
+        "fieldChars": 0,
+        "content_controls": 0,
+        "sections": 1,
+        "gridSpan": 0,
+        "vMerge": 0
+      },
+      "media_count": 0,
+      "header_parts": []
+    }
+  },
+  "root_runtime": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/legacy-python-feasibility-20260927",
+  "word_area_disposition_path": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/legacy-python-feasibility-20260927/d19-area-disposition.json",
+  "scope": "D19 known development original plus one synthetic DOCX writer control; no scoring/corpus campaign or native/render acceptance"
+}

@@ -1,0 +1,182 @@
+{
+  "CHECKPOINT.md": {
+    "bytes": 1206,
+    "sha256": "7713003f0d17468233423fb415b96137f6f0729fbbb09824a4cf2993e8b8f34f"
+  },
+  "README.md": {
+    "bytes": 29181,
+    "sha256": "9ef65e92ae664d9bf8cac9c98aa002fec48938cd547af00708e4f5536aeef1c0"
+  },
+  "compare.py": {
+    "bytes": 2146,
+    "sha256": "fc719f123ff1b39c258b7ffd68df3dcffea729eb8ad34e366008e7b4110c41bf"
+  },
+  "convert.py": {
+    "bytes": 1439,
+    "sha256": "5144310a27e08862b347363cf4699e2eef1c7c15a7be06562df211c312febc1f"
+  },
+  "d19/input.doc": {
+    "bytes": 156672,
+    "sha256": "46f4c7cffa95fa64e34e51a6ced30857084b4f5b3baf3626c0be9c8a6dd8d84d"
+  },
+  "d19/output.docx": {
+    "bytes": 8200,
+    "sha256": "d0b2ef8528146cbcb3c7f292d1026d211f96817291bffb1665f6738771364a8b"
+  },
+  "d19/retained-normalized.docx": {
+    "bytes": 78324,
+    "sha256": "394eaa6eb6fc4e33ab21eac78d635cb68c6d687baeb7827fef7d58ded5814219"
+  },
+  "d19-area-disposition.json": {
+    "bytes": 3901,
+    "sha256": "474f78b42f7cc001f0cbf4fe21df9fc18800e122b4a7ea2450535a89016744db"
+  },
+  "d19-stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "d19-stdout.json": {
+    "bytes": 462,
+    "sha256": "febfebfbca34b732e9b8a21172c97c1dca6e420603e201b297170d354c219ed3"
+  },
+  "d19-text-diff.txt": {
+    "bytes": 1443,
+    "sha256": "8b74d21be7eadb06af1990c7c308b0d9b0d8ae8a30b3c19352dc1522217a05eb"
+  },
+  "decision-summary.json": {
+    "bytes": 4893,
+    "sha256": "c87ec69804bc2143052bded06a9515f331e0e5b51998b50f4cbc0416c01b0e10"
+  },
+  "doc-reader.html": {
+    "bytes": 969533,
+    "sha256": "76c7388769882b6c26334ce0404cc66d27055ba809710e2a11a9c9474542b0a9"
+  },
+  "doc-reader.txt": {
+    "bytes": 32160,
+    "sha256": "444aadd3a17aeed9fc6f5fd12b87c60d10f7f00c2a4c9d56ea7e4082b3f7f4fa"
+  },
+  "docx-writer.html": {
+    "bytes": 974656,
+    "sha256": "64227131e14b51e1646905b22687d7d96ca338bfeb1074247eaeedf0eff72210"
+  },
+  "docx-writer.txt": {
+    "bytes": 33045,
+    "sha256": "6c4f5e784ff2842ef65c28692522888e0f1e8015c64cb7b8ee72b31a8669237b"
+  },
+  "download.log": {
+    "bytes": 4804,
+    "sha256": "bf8d1af5e705da6fc09631b682a5ce418b9004e1f3fcb3f5ff64a0c82ded1dbe"
+  },
+  "execution.json": {
+    "bytes": 105,
+    "sha256": "58f7bcb6f244074f910673685bb1fa885b9f88d9817b9da190a6f3064950e688"
+  },
+  "features.html": {
+    "bytes": 958149,
+    "sha256": "426ba5c88cbf821bc6b7dfe5daff3580b9636ce89359d4d66001fcec0289d4b9"
+  },
+  "features.txt": {
+    "bytes": 29478,
+    "sha256": "2e1e20eb68ce4f8524d81f43472c223f93ce6ec9b5cbcdcb72644e4a7671e121"
+  },
+  "install-receipt.json": {
+    "bytes": 431831,
+    "sha256": "4f9fa3b5c34343201fa1a003388ec02d998220d4117c49690734135cdee96962"
+  },
+  "install.log": {
+    "bytes": 2242,
+    "sha256": "9a591cea7e0f0bf6963cdbbb5cc7a819cf5b5e644b76ca6a5e831b06b3b4bd82"
+  },
+  "installation.html": {
+    "bytes": 959048,
+    "sha256": "bcfa96973506f5ddeac5a0fd52cfc7624da5cfab762c8ff6542fb086e37312a1"
+  },
+  "installation.txt": {
+    "bytes": 28790,
+    "sha256": "d88c6a0ff07bc490d9946465613f08abcc4dc69ad12cff64fc48e7ed8840c872"
+  },
+  "official-doc-sources.json": {
+    "bytes": 993,
+    "sha256": "8a6fa688f8777ad4c94e05a1b14f54a21fd816452470965c1fd3ca168cdf2179"
+  },
+  "original-identity.json": {
+    "bytes": 362,
+    "sha256": "51f286e0c5ccdc4b29bd997dbd5dc7055ae4fdf28d640f383451c4eeaf8400b3"
+  },
+  "prepare.py": {
+    "bytes": 2325,
+    "sha256": "fd86b942cc2b375690e14a6ac4507f9a55855f3f774f42676ea3ce3c6657041b"
+  },
+  "pypi.json": {
+    "bytes": 14576,
+    "sha256": "87b545f5d984256b99212922a4ef6c48ec11e68bb9ef16ecdc936f1021c9a537"
+  },
+  "pyproject.toml": {
+    "bytes": 1773,
+    "sha256": "3f6adb6245df841fc6bc2159965a684690a2a64a1077e48fabbbb320df17d878"
+  },
+  "requirements-hashed.txt": {
+    "bytes": 1086,
+    "sha256": "09a9f4e4bbe1ad124d8cba544580dbc71f5d947620519343256aac3206d99e56"
+  },
+  "requirements.txt": {
+    "bytes": 217,
+    "sha256": "cfd702c91f4e4a58d58acb1c0d9c49be986133eb8239549c9ea1a4adeee331e4"
+  },
+  "run-bounded.py": {
+    "bytes": 812,
+    "sha256": "56cdf0336900a3eda74b47932dda47b50ed568452bfd7c0a07b6c44c2a9869ac"
+  },
+  "sandbox.py": {
+    "bytes": 4179,
+    "sha256": "30058a462b39db0a42f2cde9cebc3eca150ecaf64349dea88d7465ab69d78c38"
+  },
+  "source/aspose/words_foss/doc_reader/doc_file_reader.py": {
+    "bytes": 61650,
+    "sha256": "882522eaf71726c2afd3a569cd5deaddbd0c0d23d701296616381e3de0f8dcab"
+  },
+  "source/aspose/words_foss/doc_reader/doc_file_reader_core.py": {
+    "bytes": 26500,
+    "sha256": "9669e54c12bc44795cccc18d8d368f49c77808244efcc46fe6725f1f08fc65b7"
+  },
+  "source/aspose/words_foss/docx_writer/drawing.py": {
+    "bytes": 39362,
+    "sha256": "0d8305c8f5686864afe2c07011e6f05ac61def6cc3e2184f6b8dd4037e27c6e0"
+  },
+  "source/aspose/words_foss/docx_writer/writer.py": {
+    "bytes": 12938,
+    "sha256": "ee5d3286b40af971e82c3d146b6b085d9afbd64deccca2c43b2cb784870b0988"
+  },
+  "structure-comparison.json": {
+    "bytes": 9720,
+    "sha256": "388c4ad771593250cef0d3a617d848b3c1359c56e191454a505be0c3c23fe585"
+  },
+  "synthetic/input.docx": {
+    "bytes": 38040,
+    "sha256": "c0a2788947662e10b73e724c6177dfceb16dc687f3f1b1520b7899af6cec6cea"
+  },
+  "synthetic/output.docx": {
+    "bytes": 15487,
+    "sha256": "dd457efc9dbd293b67b52d8d191de8a339e376855ac2168ee54e4f5ade4f5933"
+  },
+  "synthetic-stderr.log": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "synthetic-stdout.json": {
+    "bytes": 464,
+    "sha256": "abb41a6ad57ad91b4fa8cf20b562c7cf6841454662e3385a37ea923921eb7777"
+  },
+  "upstream-commit.json": {
+    "bytes": 47048,
+    "sha256": "6afdf9b765d4ceea9b2c72f4846af63fa4abf0c0e486c8a4f8e497481a908c03"
+  },
+  "upstream-tree.json": {
+    "bytes": 51512,
+    "sha256": "0456557c412478fc6fb5cef98ce98b64bb889ba76d0ef9333b35645d4b2be3c0"
+  },
+  "wheel-hashes.json": {
+    "bytes": 1784,
+    "sha256": "80810c5ae8653f71739e2b9822cb4b2d51a9240ba82564e82c4c11a12fb44939"
+  }
+}
