@@ -968,19 +968,23 @@ def layer_in_force(notices, status):
     return committed
 
 
-def read_state():
+def read_state(*, last_completed=False):
     """The merged state: status.json, the ledger layer in force, and what a first notice the previous
     release made announced. ⚠️ Raises Unreadable, with its label, for ANY state this release cannot
-    validate or recover: check() then restarts the record and says so (FAIL CLOSED MEANS ALERT)."""
+    validate or recover: check() then restarts the record and says so (FAIL CLOSED MEANS ALERT).
+
+    `last_completed` is for a reader that could not wait out a running check (see settled()): a
+    notice that check is making right now is not yet part of any completed state, so the state that
+    check began from, which its ledger keeps, is read instead."""
     try:
-        return merged_state()
+        return merged_state(last_completed)
     except Unreadable:
         raise
     except Exception:
         raise Unreadable('incident_record_invalid') from None
 
 
-def merged_state():
+def merged_state(last_completed):
     path = DIRECTORY / 'status.json'
     if not path.exists() and not path.is_symlink():
         # Partial recovery may lose mutable state while retaining a durable
@@ -1004,7 +1008,12 @@ def merged_state():
         validate_status(value)
     with unreadable('ledger_invalid'):
         notices = read_notices() or {'incident': None, 'announced_at': no_announcements(), 'committed': None}
-    notices = layer_in_force(notices, value)
+    kept = notices['committed']
+    if last_completed and kept is not None and (value == kept['status'] or committed_by(notices, value)):
+        # A notice in flight: its ledger (and perhaps status.json) landed, its check has not finished.
+        value, notices = kept['status'], kept
+    else:
+        notices = layer_in_force(notices, value)
     # ⚠️ EVERY STAMP IN THE LAYER IN FORCE IS A NOTICE THAT WAS MADE. A stamp for a notice that never
     # began can only come from a notice write whose status.json never landed, and layer_in_force has
     # already discarded that layer. A stamp LATER than status.json's last_attempt_at is therefore not
@@ -1205,7 +1214,9 @@ def locked():
 
 @contextmanager
 def reading():
-    """A consistent read of what check() writes: the same lock, held SHARED.
+    """A consistent read of what check() writes: the same lock, held SHARED. Yields whether it is
+    held: False when a check still holds it after READ_WAIT_SECONDS, for the caller to read the last
+    completed state instead (settled()), never to report the monitor broken.
 
     ⚠️ OPENED READ-ONLY AND NEVER CREATED. The publisher calls status() from a unit whose
     ProtectSystem=strict sandbox grants no write to this directory, so an O_CREAT or O_RDWR open
@@ -1217,13 +1228,69 @@ def reading():
     except FileNotFoundError:
         fd = None
     try:
+        held = True
         if fd is not None:
             lock_file(fd)
-            hold(fd, fcntl.LOCK_SH, READ_WAIT_SECONDS)
-        yield
+            try:
+                hold(fd, fcntl.LOCK_SH, READ_WAIT_SECONDS)
+            except BlockingIOError:
+                held = False
+        yield held
     finally:
         if fd is not None:
             os.close(fd)
+
+
+#: A read made while a check holds the lock is repeated until status.json is the same before and
+#: after it, this many times at most, this far apart: a check writes it at most three times.
+SETTLE_ATTEMPTS = 20
+SETTLE_PAUSE_SECONDS = 0.05
+
+
+def fingerprint(path):
+    """Enough of a file to tell whether it was replaced, without following or trusting it."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    except OSError as failure:
+        return ('unopenable', failure.errno)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
+            return ('other', info.st_ino, info.st_mode, info.st_size)
+        chunks = []
+        while chunk := os.read(fd, 65537):
+            chunks.append(chunk)
+        return b''.join(chunks)
+    finally:
+        os.close(fd)
+
+
+def settled():
+    """⚠️ THE LAST COMPLETED STATE, READ WITHOUT THE LOCK A RUNNING CHECK HOLDS (F4, round 2).
+
+    The check unit may run for 60 s, longer than a reader can wait. Every file a check writes is
+    replaced atomically, and status.json is written by every write, so a read during which
+    status.json did not change sees what a crash at that instant would leave: a state read_state
+    recovers exactly as the next check would. The one thing no crash leaves is a notice in flight,
+    and read_state(last_completed=True) reads the state its check began from instead. Request records
+    are immutable once written.
+    """
+    path = DIRECTORY / 'status.json'
+    for _ in range(SETTLE_ATTEMPTS):
+        before = fingerprint(path)
+        try:
+            state = read_state(last_completed=True)
+            outcome = (state, named_notice(state))
+        except Unreadable as failure:
+            outcome = failure
+        if fingerprint(path) == before:
+            if isinstance(outcome, Unreadable):
+                raise outcome
+            return outcome
+        time.sleep(SETTLE_PAUSE_SECONDS)
+    raise Unreadable('state_invalid')
 
 
 @contextmanager
@@ -1674,9 +1741,14 @@ def status(at=None):
     at = at or now()
     try:
         backup.private_dir(DIRECTORY)
-        with reading():
-            state = read_state()
-            latest = named_notice(state)
+        with reading() as held:
+            if held:
+                state = read_state()
+                latest = named_notice(state)
+            else:
+                # A check is running and has held the lock past READ_WAIT_SECONDS: report the last
+                # completed state and say so, never the monitor broken merely because it is running.
+                state, latest = settled()
         alert = public_receipt(latest) if latest else None
         try:
             read_configuration()
@@ -1710,7 +1782,7 @@ def status(at=None):
                         recovery=recovery, local_capture=local_capture_status(at), external=external,
                         incident=incident)
         result.update(monitor_age_seconds=int(age) if age is not None else None,
-                      stale_after_seconds=STALE_SECONDS)
+                      stale_after_seconds=STALE_SECONDS, check_running=not held)
         return result, 0 if result['healthy'] or condition in WARNINGS | {'offsite_renewal_in_progress'} else 1
     except Unreadable as failure:
         # Read-only: the next check restarts the record and announces it (FAIL CLOSED MEANS ALERT).
