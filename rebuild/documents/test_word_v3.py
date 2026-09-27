@@ -826,5 +826,66 @@ class ControlReadBack(unittest.TestCase):
         self.assertEqual(controls_shown(out), [("☒", "1"), ("☐", "0")])
 
 
+def control_checklist_bytes():
+    """The refuter's p1c input: a check-all-that-apply column whose boxes are checkbox controls, Warfarin printed
+    ticked."""
+    doc = Document()
+    doc.add_paragraph("Synthetic medication reconciliation")
+    table = doc.add_table(rows=4, cols=2)
+    table.cell(0, 0).text = "Medication"
+    table.cell(0, 1).text = "Continue (check all that apply)"
+    for r, name in ((1, "Warfarin"), (2, "Metformin"), (3, "Aspirin")):
+        table.cell(r, 0).text = name
+        table.cell(r, 1).paragraphs[0]._p.append(checkbox_control(checked=(r == 1)))
+    return docx_bytes(doc)
+
+
+def control_grid_bytes():
+    """The refuter's p1 input: a Yes/No grid whose answer cells are checkbox controls, Chest pain printed Yes."""
+    doc = Document()
+    doc.add_paragraph("Synthetic review of systems")
+    table = doc.add_table(rows=3, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        table.cell(0, c).text = h
+    table.cell(1, 0).text = "Chest pain"
+    table.cell(2, 0).text = "Dyspnea"
+    for r in (1, 2):
+        for c in (1, 2):
+            table.cell(r, c).paragraphs[0]._p.append(checkbox_control(checked=(r == 1 and c == 1)))
+    return docx_bytes(doc)
+
+
+class ControlsInBoxCells(unittest.TestCase):
+    """R2: a table cell whose box is a checkbox control is read and written as that control."""
+
+    def test_a_control_cell_printed_ticked_is_recorded_and_kept_when_unanswered(self):
+        from documents import word_v3
+        data = control_checklist_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        field = next(f for f in fields if f["kind"] == "multi_choice")
+        self.assertEqual(field["options"], ["Warfarin", "Metformin", "Aspirin"])
+        self.assertEqual(field.get("printed_ticked"), [0], "Warfarin is printed ticked")
+        self.assertEqual(controls_shown(word_v3.fill(data, fields, {})), [("☒", "1"), ("☐", "0"), ("☐", "0")])
+
+    def test_an_answer_sets_every_control_of_the_checklist(self):
+        from documents import word_v3
+        data = control_checklist_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        field = next(f for f in fields if f["kind"] == "multi_choice")
+        out = word_v3.fill(data, fields, {field["key"]: ["Metformin"]})
+        self.assertEqual(controls_shown(out), [("☐", "0"), ("☒", "1"), ("☐", "0")])
+        out = word_v3.fill(data, fields, {field["key"]: ["Aspirin", "Warfarin"]})
+        self.assertEqual(controls_shown(out), [("☒", "1"), ("☐", "0"), ("☒", "1")])
+
+    def test_a_grid_of_controls_takes_the_other_option(self):
+        from documents import word_v3
+        data = control_grid_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        chest = fields_by_label(fields)["Chest pain"]
+        self.assertEqual((chest["kind"], chest["options"], chest.get("printed_ticked")), ("choice", ["Yes", "No"], [0]))
+        out = word_v3.fill(data, fields, {chest["key"]: "No"})
+        self.assertEqual(controls_shown(out), [("☐", "0"), ("☒", "1"), ("☐", "0"), ("☐", "0")])
+
+
 if __name__ == "__main__":
     unittest.main()

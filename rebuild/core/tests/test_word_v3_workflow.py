@@ -751,6 +751,36 @@ class V3PrintedTicks(V3Fixture, TestCase):
         self.assertIn("Consent obtained ☐", text)
 
 
+@override_settings(**V3)
+class V3ControlCells(V3Fixture, TestCase):
+    """R2 end to end: a checklist whose boxes are checkbox controls in cells. The page names the box the blank form
+    prints ticked, and an answer sets every control of the checklist."""
+
+    def setUp(self):
+        super().setUp()
+        from documents.test_word_v3 import control_checklist_bytes
+        self.template, _ = self.uploaded(data=control_checklist_bytes(), name="Synthetic reconciliation")
+        self.version = self.confirm(self.template)
+        self.field = next(f for f in self.version.fields if f["kind"] == "multi_choice")
+        self.assertEqual(self.new_encounter(self.version, notes="Synthetic reconciliation notes").status_code, 302)
+        self.encounter = Encounter.objects.get()
+
+    def test_the_page_names_the_printed_tick_and_the_answer_is_exported(self):
+        from documents.test_word_v3 import controls_shown
+        page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
+        self.assertIn("With no option chosen, the form keeps what it prints: Warfarin ticked.", page)
+        self.assertIn("decided no answer belongs here; the exported form keeps what it prints: Warfarin ticked.", page)
+        payload = {"revision": Encounter.objects.get(pk=self.encounter.pk).revision, "answer_" + self.field["key"]: ["Metformin"]}
+        for f in self.version.fields:
+            payload["reviewed_" + f["key"]] = "on"
+        self.assertEqual(self.client.post(f"/encounters/{self.encounter.pk}/save/", payload).status_code, 302)
+        response = self.client.post(f"/encounters/{self.encounter.pk}/finalize/",
+                                    {"revision": Encounter.objects.get(pk=self.encounter.pk).revision, "reviewed": "on"}, follow=True)
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        self.assertEqual(controls_shown(private_path(encounter.export_path).read_bytes()), [("☐", "0"), ("☒", "1"), ("☐", "0")])
+
+
 def smoker_form_bytes():
     doc = Document()
     doc.add_paragraph("Synthetic smoking status")
