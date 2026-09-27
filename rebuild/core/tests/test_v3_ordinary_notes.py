@@ -263,29 +263,31 @@ class OneGovernanceReader(SimpleTestCase):
 
 
 class ScopeInOrdinarySentences(SimpleTestCase):
-    """R12: scope words and quotations hold a whole v3 note only from a heading-like line; complete statements."""
+    """R12 WITHDRAWN (round 2, F1/F3): contract v3 reads scope note-wide and completeness by the verb list, exactly as
+    the tab contract does. Reading scope only from heading-like lines, and 'four words and a closing mark' as complete,
+    adopted denied, conditional and other people's findings as `supported`."""
 
     fields = FIELDS + [field('v3_7', 'Family history', 'long_text'), field('v3_8', 'Social history')]
 
-    def test_a_scope_word_in_an_ordinary_sentence_holds_only_that_sentence_when_selected(self):
+    def test_a_scope_word_or_a_quotation_anywhere_holds_every_answer_in_the_note(self):
         base = 'Patient presents with right knee pain for three weeks. Plan is physiotherapy twice weekly.'
         for extra in (' Return if symptoms worsen.', ' Swelling is noted below the knee.', ' He might need surgery.',
                       ' These symptoms are worse at night.', ' "It gives way," he says.',
                       ' He takes no medications other than those listed.', ' His family history is noncontributory.'):
             notes = base + extra
-            units, inherited = g.source_units(notes, g.v3_generation_fields(self.fields)[0])
-            self.assertFalse(inherited, extra)
-            out = run(notes, {'Chief complaint': ['Patient presents with right knee pain for three weeks.'],
-                              'Plan': ['Plan is physiotherapy twice weekly.', extra.strip()]}, fields=self.fields)
-            self.assertEqual(out['Chief complaint']['status'], 'supported', extra)
-            self.assertEqual(out['Plan']['status'], 'conflict', extra)
-            self.assertEqual(run(notes, {'Plan': ['Plan is physiotherapy twice weekly.']}, fields=self.fields)
-                             ['Plan']['status'], 'supported', extra)
+            with self.subTest(extra=extra):
+                units, inherited = g.source_units(notes, g.v3_generation_fields(self.fields)[0])
+                self.assertTrue(inherited)
+                out = run(notes, {'Chief complaint': ['Patient presents with right knee pain for three weeks.'],
+                                  'Plan': ['Plan is physiotherapy twice weekly.']}, fields=self.fields)
+                for label in ('Chief complaint', 'Plan'):
+                    self.assertEqual((out[label]['status'], out[label]['text']), ('conflict', ''), label)
         held = run('Plan: physiotherapy if pain persists.', {'Plan': ['Plan: physiotherapy if pain persists.']})['Plan']
         self.assertEqual((held['status'], held['text']), ('conflict', ''))
         notes = 'Family history: father had an MI at 50.'
-        self.assertEqual(run(notes, {'Family history': [notes]}, fields=self.fields)['Family history']['text'],
-                         'father had an MI at 50.', "the form's own label is not a scope word in its answer")
+        held = run(notes, {'Family history': [notes]}, fields=self.fields)['Family history']
+        self.assertEqual((held['status'], held['text']), ('conflict', ''), "the tab contract reads the label's words too")
+        self.assertEqual(held['held_candidate']['text'], 'father had an MI at 50.')
 
     def test_a_heading_like_line_still_holds_the_whole_note(self):
         for notes in ('Family history:\nFather had an MI.', 'If symptoms recur:\nPatient presents with knee pain.',
@@ -293,19 +295,23 @@ class ScopeInOrdinarySentences(SimpleTestCase):
             _, inherited = g.source_units(notes, g.v3_generation_fields(self.fields)[0])
             self.assertTrue(inherited, notes)
 
-    def test_a_complete_statement_needs_a_listed_verb_or_four_words_and_a_closing_mark(self):
-        for label, sentence in (('Chief complaint', 'He fell from a ladder yesterday and hurt his left wrist.'),
+    def test_a_complete_statement_needs_a_listed_verb(self):
+        for label, sentence in (('Chief complaint', 'Patient presents with right knee pain for three weeks.'),
+                                ('Allergies', 'She reported a rash after amoxicillin.'),
+                                ('Social history', 'She has smoked ten cigarettes a day for years.')):
+            answer = run(sentence, {label: [sentence]}, fields=self.fields)[label]
+            self.assertEqual((answer['status'], answer['text']), ('supported', sentence), sentence)
+        # No verb from the list: held with the candidate, never adopted, however many words and whatever it closes with.
+        for label, fragment in (('Chief complaint', 'He fell from a ladder yesterday and hurt his left wrist.'),
                                 ('Allergies', 'She developed a rash after amoxicillin.'),
                                 ('Social history', 'She smokes ten cigarettes a day.'),
                                 ('Chief complaint', 'Mother brings in her son with ear pain.'),
-                                ('Allergies', 'No known drug allergies.')):
-            answer = run(sentence, {label: [sentence]}, fields=self.fields)[label]
-            self.assertEqual((answer['status'], answer['text']), ('supported', sentence), sentence)
-        for label, fragment in (('Allergies', 'NKDA.'), ('Chief complaint', 'Right knee.'),
-                                ('Chief complaint', 'Follow-up for hypertension.'),
+                                ('Allergies', 'No known drug allergies.'), ('Allergies', 'NKDA.'),
+                                ('Chief complaint', 'Right knee.'), ('Chief complaint', 'Follow-up for hypertension.'),
                                 ('Chief complaint', 'Knee pain after a fall')):
             answer = run(fragment, {label: [fragment]}, fields=self.fields)[label]
             self.assertEqual((answer['status'], answer['text']), ('conflict', ''), fragment)
+            self.assertEqual(answer['held_candidate']['text'], fragment, fragment)
 
 
 def live_config(**extra):

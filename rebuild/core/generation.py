@@ -324,13 +324,6 @@ def tab_evidence_contract(fields):
         and f['locator'].get('tab_form',{}).get('version') == 1 for f in fields)
 
 
-#: Contract v3: an unpunctuated, unlabelled line of at most this many words reads as a heading (`Family history`, `If
-#: symptoms recur`); its scope words govern the note. A longer one is dictation, and holds only itself.
-V3_HEADING_WORDS = 8
-#: A statement that closes like a sentence (the same test `source_units` applies to a line).
-CLOSED_STATEMENT = re.compile(r'[.!?]["\')\]]?$')
-
-
 def source_units(notes, fields, *, context_labels=()):
     """Offer complete source sentences with exact offsets, never word fragments.
 
@@ -342,11 +335,15 @@ def source_units(notes, fields, *, context_labels=()):
     # ⚠️ CONTRACT v3: A LINE THAT BEGINS WITH A FORM LABEL IS ONE UNIT (R2/R3). Its answer is the rest of its line, as
     # every other reader of that form takes it: split into sentences, 'Consent obtained: yes. To be obtained tomorrow.'
     # offered 'yes.' alone and ticked the box, and 'Allergies: penicillin. Sorry, I mean amoxicillin.' filled penicillin.
-    whole_labelled_lines=v3=natural_v3(fields)
-    # ⚠️ CONTRACT v3: SCOPE WORDS AND QUOTATIONS MAKE THE WHOLE NOTE INHERITED ONLY IN A HEADING-LIKE LINE (R12a). One
-    # 'Return if symptoms worsen.' or 'below the knee' in an ordinary sentence held every answer in the note; there it
-    # holds only its own sentence, when that sentence is selected (`validate_tab_selections`).
-    units=[]; offset=0; inherited=bool(QUOTED_SOURCE.search(notes)) and not v3
+    whole_labelled_lines=natural_v3(fields)
+    # ⚠️ CONTRACT v3 READS SCOPE EXACTLY AS THE TAB CONTRACT DOES, NOTE-WIDE (round 2, F1). Any line that ends in a colon
+    # or carries a pointer or reframer word, any quotation, a denial before a colon, and an unpunctuated unlabelled line
+    # in a note of more than one line each make EVERY answer in the note inherited: held, never adopted. Reading them
+    # only from heading-like lines (dd51c49a) adopted 'Polyp in the sigmoid colon.' under 'Findings: none of the
+    # following were seen.', the cephalexin after 'If the wound looks infected ...' and 'He had a myocardial infarction'
+    # after 'Family history is significant for her father.'. The price is stated, not hidden: one 'Return if symptoms
+    # worsen.' holds every answer in its note, and an unpunctuated multi-line dictation adopts nothing (F6: 0 of 6).
+    units=[]; offset=0; inherited=bool(QUOTED_SOURCE.search(notes))
     multiline=sum(bool(line.strip()) for line in notes.splitlines())>1
     for line in notes.splitlines(keepends=True):
         stripped=line.strip()
@@ -354,12 +351,7 @@ def source_units(notes, fields, *, context_labels=()):
             offset+=len(line); continue
         start=offset+line.index(stripped)
         parsed=labelled_value(stripped,labels)
-        if v3:
-            unfinished=not re.search(r'[.!?]["\')\]]?$',stripped) and not (parsed and parsed[1])
-            heading_like=ends_in_colon(stripped) or (unfinished and len(stripped.split())<=V3_HEADING_WORDS)
-            if ends_in_colon(stripped) or (heading_like and (INHERITED_SCOPE.search(stripped) or QUOTED_SOURCE.search(stripped))):
-                inherited=True
-        elif ends_in_colon(stripped) or INHERITED_SCOPE.search(stripped): inherited=True
+        if ends_in_colon(stripped) or INHERITED_SCOPE.search(stripped): inherited=True
         if not re.search(r'[.!?]["\')\]]?$',stripped) and not (parsed and parsed[1]):
             # A lone unpunctuated statement is still complete under the old
             # contract; multiple fragments can inherit an omitted heading.
@@ -823,6 +815,12 @@ HELD_REASON_DISAGREE = ('Read from the notes but NOT offered as an answer: the n
 HELD_REASON_DISAGREE_WORD = ('Read from the notes but NOT offered as an answer: the notes give this question more than one '
                              'answer, or an answer that differs from its own labelled line. Choose or type your own '
                              'answer, and paste its complete source line.')
+
+
+#: Contract v3: a candidate held with no governing line to show.
+V3_HELD_REASON = ('Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, '
+                  'a question, or words that point to other lines), or another sentence next to it in the notes may change '
+                  'what it means. Read it in the full note, then type your own answer, or choose "Leave blank — reviewed".')
 
 
 def held_reason(context, word_form, disagree=False):
@@ -1628,17 +1626,12 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if notes[unit['start']:unit['end']]!=quote: raise ValidationError('Evidence offset mismatch.')
             evidence.append({k:unit[k] for k in ('quote','start','end')})
             if unit['correction_value'] and corrected_quantity(unit,field) is None: guarded=True
-            if ':' not in quote and not finite.search(quote) and not (
-                    v3 and len(quote.split())>=4 and CLOSED_STATEMENT.search(quote)):
-                # A verbless fragment ('Left knee.', 'NKDA.') is held. Contract v3 (R12b): a statement of four or more
-                # words that closes like a sentence is complete whatever its verb ('No known drug allergies.').
-                guarded=True
+            # A verbless fragment ('Left knee.', 'Warfarin 5 mg daily.') is held: the verb-list rule of the tab contract
+            # (round 2, F3: 'four or more words and a closing mark' adopted 'Warfarin 5 mg daily.' before 'Stopped last
+            # month.' and the question 'Nausea, vomiting or abdominal pain?' as its own answer).
+            if ':' not in quote and not finite.search(quote): guarded=True
             own_value=parsed_of[unit['id']]
             if v3 and own_value and own_value[1] and POINTER_ONLY_VALUE.fullmatch(own_value[1].strip()):
-                guarded=True
-            if v3 and (INHERITED_SCOPE.search(said:=own_value[1] if own_value else quote) or QUOTED_SOURCE.search(said)):
-                # Contract v3 (R12a): a scope word or a quotation inside an ordinary sentence holds THAT sentence (its value,
-                # not the form's own label: 'Family history: …' is that question's answer), never the whole note.
                 guarded=True
             # Dates and consent are not inferred from a procedure date or general
             # narrative. These source subjects must themselves be documented.
@@ -1673,6 +1666,11 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         elif status=='supported' and (context:=governed) is not None:
             # ONE RULE for the page and for finalization: what finalization would refuse is held here.
             answer=held_for_decision(answer,texts,own,context)
+        elif status=='conflict' and v3 and governed is None and texts:
+            # ⚠️ CONTRACT v3: A HOLD KEEPS ITS CANDIDATE (round 2). A conflict no line governs (a fragment, a question, a
+            # value another sentence may change) kept only its evidence, and the page showed an empty conflict.
+            answer={**answer,'held_candidate':{'text':'\n'.join(texts),'evidence':own,'context':[],
+                    'reason':held_reason([],False,True) if (item.conflict or len(explicit)>1) else V3_HELD_REASON}}
         elif status=='conflict':
             answer=with_governing_lines(answer,texts,own,governed)
         output[item.key]=answer
