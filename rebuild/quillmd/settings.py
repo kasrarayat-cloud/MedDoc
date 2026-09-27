@@ -78,6 +78,12 @@ AI_MODEL=os.getenv('QUILLMD_AI_MODEL','gpt-4.1-mini')
 AI_INPUT_RATE=os.getenv('QUILLMD_AI_INPUT_RATE','')
 AI_OUTPUT_RATE=os.getenv('QUILLMD_AI_OUTPUT_RATE','')
 AI_CACHED_RATE=os.getenv('QUILLMD_AI_CACHED_RATE','')
+# Request profile (core.generation.request_profile). Read ONLY when QUILLMD_AI_MODEL is claude-sonnet-5: every other
+# model — claude-sonnet-4-6 included — keeps the pre-profile request byte for byte and ignores the first two.
+# Thinking 'disabled' | 'adaptive'; effort 'low' | 'medium' | 'high'. Unset inference geography sends no inference_geo.
+AI_THINKING=os.getenv('QUILLMD_AI_THINKING','disabled')
+AI_EFFORT=os.getenv('QUILLMD_AI_EFFORT','medium')
+AI_INFERENCE_GEO=os.getenv('QUILLMD_AI_INFERENCE_GEO','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
 STRIPE_WEBHOOK_SECRET=os.getenv('STRIPE_WEBHOOK_SECRET','')
 STRIPE_LIVE_ENABLED=False
