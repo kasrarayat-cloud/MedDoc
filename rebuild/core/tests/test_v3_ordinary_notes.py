@@ -4,6 +4,9 @@ The provider's choice is simulated by unit selections, exactly the shape the liv
 What is asserted is what the application does with it: complete source sentences are adopted, options are filled
 only from their own labelled statement, and governance, fragments and corrections are held, never discarded.
 """
+import time
+from unittest.mock import patch
+
 from django.test import SimpleTestCase, override_settings
 
 from core import generation as g
@@ -107,3 +110,28 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
         self.assertFalse(g.natural_v3(legacy))
         self.assertFalse(g.tab_evidence_contract(legacy))
         self.assertTrue(g.natural_v3(FIELDS))
+
+
+class OneReadingPerUnit(SimpleTestCase):
+    """R7: each unit is read once per validation, never once per question (a pure caching change)."""
+
+    def test_a_hundred_questions_over_999_units_read_each_unit_once(self):
+        fields = [field('v3_%d' % i, 'Pain %d' % i) for i in range(100)]
+        notes = ' '.join('Pain is %d.' % i for i in range(999))
+        units, _ = g.source_units(notes, fields)
+        self.assertEqual(len(units), 999)
+        selections = g.UnitSelections(fields=[g.UnitSelection(key=f['key'], unit_ids=[units[0]['id']] if i == 0 else [],
+                                                              conflict=False) for i, f in enumerate(fields)])
+        real, calls = g.tab_source_value, []
+
+        def counted(*args):
+            calls.append(1)
+            return real(*args)
+
+        with patch.object(g, 'tab_source_value', side_effect=counted):
+            started = time.monotonic()
+            answers = g.validate_selections(notes, fields, selections, evidence_contract=g.TAB_CONTRACT)
+            elapsed = time.monotonic() - started
+        self.assertEqual(len(calls), len(units), 'one reading per unit, however many questions the form asks')
+        self.assertLess(elapsed, 2.0)
+        self.assertEqual(answers['v3_0']['text'], 'Pain is 0.')

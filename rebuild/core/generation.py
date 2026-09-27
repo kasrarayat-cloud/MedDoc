@@ -201,9 +201,10 @@ def fixture(notes,fields,*,context_labels=(),evidence_contract=None):
     labels=recognized_labels(fields,context_labels)
     if evidence_contract != 'legacy' and (tab_evidence_contract(fields) or natural_v3(fields)):
         units,_=source_units(notes,fields,context_labels=context_labels)
+        parsed=[labelled_value(u['quote'],labels) for u in units]      # each unit parsed once, not once per field
         for f in fields:
             label=f['label'].strip().rstrip(':?').casefold()
-            quotes=[u['quote'] for u in units if (p:=labelled_value(u['quote'],labels)) and p[0]==label and p[1]]
+            quotes=[u['quote'] for u,p in zip(units,parsed) if p and p[0]==label and p[1]]
             result.append(Selection(key=f['key'],quotes=quotes,conflict=False))
         return Selections(fields=result)
     for f in fields:
@@ -1289,10 +1290,11 @@ def with_governing_lines(answer, texts, own, context, word_form=False):
                                          'reason': held_reason(context, word_form)}}
 
 
-def occurrence_index(notes, labels, units=None):
+def occurrence_index(notes, labels, units=None, parsed_units=None):
     """Where every quote a question may select occurs, as `(anywhere, by_label)`: ONE reader for both validators and
     the page (ninth pass: the validators judged one occurrence of a repeated quote, and the page judged only the one a
-    stored draft kept). Legacy (`units` None): whole lines, and values after a recognized label; tab: each unit."""
+    stored draft kept). Legacy (`units` None): whole lines, and values after a recognized label; tab: each unit.
+    `parsed_units`: each unit's `tab_source_value`, when the caller already read them (the same reading, once)."""
     anywhere, by_label, value_of = {}, {}, {}
     if units is None:
         offset = 0
@@ -1310,8 +1312,9 @@ def occurrence_index(notes, labels, units=None):
                         value_of[full] = (parsed[0], parsed[1])
             offset += len(line)
     else:
-        for unit in units:
-            parsed = tab_source_value(unit['quote'], labels)
+        if parsed_units is None:
+            parsed_units = [tab_source_value(unit['quote'], labels) for unit in units]
+        for unit, parsed in zip(units, parsed_units):
             if parsed:
                 own = by_label.setdefault(parsed[0], {})
                 own.setdefault(unit['quote'], []).append(unit['start'])
@@ -1520,7 +1523,10 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
     governance=heading_governance(notes,labels)
-    index=occurrence_index(notes,labels,units)
+    # ⚠️ EACH UNIT IS READ ONCE PER VALIDATION, NOT ONCE PER QUESTION (R7): `tab_source_value` tries every label on every
+    # unit, so a 100-question form over 999 units spent 26 s here under the row lock. Same reading, same order.
+    parsed_units=[tab_source_value(unit['quote'],labels) for unit in units]
+    index=occurrence_index(notes,labels,units,parsed_units)
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     from .tab_review import clinician_identity
     output={}; used_numbered={}
@@ -1534,12 +1540,13 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             continue
         label=field['label'].strip().rstrip(':?').casefold()
         allowed={}; explicit={}
-        for unit in units:
-            quote=unit['quote']; parsed=tab_source_value(quote,labels)
+        for unit,parsed in zip(units,parsed_units):
+            quote=unit['quote']
             # Exact source question labels keep their previous cross-field guard.
             if parsed and parsed[0]!=label: continue
             value=parsed[1] if parsed else quote
-            corrected=corrected_quantity(unit,field)
+            # `correction_value` is INLINE_CORRECTION's own match, kept on the unit: without it there is nothing to correct.
+            corrected=corrected_quantity(unit,field) if unit['correction_value'] is not None else None
             if corrected is not None:value=corrected
             allowed[quote]=(unit,value)
             if parsed and parsed[1]: explicit.setdefault(value,unit)
