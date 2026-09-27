@@ -196,6 +196,39 @@ def anthropic_request(model,profile,system,payload,schema):
     return request
 
 
+_CLAUDE_VERSION=re.compile(r'claude-[a-z]+-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?')
+
+def us_inference_priced(provider):
+    """Whether a receipt's provider (`anthropic:<model>`) is a Claude 4.6-or-later model, the generation the US-only
+    inference multiplier applies to. Earlier models "always use standard pricing" (pricing page, read 2026-09-27)."""
+    family,_,model=str(provider).partition(':')
+    match=_CLAUDE_VERSION.fullmatch(model) if family=='anthropic' else None
+    return bool(match) and (int(match[1]),int(match[2] or 0))>=(4,6)
+
+
+def anthropic_usage_facts(response):
+    """What a NEW Anthropic receipt records beside the token counts. Historical receipts have none of these keys, which is
+    what keeps their recomputation unchanged (`audit_billing.recompute_list_cost` reads them the same way).
+
+    Values are kept only when they have the provider's type — a string or an int — so nothing but the provider's own
+    enumerations reaches a receipt; the refusal's free-text `explanation` is deliberately never recorded.
+    """
+    usage=getattr(response,'usage',None)
+    text=lambda value: value if isinstance(value,str) else None
+    facts={'inference_geo':text(getattr(usage,'inference_geo',None)),'stop_reason':text(getattr(response,'stop_reason',None))}
+    thinking=getattr(getattr(usage,'output_tokens_details',None),'thinking_tokens',None)
+    if type(thinking) is int: facts['thinking_tokens']=thinking     # already inside output_tokens; recorded, not re-priced
+    facts['stop_details_category']=text(getattr(getattr(response,'stop_details',None),'category',None))
+    return facts
+
+
+def us_inference_multiplier(provider,units):
+    """1.1 when the provider REPORTED US-only inference for a Claude 4.6+ model, otherwise 1. Decided from the metered
+    `usage.inference_geo`, never from configuration: a workspace whose default geography is `us` is billed 1.1× even for a
+    request that did not ask for it."""
+    return US_INFERENCE_MULTIPLIER if units.get('inference_geo')=='us' and us_inference_priced(provider) else Decimal(1)
+
+
 def configuration():
     import os
     config={'mode':settings.AI_MODE,'provider':settings.AI_PROVIDER,'model':settings.AI_MODEL,
@@ -1867,11 +1900,19 @@ def generate(notes,fields,config=None,*,context_labels=()):
         cached=getattr(u,'cache_read_input_tokens',0) or 0
         written=getattr(u,'cache_creation_input_tokens',0) or 0
         units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens}
+        # New receipts carry the metered geography, the thinking share of the output and why generation stopped.
+        units.update(anthropic_usage_facts(response))
+        provider=f"anthropic:{config['model']}"
         list_cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
+        geo=us_inference_multiplier(provider,units)
+        if geo!=1: list_cost*=geo
         discount=discount_rate(config);cost=discounted_cost(list_cost,discount)
+        recorded=cost_rates(r,list_cost,discount)
+        # Recorded only when applied, so a receipt priced at standard rates keeps exactly the rate shape it always had.
+        if geo!=1: recorded['inference_geo_multiplier']=str(geo)
         raw={'anthropic_response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels),
              'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
-        return raw,cost,units,cost_rates(r,list_cost,discount),f"anthropic:{config['model']}",getattr(response,'_request_id',None) or '',False
+        return raw,cost,units,recorded,provider,getattr(response,'_request_id',None) or '',False
     from openai import OpenAI
     client=OpenAI(timeout=profile['timeout_seconds'],max_retries=0)
     r=rates(config)

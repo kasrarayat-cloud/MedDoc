@@ -12,6 +12,21 @@ from core.models import CostReconciliation, Job, LedgerEntry, PlatformCost, Prov
 from core.security import private_path
 
 
+def us_inference_multiplier(provider, units, rates):
+    """1.1 when the receipt's METERED geography is US-only on a Claude 4.6+ model, else 1 — independently of settlement.
+
+    Historical receipts carry no `inference_geo` unit and no recorded multiplier, so they recompute exactly as before
+    this rule existed. A recorded multiplier that disagrees with the metered geography is evidence tampering or a
+    settlement defect, and fails the row rather than being believed."""
+    from core.generation import US_INFERENCE_MULTIPLIER, us_inference_priced
+    metered=provider.startswith('anthropic:') and units.get('inference_geo')=='us' and us_inference_priced(provider)
+    expected=US_INFERENCE_MULTIPLIER if metered else Decimal(1)
+    recorded=rates.get('inference_geo_multiplier')
+    if (Decimal(str(recorded)) if recorded is not None else Decimal(1))!=expected:
+        raise ValueError('Recorded inference geography multiplier disagrees with the metered geography')
+    return expected
+
+
 def recompute_list_cost(provider, units, rates):
     if provider.startswith(('anthropic:', 'openai:')):
         inputs=Decimal(units['input_tokens'])
@@ -19,7 +34,10 @@ def recompute_list_cost(provider, units, rates):
         outputs=Decimal(units['output_tokens'])
         written=Decimal(units.get('cache_creation_tokens',0))
         if provider.startswith('openai:'):inputs-=cached
-        return (inputs*Decimal(rates['input_per_million'])+cached*Decimal(rates['cached_per_million'])+outputs*Decimal(rates['output_per_million'])+written*Decimal(rates['input_per_million'])*Decimal('1.25'))/1000000
+        # `thinking_tokens` is deliberately absent: thinking is already inside output_tokens, which is what is billed.
+        cost=(inputs*Decimal(rates['input_per_million'])+cached*Decimal(rates['cached_per_million'])+outputs*Decimal(rates['output_per_million'])+written*Decimal(rates['input_per_million'])*Decimal('1.25'))/1000000
+        geo=us_inference_multiplier(provider,units,rates)
+        return cost*geo if geo!=1 else cost
     if provider.startswith('deepgram:'):
         return (Decimal(units['duration_seconds'])*Decimal(rates['usd_per_minute'])/60).quantize(Decimal(rates['cost_quantum_usd']),rounding=ROUND_HALF_EVEN)
     raise ValueError('No audited cost formula for provider')
