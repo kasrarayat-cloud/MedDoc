@@ -1226,6 +1226,14 @@ def accept_code(request,pk,code_pk):
                                            'This document changed after you opened it, in another window or by a colleague.')
                                 +' Nothing was accepted. Reopen it to see the current notes and codes.',409)
     if item is None:raise Http404
+    if item.accepted_by_id:
+        # ⚠️ AN ACCEPTANCE BELONGS TO WHOEVER MADE IT. Accepting does not renumber the revision, so a page opened before
+        # clinician A accepted still posts the current revision, and B's Accept from it re-stamped the code as B's, with a
+        # second coding.accept (refutation round 4, R4-6). Refused, not answered as a no-op: B is told the acceptance is
+        # A's, by the email the page shows beside it, and when — nothing is written or audited.
+        when=timezone.localtime(item.accepted_at).strftime('%Y-%m-%d %H:%M %Z') if item.accepted_at else 'an unrecorded time'
+        return document_refusal(request,e,f'This code was already accepted by {item.accepted_by.email}, at {when}. '
+                                          'Nothing was accepted. Reopen the document to see its current codes.',409)
     if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
     if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
     if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied
