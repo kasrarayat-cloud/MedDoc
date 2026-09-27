@@ -1,0 +1,140 @@
+{
+  "removed": [
+    {
+      "key": "v3_15",
+      "label": "Please give details of the discharge proposal including",
+      "kind": "long_text",
+      "context": "Conditional Discharge Proposal",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[14]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "7582d65a43510d496a41e9dfd18fddad760e2a67550766d470775a0d31daf115"
+      }
+    },
+    {
+      "key": "v3_22",
+      "label": "Report on leave",
+      "kind": "text",
+      "context": "Conditional Discharge Proposal",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[19]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "410ebae62c646ab61e59a5b039eb683912f9c38eceeb0018790660d8507d7059"
+      }
+    },
+    {
+      "key": "v3_29",
+      "label": "Please give details of the discharge proposal, including",
+      "kind": "long_text",
+      "context": "Absolute Discharge Proposal",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[26]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "d1570cf4380f75a364c7cb9a4e723dd2aa5cfc604d8d2df2f85e195d795a9ac8"
+      }
+    },
+    {
+      "key": "v3_32",
+      "label": "Please give details of the proposal, including",
+      "kind": "long_text",
+      "context": "Lifting s41 Restrictions",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[29]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "cf4156ab8ec444361ec874e15d9ba39c6fceed20c43e7d0c0d0f5931ce0c0ebd"
+      }
+    },
+    {
+      "key": "v3_35",
+      "label": "Please describe the patient’s mental disorder, including",
+      "kind": "long_text",
+      "context": "Patient’s Mental Disorder",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[32]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "ada62ac6867951e5195f14139e8508ce012dfe25009756293f367756556d868e"
+      }
+    },
+    {
+      "key": "v3_40",
+      "label": "State what effect these have had on the patient and how they have been addressed",
+      "kind": "text",
+      "context": "Patient’s Mental Disorder",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[34]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "b4b018b84fa1b3a257d58b7fb73a15bd0341a21be9e8d5c5813a3c6fc0d5001f"
+      }
+    },
+    {
+      "key": "v3_45",
+      "label": "Detail any history of discharge and recall to hospital",
+      "kind": "long_text",
+      "context": "Patient’s Mental Disorder",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[36]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "68e1cf010bf3fa32f2aef8d17df514fead04a60dd7596db64c35a86a039a33db"
+      }
+    },
+    {
+      "key": "v3_62",
+      "label": "Details of conditions requested by victim(s)",
+      "kind": "long_text",
+      "context": "Victims",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[49]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "2c4dcf934ba684b8a425ff23c868ae79f644fa4625307c758a5d2671c694245d"
+      }
+    },
+    {
+      "key": "v3_65",
+      "label": "Please consider the following",
+      "kind": "text",
+      "context": "Additional Comments",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[52]/tr[0]/tc[0]/p[1]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "70ea5371f062a6af1ad684a29e5d5ed4df8631f0368b1c74da0fb9f69af59dc4"
+      }
+    }
+  ],
+  "added": []
+}

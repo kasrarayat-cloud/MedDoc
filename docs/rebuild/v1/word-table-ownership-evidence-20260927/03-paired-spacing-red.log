@@ -1,0 +1,37 @@
+FFFF.
+======================================================================
+FAIL: test_paired_cell_label_spacing_is_not_a_second_answer (documents.test_question_boxes.QuestionBoxes.test_paired_cell_label_spacing_is_not_a_second_answer) (layout='ordinary')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 49, in test_paired_cell_label_spacing_is_not_a_second_answer
+    self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+AssertionError: [{'key': 'v3_1', 'label': 'Date of Birth', 'kind': 'date', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[1]', 'target': {'type': 'paragraph'}, 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[2]', 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8'}]}}] is not false
+
+======================================================================
+FAIL: test_paired_cell_label_spacing_is_not_a_second_answer (documents.test_question_boxes.QuestionBoxes.test_paired_cell_label_spacing_is_not_a_second_answer) (layout='merged')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 49, in test_paired_cell_label_spacing_is_not_a_second_answer
+    self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+AssertionError: [{'key': 'v3_1', 'label': 'Date of Birth', 'kind': 'date', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[1]', 'target': {'type': 'paragraph'}, 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[2]', 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8'}]}}] is not false
+
+======================================================================
+FAIL: test_paired_cell_label_spacing_is_not_a_second_answer (documents.test_question_boxes.QuestionBoxes.test_paired_cell_label_spacing_is_not_a_second_answer) (layout='multicolumn')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 49, in test_paired_cell_label_spacing_is_not_a_second_answer
+    self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+AssertionError: [{'key': 'v3_1', 'label': 'Date of Birth', 'kind': 'date', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[1]', 'target': {'type': 'paragraph'}, 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[2]', 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8'}]}}, {'key': 'v3_3', 'label': 'Date of Visit', 'kind': 'date', 'context': 'Date of Birth', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[2]/p[1]', 'target': {'type': 'paragraph'}, 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8'}}] is not false
+
+======================================================================
+FAIL: test_paired_cell_label_spacing_is_not_a_second_answer (documents.test_question_boxes.QuestionBoxes.test_paired_cell_label_spacing_is_not_a_second_answer) (layout='nested')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 49, in test_paired_cell_label_spacing_is_not_a_second_answer
+    self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+AssertionError: [{'key': 'v3_1', 'label': 'Date of Birth', 'kind': 'date', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[1]', 'target': {'type': 'paragraph'}, 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[2]', 'fingerprint': '8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8'}]}}] is not false
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.521s
+
+FAILED (failures=4)

@@ -1,0 +1,112 @@
+Creating test database for alias 'default' ('test_quillmd_ci')...
+Found 2 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying core.0001_initial... OK
+  Applying core.0002_job_payer... OK
+  Applying core.0003_immutable_records... OK
+  Applying core.0004_job_config... OK
+  Applying core.0005_providerreceipt... OK
+  Applying core.0006_receipt_immutable... OK
+  Applying core.0007_job_result_path_job_result_sha256... OK
+  Applying core.0008_payment_event_evidence... OK
+  Applying core.0009_provider_identifiers... OK
+  Applying core.0010_canonical_provider_settlement... OK
+  Applying core.0011_template_clinical_review... OK
+  Applying core.0012_billing_policy... OK
+  Applying core.0013_recording_charge_limit... OK
+  Applying core.0014_encounter_service_date... OK
+  Applying core.0015_reconciliation_evidence_guard... OK
+  Applying core.0016_user_session_version... OK
+  Applying core.0017_reconciliation_evidence_kind... OK
+  Applying core.0018_servicehealth... OK
+  Applying core.0019_clinicinvitation... OK
+  Applying core.0020_payment_livemode... OK
+  Applying core.0021_word_v3_mapping_review... OK
+  Applying core.0022_mapping_job_scope... OK
+  Applying otp_totp.0001_initial... OK
+  Applying otp_totp.0002_auto_20190420_0723... OK
+  Applying otp_totp.0003_add_timestamps... OK
+  Applying sessions.0001_initial...test_missing_ordinary_long_worker_correction_finalization_and_export (pair_workflow.D30.test_missing_ordinary_long_worker_correction_finalization_and_export) ... /opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FAIL
+test_missing_ordinary_long_worker_correction_finalization_and_export (pair_workflow.D31.test_missing_ordinary_long_worker_correction_finalization_and_export) ... FAIL
+
+======================================================================
+FAIL: test_missing_ordinary_long_worker_correction_finalization_and_export (pair_workflow.D30.test_missing_ordinary_long_worker_correction_finalization_and_export)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_question_box_workflow.py", line 85, in test_missing_ordinary_long_worker_correction_finalization_and_export
+    template, version = self.uploaded(data=original, name='SYNTHETIC separate answer box')
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-workflows-20260927/pair_workflow.py", line 19, in uploaded
+    self.assertEqual(wrong,[], 'A plain label spacer became a second answer destination')
+AssertionError: Lists differ: [{'key': 'v3_7', 'kind': 'date', 'label': [257 chars]c'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_7', 'kind': 'date', 'label': 'Date of Birth', 'context': 'Patient’s Details', 'locator': {'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[5]/tc[0]/p[2]', 'target': {'type': 'paragraph'}, 'contract': 'v3', 'fingerprint': 'cec53843335c4c2f3468bdd0cb97c6bdd0738e48b54fc47f36809ca674060cdc'}}
+
++ []
+- [{'context': 'Patient’s Details',
+-   'key': 'v3_7',
+-   'kind': 'date',
+-   'label': 'Date of Birth',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': 'cec53843335c4c2f3468bdd0cb97c6bdd0738e48b54fc47f36809ca674060cdc',
+-               'part': 'word/document.xml',
+-               'slot': 'b/tbl[0]/tr[5]/tc[0]/p[2]',
+-               'target': {'type': 'paragraph'}}}] : A plain label spacer became a second answer destination
+
+======================================================================
+FAIL: test_missing_ordinary_long_worker_correction_finalization_and_export (pair_workflow.D31.test_missing_ordinary_long_worker_correction_finalization_and_export)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_question_box_workflow.py", line 85, in test_missing_ordinary_long_worker_correction_finalization_and_export
+    template, version = self.uploaded(data=original, name='SYNTHETIC separate answer box')
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-workflows-20260927/pair_workflow.py", line 19, in uploaded
+    self.assertEqual(wrong,[], 'A plain label spacer became a second answer destination')
+AssertionError: Lists differ: [{'key': 'v3_22', 'kind': 'text', 'label':[274 chars]9'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_22', 'kind': 'text', 'label': 'Report on leave', 'context': 'Conditional Discharge Proposal', 'locator': {'part': 'word/document.xml', 'slot': 'b/tbl[19]/tr[0]/tc[0]/p[1]', 'target': {'type': 'paragraph'}, 'contract': 'v3', 'fingerprint': '410ebae62c646ab61e59a5b039eb683912f9c38eceeb0018790660d8507d7059'}}
+
++ []
+- [{'context': 'Conditional Discharge Proposal',
+-   'key': 'v3_22',
+-   'kind': 'text',
+-   'label': 'Report on leave',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '410ebae62c646ab61e59a5b039eb683912f9c38eceeb0018790660d8507d7059',
+-               'part': 'word/document.xml',
+-               'slot': 'b/tbl[19]/tr[0]/tc[0]/p[1]',
+-               'target': {'type': 'paragraph'}}}] : A plain label spacer became a second answer destination
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.703s
+
+FAILED (failures=2)
+Destroying test database for alias 'default' ('test_quillmd_ci')...
+ OK
+System check identified no issues (0 silenced).

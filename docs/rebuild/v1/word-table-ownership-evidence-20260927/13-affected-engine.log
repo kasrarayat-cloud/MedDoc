@@ -1,0 +1,13 @@
+.................F................................................................................
+======================================================================
+FAIL: test_paired_cell_spacing_does_not_claim_controls_or_textboxes (documents.test_question_boxes.QuestionBoxes.test_paired_cell_spacing_does_not_claim_controls_or_textboxes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 97, in test_paired_cell_spacing_does_not_claim_controls_or_textboxes
+    self.assertEqual(len([f for f in result['fields'] if f['locator']['target']['type'] == 'dropdown']), 1)
+AssertionError: 0 != 1
+
+----------------------------------------------------------------------
+Ran 98 tests in 52.468s
+
+FAILED (failures=1)

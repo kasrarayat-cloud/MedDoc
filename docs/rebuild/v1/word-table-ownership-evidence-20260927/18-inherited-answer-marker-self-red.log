@@ -1,0 +1,21 @@
+FF
+======================================================================
+FAIL: test_paired_cell_keeps_explicit_and_independent_answer_lines (documents.test_question_boxes.QuestionBoxes.test_paired_cell_keeps_explicit_and_independent_answer_lines) (marker='table_border')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 83, in test_paired_cell_keeps_explicit_and_independent_answer_lines
+    self.assertTrue([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+AssertionError: [] is not true
+
+======================================================================
+FAIL: test_paired_cell_keeps_explicit_and_independent_answer_lines (documents.test_question_boxes.QuestionBoxes.test_paired_cell_keeps_explicit_and_independent_answer_lines) (marker='default_border')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 83, in test_paired_cell_keeps_explicit_and_independent_answer_lines
+    self.assertTrue([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+AssertionError: [] is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 0.491s
+
+FAILED (failures=2)
