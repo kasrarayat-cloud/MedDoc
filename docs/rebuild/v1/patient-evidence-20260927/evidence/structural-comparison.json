@@ -1,0 +1,27 @@
+{
+  "original": {
+    "same_actor_relations_as_original": true,
+    "same_blocks_as_original": true,
+    "same_actor_destinations_as_original": true
+  },
+  "smoking-assessment": {
+    "same_actor_relations_as_original": true,
+    "same_blocks_as_original": true,
+    "same_actor_destinations_as_original": true
+  },
+  "medication-cessation-assessment": {
+    "same_actor_relations_as_original": true,
+    "same_blocks_as_original": true,
+    "same_actor_destinations_as_original": true
+  },
+  "allergy-anaphylaxis-assessment": {
+    "same_actor_relations_as_original": true,
+    "same_blocks_as_original": true,
+    "same_actor_destinations_as_original": true
+  },
+  "allergy-hypersensitivity-assessment": {
+    "same_actor_relations_as_original": true,
+    "same_blocks_as_original": true,
+    "same_actor_destinations_as_original": true
+  }
+}
