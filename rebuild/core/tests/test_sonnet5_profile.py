@@ -14,6 +14,7 @@ test_configuration_status.py.
 """
 import json
 import os
+import re
 import tempfile
 from decimal import Decimal
 from pathlib import Path
@@ -434,13 +435,35 @@ class OperatorValueBlocks(SimpleTestCase):
     NOTE = ROOT / 'docs' / 'rebuild' / 'v1' / 'sonnet5-migration.md'
     EXAMPLE = ROOT / 'rebuild' / '.env.example'
 
-    def blocks(self):
-        import re
-        return [block.splitlines() for block in re.findall(r'^```\n(.*?)^```$', self.NOTE.read_text(), re.S | re.M)]
+    #: An opening code fence of either kind, at any indent (a block inside a list item), with or without an info string.
+    FENCE = re.compile(r'^[ \t]*(?P<fence>`{3,}|~{3,})(?P<info>.*)$')
+    #: A line systemd would read as an assignment; a `#` or `;` line is a comment and never matches.
+    ASSIGNMENT = re.compile(r'^[ \t]*(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=')
 
-    @staticmethod
-    def assignments(lines):
-        return [line for line in lines if line.strip() and not line.lstrip().startswith(('#', ';'))]
+    @classmethod
+    def blocks(cls, text=None):
+        """Every fenced block in the note, whatever its fence: ``` or ~~~, bare or with an info string (```ini), at any
+        indent. R2-5: the reader used to see only unindented bare ``` fences, so a value block written any other way —
+        the shapes a note naturally grows — carried an inline comment past this test. An unclosed fence runs to the end,
+        as CommonMark reads it. Lines are returned de-indented, as they would be pasted."""
+        blocks, current, fence = [], [], None
+        for line in (cls.NOTE.read_text() if text is None else text).splitlines():
+            if fence is None:
+                match = cls.FENCE.match(line)
+                if match and not (match['fence'][0] == '`' and '`' in match['info']):
+                    fence, current = match['fence'], []
+            elif re.fullmatch(r'[ \t]*' + re.escape(fence[0]) + '{%d,}[ \t]*' % len(fence), line):
+                blocks.append(current)
+                fence = None
+            else:
+                current.append(line.strip())
+        if fence is not None:
+            blocks.append(current)
+        return blocks
+
+    @classmethod
+    def assignments(cls, lines):
+        return [line.strip() for line in lines if cls.ASSIGNMENT.match(line)]
 
     @classmethod
     def systemd_values(cls, lines):
@@ -448,12 +471,20 @@ class OperatorValueBlocks(SimpleTestCase):
         loses its leading and trailing whitespace and keeps everything else, an inline `#` included."""
         return {name.strip(): value.strip() for name, _, value in (line.partition('=') for line in cls.assignments(lines))}
 
+    def test_the_block_reader_sees_every_fence_shape(self):
+        """The reader's own positive control: each shape a value block can take is found, with its lines de-indented."""
+        text = ('```\nA=1\n```\n\n```ini\nB=2\n```\n\n- item:\n\n    ```\n    C=3\n    ```\n\n~~~\nD=4\n~~~\n\n'
+                '````text\nE=5\n```\nstill E\n````\n\n~~~~\nF=6\n')
+        self.assertEqual(self.blocks(text), [['A=1'], ['B=2'], ['C=3'], ['D=4'], ['E=5', '```', 'still E'], ['F=6']])
+
     def test_no_value_line_carries_an_inline_comment(self):
         note = [line for block in self.blocks() for line in self.assignments(block)]
-        self.assertEqual(len(note), 12, 'positive control: the switch (4), profile (3) and rollback (5) value lines')
-        for line in note + self.assignments(self.EXAMPLE.read_text().splitlines()):
+        self.assertGreaterEqual(len(note), 12, 'positive control: the switch (4), profile (3) and rollback (5) value lines')
+        # Every assignment-shaped line anywhere in the note too — an indented code block has no fence at all.
+        anywhere = self.assignments(self.NOTE.read_text().splitlines())
+        self.assertLessEqual(set(note), set(anywhere))
+        for line in note + anywhere + self.assignments(self.EXAMPLE.read_text().splitlines()):
             with self.subTest(line=line):
-                self.assertIn('=', line)
                 self.assertNotIn('#', line)
 
     def block(self, has):
