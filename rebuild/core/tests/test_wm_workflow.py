@@ -102,7 +102,8 @@ class WMDocumentWorkflow(TestCase):
         self.assertEqual(self.version.document_backend['backend'], BACKEND)
         self.assertEqual((len(self.version.fields), len(self.version.review_requirements)), (90, 14))
 
-    def prepare(self, *, positive=False, missing_measurement=False, long_answer=False, select_variants=True, heading=None):
+    def prepare(self, *, positive=False, missing_measurement=False, long_answer=False, select_variants=True, heading=None,
+                overrides=()):
         values = {}
         for field in self.version.fields:
             if field['kind'] == 'choice':
@@ -117,6 +118,7 @@ class WMDocumentWorkflow(TestCase):
             values['measurement_1_2'] = '650 ms'
             values['sdt_1706206184'] = ', however, there has been a recurrence.'
         if missing_measurement: values['measurement_15_1'] = ''
+        values.update(overrides)
         if long_answer: values['patient_name'] = 'SYNTHETIC 😀 ' + ('documented ' * 1800) + 'END-OF-COMPLETE-ANSWER'
         if heading:
             # A question whose own value introduces the lines after it, and a diameter below it the export can be read by.
@@ -192,6 +194,29 @@ class WMDocumentWorkflow(TestCase):
         self.assertEqual(hashlib.sha256(payload).hexdigest(), encounter.export_sha256)
         self.assertEqual(private_path(self.template.original_path).read_bytes(), self.original)
         return payload
+
+    def test_text_the_engine_would_rewrite_in_a_cell_is_refused_at_review_and_finalization(self):
+        """Ported from feat/wm-narrative (rounds 18 and 20): the engine writes a location cell through a replace that reads
+        `&m` as a page break, so `thigh&mid calf` exported as `thigh`, a page break and `id calf`. Review names it and
+        finalization refuses it; the advice changes the notes' line, since the answer must repeat that line."""
+        from core.views import WM_BLOCKERS
+        encounter = self.prepare(overrides={'location_11': 'thigh&mid calf'})
+        self.save(encounter)
+        reasons = [b['reason'] for b in encounter.template_review['assessment']['blockers'] if b['key'] == 'location_11']
+        self.assertEqual(reasons, ['text_the_form_rewrites_labelled'])
+        self.assertIn('Change that line in the notes', WM_BLOCKERS['text_the_form_rewrites_labelled'])
+        self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'})
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.status, 'review')
+
+    def test_the_advised_line_completes_and_prints_as_written(self):
+        encounter = self.prepare(overrides={'location_11': 'thigh&Mid calf'})
+        self.save(encounter)
+        self.assertEqual([b for b in encounter.template_review['assessment']['blockers'] if b['key'] == 'location_11'], [])
+        exported = self.finalize(encounter)
+        with ZipFile(BytesIO(exported)) as zipped:
+            document = zipped.read('word/document.xml').decode()
+        self.assertIn('thigh&amp;Mid calf', document)
 
     def test_upload_generate_review_original_export_actual_identity_and_blank_measurement(self):
         encounter = self.prepare(missing_measurement=True)

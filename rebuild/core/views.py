@@ -104,6 +104,7 @@ WM_BLOCKERS={
     'selected_answer_conflicts_with_fixed_assertion':'The selected reflux finding contradicts this fixed negative statement. Export is blocked.',
     'symptom_conflicts_with_asymptomatic':'This symptom conflicts with the selected asymptomatic finding.',
     'asymptomatic_conflicts_with_documented_symptom':'Asymptomatic conflicts with another selected symptom.',
+    'text_the_form_rewrites_labelled':'The form reads "&p", "&l", "&m", "&b" and "&&" in this table cell as formatting codes (a break, or a single "&"), so it would print differently from this answer, and on this form an answer must repeat its labelled line exactly. Change that line in the notes: write the letter after "&" as a capital (for example "thigh&Mid calf") or write "and". Then save the notes and generate again.',
 }
 
 #: ⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING CITED AS PROOF OF THE GUARD.
