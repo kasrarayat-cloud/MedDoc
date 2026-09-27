@@ -1,0 +1,26 @@
+[
+  {
+    "name": "doc-reader",
+    "url": "https://docs.aspose.org/words/python/developer-guide/doc-reader/",
+    "sha256": "76c7388769882b6c26334ce0404cc66d27055ba809710e2a11a9c9474542b0a9",
+    "read_utc": "2026-09-27T20:26:26.977312+00:00"
+  },
+  {
+    "name": "docx-writer",
+    "url": "https://docs.aspose.org/words/python/developer-guide/docx-writer/",
+    "sha256": "64227131e14b51e1646905b22687d7d96ca338bfeb1074247eaeedf0eff72210",
+    "read_utc": "2026-09-27T20:26:27.115218+00:00"
+  },
+  {
+    "name": "features",
+    "url": "https://docs.aspose.org/words/python/developer-guide/features/",
+    "sha256": "426ba5c88cbf821bc6b7dfe5daff3580b9636ce89359d4d66001fcec0289d4b9",
+    "read_utc": "2026-09-27T20:26:27.247692+00:00"
+  },
+  {
+    "name": "installation",
+    "url": "https://docs.aspose.org/words/python/getting-started/installation/",
+    "sha256": "bcfa96973506f5ddeac5a0fd52cfc7624da5cfab762c8ff6542fb086e37312a1",
+    "read_utc": "2026-09-27T20:26:27.431160+00:00"
+  }
+]
