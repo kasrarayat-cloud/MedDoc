@@ -30,7 +30,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from core import generation as g
 from core.jobs import NoProviderRequest, PLATFORM_FAILURE, enqueue, run_one
 from core.management.commands.audit_billing import audit_report
-from core.models import Encounter, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage
+from core.models import AuditEvent, Encounter, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage
 from core.billing import reserve
 from core.security import private_path
 from core.tests.test_security import SyntheticFixture
@@ -940,6 +940,7 @@ class ModeSwitch(OutcomeFixture, TestCase):
         job.refresh_from_db()
         self.assertEqual(job.state, 'failed')
         self.assertTrue(job.error.startswith('Not processed: QuillMD was switched out of live mode'), job.error)
+        self.assertEqual(AuditEvent.objects.get(action='job.failed', target=str(job.pk)).details['billing'], 'not_processed')
         self.assertFalse(Usage.objects.filter(job=job).exists())
         self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
         self.assertFalse(self.held(encounter))
@@ -958,6 +959,9 @@ class ModeSwitch(OutcomeFixture, TestCase):
         encounter.refresh_from_db()
         self.assertEqual(job.state, 'failed')
         self.assertTrue(job.error.startswith('Not processed: QuillMD was switched to live mode'), job.error)
+        # F-D (round 4): the job is BOTH a fixture job and one refused before any request; its audit row classifies it by
+        # the refusal, as its error does. Putting 'fixture' ahead of 'not_processed' in that chain survived every test.
+        self.assertEqual(AuditEvent.objects.get(action='job.failed', target=str(job.pk)).details['billing'], 'not_processed')
         self.assertEqual((encounter.answers, encounter.status), ({}, 'draft'))
         self.assertFalse(Usage.objects.filter(job=job).exists())
         self.assertFalse(self.held(encounter))
