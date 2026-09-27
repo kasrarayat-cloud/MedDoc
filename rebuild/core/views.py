@@ -1235,15 +1235,13 @@ def accept_code(request,pk,code_pk):
     item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e).first()
     posted=request.POST.get('revision')
     if item is None:
-        # ⚠️ "NO LONGER ON THIS DOCUMENT" IS SAID ONLY WHEN IT IS TRUE. Only a change to the notes deletes an encounter's code
-        # suggestions, so a code that exists (on another encounter), or one missing while the notes did not change after
-        # the page's revision, was never on this document: not found, at any revision. Told "its source notes were
-        # changed" at a stale revision, it was told something false (refutation round 4, R4-7).
+        # A stale revision proves the notes changed, not that an arbitrary missing code ID
+        # ever belonged to this encounter. State only availability and the observed change.
         if CodeSuggestion.objects.filter(pk=code_pk).exists():raise Http404
         if not posted:return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was accepted. Reload the document to see its current codes.',409)
         if not notes_changed_since(e,posted):raise Http404
-        return document_refusal(request,e,'This code suggestion is no longer on this document: its source notes were changed after '
-                                          'you opened the page, which clears their code suggestions. Nothing was accepted. Reopen '
+        return document_refusal(request,e,'This code suggestion is unavailable. The notes changed after you opened the page, '
+                                          'which clears their code suggestions. Nothing was accepted. Reopen '
                                           'it to see the current notes and codes.',409)
     if not posted:return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was accepted. Reload the document to see its current codes.',409)
     if posted!=str(e.revision):

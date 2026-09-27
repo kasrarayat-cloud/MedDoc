@@ -732,7 +732,7 @@ class CodeWritersSerializeWithANotesSave(OrdinaryDraft, TransactionTestCase):
         thread.join(timeout=60)
         encounter.refresh_from_db()
         self.assertEqual((accept.get('accept_ran'), accept.get('status')), ('waiting', 409))
-        self.assertIn('This code suggestion is no longer on this document', accept.get('text', ''))
+        self.assertIn('This code suggestion is unavailable.', accept.get('text', ''))
         self.assertIn('Nothing was accepted.', accept.get('text', ''))
         self.assertFalse(AuditEvent.objects.filter(action='coding.accept').exists())
         self.assertEqual((encounter.notes, CodeSuggestion.objects.filter(encounter=encounter).count()), (self.CHANGED, 0))
@@ -844,7 +844,7 @@ class TheCodingTabPostsTheRevisionItShows(OrdinaryDraft, TestCase):
         self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': self.CODED + '\nPlan: synthetic.'})
         self.assertFalse(CodeSuggestion.objects.filter(pk=offer.pk).exists())            # (the control: the save cleared it)
         refused = self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': stale})
-        self.assertContains(refused, 'This code suggestion is no longer on this document', status_code=409)
+        self.assertContains(refused, 'This code suggestion is unavailable.', status_code=409)
         self.assertContains(refused, 'Nothing was accepted.', status_code=409)
         # (a suggestion that was never on this document is not found, at any revision)
         self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/',
@@ -1461,6 +1461,20 @@ class CodeRefusalsSayWhatHappened(OrdinaryDraft, TestCase):
         self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
         return encounter, CodeSuggestion.objects.get(encounter=encounter)
 
+    def test_never_existing_code_after_notes_save_has_no_invented_history(self):
+        encounter, _offer = self.offered()
+        stale = encounter.revision
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter,
+                  {'notes': self.CODED + '\nPlan: synthetic.'})
+        code = '00000000-0000-4000-8000-000000000000'
+        self.assertFalse(CodeSuggestion.objects.filter(pk=code).exists())
+        before = AuditEvent.objects.filter(action='coding.accept').count()
+        refused = self.client.post(f'/encounters/{encounter.pk}/coding/{code}/accept/', {'revision': stale})
+        self.assertContains(refused, 'This code suggestion is unavailable.', status_code=409)
+        self.assertNotContains(refused, 'no longer on this document', status_code=409)
+        self.assertNotContains(refused, 'its source notes', status_code=409)
+        self.assertEqual(AuditEvent.objects.filter(action='coding.accept').count(), before)
+
     def test_a_code_never_on_this_document_is_not_found_at_a_stale_revision(self):
         encounter, offer = self.offered()
         elsewhere = Encounter.objects.create(department=self.department, patient=self.patient, created_by=self.user,
@@ -1481,7 +1495,7 @@ class CodeRefusalsSayWhatHappened(OrdinaryDraft, TestCase):
         stale = encounter.revision
         self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': self.CODED + '\nPlan: synthetic.'})
         refused = self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': stale})
-        self.assertContains(refused, 'This code suggestion is no longer on this document', status_code=409)
+        self.assertContains(refused, 'This code suggestion is unavailable.', status_code=409)
 
     def test_a_page_from_before_this_release_is_told_it_is_out_of_date(self):
         encounter, offer = self.offered()
@@ -1626,4 +1640,4 @@ class RoundFourMutantPins(OrdinaryDraft, TestCase):
         encounter.refresh_from_db()
         self.assertEqual((encounter.revision, CodeSuggestion.objects.filter(encounter=encounter).count()), (stale + 1, 0))
         refused = self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': stale})
-        self.assertContains(refused, 'This code suggestion is no longer on this document', status_code=409)
+        self.assertContains(refused, 'This code suggestion is unavailable.', status_code=409)
