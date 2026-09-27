@@ -374,6 +374,47 @@ class V3Confirmation(V3Fixture, TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(self.template.versions.count(), 1)
 
+    def test_a_stale_page_cannot_confirm_the_newer_version(self):
+        by = self.by_label(self.version)
+        self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": self.version.pk,
+                                                             "label_" + by["Allergies"]["key"]: "Known allergies"})
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_confirm",
+                                    "mapping_version": self.version.pk, "checked_every_field": "on"})
+        self.assertEqual(response.status_code, 409, "the page showed version 1; version 2 was never shown")
+        self.assertIn("This mapping changed after you opened it", response.context["v3_error"])
+        self.assertFalse(MappingConfirmation.objects.exists())
+
+    def test_an_employee_can_neither_correct_nor_add(self):
+        by = self.by_label(self.version)
+        self.client.force_login(self.employee)
+        saved = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": self.version.pk,
+                                                                     "remove_" + by["Reason for visit"]["key"]: "on"})
+        added = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_add", "mapping_version": self.version.pk,
+                                 "slot": "word/document.xml#b/p[0]", "kind": "text", "label": "Clinic"})
+        self.assertEqual((saved.status_code, added.status_code), (403, 403))
+        self.assertEqual(self.template.versions.count(), 1)
+
+    def test_a_confirmation_is_append_only_in_the_model_and_in_the_database(self):
+        from django.core.exceptions import ValidationError
+        from django.db import DatabaseError, transaction
+        confirmation = MappingConfirmation.objects.create(version=self.version, confirmed_by=self.user)
+        confirmation.confirmed_by = self.manager
+        for act in (confirmation.save, confirmation.delete):
+            try:
+                with transaction.atomic():
+                    act()
+            except ValidationError:
+                continue                    # refused by the model, before any SQL
+            except DatabaseError:
+                self.fail("the model let a change to a confirmation reach the database (%s)" % act.__name__)
+            self.fail("a confirmation was changed (%s)" % act.__name__)
+        for write in (lambda: MappingConfirmation.objects.filter(pk=confirmation.pk).update(confirmed_by=self.manager),
+                      lambda: MappingConfirmation.objects.filter(pk=confirmation.pk).delete()):
+            with self.assertRaises(DatabaseError), transaction.atomic():
+                write()
+        stored = MappingConfirmation.objects.get(pk=confirmation.pk)
+        self.assertEqual(stored.confirmed_by, self.user)
+
     @override_settings(QUILLMD_WORD_ENGINE="legacy")
     def test_legacy_templates_need_no_confirmation(self):
         legacy = self.upload(data=build_legacy_table_form(), name="Synthetic legacy table")
@@ -1005,6 +1046,16 @@ class V3LiveAdoption(TestCase):
             answers = validated(live_result(notes, {"v3_1": [quote], "v3_2": ["none documented"]}))
             self.assertEqual((answers["v3_1"]["status"], answers["v3_1"]["text"]), ("supported", "Yes"), quote)
             self.assertEqual(answers["v3_2"]["text"], "none documented")
+
+    def test_the_source_must_be_the_labelled_value_at_its_own_position(self):
+        from core.generation import recognized_labels, v3_labelled_source
+        notes = "Smoker: yes\nAllergies: none documented"
+        labels = recognized_labels(V3_FIELDS[:2])
+        self.assertTrue(v3_labelled_source(notes, labels, "smoker", [{"quote": "yes", "start": 8, "end": 11}]))
+        self.assertTrue(v3_labelled_source(notes, labels, "smoker", [{"quote": "Smoker: yes", "start": 0, "end": 11}]))
+        self.assertFalse(v3_labelled_source(notes, labels, "smoker", [{"quote": "yes", "start": 0, "end": 3}]),
+                         "a quote that is not the value at its own position is not the labelled value")
+        self.assertFalse(v3_labelled_source(notes, labels, "smoker", [{"quote": "none documented", "start": 8, "end": 23}]))
 
     def test_other_forms_are_adopted_exactly_as_before(self):
         from core.generation import validated
