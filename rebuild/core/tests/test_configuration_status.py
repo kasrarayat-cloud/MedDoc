@@ -5,7 +5,7 @@ from io import StringIO
 from unittest.mock import patch
 
 from django.core.management import call_command
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 
 from core import generation as g
 from core.tests.test_sonnet5_profile import (PRICE_ENV, ROLLBACK_FINGERPRINT, SONNET_5, SONNET_5_DISABLED_MEDIUM,
@@ -14,7 +14,7 @@ from core.tests.test_sonnet5_profile import (PRICE_ENV, ROLLBACK_FINGERPRINT, SO
 SECRET = 'sk_test_thisvaluemustneverbeprinted'
 
 
-class ConfigurationStatusDisclosesNothing(SimpleTestCase):
+class ConfigurationStatusDisclosesNothing(TestCase):
     def report(self):
         out = StringIO()
         call_command('configuration_status', stdout=out)
@@ -66,7 +66,7 @@ class ConfigurationStatusDisclosesNothing(SimpleTestCase):
         self.assertNotIn('submitted exactly as uploaded', missing)
 
 
-class HealthReportsTheGuardRatherThanAsserting(SimpleTestCase):
+class HealthReportsTheGuardRatherThanAsserting(TestCase):
     """⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING READ AS PROOF OF THE GUARD.
 
     `/health/` printed `synthetic-only` unconditionally. It would have kept printing it with
@@ -100,7 +100,7 @@ class HealthReportsTheGuardRatherThanAsserting(SimpleTestCase):
         return out.getvalue()
 
 
-class ConfigurationStatusNamesTheModel(SimpleTestCase):
+class ConfigurationStatusNamesTheModel(TestCase):
     """The language-model section: which model, at which rates, sending which request, under which pricing version.
 
     Plain configuration values, printed so the owner can confirm a model switch or a rollback from the one screen built for
@@ -173,8 +173,9 @@ class ConfigurationStatusNamesTheModel(SimpleTestCase):
                                         'confirmed):')
                     section = [line.strip() for line in lines[start + 1:lines.index('Media tools:')]]
                     mirror = [f"{row['name']}: {row['value']}" for row in rows.get('language_model', [])]
-                    # 7 settings + request profile + pricing_version, and outside live mode the 'provider requests' line.
-                    self.assertEqual(len(section), 9 if overrides['AI_MODE'] == 'live' else 10)
+                    # 7 settings + request profile + pricing_version + live generation jobs, and outside live mode the
+                    # 'provider requests' line.
+                    self.assertEqual(len(section), 10 if overrides['AI_MODE'] == 'live' else 11)
                     self.assertEqual(mirror, section)
                     self.assertNotIn('canary', repr(rows))
                     by_name = {row['name']: row for row in rows.get('language_model', [])}
@@ -201,10 +202,11 @@ class ConfigurationStatusNamesTheModel(SimpleTestCase):
                 self.assertTrue(rows[0]['value'].startswith('NONE — QUILLMD_AI_MODE is fixture, not live'))
                 self.assertEqual(rows[0]['severity'], 'warning')
                 self.assertIn('provider requests: NONE — QUILLMD_AI_MODE is fixture, not live', report)
-                for row in rows[1:]:
+                for row in rows[1:-1]:
                     self.assertIn('INACTIVE' if row['name'] == 'request profile' else '(inactive: QUILLMD_AI_MODE is not live)',
                                   row['value'], row['name'])
                     self.assertIn(row['severity'], ('', 'error'))     # error only for UNAVAILABLE, which is real here
+                self.assertEqual(rows[-1]['name'], 'live generation jobs')
                 for claim in ('request profile: INVALID', 'request profile: legacy', 'request profile: explicit',
                               'request profile: NOT the pre-profile'):
                     self.assertNotIn(claim, report)

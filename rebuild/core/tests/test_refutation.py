@@ -205,7 +205,10 @@ class AuthorizationAndPayerRefutation(TestCase):
         with override_settings(AI_MODE="fixture", AI_PROVIDER="anthropic", AI_MODEL="synthetic-original", AI_INPUT_RATE="1", AI_OUTPUT_RATE="5", AI_CACHED_RATE="0.1"):
             job = enqueue(self.job.encounter, self.user)
         expected = job.config.copy()
-        with override_settings(AI_MODE="live", AI_PROVIDER="openai", AI_MODEL="synthetic-changed", AI_INPUT_RATE="100", AI_OUTPUT_RATE="500", AI_CACHED_RATE="10"), patch("core.jobs.generation.generate", wraps=generation.generate) as provider:
+        # The provider, model and rates change; the MODE does not. A switch between live and fixture is the operator's
+        # stop and refuses the queued job instead (core.generation.refuse_switched_mode, test_sonnet5_profile.ModeSwitch) —
+        # this test used to switch the mode too and so pinned a synthetic job running inside a live deployment.
+        with override_settings(AI_MODE="fixture", AI_PROVIDER="openai", AI_MODEL="synthetic-changed", AI_INPUT_RATE="100", AI_OUTPUT_RATE="500", AI_CACHED_RATE="10"), patch("core.jobs.generation.generate", wraps=generation.generate) as provider:
             run_one()
         self.assertEqual(provider.call_args.args[2], expected)
         job.refresh_from_db()
@@ -220,8 +223,22 @@ class AuthorizationAndPayerRefutation(TestCase):
         with override_settings(AI_MODE="live", AI_PROVIDER="anthropic", AI_MODEL="synthetic-original", AI_INPUT_RATE="1", AI_OUTPUT_RATE="5", AI_CACHED_RATE="0.1"):
             job = enqueue(self.job.encounter, self.user)
         reserved_before = Wallet.objects.get(user=self.user, kind="promo").reserved
-        with override_settings(AI_MODE="fixture"), patch("core.jobs.generation.generate", side_effect=TimeoutError("synthetic unknown live request")):
-            run_one()
+        # The operator switches to fixture WHILE the live request is in flight: after the worker's mode check (a switch
+        # before it refuses the job unsent — test_sonnet5_profile.ModeSwitch), so the timeout is classified with the
+        # current settings saying fixture. It must still be read by the QUEUED mode.
+        switch = override_settings(AI_MODE="fixture")
+
+        def switched_then_timed_out(*args, **kwargs):
+            switch.enable()
+            raise TimeoutError("synthetic unknown live request")
+
+        with override_settings(AI_MODE="live"), patch("core.jobs.generation.generate", side_effect=switched_then_timed_out) as sent:
+            try:
+                run_one()
+                from django.conf import settings as current
+                self.assertEqual((sent.call_count, current.AI_MODE), (1, "fixture"))
+            finally:
+                switch.disable()
         job.refresh_from_db()
         self.assertEqual(job.state, "reconciliation")
         self.assertEqual(Wallet.objects.get(user=self.user, kind="promo").reserved, reserved_before)

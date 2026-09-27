@@ -289,6 +289,28 @@ def shape(value, recogniser=None):
     return 'present, recognised shape' if recogniser(value) else 'present, UNRECOGNISED shape'
 
 
+def live_generation_queue_row(live):
+    """How many LIVE-mode generation jobs are waiting or in flight: a count, nothing about any job.
+
+    A model, price or mode switch is only clean once these drain, and a switch out of live mode is the operator's stop —
+    the worker refuses each queued live job before sending it (not processed, hold released). Without the count the drain
+    the migration note asks for could not be seen from either screen.
+    """
+    from django.db import DatabaseError
+    from .models import Job
+    try:
+        live_jobs = Job.objects.filter(kind='generation', config__mode='live')
+        queued, running = live_jobs.filter(state='queued').count(), live_jobs.filter(state='running').count()
+    except DatabaseError:
+        return {'name': 'live generation jobs', 'value': 'UNAVAILABLE — the job table could not be read', 'severity': 'error'}
+    value = f'{queued} queued, {running} running'
+    if live:
+        return {'name': 'live generation jobs', 'value': value + ' (drained when both are 0)', 'severity': ''}
+    return {'name': 'live generation jobs', 'severity': 'warning' if queued or running else '',
+            'value': value + ' — QUILLMD_AI_MODE is not live, so the worker refuses each queued one before sending it '
+                             '(not processed, nothing charged, hold released)'}
+
+
 def language_model_rows():
     """The language-model section: model, three rates, the Sonnet 5 settings, the request profile and pricing_version.
 
@@ -331,6 +353,7 @@ def language_model_rows():
         # Only the discount can refuse here, and its message is fixed text naming no value.
         rows.append({'name': 'request profile', 'value': 'UNAVAILABLE — ' + '; '.join(error.messages), 'severity': 'error'})
         rows.append({'name': 'pricing_version', 'value': 'UNAVAILABLE', 'severity': 'error'})
+        rows.append(live_generation_queue_row(live))
         return rows
     profile = config['request_profile']
     if 'invalid' in profile:
@@ -350,6 +373,7 @@ def language_model_rows():
         value, severity = 'INACTIVE — no provider request is sent while QUILLMD_AI_MODE is not live. In live mode: ' + value, ''
     rows.append({'name': 'request profile', 'value': value, 'severity': severity})
     rows.append({'name': 'pricing_version', 'value': config['pricing_version'] + inactive, 'severity': ''})
+    rows.append(live_generation_queue_row(live))
     return rows
 
 

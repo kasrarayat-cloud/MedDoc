@@ -768,3 +768,96 @@ class StoredDiscountRefusal(OutcomeFixture, TestCase):
         self.assertTrue(job.error.startswith('Not processed: '), job.error)
         self.assertFalse(Usage.objects.filter(job=job).exists())
         self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
+class ModeSwitch(OutcomeFixture, TestCase):
+    """F1 (round 3). pricing_version does not hash the mode, so a switch between live and fixture was invisible to the
+    stale-quote check and to the worker. Measured: a page quoted live and clicked after the switch to fixture queued a
+    LIVE job that held $0.19, was sent and charged, while the console said no provider request is sent; the reverse put
+    a fixture job's synthetic answers into a live deployment. Now: the quote is refused at enqueue in both directions,
+    a job already queued is refused by the worker before sending (not processed, nothing charged, hold released), and
+    the console counts the live jobs still queued."""
+    FIXTURE = dict(SONNET_46, AI_MODE='fixture')
+
+    def page(self, encounter):
+        self.client.force_login(self.user)
+        return self.client.get(f'/encounters/{encounter.pk}/')
+
+    def held(self, encounter):
+        return Reservation.objects.filter(job__encounter=encounter, state='held').exists()
+
+    def test_a_quote_from_either_mode_is_refused_after_the_switch_and_the_page_re_quotes(self):
+        for label, quoted_under, clicked_under in (('live -> fixture', SONNET_46, self.FIXTURE),
+                                                   ('fixture -> live', self.FIXTURE, SONNET_46)):
+            with self.subTest(switch=label):
+                encounter = self.fresh_encounter()
+                answers = encounter.answers
+                with override_settings(**quoted_under):
+                    quote = self.page(encounter).context['usage_quote']
+                with override_settings(**clicked_under), patch('anthropic.Anthropic') as client:
+                    response = self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': quote}, follow=True)
+                    client.assert_not_called()
+                    self.assertContains(response, 'QuillMD was switched between live and synthetic processing')
+                    self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+                    self.assertFalse(self.held(encounter))
+                    encounter.refresh_from_db()
+                    self.assertEqual(encounter.answers, answers)
+                    # Positive control: the re-quoted page queues a job in the mode that is configured NOW.
+                    self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': response.context['usage_quote']})
+                    self.assertEqual(Job.objects.get(encounter=encounter).config['mode'], clicked_under['AI_MODE'])
+
+    def test_a_queued_live_job_is_not_sent_after_the_switch_to_fixture(self):
+        encounter = self.fresh_encounter()
+        with override_settings(**SONNET_46):
+            job = enqueue(encounter, self.user)
+        self.assertTrue(self.held(encounter))
+        with override_settings(**self.FIXTURE), patch('anthropic.Anthropic') as client:
+            client.return_value.messages.create.return_value = message(text(SELECTED), model='claude-sonnet-4-6')
+            self.assertTrue(run_one())
+            client.assert_not_called()
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertTrue(job.error.startswith('Not processed: QuillMD was switched out of live mode'), job.error)
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
+        self.assertFalse(self.held(encounter))
+        self.assertTrue(audit_report()['all_checks_pass'])
+
+    def test_a_queued_fixture_job_is_not_used_after_the_switch_to_live(self):
+        encounter = self.fresh_encounter()
+        encounter.answers = {}
+        encounter.save(update_fields=['answers'])
+        with override_settings(**self.FIXTURE):
+            job = enqueue(encounter, self.user)
+        with override_settings(**SONNET_46), patch('anthropic.Anthropic') as client:
+            self.assertTrue(run_one())
+            client.assert_not_called()
+        job.refresh_from_db()
+        encounter.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertTrue(job.error.startswith('Not processed: QuillMD was switched to live mode'), job.error)
+        self.assertEqual((encounter.answers, encounter.status), ({}, 'draft'))
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertFalse(self.held(encounter))
+
+    def test_the_console_counts_the_live_jobs_still_queued(self):
+        from core import admin_console
+        encounter = self.fresh_encounter()
+        with override_settings(**SONNET_46):
+            job = enqueue(encounter, self.user)
+            row = admin_console.language_model_rows()[-1]
+        self.assertEqual(row, {'name': 'live generation jobs', 'value': '1 queued, 0 running (drained when both are 0)',
+                               'severity': ''})
+        with override_settings(**self.FIXTURE):
+            row = admin_console.language_model_rows()[-1]
+        self.assertEqual(row['name'], 'live generation jobs')
+        self.assertTrue(row['value'].startswith('1 queued, 0 running — QUILLMD_AI_MODE is not live, so the worker refuses'))
+        self.assertEqual(row['severity'], 'warning')
+        self.assertNotIn(str(job.pk), repr(row))
+        self.assertNotIn(str(encounter.pk), repr(row))
+        # A fixture job is not a live one, and a finished live job is not queued.
+        with override_settings(**self.FIXTURE):
+            enqueue(self.fresh_encounter(), self.user)
+            Job.objects.filter(pk=job.pk).update(state='succeeded')
+            self.assertTrue(admin_console.language_model_rows()[-1]['value'].startswith('0 queued, 0 running'))

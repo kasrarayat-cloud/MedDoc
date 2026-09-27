@@ -127,7 +127,11 @@ As an example of the hold, take the three-line synthetic note `verify_live` uses
    it was quoted with. A page loaded before the change still holds a quote signed under the old model and prices (it
    lives 10 minutes). When it is used after the restart, enqueue compares its `pricing_version` with the current one
    and refuses it: no job, no hold, nothing sent. The doctor sees "The prices or the language model changed after this
-   page loaded" and the page re-quotes. Draining is therefore enough; open pages need no action.
+   page loaded" and the page re-quotes. Draining is therefore enough; open pages need no action. `configuration_status`
+   and the services page print `live generation jobs: N queued, M running` (a count only); drained means both are 0.
+   Switching `QUILLMD_AI_MODE` between `live` and `fixture` is also a stop: a quote from the other mode is refused at
+   enqueue, and a job already queued in the other mode is refused by the worker before anything is sent (not processed,
+   nothing charged, hold released).
 3. Set the four values and the profile in the private environment, then restart the doctor, admin and worker services.
    They read the environment only at start.
 4. Run `manage.py configuration_status`. Confirm the model, the rates, `request profile: explicit {…}` and the

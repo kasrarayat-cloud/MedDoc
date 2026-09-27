@@ -1918,6 +1918,28 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         output[item.key]=answer
     return output
 
+#: Why a queued generation is refused when the deployment's mode moved after it was queued (`refuse_switched_mode`).
+MODE_LEFT_LIVE=('QuillMD was switched out of live mode after this request was queued, so it was not sent to the provider.')
+MODE_ENTERED_LIVE=('QuillMD was switched to live mode after this synthetic request was queued, so its synthetic answers were not '
+                   'used.')
+
+
+def refuse_switched_mode(config):
+    """Refuse a queued generation whose mode is not the deployment's mode NOW, before anything is sent.
+
+    ⚠️ THE MODE SWITCH IS THE OPERATOR'S STOP. A live job queued before the switch to fixture used to be sent and charged
+    after it, while the console said no provider request is sent; a fixture job queued before the switch to live put
+    synthetic answers into a live deployment. Raised as NoProviderRequest, so the worker marks the job not processed,
+    charges nothing and releases the hold. A config with no recorded mode is read as the current mode, as run_one does.
+    Called by the WORKER (core.jobs.run_one) immediately before generate(): generate() itself stays a function of the
+    config it is handed, which is how the prompt and payload tests exercise one mode's request under another's settings.
+    """
+    queued_live=config.get('mode',settings.AI_MODE)=='live'
+    now_live=settings.AI_MODE=='live'
+    if queued_live and not now_live: _refuse_profile(MODE_LEFT_LIVE)
+    if now_live and not queued_live: _refuse_profile(MODE_ENTERED_LIVE)
+
+
 def generate(notes,fields,config=None,*,context_labels=()):
     config=config or configuration()
     if len(notes)>50000 or len(fields)>100: raise ValidationError('Source exceeds supported limits; split explicitly. Nothing was truncated.')
