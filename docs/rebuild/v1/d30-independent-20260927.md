@@ -81,3 +81,63 @@ Tracked text evidence and artifact hashes are in `d30-independent-evidence-20260
 The parent and source author have both received the exact findings. Parent
 verification and bounded repair/re-refutation are required before integration.
 This review does not establish whole-D30, family or broad Word compatibility.
+
+## Follow-up, 2026-09-27 — both findings closed
+
+**NOTHING FOUND in the bounded finished follow-up.** The original findings and
+their failed outputs above remain part of the record.
+
+Reviewed finished source: `f170f5a7e10d557679d3fb6000948f7bd5df5e16`, compared
+with the failed candidate `75e545b2a6469b0d188c779f3c4ee9af02dfc7f5`.
+Engine SHA256:
+`d4d82856ca066c07b537f3c3d28f9a10b1b3bcbf441d516e6ba636699ea8bc77`.
+The Word worktree was clean and source identity was checked before execution.
+No changes were made to it.
+
+The follow-up read the same eight original synthetic DOCX bytes, checked every
+original hash, and replayed the failed candidate to confirm its recorded output
+had not drifted. It then inspected those bytes with the finished source:
+
+| Retained case | Finished result |
+| --- | --- |
+| Direct Donor heading | Correct Donor context retained. |
+| Inherited Donor heading | Correct Donor context retained; prior scope loss closed. |
+| Two-paragraph medication question | No automatic assignment; visible warning includes both complete source paragraphs. |
+| Plain adjacent question | Exact original field, source label and destination unchanged. |
+| Direct cell nil | Visible refusal retained. |
+| Conditional border in ancestor style | Visible refusal. |
+| Inline Patient-name blank | Original span retained, extra answer box visibly refused. |
+| Page-break spacer | Visible refusal at the physical boundary. |
+
+Twelve additional local controls were fixed in a manifest before execution;
+**12/12 produced the declared result**. Unknown, cyclic and missing-parent
+paragraph and table styles all visibly refuse. An inherited page break refuses;
+an explicit direct false override allows the ordinary adjacent question. Inherited
+major/local headings preserve exactly `Part B > Donor > Medication history`.
+Simple inherited table borders permit the adjacent question, while child-style
+nil refuses. A split question separated by one empty paragraph visibly refuses
+with both source paragraphs. These are structural control counts, not document
+compatibility scores.
+
+The finished delta was read for its local style-chain resolution, precedence,
+heading context, split-question boundary and warning paths. It changes the
+question-box detector only; the exporter and shared heading reader are unchanged.
+No new wrong destination, lost source context, omitted inline field or false
+acceptance was demonstrated in this finite review.
+
+The author's retained equivalence check reports D30 fields, warnings, contract
+and digest unchanged by this follow-up. The author's 40 affected checks passed
+in 11.772 seconds. Those results and the previous workflow/render evidence are
+reused, not claimed as independently rerun here. No real corpus original,
+holdout, qualification cohort, provider, database, renderer or native Word was
+used by this follow-up. Network connections were denied in the probe. Native
+Word and broad custom-form acceptance remain separate release gates; whole D30
+is still not a successful document.
+
+Evidence: `d30-independent-evidence-20260927/final/` contains the new script,
+predeclared manifest, full previous/finished outputs, log and artifact hashes.
+Runtime `rebuild/.runtime/d30-refutation-20260927/final/` retains the exact
+finished engine snapshot and twelve new synthetic blank files; its parent
+retains all original eight files, earlier source snapshots and failed results.
+The original artifacts were read only and were not regenerated. The probe
+completed normally and has no remaining process. No clinical source was changed.

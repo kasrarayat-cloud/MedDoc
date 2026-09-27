@@ -1,0 +1,106 @@
+{
+  "original_artifacts": [
+    {
+      "name": "direct-donor-heading",
+      "sha256": "01b43a253175dd69ccdda834dd38de0ab1931e3cb98ecdaa820b96a9aa22983a",
+      "expected": "Context must retain Donor."
+    },
+    {
+      "name": "inherited-donor-heading",
+      "sha256": "7723cbbe8825e71547994e09e33df7f55d283ee610d0812d1892a514cb5e61eb",
+      "expected": "Equivalent inherited Heading 1 context must retain Donor or visibly refuse."
+    },
+    {
+      "name": "two-paragraph-question",
+      "sha256": "be45cc73d4f5f66b96ddb498abee5f07f2c7b6882c1247e095d8c5dfada7c564",
+      "expected": "Cannot silently assign only the anaphoric second part; retain complete question context or warn."
+    },
+    {
+      "name": "plain-positive",
+      "sha256": "beb5918a21a5c0ed277703d45ae8be449564d9e86828bf4cf563c014fe385783",
+      "expected": "One complete question maps to its adjacent box."
+    },
+    {
+      "name": "cell-nil",
+      "sha256": "53fc05e7309e84b7e10a2d749522e6850b36b222fa1f2b32126a52ff928219e1",
+      "expected": "Explicit cell nil overrides style and must refuse."
+    },
+    {
+      "name": "ancestor-conditional-nil",
+      "sha256": "5e0ac6d2264ee30c7c56c6e26a007e0009cbd8222291e88cb8158c96850a4dee",
+      "expected": "Conditional nil exists in the style ancestry; automatic explicit-border proof must not ignore it."
+    },
+    {
+      "name": "inline-blank",
+      "sha256": "21256cfbdc4738d6f3aac7a01dea8d1a0f7cf46b011236e8ff4c655cda682f6a",
+      "expected": "Preserve the original name field and warn about the additional box."
+    },
+    {
+      "name": "page-break-spacer",
+      "sha256": "f370f99cdf1a405c1dac80b9fe552abc5425cfa57dce19d554046a4042450913",
+      "expected": "A physical page-break paragraph is not a plain empty spacer; assess refusal."
+    }
+  ],
+  "controls": [
+    {
+      "name": "paragraph-unknown",
+      "expected": "hold",
+      "context": ""
+    },
+    {
+      "name": "paragraph-cycle",
+      "expected": "hold",
+      "context": ""
+    },
+    {
+      "name": "paragraph-missing-parent",
+      "expected": "hold",
+      "context": ""
+    },
+    {
+      "name": "table-unknown",
+      "expected": "hold",
+      "context": ""
+    },
+    {
+      "name": "table-cycle",
+      "expected": "hold",
+      "context": ""
+    },
+    {
+      "name": "table-missing-parent",
+      "expected": "hold",
+      "context": ""
+    },
+    {
+      "name": "inherited-break",
+      "expected": "hold",
+      "context": ""
+    },
+    {
+      "name": "inherited-break-overridden-false",
+      "expected": "map",
+      "context": ""
+    },
+    {
+      "name": "full-inherited-scope",
+      "expected": "map",
+      "context": "Part B > Donor > Medication history"
+    },
+    {
+      "name": "simple-ancestor-borders",
+      "expected": "map",
+      "context": ""
+    },
+    {
+      "name": "simple-ancestor-borders-child-nil",
+      "expected": "hold",
+      "context": ""
+    },
+    {
+      "name": "split-question-one-spacer",
+      "expected": "hold",
+      "context": ""
+    }
+  ]
+}
