@@ -1438,6 +1438,69 @@ class ConcurrentStatusReadTests(unittest.TestCase):
         self.assertEqual((self.alerts / 'status.json').read_bytes(), before)
         self.sender.assert_not_called()
 
+    def in_flight(self, blocking):
+        """A real check at +2 h whose escalation is stopped inside `blocking` (patched onto the module)
+        until released; the previous check completed at +1 h 55 with the first notice accepted."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)                                       # first notice, accepted
+        a.check(self.at + timedelta(hours=1, minutes=55))      # the last check to complete
+        self.health.return_value = 'backup_stale'              # owed at +2 h: an escalation
+        entered, release, results = threading.Event(), threading.Event(), {}
+        real = getattr(a, blocking)
+
+        def stopped(*args, **kwargs):
+            entered.set()
+            release.wait(30)
+            return real(*args, **kwargs)
+
+        def running():
+            with patch.object(a, blocking, side_effect=stopped):
+                results['check'] = a.check(self.at + timedelta(hours=2))
+        worker = threading.Thread(target=running, name='check-in-flight')
+        worker.start()
+        self.assertTrue(entered.wait(30))
+        return worker, release, results
+
+    def test_a_check_running_past_the_readers_wait_is_reported_as_running_not_broken(self):
+        """⚠️ F4, round 2. The check unit allows 60 s, and status() waited READ_WAIT_SECONDS (30 s) and
+        then reported monitoring_state_unavailable: the monitor "broken" because a check was slow. It
+        must report the last completed state, marked as a check running. The wait is shortened here
+        only to keep the test fast; the escalation's request is in flight throughout."""
+        for blocking in ('email_transport', 'notice_message'):   # the request in flight; before its record
+            with self.subTest(blocking=blocking):
+                for path in self.alerts.iterdir():
+                    path.unlink()
+                self.sender.reset_mock()
+                worker, release, results = self.in_flight(blocking)
+                try:
+                    with patch.object(a, 'READ_WAIT_SECONDS', 0.3):
+                        shown, code = a.status(self.at + timedelta(hours=2, minutes=1))
+                finally:
+                    release.set()
+                    worker.join(30)
+                self.assertFalse(worker.is_alive())
+                self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable',
+                                    'a running check made status() report the monitor broken')
+                self.assertEqual((code, shown['condition'], shown['checked_at'], shown.get('check_running')),
+                                 (1, 'backup_failed', (self.at + timedelta(hours=1, minutes=55)).isoformat(), True))
+                self.assertEqual((shown['alert']['outcome'], shown['incident']['last_notice_condition'],
+                                  shown['incident']['notices_attempted']), ('provider_accepted', 'backup_failed', 1))
+                self.assertEqual(results['check'][0]['condition'], 'backup_stale')
+                after, _ = a.status(self.at + timedelta(hours=2, minutes=2))
+                self.assertEqual((after['check_running'], after['incident']['last_notice_condition']), (False, 'backup_stale'))
+
+    def test_a_held_lock_with_nothing_being_written_reads_the_state_as_it_is(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        descriptor = os.open(self.alerts / 'monitor.lock', os.O_RDWR)
+        self.addCleanup(os.close, descriptor)
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)      # a check, stuck before writing
+        with patch.object(a, 'READ_WAIT_SECONDS', 0.3):
+            shown, _ = a.status(self.at + timedelta(minutes=1))
+        self.assertEqual((shown['condition'], shown.get('check_running')), ('backup_failed', True),
+                         'a held lock made status() report the monitor broken')
+        self.assertEqual(shown['incident']['last_notice_condition'], 'backup_failed')
+
     def test_status_takes_the_lock_without_creating_or_writing_anything(self):
         """The publisher runs status() in a sandbox with no write grant to this directory, so the
         reader's lock is opened read-only and never created: a writable open would fail there."""
