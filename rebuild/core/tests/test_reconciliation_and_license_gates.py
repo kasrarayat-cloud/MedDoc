@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core.billing import reconcile_usage
-from core.models import Code, CodeSet, CodeSuggestion, CostReconciliation, LedgerEntry
+from core.models import Code, CodeSet, CodeSuggestion, CostReconciliation, Encounter, LedgerEntry
 from core.tests.test_billing_policy import PolicyFixture, STORAGES
 
 
@@ -58,13 +58,17 @@ class StoredCptDisplayGate(PolicyFixture, TestCase):
         CodeSuggestion.objects.create(encounter=self.encounter, terminology=icd_code,
                                       evidence=self.encounter.notes, explanation='Synthetic preserved ICD suggestion')
 
+    def as_shown(self):
+        """What the coding tab's forms post besides the token: the revision the page shows (refutation round 3, F1)."""
+        return {'revision': Encounter.objects.values_list('revision', flat=True).get(pk=self.encounter.pk)}
+
     def assert_not_displayed_or_accepted(self):
         response = self.client.get(f'/encounters/{self.encounter.pk}/?tab=coding')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'SYNTHETIC LICENSE GATE DESCRIPTOR NOT CPT CONTENT')
         self.assertContains(response, 'Synthetic ICD descriptor remains visible')
         self.assertEqual(CodeSuggestion.objects.filter(encounter=self.encounter).count(), 2)
-        accepted = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/')
+        accepted = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/', self.as_shown())
         self.assertIn(accepted.status_code, [400, 403])
         self.suggestion.refresh_from_db()
         self.assertIsNone(self.suggestion.accepted_at)
@@ -86,7 +90,7 @@ class StoredCptDisplayGate(PolicyFixture, TestCase):
         response = self.client.get(f'/encounters/{self.encounter.pk}/?tab=coding')
         self.assertContains(response, 'SYNTHETIC LICENSE GATE DESCRIPTOR NOT CPT CONTENT')
         self.assertContains(response, 'Synthetic ICD descriptor remains visible')
-        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/')
+        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/', self.as_shown())
         self.assertEqual(response.status_code, 302)
         self.suggestion.refresh_from_db()
         self.assertIsNotNone(self.suggestion.accepted_at)

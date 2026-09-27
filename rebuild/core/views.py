@@ -1104,10 +1104,15 @@ def invite_accept(request,raw):
     return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
 
 @require_POST
+@transaction.atomic
 def coding(request,pk):
     from .coding import suggest
-    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    # (under the encounter's row lock, at the page's revision, as `accept_code` below: a suggestion read unlocked was written
+    # from notes a concurrent save had already replaced — refutation round 3, F1)
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     membership(request.user,e.department)
+    if request.POST.get('revision')!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing was suggested. Reopen it to see the current notes before suggesting codes.',409)
     result=suggest(e,request.user)
     served=e.service_date.strftime('%d %B %Y')
     if result.covered:
@@ -1123,10 +1128,21 @@ def coding(request,pk):
 @require_POST
 @transaction.atomic
 def accept_code(request,pk,code_pk):
-    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    # ⚠️ UNDER THE ENCOUNTER'S ROW LOCK, AT THE REVISION THE PAGE SHOWED, like every other writer of its codes or review.
+    # Unlocked, an acceptance could commit after a notes save had counted what it would clear and before it cleared the
+    # codes: answered and audited as accepted, then deleted by the save, which said nothing of it (refutation round 3, F1).
+    # Now the two serialize: the save counts and names the accepted code, or this finds its code gone and says so.
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     membership(request.user,e.department,roles=['owner','clinician'])
     from .coding import applicable_releases,cpt_licensed
-    item=get_object_or_404(CodeSuggestion.objects.select_for_update(),pk=code_pk,encounter=e)
+    item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e).first()
+    if request.POST.get('revision')!=str(e.revision):
+        # (a changed save, and only a revision-changing write, deletes an encounter's code suggestions)
+        return document_refusal(request,e,('This code suggestion is no longer on this document: its source notes were changed after '
+                                           'you opened the page, which clears their code suggestions.' if item is None else
+                                           'This document changed after you opened it, in another window or by a colleague.')
+                                +' Nothing was accepted. Reopen it to see the current notes and codes.',409)
+    if item is None:raise Http404
     if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
     if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
     if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied

@@ -619,6 +619,71 @@ class CodeWritersSerializeWithANotesSave(OrdinaryDraft, TransactionTestCase):
         self.assertEqual([s.evidence for s in CodeSuggestion.objects.filter(encounter=encounter) if s.evidence not in encounter.notes], [])
 
 
+def page_form(page, action_suffix):
+    """The action and hidden fields of the page's form that posts to a URL ending `action_suffix`, as a browser posts them."""
+    for form in re.finditer(r'<form method="post" action="([^"]*)"[^>]*>(.*?)</form>', page.content.decode(), re.S):
+        if form.group(1).endswith(action_suffix):
+            return form.group(1), dict(re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)"', form.group(2)))
+    return None, {}
+
+
+@override_settings(**TEST_SETTINGS)
+class TheCodingTabPostsTheRevisionItShows(OrdinaryDraft, TestCase):
+    """F1's repair refuses a code write from a page older than the document, so the page posts the revision it shows."""
+    CODED = OrdinaryDraft.NOTES + '\nAssessment: documented as R00.0.'
+
+    def coded(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        synthetic_code()
+        return encounter
+
+    def test_suggesting_and_accepting_as_the_page_posts_them(self):
+        encounter = self.coded()
+        url, fields = page_form(self.client.get(f'/encounters/{encounter.pk}/?tab=coding'), '/coding/')
+        self.assertEqual(fields.get('revision'), str(encounter.revision))
+        self.assertEqual(self.client.post(url, fields).status_code, 302)
+        offer = CodeSuggestion.objects.get(encounter=encounter)
+        url, fields = page_form(self.client.get(f'/encounters/{encounter.pk}/?tab=coding'), f'/coding/{offer.pk}/accept/')
+        self.assertEqual(fields.get('revision'), str(encounter.revision))
+        self.assertEqual(self.client.post(url, fields).status_code, 302)
+        offer.refresh_from_db()
+        self.assertEqual(offer.accepted_by_id, self.user.pk)
+
+    def test_a_page_older_than_the_document_suggests_and_accepts_nothing_and_says_why(self):
+        encounter = self.coded()
+        self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
+        offer = CodeSuggestion.objects.get(encounter=encounter)
+        stale = encounter.revision
+        Encounter.objects.filter(pk=encounter.pk).update(revision=stale + 1)     # (as an answers save elsewhere renumbers it)
+        refused = self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': stale})
+        self.assertContains(refused, 'This document changed after you opened it', status_code=409)
+        self.assertContains(refused, 'Nothing was accepted.', status_code=409)
+        offer.refresh_from_db()
+        self.assertIsNone(offer.accepted_by_id)
+        self.assertFalse(AuditEvent.objects.filter(action='coding.accept').exists())
+        suggested = AuditEvent.objects.filter(action='coding.suggest').count()
+        self.assertContains(self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': stale}),
+                            'Nothing was suggested.', status_code=409)
+        self.assertEqual(AuditEvent.objects.filter(action='coding.suggest').count(), suggested)
+        # (a page rendered before this release posts no revision, and is refused the same way)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/').status_code, 409)
+
+    def test_an_acceptance_from_before_a_changed_save_says_its_code_is_gone(self):
+        encounter = self.coded()
+        self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
+        offer = CodeSuggestion.objects.get(encounter=encounter)
+        stale = encounter.revision
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': self.CODED + '\nPlan: synthetic.'})
+        self.assertFalse(CodeSuggestion.objects.filter(pk=offer.pk).exists())            # (the control: the save cleared it)
+        refused = self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/', {'revision': stale})
+        self.assertContains(refused, 'This code suggestion is no longer on this document', status_code=409)
+        self.assertContains(refused, 'Nothing was accepted.', status_code=409)
+        # (a suggestion that was never on this document is not found, at any revision)
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/coding/{offer.pk}/accept/',
+                                          {'revision': encounter.revision}).status_code, 404)
+
+
 # ── the qualified Word form, offline ─────────────────────────────────────────────────────────────────────────────
 def statement(key, paragraph, label, text, variants, kind='assertion'):
     return {'key': key, 'kind': kind, 'body_paragraph': paragraph, 'label': 'Prewritten statement: ' + label,

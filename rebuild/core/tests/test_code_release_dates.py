@@ -131,10 +131,14 @@ class AcceptanceReadsTheSameRuleAsSuggestion(SyntheticFixture, TestCase):
         self.suggestion = CodeSuggestion.objects.get(encounter=self.encounter)
         self.client.force_login(self.user)
 
+    def as_shown(self):
+        """What the coding tab's forms post besides the token: the revision the page shows (refutation round 3, F1)."""
+        return {'revision': Encounter.objects.values_list('revision', flat=True).get(pk=self.encounter.pk)}
+
     def test_an_expired_fiscal_year_still_accepts_for_a_visit_inside_it(self):
         """The release is not 'no longer current' for an encounter it covers."""
         with patch('core.coding.timezone.localdate', return_value=date(2027, 6, 1)):
-            response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/')
+            response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/', self.as_shown())
         self.assertEqual(response.status_code, 302)
         self.suggestion.refresh_from_db()
         self.assertIsNotNone(self.suggestion.accepted_at)
@@ -142,7 +146,7 @@ class AcceptanceReadsTheSameRuleAsSuggestion(SyntheticFixture, TestCase):
 
     def test_a_suggestion_whose_release_does_not_cover_the_date_of_service_cannot_be_accepted(self):
         Encounter.objects.filter(pk=self.encounter.pk).update(service_date=date(2026, 10, 1))
-        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/')
+        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/', self.as_shown())
         self.assertEqual(response.status_code, 400)
         self.assertIn(b'date of service', response.content)
         self.suggestion.refresh_from_db()
@@ -176,6 +180,10 @@ class ANewFiscalYearIsAddedBesideItsPredecessor(TestCase):
                              'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
     """Each test here is a defect a refutation lens demonstrated on the finished diff."""
+
+    def as_shown(self):
+        """What the coding tab's forms post besides the token: the revision the page shows (refutation round 3, F1)."""
+        return {'revision': Encounter.objects.values_list('revision', flat=True).get(pk=self.encounter.pk)}
 
     def setUp(self):
         self.user, _org, self.department, _patient, _template, self.encounter, _blob = self.make_scope('refuted')
@@ -276,7 +284,7 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
         result = self.code_with_notes('Assessment: synthetic visit documented as 99213 in the record.',
                                       service_date=date(2026, 3, 31))
         self.assertEqual((result.count, result.covered, result.versions), (1, False, ['CPT CPT-2026']))
-        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/', follow=True)
+        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/', self.as_shown(), follow=True)
         text = ' '.join(str(m) for m in response.context['messages'])
         self.assertIn('No ICD-10-CM release covers', text)
         self.assertNotIn('no suggestion was recorded', text)
@@ -285,7 +293,7 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
 
     def test_a_date_no_release_at_all_covers_still_says_nothing_was_recorded(self):
         self.code_with_notes('Assessment: synthetic finding documented as M25.532.', service_date=date(2026, 3, 31))
-        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/', follow=True)
+        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/', self.as_shown(), follow=True)
         text = ' '.join(str(m) for m in response.context['messages'])
         self.assertIn('No terminology release covers', text)
         self.assertIn('nothing was validated and no suggestion was recorded', text)
