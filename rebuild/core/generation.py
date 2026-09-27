@@ -1930,15 +1930,28 @@ def without_closing_stop(line):
     return line
 
 
+def named_option(options, text):
+    """The one printed option `text` names: equal (trimmed, ignoring case as `v3_mapping.option_for` does) after removing
+    AT MOST ONE closing full stop from EACH side (`without_closing_stop`), never more (round 2, F4: an option printed
+    'No.' or 'reflux positive.' could never be filled, since only the value lost its stop). 'No..' names neither 'No.'
+    nor 'No'. None when it names no option, or two."""
+    def read(value):
+        value = str(value or '').strip()
+        return {value.lower(), without_closing_stop(value).lower()} - {''}
+    wanted = read(text)
+    found = [option for option in options or [] if read(option) & wanted]
+    return found[0] if wanted and len(found) == 1 else None
+
+
 def v3_option_value(field, text):
     """The text form of an option answer read from the notes, or None unless the value names the printed options
-    exactly (trimmed, ignoring case). A checkbox takes only an explicit yes, checked or present."""
-    from .v3_mapping import CHECKBOX_YES, CHECKED, option_for
-    lines = [line for line in map(without_closing_stop, str(text or '').split('\n')) if line]
+    exactly (`named_option`). A checkbox takes only an explicit yes, checked or present."""
+    from .v3_mapping import CHECKBOX_YES, CHECKED
+    lines = [line.strip() for line in str(text or '').split('\n') if line.strip()]
     if field.get('kind') == 'checkbox':
-        return CHECKED if len(lines) == 1 and lines[0].strip().lower() in CHECKBOX_YES else None
+        return CHECKED if len(lines) == 1 and without_closing_stop(lines[0]).lower() in CHECKBOX_YES else None
     options = field.get('options') or []
-    chosen = [option_for(options, line) for line in lines]
+    chosen = [named_option(options, line) for line in lines]
     if not chosen or None in chosen or (field.get('kind') == 'choice' and len(chosen) != 1):
         return None
     return '\n'.join(option for option in options if option in chosen)

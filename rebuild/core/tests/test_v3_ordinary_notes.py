@@ -652,6 +652,25 @@ class RoundTwoRefutation(SimpleTestCase):
             with self.subTest(notes=notes):
                 answer = run(notes, {label: [notes]}, fields=form)[label]
                 self.assertEqual((answer['status'], answer['text']), ('supported', option), notes)
+        # At most one closing stop from EACH side, never more: a doubled or trailing-off stop names no option.
+        for notes, label in (('Smoker: No..', 'Smoker'), ('Smoker: No...', 'Smoker'),
+                             ('Right impression: reflux positive..', 'Right impression')):
+            with self.subTest(notes=notes):
+                answer = run(notes, {label: [notes]}, fields=form)[label]
+                self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+                self.assertEqual(answer['held_candidate']['text'], notes.split(': ', 1)[1], notes)
+        # The same reading wherever an option value is judged: directly, and on the labelled-line contract a job quoted
+        # before the complete-sentence contract runs under (there nothing else holds 'No..' first).
+        self.assertEqual([g.named_option(['Yes.', 'No.'], value) for value in ('No', 'No.', ' no. ', 'No..', 'No...')],
+                         ['No.', 'No.', 'No.', None, None])
+        self.assertEqual(g.named_option(['Yes', 'No'], 'No.'), 'No')
+        quoted = {k: v for k, v in g.configuration().items() if k != 'v3_evidence_contract'}
+        for notes, expected in (('Smoker: No.', ('supported', 'No.')), ('Smoker: No..', ('conflict', ''))):
+            smoker = g.generate(notes, form, {**quoted, 'mode': 'fixture'})[0]['v3_s']
+            self.assertEqual((smoker['status'], smoker['text']), expected, notes)
+        # Two printed options that read alike are not named by either reading.
+        both = [field('v3_s', 'Smoker', 'choice', ['No', 'No.'])]
+        self.assertEqual(run('Smoker: No', {'Smoker': ['Smoker: No']}, fields=both)['Smoker']['status'], 'conflict')
 
     def test_f5_each_form_label_on_one_line_is_its_own_unit(self):
         vitals = [field('v3_b', 'BP'), field('v3_h', 'HR'), field('v3_t', 'Temp')]
