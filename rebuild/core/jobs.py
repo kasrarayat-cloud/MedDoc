@@ -383,7 +383,7 @@ def refuse(kind,detail,job=None):
 
 
 #: A hold taken before the switch to real data mode that sits on sandbox money: refused before any provider request.
-SANDBOX_HOLD_REFUSED='The funds held for this request include sandbox (test) payments, which real data mode never spends. Contact support.'
+SANDBOX_HOLD_REFUSED='The paid balance for this request holds sandbox (test) payments, which real data mode never spends. Contact support.'
 
 
 def refuse_sandbox_hold(job):
@@ -591,7 +591,8 @@ def run_one():
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
     provider_returned=False
     try:
-        # A hold taken before the switch to real data mode may sit on sandbox money, which real mode never spends.
+        # A hold taken before the switch to real data mode may sit on sandbox money, or its payer's paid balance (which a
+        # reconciled cost would debit) may hold it: real mode never spends it, and refuses the job as reserve() would.
         if sandbox_hold(job): raise refuse_sandbox_hold(job)
         e=job.encounter
         result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)

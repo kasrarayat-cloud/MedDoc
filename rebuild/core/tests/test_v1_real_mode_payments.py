@@ -821,7 +821,8 @@ class RealModeNeverDebitsSandboxMoney(SyntheticFixture, TestCase):
         self.assert_untouched(wallet)
         self.assertFalse(LedgerEntry.objects.filter(job=job, kind='reconciliation').exists())
         refused = AuditEvent.objects.get(action='usage.reconciliation_sandbox_refused')
-        self.assertEqual((refused.actor_id, refused.target, refused.details['charge_delta']), (self.user.pk, str(job.pk), '1.2'))
+        self.assertEqual((refused.actor_id, refused.target, Decimal(refused.details['charge_delta']), refused.details['wallet']),
+                         (self.user.pk, str(job.pk), Decimal('1.2'), str(wallet.pk)))
 
     def test_R4_2_a_charge_reconciled_in_real_mode_for_a_job_settled_before_the_switch_stays_pending(self):
         promo, wallet = self.funded()
@@ -831,10 +832,8 @@ class RealModeNeverDebitsSandboxMoney(SyntheticFixture, TestCase):
         self.assertEqual((row.charge_delta, row.ledger_status), (Decimal('1.2'), 'pending_funds'))
         self.assert_untouched(wallet)
         self.assertTrue(AuditEvent.objects.filter(action='usage.reconciliation_sandbox_refused', target=str(job.pk)).exists())
-        # Synthetic mode, unchanged: the same charge is applied from the same balance.
-        other, other_usage = self.settled_on_promotional_credit('synthetic-reconciliation')
-        applied = reconcile_usage(other_usage, Decimal('1.8'), 'synthetic-invoice-synthetic', self.user)
-        self.assertEqual(applied.ledger_status, 'applied')
+        # Synthetic mode, unchanged: the charge still waiting is applied from the same balance.
+        self.assertEqual(apply_pending_reconciliations(actor=self.user), [row])
         wallet.refresh_from_db()
         self.assertEqual(wallet.balance, Decimal('8.8'))
 
@@ -908,6 +907,19 @@ class RealModeNeverDebitsSandboxMoney(SyntheticFixture, TestCase):
         self.assertEqual(self.holds(job), [('paid', Decimal('2'), 'settled'), ('promo', Decimal('1'), 'settled')])
         promo = Wallet.objects.get(user=self.user, kind='promo')
         self.assertEqual((promo.balance, promo.reserved), (Decimal('0.25'), Decimal('0')))
+        self.assert_untouched(wallet)
+
+    def test_a_queued_job_with_no_hold_yet_is_judged_by_the_payer_reserve_would_record(self):
+        """A job queued without a recorded payer (no hold taken) is refused when the payer reserve() would record for it
+        holds sandbox money, rather than sent with nothing to check."""
+        _, wallet = self.sandbox_top_up()
+        job = self.job('no-payer-yet')
+        self.assertEqual((job.payer, self.holds(job)), ('', []))
+        generate, _ = self.run_worker(**self.REAL_LIVE_AI)
+        generate.assert_not_called()
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertIn('sandbox (test) payments', job.error)
         self.assert_untouched(wallet)
 
     def test_a_hold_on_any_sandbox_funded_balance_is_refused_even_one_that_is_not_the_payers(self):
