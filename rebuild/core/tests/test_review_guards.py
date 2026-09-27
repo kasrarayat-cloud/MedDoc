@@ -152,6 +152,16 @@ class GenerationRefusedOverReviewOnOrdinaryForms(OrdinaryDraft, TestCase):
         self.assertEqual(sorted((answer['status'], answer['reviewed']) for answer in saved.values()),
                          [('left_blank', False), ('supported', False)])               # (the control)
 
+    def test_a_finalized_record_is_refused_as_immutable_not_advised(self):
+        """R2: on a finalized record the refusal advised clearing the draft — an action the record refuses."""
+        encounter, _keys = self.reviewed_draft()
+        Encounter.objects.filter(pk=encounter.pk).update(status='finalized', finalized_by=self.user, finalized_at=timezone.now())
+        response = self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertEqual(Job.objects.filter(encounter=encounter, kind='generation').count(), 1)
+        self.assertContains(response, 'Finalized documents are immutable.')
+        self.assertNotContains(response, REFUSED)
+        self.assertNotContains(response, CLEAR_ACTION)
+
     def test_a_draft_nobody_has_decided_is_not_refused(self):
         """The refusal reads decisions, not the presence of answers: an untouched draft reaches the existing
         same-revision reuse (nothing new is requested either way)."""

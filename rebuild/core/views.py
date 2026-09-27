@@ -524,6 +524,8 @@ def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
+        # (a finalized record says so first: the advice below names an action it refuses — refutation R2)
+        if e.status=='finalized':raise ValidationError('Finalized documents are immutable.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
         # ⚠️ ADOPTING A GENERATION REPLACES EVERY ANSWER AND THE WHOLE REVIEW (`jobs.py`). The page offers it only
         # before any answer exists; a crafted POST at the current revision queued a billed job that erased reviewed,
