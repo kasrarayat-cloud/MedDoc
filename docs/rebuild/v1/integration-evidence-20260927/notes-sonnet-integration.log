@@ -1,0 +1,501 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..EEFEEEEEEEEE....................................F...........................F................/opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...........FEE....................EE....................................EEEEE................................................
+======================================================================
+ERROR: test_the_worker_adopts_a_live_unit_selection_for_a_v3_form (core.tests.test_v3_ordinary_notes.LiveCompleteSentenceWorker.test_the_worker_adopts_a_live_unit_selection_for_a_v3_form)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 564, in test_the_worker_adopts_a_live_unit_selection_for_a_v3_form
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_a_client_that_cannot_be_built_ends_not_processed_with_the_hold_released (core.tests.test_v3_ordinary_notes.NothingStrandsAHold.test_a_client_that_cannot_be_built_ends_not_processed_with_the_hold_released)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 495, in test_a_client_that_cannot_be_built_ends_not_processed_with_the_hold_released
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_a_refusal_after_the_hold_ends_not_processed_with_the_hold_released (core.tests.test_v3_ordinary_notes.NothingStrandsAHold.test_a_refusal_after_the_hold_ends_not_processed_with_the_hold_released)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 484, in test_a_refusal_after_the_hold_ends_not_processed_with_the_hold_released
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_corrected_allergy_is_held_through_the_queued_worker (core.tests.test_v3_ordinary_notes.RecoveredNoteContextWorker.test_corrected_allergy_is_held_through_the_queued_worker)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1316, in test_corrected_allergy_is_held_through_the_queued_worker
+    answers, _ = self.generate(notes, {'Allergies': ['Allergies: penicillin.']})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1165, in generate
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_intact_ordinary_history_reaches_the_review_page_in_source_order (core.tests.test_v3_ordinary_notes.RecoveredNoteContextWorker.test_intact_ordinary_history_reaches_the_review_page_in_source_order)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1326, in test_intact_ordinary_history_reaches_the_review_page_in_source_order
+    answers, _ = self.generate(' '.join(quotes), {'Reason for visit': quotes[::-1]})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1165, in generate
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_repeated_hpi_occurrences_survive_worker_review_and_word_export (core.tests.test_v3_ordinary_notes.RecoveredParagraphExport.test_repeated_hpi_occurrences_survive_worker_review_and_word_export)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1392, in test_repeated_hpi_occurrences_survive_worker_review_and_word_export
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_checkbox (core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_checkbox)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1180, in test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_checkbox
+    self.held_option('Diabetes: yes. Reason for visit: review; diabetes was excluded on repeat HbA1c.', 'Diabetes',
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1174, in held_option
+    answers, _ = self.generate(notes, {label: [quote], 'Reason for visit': [other]})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1165, in generate
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_choice (core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_choice)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1184, in test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_choice
+    self.held_option('Smoker: yes. Reason for visit: cough; he quit smoking ten years ago.', 'Smoker?', 'Smoker: yes.',
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1174, in held_option
+    answers, _ = self.generate(notes, {label: [quote], 'Reason for visit': [other]})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1165, in generate
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r3_2_a_reason_is_sentence_holds_the_checkbox_before_it (core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_2_a_reason_is_sentence_holds_the_checkbox_before_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1188, in test_r3_2_a_reason_is_sentence_holds_the_checkbox_before_it
+    self.held_option('Diabetes: yes.\nReason for visit is review, as diabetes was excluded on repeat testing.', 'Diabetes',
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1174, in held_option
+    answers, _ = self.generate(notes, {label: [quote], 'Reason for visit': [other]})
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1165, in generate
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock (core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1193, in test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock
+    answers, elapsed = self.generate(notes, {'Allergies': ['Allergies: ' + '.' * 49900],
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 1165, in generate
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_a_denied_symptom_is_never_stored_as_the_reason_for_visit (core.tests.test_v3_ordinary_notes.RoundTwoThroughTheWorker.test_a_denied_symptom_is_never_stored_as_the_reason_for_visit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 770, in test_a_denied_symptom_is_never_stored_as_the_reason_for_visit
+    job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/jobs.py", line 288, in enqueue
+    max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 387, in maximum_cost
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_the_bytes_sent_never_exceed_the_bytes_held_for (core.tests.test_v3_ordinary_notes.CostBoundCoversTheRequest.test_the_bytes_sent_never_exceed_the_bytes_held_for)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 434, in test_the_bytes_sent_never_exceed_the_bytes_held_for
+    sent = sent_request(notes, TEN, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 355, in sent_request
+    g.generate(notes, fields, config)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_a_v3_form_is_sent_source_units_and_the_unit_schema_and_its_selections_are_adopted (core.tests.test_v3_ordinary_notes.LiveCompleteSentencePath.test_a_v3_form_is_sent_source_units_and_the_unit_schema_and_its_selections_are_adopted)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 528, in test_a_v3_form_is_sent_source_units_and_the_unit_schema_and_its_selections_are_adopted
+    raw, *_ = g.generate(self.notes, FIELDS, live_config())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_a_v3_job_quoted_before_the_contract_existed_is_sent_the_labelled_line_request (core.tests.test_v3_ordinary_notes.QueuedContractAttribution.test_a_v3_job_quoted_before_the_contract_existed_is_sent_the_labelled_line_request)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 369, in test_a_v3_job_quoted_before_the_contract_existed_is_sent_the_labelled_line_request
+    sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, config)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 355, in sent_request
+    g.generate(notes, fields, config)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_a_v3_job_quoted_under_the_contract_is_sent_the_complete_sentence_request (core.tests.test_v3_ordinary_notes.QueuedContractAttribution.test_a_v3_job_quoted_under_the_contract_is_sent_the_complete_sentence_request)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 381, in test_a_v3_job_quoted_under_the_contract_is_sent_the_complete_sentence_request
+    sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, live_config())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 355, in sent_request
+    g.generate(notes, fields, config)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r10_only_the_named_contract_value_selects_the_complete_sentence_request (core.tests.test_v3_ordinary_notes.RoundTwoMutantPins.test_r10_only_the_named_contract_value_selects_the_complete_sentence_request) (value='natural-v0')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 812, in test_r10_only_the_named_contract_value_selects_the_complete_sentence_request
+    sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, live_config(v3_evidence_contract=value))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 355, in sent_request
+    g.generate(notes, fields, config)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r10_only_the_named_contract_value_selects_the_complete_sentence_request (core.tests.test_v3_ordinary_notes.RoundTwoMutantPins.test_r10_only_the_named_contract_value_selects_the_complete_sentence_request) (value='natural-v1 ')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 812, in test_r10_only_the_named_contract_value_selects_the_complete_sentence_request
+    sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, live_config(v3_evidence_contract=value))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 355, in sent_request
+    g.generate(notes, fields, config)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r10_only_the_named_contract_value_selects_the_complete_sentence_request (core.tests.test_v3_ordinary_notes.RoundTwoMutantPins.test_r10_only_the_named_contract_value_selects_the_complete_sentence_request) (value='NATURAL-V1')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 812, in test_r10_only_the_named_contract_value_selects_the_complete_sentence_request
+    sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, live_config(v3_evidence_contract=value))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 355, in sent_request
+    g.generate(notes, fields, config)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r10_only_the_named_contract_value_selects_the_complete_sentence_request (core.tests.test_v3_ordinary_notes.RoundTwoMutantPins.test_r10_only_the_named_contract_value_selects_the_complete_sentence_request) (value='')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 812, in test_r10_only_the_named_contract_value_selects_the_complete_sentence_request
+    sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, live_config(v3_evidence_contract=value))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 355, in sent_request
+    g.generate(notes, fields, config)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+ERROR: test_r10_only_the_named_contract_value_selects_the_complete_sentence_request (core.tests.test_v3_ordinary_notes.RoundTwoMutantPins.test_r10_only_the_named_contract_value_selects_the_complete_sentence_request) (value=None)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 812, in test_r10_only_the_named_contract_value_selects_the_complete_sentence_request
+    sent = sent_request('Patient seen today.\nSmoker: yes', FIELDS, live_config(v3_evidence_contract=value))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 355, in sent_request
+    g.generate(notes, fields, config)
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 2616, in generate
+    profile=job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 246, in job_request_profile
+    _refuse_profile('QuillMD has no request profile for this provider and model, so the request cannot be built. '
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py", line 224, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+======================================================================
+FAIL: test_a_note_of_more_than_a_thousand_units_is_refused_at_enqueue_before_any_hold (core.tests.test_v3_ordinary_notes.NothingStrandsAHold.test_a_note_of_more_than_a_thousand_units_is_refused_at_enqueue_before_any_hold)
+----------------------------------------------------------------------
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 467, in test_a_note_of_more_than_a_thousand_units_is_refused_at_enqueue_before_any_hold
+    with self.assertRaisesMessage(g.ValidationError, '1,000 complete statements'):
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+AssertionError: '1,000 complete statements' not found in "['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']"
+
+======================================================================
+FAIL: test_the_side_in_the_notes_is_the_box_ticked (core.tests.test_word_v3_workflow.V3LateralityRoundTrip.test_the_side_in_the_notes_is_the_box_ticked)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_word_v3_workflow.py", line 1233, in test_the_side_in_the_notes_is_the_box_ticked
+    self.assertEqual(texts, {"Indication": ("supported", "synthetic"), "Injected joint": ("supported", "(R) knee"),
+AssertionError: {'Indication': ('conflict', ''), 'Injected joint': ('confl[85 chars]ee')} != {'Indication': ('supported', 'synthetic'), 'Injected joint[111 chars]ee')}
+- {'Aspirated joint': ('conflict', ''),
+?                       ^ ^^^^^
+
++ {'Aspirated joint': ('supported', 'L knee'),
+?                       ^^^^ ^ ++    ++++++
+
+   'Imaged joint': ('supported', '(L) knee'),
+-  'Indication': ('conflict', ''),
+-  'Injected joint': ('conflict', '')}
++  'Indication': ('supported', 'synthetic'),
++  'Injected joint': ('supported', '(R) knee')}
+
+======================================================================
+FAIL: test_left_knee_generated_reviewed_and_exported (core.tests.test_word_v3_workflow.V3ReviewedOptionIsExported.test_left_knee_generated_reviewed_and_exported)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_word_v3_workflow.py", line 1329, in test_left_knee_generated_reviewed_and_exported
+    self.assertEqual((encounter.answers[field["key"]]["status"], encounter.answers[field["key"]]["text"]), ("supported", "Lt. knee"))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'Lt. knee')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'Lt. knee')
+
+======================================================================
+FAIL: test_more_than_a_thousand_units_or_a_hundred_questions_are_refused_at_the_quote (core.tests.test_v3_ordinary_notes.CostBoundCoversTheRequest.test_more_than_a_thousand_units_or_a_hundred_questions_are_refused_at_the_quote)
+----------------------------------------------------------------------
+core.jobs.NoProviderRequest: ['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/tests/test_v3_ordinary_notes.py", line 443, in test_more_than_a_thousand_units_or_a_hundred_questions_are_refused_at_the_quote
+    with self.assertRaisesMessage(g.ValidationError, '1,000 complete statements'):
+  File "/usr/lib/python3.12/contextlib.py", line 158, in __exit__
+    self.gen.throw(value)
+AssertionError: '1,000 complete statements' not found in "['QuillMD has no request profile for this provider and model, so the request cannot be built. Nothing was sent.']"
+
+----------------------------------------------------------------------
+Ran 216 tests in 96.285s
+
+FAILED (failures=4, errors=20)
+Destroying test database for alias 'default'...
+Found 216 test(s).
+System check identified no issues (0 silenced).

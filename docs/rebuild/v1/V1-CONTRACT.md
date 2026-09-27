@@ -52,6 +52,18 @@ meet V1 until an item on `V1-BLOCKERS.md` clears; **OFF** — deliberately disab
 | Faithful export | v3 writers: only touched parts change; signatures never filled; bounded capacity where the page cannot grow | historical export proxy 18/20; earlier scorer lacked checkbox correctness and native Word acceptance; H08 control defect repaired | REPAIRED on branch; qualification remains open |
 | Qualified WM IOV and colonoscopy forms | existing pinned / tab paths | tests | READY |
 
+## File-format boundary
+
+| format | current boundary |
+|---|---|
+| Editable `.docx` | Broad structural support is the V1 target and remains unqualified; the qualified WM original keeps its own adapter. No placeholder rewriting is required by the intended workflow. |
+| Legacy binary `.doc` | Live upload explicitly refuses it with a save-as-unprotected-`.docx` instruction. The original D19 legacy file is preserved; an earlier conversion/render probe found only 2/17 expected areas correct and does not qualify a faithful automatic conversion path. This exception stays in the scored denominator. |
+| Fillable PDF | Existing narrow text-only AcroForm path: fixed-size Helvetica, unrotated ordinary text fields, no checkbox/radio/dropdown/signature widgets or actions. It is not scanned-form recognition or Word-to-PDF export. |
+| Encrypted/corrupt files, macros/active code, external relationships, tracked revisions, image-only/scanned forms | Explicit refusal or visible unsupported-area handling; no embedded code execution, external fetch, silent revision acceptance or OCR compatibility claim. |
+
+Ordinary merged/nested tables, text boxes and content controls remain in the required Word families. They
+are not broadly excluded to improve a percentage. A detected field is not proof of a successful export.
+
 ## Money
 
 | function | V1 path | evidence | V1 status |
