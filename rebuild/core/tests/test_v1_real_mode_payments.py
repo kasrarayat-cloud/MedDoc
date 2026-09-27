@@ -20,7 +20,7 @@ from django.db import DatabaseError, transaction
 from django.test import TestCase, override_settings
 
 from core.billing import reserve, sandbox_funded
-from core.models import AuditEvent, Job, LedgerEntry, Payment, Reservation, Wallet, WebhookEvent
+from core.models import AuditEvent, Job, LedgerEntry, Payment, ProviderReceipt, Reservation, Usage, Wallet, WebhookEvent
 from core.tests.test_security import SyntheticFixture
 from core.tests import test_v1_stripe_live as stripe_live  # The module, so its TestCase is not collected twice here.
 from core.tests.test_v1_stripe_live import LIVE, SECRET, STORAGES, event
@@ -420,3 +420,99 @@ class RealModeFundsOnlyWhatItCanSpend(SyntheticFixture, TestCase):
                       credit=True)
         self.assertFalse(sandbox_funded(other_org_wallet))
         self.assertFalse(sandbox_funded(Wallet.objects.get(user=other[0], kind='promo')))
+
+
+@override_settings(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES,
+                   QUILLMD_WELCOME_CREDIT=Decimal('0'))
+class RealModeWorkerNeverSpendsAHoldOnSandboxMoney(SyntheticFixture, TestCase):
+    """Round-3 refutation F2: a hold taken before the switch to real data mode sits on sandbox money. The worker refuses
+    the job before any provider request: not processed, nothing charged, the hold released, audited."""
+    setUp = stripe_live.LiveCheckoutAndSettlement.setUp
+    checkout = stripe_live.LiveCheckoutAndSettlement.checkout
+    signed = stripe_live.LiveCheckoutAndSettlement.signed
+    sandbox_top_up = RealModeNeverSpendsSandboxMoney.sandbox_top_up
+    job = RealModeNeverSpendsSandboxMoney.job
+    ANSWERS = {'symptoms': {'text': 'no chest pain', 'status': 'supported', 'reviewed': False, 'evidence': []}}
+    REAL_LIVE_AI = dict(REAL_PAYMENTS_OFF, AI_MODE='live')
+
+    def run_worker(self, **now):
+        from core import jobs
+        provider = ({'answers': self.ANSWERS}, Decimal('1'), {'input_tokens': 1}, {'rate': '1'}, 'anthropic:probe',
+                    'msg_probe_refute3', False)
+        with override_settings(**now), patch('core.jobs.generation.generate', return_value=provider) as generate, \
+                patch('core.jobs.generation.validated', return_value=self.ANSWERS), \
+                patch('core.jobs.transcribe', side_effect=AssertionError('transcription was sent')) as transcribe:
+            self.assertTrue(jobs.run_one())
+        return generate, transcribe
+
+    def assert_refused_and_released(self, job, wallet):
+        job.refresh_from_db()
+        wallet.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertTrue(job.error.startswith('Not processed: '), job.error)
+        self.assertIn('sandbox (test) payments', job.error)
+        self.assertIn('Contact support', job.error)
+        self.assertIn('nothing was charged and the held funds were released', job.error)
+        self.assertEqual((wallet.balance, wallet.reserved), (10, 0))
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state', flat=True)), ['released'])
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
+        self.assertFalse(LedgerEntry.objects.filter(job=job).exists())
+        refused = AuditEvent.objects.get(action='usage.sandbox_hold_refused')
+        self.assertEqual((refused.actor_id, refused.target), (self.user.pk, str(job.pk)))
+        self.assertEqual(AuditEvent.objects.get(action='job.failed', target=str(job.pk)).details['billing'], 'not_processed')
+        self.assertTrue(AuditEvent.objects.filter(action='usage.release', target=str(job.pk)).exists())
+
+    def test_P2_a_generation_hold_taken_in_synthetic_mode_is_never_spent_on_a_real_mode_provider_call(self):
+        """The refuter's P2: synthetic mode, sandbox top-up, a generation job holds $3; restart in real data mode,
+        payments off, AI_MODE live; run_one() called the provider and debited $1.50 of sandbox money."""
+        _, wallet = self.sandbox_top_up()
+        job = self.job('queued-before-restart')
+        reserve(job, Decimal('2'))
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('wallet__kind', 'amount', 'state')),
+                         [('paid', Decimal('3'), 'held')])
+        generate, _ = self.run_worker(**self.REAL_LIVE_AI)
+        generate.assert_not_called()
+        self.assert_refused_and_released(job, wallet)
+
+    def test_a_transcription_hold_taken_in_synthetic_mode_is_never_sent_in_real_mode(self):
+        _, wallet = self.sandbox_top_up()
+        job = Job.objects.create(encounter=self.user.membership_set.first().department.encounter_set.first(), user=self.user,
+                                 kind='transcription', request_key='transcription-before-restart', config={})
+        reserve(job, charge_limit=Decimal('3'))
+        _, transcribe = self.run_worker(**self.REAL_LIVE_AI)
+        transcribe.assert_not_called()
+        self.assert_refused_and_released(job, wallet)
+
+    def test_synthetic_mode_spends_the_same_hold_as_before(self):
+        _, wallet = self.sandbox_top_up()
+        job = self.job('synthetic-worker')
+        reserve(job, Decimal('2'))
+        generate, _ = self.run_worker(AI_MODE='live')
+        self.assertTrue(generate.called)
+        wallet.refresh_from_db()
+        self.assertEqual((wallet.balance, wallet.reserved), (Decimal('8.5'), 0))
+        self.assertFalse(AuditEvent.objects.filter(action='usage.sandbox_hold_refused').exists())
+
+    def test_real_mode_spends_a_hold_on_promotional_credit(self):
+        with override_settings(QUILLMD_WELCOME_CREDIT=Decimal('10')):
+            other = self.make_scope('promo-worker')
+        job = Job.objects.create(encounter=other[5], user=other[0], kind='generation', request_key='promo-worker', config={})
+        with override_settings(**self.REAL_LIVE_AI):
+            reserve(job, Decimal('2'))
+        generate, _ = self.run_worker(**self.REAL_LIVE_AI)
+        self.assertTrue(generate.called)
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+
+    def test_real_mode_spends_a_hold_on_live_money(self):
+        with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
+            self.checkout('worker-live')
+            payment = Payment.objects.get(stripe_session='cs_worker-live')
+            self.assertEqual(self.signed(event(True, paid_session(payment, True, 'pi_worker_live'), 'evt_worker_live')).status_code, 200)
+            job = self.job('worker-live')
+            reserve(job, Decimal('2'))
+        generate, _ = self.run_worker(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', AI_MODE='live', **REAL, **LIVE)
+        self.assertTrue(generate.called)
+        wallet = Wallet.objects.get(user=self.user, kind='paid')
+        self.assertEqual((wallet.balance, wallet.reserved), (Decimal('8.5'), 0))
