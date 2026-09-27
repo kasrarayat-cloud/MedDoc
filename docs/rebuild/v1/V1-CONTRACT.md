@@ -7,7 +7,8 @@ function that is not ready is either repaired, gated off with its reason shown, 
 
 Base: the installed release `dedac162` (verified via `/health/` on both surfaces). `release/v1` branches from
 it; `origin/main` (`80fb591b`) is one tooling PR ahead. PR #1287 (WM narrative) stays a **draft**. It is not
-merged to call anything V1. Only its flag-independent review fixes are ported (see "Review guards").
+merged to call anything V1. Its shared review fixes and ordinary narrative path are classified against the
+promised workflows; required narrative repairs remain in V1 scope (see B-G1).
 
 Status words: **READY** — works and tested on synthetic data; **REPAIRED** — defect found and fixed on a
 V1 branch (not yet installed); **BUILT** — new V1 work on a branch (not yet installed); **BLOCKED** — cannot
@@ -31,11 +32,11 @@ meet V1 until an item on `V1-BLOCKERS.md` clears; **OFF** — deliberately disab
 | Patients (create, list, search) | department-scoped; synthetic attestation removed in real mode | inventory | READY (no patient detail/edit page — OFF, listed) |
 | Typed notes | 1–50,000 characters, revision-checked | tests | READY |
 | Voice (upload/record → transcript review → notes) | consent, signed quote, Deepgram with `mip_opt_out` in real mode; nothing reaches the notes until reviewed | `45f53519` (+ repair pending) | BUILT; BLOCKED on Deepgram BAA + pricing check |
-| **Answers from ordinary (unlabelled) typed or dictated notes on custom forms** | today: only labelled `Label: value` lines; any unlabelled line returns every answer as a conflict | inventory (VERIFIED) | **BLOCKED** — a generic sentence-selection path is designed, not built (B-G1) |
+| **Answers from ordinary (unlabelled) typed or dictated notes on custom forms** | source-unit selection, exact evidence, correction/negation/side guards; bounded whole-paragraph adoption for a unique narrative field | `v1/ordinary-notes`; synthetic worker-to-export checks; final review underway | **BUILT / BLOCKED** — excessive holds and useful positive coverage still need acceptance (B-G1); labelled notes are not a required workaround |
 | Answers on the colonoscopy (tab) form | natural sentence-selection contract | tests; live runs in docs | READY |
-| Answers on the WM IOV form | labelled lines + prewritten statements; narrative reader stays a draft (PR #1287) | tests | READY (labelled only) |
+| Answers on the WM IOV form | qualified original adapter retained; ordinary dictated/typed narratives require the necessary PR #1287 path and reviewed shared repairs | PR #1287 remains draft and preserved | **BLOCKED** for the promised ordinary-note workflow (B-G1); labelled-only operation does not satisfy V1 |
 | Review, correction, held candidates, leave blank | explicit accept by owner/clinician; evidence shown | tests | READY |
-| **Review guards** — no generation over reviewed answers; WM statement decisions kept on an employee save; finalized record not re-reviewed; `&` rewrite blocker | ported from PR #1287 onto `v1/review-guards` | in progress | BUILT (pending) |
+| **Review guards** — no generation over reviewed answers; WM statement decisions kept on an employee save; finalized record not re-reviewed; `&` rewrite blocker | ported from PR #1287 onto `v1/review-guards` | `review-round4-recovery-20260927.md`; 1,224 core tests, 11 skips; independent final review pending | REPAIRED on branch; not installed |
 | Finalization | owner/clinician, confirmation, revision match, original hash match | tests | READY |
 | Export | original format only, hash-checked | tests | READY |
 | Coding | ICD-10-CM only, explicit codes, by service date | tests | READY; **CPT OFF** (licence) |
@@ -45,10 +46,10 @@ meet V1 until an item on `V1-BLOCKERS.md` clears; **OFF** — deliberately disab
 | function | V1 path | evidence | V1 status |
 |---|---|---|---|
 | Upload of blank `.docx` | sandboxed inspection; macros/active content/external links/tracked changes refused by name; `.doc` refused with a save-as-.docx instruction | engine | READY |
-| Detection of every answer area (F1–F10) | contract v3 (`word_v3.py`) behind `QUILLMD_WORD_ENGINE` | dev 3/40, **holdout 0/20** automatic | **BLOCKED** (B-W1) |
-| Visual mapping review + corrections (add / remove / kind / label), manual mapping recorded separately, clinician confirmation before use | Word integration stream | in progress | BUILT (pending) |
+| Detection of every answer area (F1–F10) | contract v3 (`word_v3.py`) behind `QUILLMD_WORD_ENGINE` | historical engine proxy: dev 3/40, **holdout 0/20**; incomplete end-to-end evidence; 44 declared lineages across 60 files | **BLOCKED** (B-W1); not a measured V1 automatic success rate |
+| Visual mapping review + corrections (add / remove / kind / label), manual mapping recorded separately, clinician confirmation before use | Word integration stream; immutable original and mapping versions | synthetic workflow tests; final repairs/review underway | BUILT on branch; corpus workflow qualification pending |
 | Answers for choice / multi-choice / checkbox / table kinds | explicit-option-only filling; everything else held for the clinician | in progress | BUILT (pending) |
-| Faithful export | v3 writers: only touched parts change; signatures never filled; bounded capacity where the page cannot grow | 18/20 holdout exports clean; H08 control defect repaired | REPAIRED (to be judged on the qualification cohort) |
+| Faithful export | v3 writers: only touched parts change; signatures never filled; bounded capacity where the page cannot grow | historical export proxy 18/20; earlier scorer lacked checkbox correctness and native Word acceptance; H08 control defect repaired | REPAIRED on branch; qualification remains open |
 | Qualified WM IOV and colonoscopy forms | existing pinned / tab paths | tests | READY |
 
 ## Money
@@ -64,7 +65,7 @@ meet V1 until an item on `V1-BLOCKERS.md` clears; **OFF** — deliberately disab
 
 | function | V1 path | evidence | V1 status |
 |---|---|---|---|
-| `claude-sonnet-5` | model-keyed request profile (explicit thinking/effort, no sampling params), refusal/incomplete never adopted, new receipts record geography/thinking/stop, 1.5× preserved, 4.6 rollback byte-identical | `v1/sonnet5` (5 commits + repairs pending) | BUILT — **prepared, not configured**: needs owner config switch + bounded live check |
+| `claude-sonnet-5` | model-keyed request profile (disabled thinking / medium effort), refusal/incomplete never adopted, new receipts record geography/thinking/stop, 1.5× preserved, 4.6 rollback preserved | account model metadata verified; four free token-count requests recorded; migration code on candidate | BUILT — **prepared, not served**; paid request and worker verification require eligible authority |
 
 ## Administration, audit, operations
 
@@ -76,5 +77,8 @@ meet V1 until an item on `V1-BLOCKERS.md` clears; **OFF** — deliberately disab
 
 ## Explicit non-goals for V1 (listed so they are not mistaken for omissions)
 
-CPT coding; the WM narrative reader (PR #1287, draft); PDF output of Word forms; patient detail/edit pages;
+CPT coding; PDF output of Word forms; patient detail/edit pages;
 self-service account deletion/export; refunds in-app; open registration. Each one stays visible as OFF.
+
+The necessary WM narrative work is explicitly **not** a non-goal. No flag, labelled-note workaround or
+assisted mapping result reduces the ordinary-note and automatic Word launch requirements.

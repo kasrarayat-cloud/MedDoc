@@ -1,4 +1,23 @@
-# Custom Word compatibility matrix — candidate 1 (deterministic, frozen 79a5b2ec)
+# Custom Word compatibility matrix — preserved candidate 1 engine results
+
+## Recovery correction — 2026-09-27
+
+The table below is the **historical engine proxy** on frozen candidate `79a5b2ec`, not complete
+upload → mapping → generation → correction → finalization → export acceptance. The app integration was
+built later. Its original scorer did not verify checkbox correctness, and native Microsoft Word acceptance
+has not run. Preserve the original results and render files unchanged; do not upgrade their meaning.
+
+A metadata-only audit also found **44 declared independent lineages across the 60 files** (30 development,
+14 holdout), despite 60 distinct file hashes and 26 source groups. At most two files per lineage were allowed
+by the original selection rule. This does not establish the owner's 60 independently authored templates.
+The source/lineage sets are disjoint; authorization bases are recorded. Provenance clarification or a
+separately declared supplemental cohort is needed without replacing any failed original case. The frozen
+manifest's `coverage` totals count lineages; the family denominators below count tagged files. Those two
+units must not be interchanged. Legacy `.doc` cases without family tags stay in the document denominator.
+
+The target remains **54/60 overall, 18/20 holdout, 75% in every declared family**, with independent examples,
+all answer profiles, rendered comparisons, full app workflow and native Word checks. It is unmet. The
+reserved qualification contents remain unopened; metadata inspection is not model or parser qualification.
 
 Measured 2026-09-27 on the frozen corpus (`word-corpus-manifest.json`). The scoring was declared before any
 change (`word-compatibility-target.md`). A document counts as an automatic success only if every
@@ -35,10 +54,11 @@ Per-template evidence is retained outside scratch, in the sealed corpus director
 
 Ground truth: `{dev,holdout,qual}/groundtruth/`, sealed by `GROUND-TRUTH-SEAL.txt`.
 
-## What works today, with a clinician confirming the mapping (assisted completion — not counted above)
+## Historical assisted-path description — not a corpus-wide qualification
 
-Every tested document inspects safely. Detection proposes fields for all ten families. With corrected mappings,
-exports keep untouched parts byte-identical, and signature and initials areas are never filled. Where a page
+The engine proposes fields across all ten families. Synthetic regression checks exercise corrected mappings,
+untouched-part identity and unfilled signature/initials areas. This is not proof that every corpus document
+completes the app workflow. Where a page
 cannot grow (headers, footers, text boxes, narrow or fixed-height cells), answer length is bounded instead of
 overflowing. Known limits: bulleted lists without blanks, printed option words to circle mid-paragraph,
 floating initials boxes anchored in another row, and author placeholders are misread or missed. The clinician

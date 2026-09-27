@@ -4,6 +4,12 @@ Declared 2026-09-27, **before any change to the importer**. The commit that adds
 `word-corpus-manifest.json` is the predeclaration: its timestamp precedes every candidate result.
 This is an engineering acceptance target, not a measured result and not a market-wide statistic.
 
+**Recovery correction, 2026-09-27:** the frozen selection below allowed two files per declared lineage.
+A metadata audit found 44 lineages across its 60 files. Thus the frozen corpus does not yet establish the
+owner's requirement for 60 independently authored templates. Preserve this manifest and every first-pass
+failure. Clarify independent authorship from provenance or declare additional independent evidence
+separately; do not substitute successful cases into the original denominator. The target itself is unchanged.
+
 ## Baseline (dedac162, measured 2026-09-27 before any change)
 
 The installed importer is a narrow deterministic adapter: two-column question|blank tables, strict

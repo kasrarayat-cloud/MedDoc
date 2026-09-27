@@ -1,10 +1,25 @@
 # Claude Sonnet 5 migration — 2026-09-27
 
 **Status: code only. The deployed configuration is unchanged.** This change edits code, tests, this note,
-[`cost-definition.md`](../cost-definition.md) and `rebuild/.env.example`. The switch itself is the owner's act. It means
-editing the private environment, which no session reads or writes, and restarting the services. This note gives the
+[`cost-definition.md`](../cost-definition.md) and `rebuild/.env.example`. The owner has selected Sonnet 5 and authorized
+migration engineering; no repeat model-selection approval is needed. The switch requires the approved private
+configuration procedure and service restart after candidate/deployment gates. This note gives the
 exact values for the switch and for the rollback, the pricing version to expect for each, and a bounded live check.
 It is the clinical generation path, so the refutation pass over the finished diff is required before merge.
+
+### Continuation evidence at 2026-09-27 16:29 UTC
+
+Native `GET /v1/models/claude-sonnet-5` succeeded with the installed account and returned the exact model ID.
+Four **free** token-count requests compared two synthetic request shapes: short 596 → 775 input tokens;
+100-field / 50,000-character notes 21,068 → 26,676 tokens (4.6 → 5). These use the candidate's request
+payload/schema; the comparison uses the same shape, not the historical 4.6 request profile. Candidate Sonnet 5
+provider bounds were $0.104546 and $0.224998. The stored bound is a Sonnet 5 bound on both comparison rows.
+
+Evidence: `rebuild/.runtime/v1-astra-recovery-20260927/{sonnet5-account-access,sonnet5-token-counts}.json`,
+per-attempt records and `TOKEN-COUNT-LIMITS.md`. The token-count endpoint is documented as free. No generation
+request, charge or old campaign allowance was used. This proves model metadata access and token sizing,
+**not** generation compatibility, clinical quality, BAA coverage or actual served-worker identity. Installed
+doctor/admin still report `dedac162…` in synthetic-only mode; management settings still select Sonnet 4.6.
 
 Sources, read 2026-09-27:
 [migration guide](https://platform.claude.com/docs/en/models/sonnet-5/migration-guide),

@@ -1,6 +1,7 @@
 # V1 — agreements and account settings for every provider that would handle patient data
 
-Researched 2026-09-27 from each vendor's own pages (raw downloads kept with sha256 in the session scratch;
+Researched 2026-09-27 from each vendor's own pages (raw downloads and SHA256 manifests preserved in
+`rebuild/.runtime/v1-astra-recovery-20260927/hosting-source-snapshots/` as well as the original scratch;
 Wayback copies used where the live site refused automated access). **A provider advertising a BAA is not proof
 that our account has one.** No account console was opened, and no agreement was accepted, inferred or clicked.
 
@@ -26,3 +27,10 @@ that our account has one.** No account console was opened, and no agreement was 
   today's request (repair in progress).
 - **Logs.** Clinical text is not logged. One residue: a CSRF failure warning can log a request path that contains
   a capability token (not PHI).
+
+## Account verification limit at continuation
+
+Native Anthropic model metadata returned `claude-sonnet-5`; this is account endpoint access only. No Console
+agreement, HIPAA-ready organization setting, retention policy, US geography default or rate tier was verified.
+The exact model and structured-output feature must be covered by the actual executed agreement before PHI.
+The AWS, Deepgram and backup account agreement statuses above remain unknown, not implicitly accepted.

@@ -1,6 +1,8 @@
 # Model-assisted Word mapping — design and bounded measurement request
 
-Status: **designed, not built, not measured.** It needs specific spending authority before any provider call.
+Status: **designed, not built, not measured.** Offline implementation and synthetic verification are authorized
+engineering work. Only provider calls require eligible spending authority. Lack of funding does not prevent
+the parser, proposal validation, review path or accounting preparation from being implemented.
 
 ## Why
 
@@ -28,9 +30,11 @@ They are judgement calls a reader of the blank form makes easily and a rule set 
    - additions go through the same `locate` writers a clinician uses.
 
    Anything that fails validation is dropped *and listed*.
-5. The result is still a **proposal the clinician reviews and confirms**. Automatic success is scored exactly as
-   predeclared (`word-compatibility-target.md`) on the **qualification cohort** (20 predeclared documents,
-   unopened), with the layer switched on.
+5. The result is still a **proposal the clinician reviews and confirms**. Unmodified confirmation may count;
+   corrective manual mapping is assisted completion and does not. Automatic success requires the full app
+   workflow and export evidence under `word-compatibility-target.md`, not only a plausible response.
+   Freeze candidate, source/schema/model/profile and first-pass harness before opening an unseen cohort.
+   The original corpus's 44-lineage provenance gap remains separately visible.
 
 ## Cost (measured sizes, estimated tokens)
 
@@ -39,16 +43,21 @@ Measured on the 40 development forms: payload median 26.5 KB, p90 126 KB, max 34
 plus 500. At $2/M input and $10/M output: **median $0.05, p90 $0.21, max $0.42 per form; one development pass
 ≈ $3.41.**
 
-Bounded request (blank forms only, no patient data):
+These sizing estimates are not token counts or authority. Free native token counting can size exact requests
+once the request compiler exists. The $25 proposal below is an **unapproved ceiling**, not permission to start
+or a claim that the layer will meet the gate.
 
 | step | runs | cap |
 |---|---|---|
 | development tuning | ≤ 4 passes over 40 dev forms | $15 |
-| qualification cohort (judged once, with every attempt reported) | ≤ 3 runs over 20 forms | $6 |
-| margin for retries and failures | — | $4 |
+| qualification cohort (one frozen first pass; every failure/refusal retained) | **one run over 20 forms** | $6 |
+| declared transport-failure reserve (no automatic retries or tuning on this cohort) | reconciled case by case | $4 |
 | **total** | | **$25** |
 
-Each request carries its own hard bound (max output tokens), and the run stops at the cap.
+Each request needs a hard bound and attempt record before sending. Unknown outcomes stop that case for
+reconciliation. Caps include failed/absorbed charges. A qualification failure that informs a repair consumes
+its unseen status: preserve the entire cohort and first results, then predeclare a new independent cohort
+of at least 20 before qualifying that repaired candidate. No cap authorizes a new campaign.
 
 ## What it will not do
 

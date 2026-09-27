@@ -8,15 +8,15 @@ with its evidence and what clears it. **E** = engineering in this programme; **O
 
 | id | blocker | evidence | clears when | who |
 |---|---|---|---|---|
-| B-W1 | **Custom Word automatic compatibility** is far below the gate (≥90% documents) | frozen candidate 1: dev 3/40, **holdout 0/20** (`word-holdout-first-pass-1.md`) | a candidate reaches ≥18/20 on the predeclared qualification cohort **and** ≥75% per family. The realistic route is a bounded model-assisted mapping layer on blank forms (design: `model-assisted-mapping.md`), measured only after spend approval | E + O (spend) |
+| B-W1 | **Custom Word automatic compatibility** and independent-corpus evidence fail the gate | historical engine proxy dev 3/40, **holdout 0/20**; incomplete workflow/checkbox/native evidence; 60 files but 44 declared lineages | preserve every first-pass result; establish independent authorship; complete mapping work offline; satisfy 54/60 overall, 18/20 holdout and ≥75% per family through the app. Holdout-informed repairs also need ≥18/20 on a separately predeclared unseen cohort. Model calls need eligible authority | E + O (spend / native access) |
 | B-W2 | Word v3 in the app: mapping review with corrections, confirmation before use, answers for choice/checkbox/table kinds, export | engine wired (`66aef05e`); app side in progress | built, refuted (clinical path), installed | E |
 | B-W3 | Native Microsoft Word acceptance of holdout/qualification outputs | LibreOffice renders are evidence, not native acceptance | the owner opens the exported files in desktop Word and records the result | O |
-| B-G1 | **Ordinary (unlabelled) typed or dictated notes on custom forms** return every answer as a conflict | `validate_selections`: any unlabelled line → inherited context → conflict (inventory, VERIFIED) | a generic sentence-selection contract for custom forms (extend the colonoscopy "natural" contract beyond tab forms), refuted in rounds, then a bounded live synthetic evaluation | E + O (spend) |
+| B-G1 | **Ordinary typed/dictated notes, including the qualified WM form**, lack acceptable end-to-end evidence | generic source-unit path built; correction/consent repairs and excessive holds under review. WM path on preserved PR #1287 is not covered by v3 | integrate necessary reviewed WM path and generic repairs; verify useful positives plus missing/denied/corrected/side/row cases through worker → correction → finalization → export; exact-model synthetic verification. Labelled-note workaround does not close this | E + O (eligible live spend) |
 | B-R1 | Shared review defects: a stale/crafted POST can generate over reviewed answers; WM statement decisions lost on an employee save; `&` export rewrite | PR #1287 analysis (VERIFIED by reading) | ported on `v1/review-guards`, refuted, installed | E |
-| B-M1 | Sonnet 5 is prepared, not active | `v1/sonnet5` built + refuted; 4 LOW repairs in progress | owner sets the model/rates/profile values (`sonnet5-migration.md`), approves the bounded live check, and it passes (model echo, stop reason, tokens vs bound, latency) | E + O |
-| B-S1 | Real mode could accept sandbox payments as real credit (HIGH); live Stripe behind the preview gate never credits | refuter R1/R2 on `v1/blockers` (confirmed by reading) | repairs merged with fail-before/pass-after tests | E |
+| B-M1 | Sonnet 5 is prepared, not served | native account model metadata and free token counts verified 2026-09-27; installed app remains 4.6 | configuration cutover after candidate gates; eligible bounded check proves served worker request/response model, stop, usage, reservation/charge and clinical behavior; account agreement separately required | E + O (eligible spend / account) |
+| B-S1 | Real-mode funding and payment evidence must remain trustworthy | prior sandbox/live-gate repairs built; R5 catalog/body/session-setting defects reproduced and repair under final verification | final reviewed repair integrated; fail-before/pass-after evidence; fresh-install and supported upgrade checks, immutable settled history | E |
 | B-S2 | Live payments need a live Stripe account, restricted key, webhook registration and ingress | no live account configured | owner provides them; bounded live payment test | O |
-| B-P1 | Production launcher would refuse to start under its own metadata block (TCP timeout, not EPERM) | refuter F1 (kernel-level reproduction) | repair on `v1/prodprofile` proven with the containerised BPF probe | E |
+| B-P1 | Production metadata-denial launcher repair | repaired in candidate; containerised BPF probe evidence retained | prepared code gate passed; deployment-target configuration and startup still require verification after provisioning | E; target blocked by B-H1 |
 
 ## Hosting and agreements (real patient data cannot move before these)
 
@@ -36,7 +36,7 @@ with its evidence and what clears it. **E** = engineering in this programme; **O
 |---|---|---|---|---|
 | B-O1 | Backups with a **verified restore** on the production host | no production host yet | scheduled encrypted capture + restore drill into isolation with measured RPO/RTO | E (after B-H1) |
 | B-O2 | Independent recovery access and key custody | one custodian; LUKS key beside the data on the VPS | two custodians or an offline copy, each proven by retrieval and restore | O |
-| B-O3 | Delivered alerts, including **escalation inside an open incident** | today an escalating incident sends nothing after its first warning (demonstrated 09-23..09-26) | owner-confirmed inbox receipt from the production host; escalation re-notifies | E + O |
+| B-O3 | Delivered alerts, including **escalation inside an open incident** | escalation/reminder repair completed on branch (`alerts-round3-recovery-20260927.md`); installed incident and delivery remain unverified | integrate reviewed repair, then confirm recipient delivery and escalation from the actual production host | E + O |
 | B-O4 | Outside-host monitoring | adapter built, no check URL | a heartbeat service account; missed-heartbeat test passes | O + E |
 | B-O5 | Independent penetration test | none has run | vendor test of the production host and release; findings retested | V + O |
 | B-O6 | Whole-host recovery drill | only unplanned reboots survived | fresh-instance rebuild from vaulted material, measured | E (after B-H1) |
@@ -44,5 +44,8 @@ with its evidence and what clears it. **E** = engineering in this programme; **O
 ## Current synthetic system (not a V1 gate, recorded so it is not lost)
 
 - Offsite (B2) backups have been refused daily since 2026-09-24. The admission lease lapsed at 2026-09-23T22:05:53Z
-  and needs the owner-desktop renewal. Local encrypted backups continue daily (latest verified 2026-09-26
-  04:31Z). A healthy status row is not taken as proof of a completed backup.
+  and needs the existing custody/admission process. Latest Sep27 offsite attempt refused before provider
+  calls, with no pending publication; no ticket was replayed or lock cleared. Local Sep27 capture passed an isolated restore at 16:44 UTC: 36 tables, 226,187 rows, 64 files, all hashes
+  matched, zero provider actions; temporary container removed. This is same-host/local-key recovery, not
+  independent custody or offsite recovery proof (see `astra-recovery-20260927.md`). Production scheduling needs renewable admission instead
+  of a daily manual action.
