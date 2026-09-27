@@ -611,6 +611,26 @@ class IncidentNotificationTests(unittest.TestCase):
         self.assertEqual(self.sender.call_count, 2, 'a warning from a fast clock held a failure')
         self.assertIn('(highest: warning)', self.sent()[-1][1])
 
+    def test_a_close_stopped_between_its_writes_after_a_fast_clock_never_delays_the_next(self):
+        """⚠️ F2, round 2, the refuter's sequence. A close writes status.json first, with its last
+        notice time read as now; killed before the ledger, the ledger kept the warning's stamp three
+        days ahead. That stamp was then dropped as "later than any recorded request", so the warning
+        became an unknown notice, counted as a failure, and held the failure until +25 h."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at + timedelta(days=3))                  # a warning notice, on a clock three days fast
+        self.recovery.return_value['condition'] = 'healthy'
+        crash, calls = IncidentLedgerTests.crash_on_second_write(self)
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=1))             # corrected: the incident closes, killed mid-write
+        self.assertEqual(calls, ['status.json', a.NOTICES_FILE])
+        self.health.return_value = 'backup_failed'
+        result, _ = a.check(self.at + timedelta(hours=2))
+        self.assertEqual((result['alert']['outcome'], self.sender.call_count), ('provider_accepted', 2),
+                         'a warning stamped by a fast clock held a failure after a close stopped between its writes')
+        subject, body = self.sent()[-1]
+        self.assertEqual(subject, '[QuillMD operations] ESCALATION: a more severe backup incident opened')
+        self.assertIn('(highest: warning)', body)
+
     def test_status_reports_the_deferred_escalation_the_check_reported(self):
         """⚠️ R5(b). The summary carries any deferred escalation, from status() as from check()."""
         self.health.return_value = 'backup_failed'
