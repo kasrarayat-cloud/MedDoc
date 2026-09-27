@@ -2838,7 +2838,9 @@ def displayed_option(index, field):
         if dd is None:
             return None
         entries = [x.get(q("w:val")) for x in dd.findall(q("w:listEntry"))]
+        # the entry Word shows: w:result, else w:default, else the first
         res = dd.find(q("w:result"))
+        res = res if res is not None else dd.find(q("w:default"))
         at = int(res.get(q("w:val")) or 0) if res is not None else 0
         if not 0 <= at < len(entries):
             return None
