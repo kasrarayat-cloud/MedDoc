@@ -6,7 +6,6 @@ installer only against temporary directories.
 """
 import ast
 from decimal import Decimal, ROUND_HALF_UP
-import functools
 import hashlib
 import importlib.util
 import io
@@ -800,6 +799,20 @@ def built_request(tree, node, where):
     constant string keys and no `**`; every other use of that name in the builder must store one constant key that is
     neither an output cap nor an override (`request['thinking'] = ...`). Anything else fails closed."""
     counts, _ = bindings(tree)
+    if isinstance(node, ast.Name):
+        parents = parent_map(tree)
+        function = enclosing_function(node, parents)
+        if function is None:
+            raise Unresolved(f'{where}: request alias is outside a function')
+        uses = [use for use in ast.walk(function) if isinstance(use, ast.Name) and use.id == node.id]
+        stores = [use for use in uses if isinstance(use.ctx, (ast.Store, ast.Del))]
+        if len(stores) != 1 or len(uses) != 2 or any(arg.arg == node.id for arg in function.args.args):
+            raise Unresolved(f'{where}: request alias is rebound, mutated, reused or escaped')
+        assignment = parents.get(stores[0])
+        if not (isinstance(assignment, ast.Assign) and assignment.targets == [stores[0]]
+                and isinstance(assignment.value, ast.Call) and assignment.lineno < node.lineno):
+            raise Unresolved(f'{where}: request alias is not assigned once by a preceding builder call')
+        node = assignment.value
     if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
         raise Unresolved(f'{where}: ** of something other than a call of a request builder hides the request')
     functions = [item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == node.func.id]
@@ -834,6 +847,123 @@ def built_request(tree, node, where):
             continue
         raise Unresolved(f'{where}: {builder.name} uses {request} at line {use.lineno} in a way that can change the request')
     return [(key.value, value) for key, value in zip(literal.keys, literal.values)]
+
+
+def one_function(tree, name):
+    matches = [item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == name]
+    if len(matches) != 1:
+        raise Unresolved(f'compiled mapping: {name} is not one module-level function')
+    return matches[0]
+
+
+def assigned_once(function, name, expression=None):
+    parents = parent_map(function)
+    stores = [node for node in ast.walk(function) if isinstance(node, ast.Name)
+              and node.id == name and isinstance(node.ctx, (ast.Store, ast.Del))]
+    if len(stores) != 1:
+        raise Unresolved(f'compiled mapping: {function.name}.{name} is not assigned once')
+    assignment = parents.get(stores[0])
+    if not isinstance(assignment, ast.Assign) or assignment.targets != stores:
+        raise Unresolved(f'compiled mapping: {name} has an indirect assignment')
+    if expression is not None and ast.dump(assignment.value) != ast.dump(ast.parse(expression, mode='eval').body):
+        raise Unresolved(f'compiled mapping: {function.name}.{name} no longer has its priced source')
+    return assignment.value
+
+
+def readonly_value(function, name, allowed_calls=()):
+    """No alias, mutation or escape of a compiled request/profile; reads into JSON/hash/comparisons are allowed."""
+    parents = parent_map(function)
+    for use in ast.walk(function):
+        if not isinstance(use, ast.Name) or use.id != name or not isinstance(use.ctx, ast.Load):
+            continue
+        top = use
+        while isinstance(parents.get(top), ast.Subscript) and parents[top].value is top:
+            top = parents[top]
+            if not isinstance(top.ctx, ast.Load):
+                raise Unresolved(f'compiled mapping: {name} is mutated')
+        holder = parents.get(top)
+        if isinstance(holder, (ast.Compare, ast.Return)):
+            continue
+        if isinstance(holder, ast.Dict) and isinstance(parents.get(holder), ast.Return):
+            continue
+        if isinstance(holder, ast.Call) and '.'.join(chain(holder.func) or []) in allowed_calls:
+            continue
+        if isinstance(holder, ast.keyword) and holder.arg is None:
+            continue  # provider call itself is checked by provider_caps
+        raise Unresolved(f'compiled mapping: {name} escapes through {type(holder).__name__}')
+
+
+def compiled_mapping_cap(path, tree, call, expression, where):
+    """Separate template queue: trace its immutable compiled request and the quote's same profile output term.
+
+    This is an explicit second contract, not an exemption from scanning. Unknown files, aliases,
+    mutations, calls, cap overrides or pricing formula changes still refuse.
+    """
+    if path != REBUILD / 'core' / 'mapping_jobs.py' or ast.unparse(expression) != "compiled['request']":
+        raise Unresolved(f'{where}: unknown compiled request contract')
+    send = one_function(tree, 'send')
+    if enclosing_function(call, parent_map(tree)) is not send:
+        raise Unresolved(f'{where}: compiled request outside mapping send')
+    if [arg.arg for arg in send.args.args] != ['compiled', 'config']:
+        raise Unresolved(f'{where}: mapping send arguments changed')
+    if any(isinstance(n, ast.Name) and n.id == 'compiled' and isinstance(n.ctx, (ast.Store, ast.Del)) for n in ast.walk(send)):
+        raise Unresolved(f'{where}: compiled send parameter is rebound')
+    readonly_value(send, 'compiled', ('json.loads',))
+    callers = [n for n in ast.walk(tree) if isinstance(n, ast.Name) and n.id == 'send']
+    if len(callers) != 1:
+        raise Unresolved(f'{where}: mapping send is aliased or has additional callers')
+    parent = parent_map(tree).get(callers[0])
+    if not isinstance(parent, ast.Call) or ast.unparse(parent) != 'send(compiled, job.config)':
+        raise Unresolved(f'{where}: mapping send does not receive the quoted compilation')
+    runner = enclosing_function(parent, parent_map(tree))
+    assigned_once(runner, 'compiled', 'mapping.compile_request(version, job.config)')
+    readonly_value(runner, 'compiled', ('send', 'mapping.validate_proposal'))
+    reviews = [n for n in ast.walk(runner) if isinstance(n, ast.Call) and chain(n.func) == ['mapping', 'validate_proposal']]
+    if len(reviews) != 1 or reviews[0].lineno <= parent.lineno:
+        raise Unresolved(f'{where}: compiled proposal may escape before the send')
+    compiler_tree = ast.parse((REBUILD / 'core' / 'mapping_assistance.py').read_text())
+    compiler = one_function(compiler_tree, 'compile_request')
+    assigned_once(compiler, 'profile', 'request_profile(config)')
+    assigned_once(compiler, 'request', "generation.anthropic_request(config['model'], profile, SYSTEM, payload, wire.Proposal)")
+    readonly_value(compiler, 'request', ('canonical', 'digest'))
+    assigned_once(compiler, 'size', 'len(canonical(request).encode())')
+    assigned_once(compiler, 'bound', 'size + 12000')
+    returns = [n for n in ast.walk(compiler) if isinstance(n, ast.Return)]
+    if len(returns) != 1 or returns[0] is not compiler.body[-1] or not isinstance(returns[0].value, ast.Dict):
+        raise Unresolved(f'{where}: mapping compiler no longer returns one explicit envelope')
+    returned = {k.value: v for k, v in zip(returns[0].value.keys, returns[0].value.values)
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    if not (len(returned) == len(returns[0].value.keys) and isinstance(returned.get('request'), ast.Name)
+            and returned['request'].id == 'request'):
+        raise Unresolved(f'{where}: mapping compiler returns a different request')
+    if ast.dump(returned.get('maximum_cost', ast.Constant(None))) != ast.dump(ast.parse(
+            'str(cost.quantize(generation.COST_QUANTUM, rounding=ROUND_CEILING))', mode='eval').body):
+        raise Unresolved(f'{where}: mapping compiler returns a different hold')
+    # The US geography adjustment occurs after this list-rate bound; both token terms use the compiled envelope.
+    costs = [n for n in ast.walk(compiler) if isinstance(n, ast.Assign) and any(
+        isinstance(t, ast.Name) and t.id == 'cost' for t in n.targets)]
+    expected = "(Decimal(bound) * rates['input_per_million'] + Decimal(profile['max_output_tokens']) * rates['output_per_million']) / 1000000"
+    if len(costs) != 1 or ast.dump(costs[0].value) != ast.dump(ast.parse(expected, mode='eval').body):
+        raise Unresolved(f'{where}: mapping output hold no longer prices the compiled profile cap')
+    adjustments = [n for n in ast.walk(compiler) if isinstance(n, ast.AugAssign)
+                   and isinstance(n.target, ast.Name) and n.target.id == 'cost']
+    if len(adjustments) != 1 or ast.unparse(adjustments[0]) != 'cost *= generation.US_INFERENCE_MULTIPLIER':
+        raise Unresolved(f'{where}: mapping cost adjustment changed')
+    cost_stores = [n for n in ast.walk(compiler) if isinstance(n, ast.Name) and n.id == 'cost'
+                   and isinstance(n.ctx, (ast.Store, ast.Del))]
+    if set(cost_stores) != {costs[0].targets[0], adjustments[0].target}:
+        raise Unresolved(f'{where}: mapping cost is rebound outside its priced formula')
+    profiled = one_function(compiler_tree, 'request_profile')
+    assigned_once(profiled, 'base', 'generation.job_request_profile(config)')
+    assigned_once(profiled, 'profile', "{**base, 'profile': PROFILE, 'max_output_tokens': MAX_OUTPUT_TOKENS, 'timeout_seconds': TIMEOUT_SECONDS}")
+    readonly_value(profiled, 'profile', ('digest',))
+    returns = [n for n in ast.walk(profiled) if isinstance(n, ast.Return)]
+    if len(returns) != 1 or returns[0] is not profiled.body[-1] or ast.unparse(returns[0]) != 'return profile':
+        raise Unresolved(f'{where}: mapping profile returns another envelope')
+    cap = resolve(ast.Name(id='MAX_OUTPUT_TOKENS'), int_constants(compiler_tree), where)
+    if profile_cap_values(compiler_tree, int_constants(compiler_tree), where) != frozenset({cap}):
+        raise Unresolved(f'{where}: mapping profile has another output cap')
+    return 'mapping-profile', frozenset({cap})
 
 
 def provider_caps(path):
@@ -904,6 +1034,9 @@ def provider_caps(path):
         if any(keyword.arg is None for keyword in node.keywords):
             if len(node.keywords) != 1:
                 raise Unresolved(f'{where}: ** beside other keywords hides the request')
+            if isinstance(node.keywords[0].value, ast.Subscript):
+                caps.append((where, compiled_mapping_cap(path, tree, node, node.keywords[0].value, where)))
+                continue
             keywords = built_request(tree, node.keywords[0].value, where)
         else:
             keywords = [(keyword.arg, keyword.value) for keyword in node.keywords]
@@ -917,7 +1050,6 @@ def provider_caps(path):
     return caps
 
 
-@functools.lru_cache(maxsize=1)
 def all_provider_caps():
     return tuple(cap for path in application_sources() for cap in provider_caps(path))
 
@@ -930,14 +1062,48 @@ def maximum_cost_terms():
     functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == 'maximum_cost']
     if len(functions) != 1:
         raise Unresolved(f'core/generation.py: {len(functions)} maximum_cost functions')
-    terms = {}
+    parents = parent_map(tree)
+    branches = {}
     for node in ast.walk(functions[0]):
         if (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult) and isinstance(node.right, ast.Subscript)
                 and isinstance(node.right.slice, ast.Constant)):
-            terms.setdefault(node.right.slice.value, []).append(node.left)
-    if sorted(terms) != ['input_per_million', 'output_per_million'] or any(len(v) != 1 for v in terms.values()):
-        raise Unresolved(f'core/generation.py maximum_cost: rate terms {sorted(terms)} are not one input and one output')
-    where = f'core/generation.py:{functions[0].lineno} maximum_cost'
+            assignment = node
+            while assignment in parents and not isinstance(assignment, ast.Assign):
+                assignment = parents[assignment]
+            if not isinstance(assignment, ast.Assign):
+                raise Unresolved('maximum_cost: rate term outside a bounded assignment')
+            branches.setdefault(assignment, {}).setdefault(node.right.slice.value, []).append(node.left)
+    if not branches:
+        raise Unresolved('maximum_cost: no priced branches')
+    zero_return = ast.parse("if config['mode'] != 'live': return Decimal('0')").body[0]
+    allowed_zero = [node for node in ast.walk(functions[0]) if isinstance(node, ast.If)
+                    and ast.dump(node) == ast.dump(zero_return)]
+    if len(allowed_zero) != 1:
+        raise Unresolved('maximum_cost: unpriced mode return changed')
+    for node in ast.walk(functions[0]):
+        if isinstance(node, ast.Return) and node is not allowed_zero[0].body[0]:
+            if not isinstance(node.value, ast.Name) or node.value.id != 'bound':
+                raise Unresolved('maximum_cost: priced branch returns something other than bound')
+        if isinstance(node, ast.Name) and node.id == 'bound' and isinstance(node.ctx, (ast.Store, ast.Del)):
+            holder = parents.get(node)
+            if holder in branches:
+                continue
+            adjustment = '(bound * US_INFERENCE_MULTIPLIER).quantize(COST_QUANTUM, rounding=ROUND_CEILING)'
+            if not (isinstance(holder, ast.Assign) and holder.targets == [node]
+                    and ast.dump(holder.value) == ast.dump(ast.parse(adjustment, mode='eval').body)):
+                raise Unresolved('maximum_cost: bound is rebound outside its priced formula')
+    results = set()
+    for terms in branches.values():
+        if sorted(terms) != ['input_per_million', 'output_per_million'] or any(len(v) != 1 for v in terms.values()):
+            raise Unresolved(f'core/generation.py maximum_cost: branch rate terms {sorted(terms)} are not one input and one output')
+        results.add(cost_branch_terms(tree, functions[0], terms, constants))
+    if len(results) != 1:
+        raise Unresolved('maximum_cost: narrative and general branches price different caps or overheads')
+    return next(iter(results))
+
+
+def cost_branch_terms(tree, function, terms, constants):
+    where = f'core/generation.py:{function.lineno} maximum_cost'
     inputs, output = terms['input_per_million'][0], terms['output_per_million'][0]
     if not (isinstance(inputs, ast.Call) and chain(inputs.func) == ['Decimal'] and len(inputs.args) == 1
             and isinstance(inputs.args[0], ast.BinOp) and isinstance(inputs.args[0].op, ast.Add)
@@ -969,17 +1135,21 @@ class ProductionCostDocumentTests(unittest.TestCase):
         overhead, output = maximum_cost_terms()
         self.assertEqual(overhead, number(bound.group(1)))
         # The hold prices exactly the cap each call sends: the same number, or the same job's request-profile cap.
-        self.assertEqual(output, ('profile', stated_caps))
+        self.assertEqual(stated_caps, frozenset().union(*(cap[1] for _, cap in caps)))
         for where, cap in caps:
             with self.subTest(call=where):
-                self.assertEqual(cap, output)
+                if cap[0] == 'mapping-profile':
+                    self.assertEqual(cap[1], frozenset({20000}))
+                else:
+                    self.assertEqual(cap, output)
 
     def test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code(self):
         raw = COST_DOCUMENT.read_text()
         text = ' '.join(raw.split())
         rates = re.search(r'\$(\d+) per million input tokens, \$(\d+) per million output tokens', text)
         input_rate, output_rate = (Decimal(value) / 1000000 for value in rates.groups())
-        overhead, (_, caps) = maximum_cost_terms()
+        overhead, _ = maximum_cost_terms()
+        caps = frozenset().union(*(cap[1] for _, cap in all_provider_caps()))
         sentence = re.search(r'a 20,000-byte request is bounded at (.*?)\.(?:\s|$)', text)
         self.assertIsNotNone(sentence)
         pairs = re.findall(r'\*\*\$([0-9]+\.[0-9]{3})\*\* \(([0-9]{1,3}(?:,[0-9]{3})*)-token cap', sentence.group(1))

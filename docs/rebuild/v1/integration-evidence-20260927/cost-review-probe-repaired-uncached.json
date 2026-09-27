@@ -1,0 +1,44 @@
+{
+  "scanner_sha256": "f6b59ca04cc69f8f3d4b20a8c6b4c75696df073e468c35976b75368daf45ed66",
+  "baseline": {
+    "test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states": "PASS",
+    "test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code": "PASS"
+  },
+  "mutants": [
+    {
+      "name": "mapping_request_dict_alias",
+      "path": "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/mapping_jobs.py",
+      "old": "    response=client.messages.create(**compiled['request'])",
+      "new": "    wrapped={'request':compiled['request']}\n    wrapped['request']['max_tokens']=90000\n    response=client.messages.create(**compiled['request'])",
+      "checks": {
+        "test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states": "Unresolved: compiled mapping: compiled escapes through Dict",
+        "test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code": "Unresolved: compiled mapping: compiled escapes through Dict"
+      },
+      "original_sha256": "2941afc351ce202fd0917eec05b66a303af5defb34e60d343506929f449ad3f7",
+      "actual_submitted_cap": 90000
+    },
+    {
+      "name": "mapping_annotated_cost_rebind",
+      "path": "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/mapping_assistance.py",
+      "old": "    return {'request':request",
+      "new": "    cost: Decimal = Decimal(0)\n    return {'request':request",
+      "checks": {
+        "test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states": "Unresolved: rebuild/core/mapping_jobs.py:74 client.messages.create: mapping cost is rebound outside its priced formula",
+        "test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code": "Unresolved: rebuild/core/mapping_jobs.py:74 client.messages.create: mapping cost is rebound outside its priced formula"
+      },
+      "original_sha256": "a5d471d8bf9de67054f510add0a106350ac564261a67773d88130d735c318de4",
+      "actual_cost_after_rebind": "0"
+    },
+    {
+      "name": "narrative_return_zero",
+      "path": "/opt/meddoc-pro/.worktrees/v1-release/rebuild/core/generation.py",
+      "old": "        return bound",
+      "new": "        return Decimal(0)",
+      "checks": {
+        "test_every_provider_output_cap_is_the_one_the_hold_prices_and_the_document_states": "Unresolved: maximum_cost: priced branch returns something other than bound",
+        "test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code": "Unresolved: maximum_cost: priced branch returns something other than bound"
+      },
+      "original_sha256": "ce7af2f35124c24edcc0f74daa103fd0bd9b72b6db610225195315830171827d"
+    }
+  ]
+}

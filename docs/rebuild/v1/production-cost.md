@@ -109,30 +109,27 @@ about 30% more tokens than Sonnet 4.6 for the same text; if the workspace uses U
 (`inference_geo`), every token costs 1.1x (whether it does is unknown). The application's own bound
 for a form generation is (request bytes + 12,000) input tokens plus the request profile's output cap
 (`core/generation.py`, `maximum_cost`). At Sonnet 5's rates a 20,000-byte request is bounded at
-**$0.144** (8,000-token cap, thinking disabled) or **$0.224** (16,000-token cap, adaptive thinking):
-32,000 x $2/M + 8,000 x $10/M, and 32,000 x $2/M + 16,000 x $10/M.
+**$0.144** (8,000-token cap, ordinary notes), **$0.224** (16,000-token cap, adaptive thinking), or
+**$0.264** (20,000-token cap, blank mapping only): 32,000 x $2/M plus the stated output cap x $10/M.
 
 **Output caps this table assumes:** the output cap of each provider call is the job's request
-profile's `max_output_tokens`, the same value `maximum_cost` prices, so the hold always covers the cap
-that is sent. The output caps a request profile can set are 6,000, 8,000 and 16,000 tokens: 6,000 under
+profile's `max_output_tokens`, the same value `maximum_cost` (notes) or `mapping_assistance.compile_request` (mapping) prices, so the hold always covers the cap
+that is sent. The output caps a request profile can set are 6,000, 8,000, 16,000 and 20,000 tokens: 6,000 under
 the legacy profile that serves the rollback models (`claude-sonnet-4-6` and the other listed legacy
 ids, at their own rates), 8,000 under Sonnet 5 with thinking disabled and 16,000 under Sonnet 5 with
-adaptive thinking (`request_profile`). A stored profile is refused before anything is sent if its cap
-is not an int between 1 and 21,333 (`job_request_profile`). Which thinking mode V1 uses is decided on
-the bounded live check; the table assumes the larger cap.
+adaptive thinking (`request_profile`); blank-form mapping has a separate 20,000-token/120-second profile. A stored profile is refused before anything is sent if its cap
+is not an int between 1 and 21,333 (`job_request_profile`). V1 uses disabled thinking/medium effort; actual sufficiency remains bounded live qualification. The adaptive profile remains available only through its own configuration and quote.
 
 A test parses every application Python file under `rebuild/` (tests excluded). It fails, naming the
 call, when a provider call's receiver cannot be traced to a client constructed and bound to one name
 in that file; when the call goes through `with_options`, `with_raw_response`,
 `with_streaming_response` or `copy`; when it carries `extra_body`, `extra_query`, `extra_headers` or
-positional arguments; when it uses `**` other than on one module-level request builder that returns a
-dict literal with constant keys, extended only by keys that are neither an output cap nor an
-override; when it has not exactly one output cap; or when the cap is neither one number (an int
+positional arguments; when it uses `**` other than on one module-level request builder (directly or through one unescaped local assignment), or the explicitly traced mapping compiler contract; the shared builder returns a dict literal with constant keys, extended only by keys that are neither an output cap nor an override; when it has not exactly one output cap; or when the cap is neither one number (an int
 literal, or a module-level name whose only binding is one assignment of an int literal) nor exactly
 `profile['max_output_tokens']` with `profile` bound once by `job_request_profile(...)` (or passed, as
 that same name, by every call of the builder). The set of profile caps is read from every
 `'max_output_tokens'` entry of a dict literal in the module; any other way of writing that key fails
-the test. It also fails when `maximum_cost` does not price the same cap the calls send, when the caps
+the test. The mapping trace separately verifies its 20,000 cap, compiler request, priced output term, immutable local envelope and sole send caller. Both generic and narrative `maximum_cost` branches must agree. It also fails when `maximum_cost` does not price the same cap the calls send, when the caps
 or the bound differ from what this page states, or when any row of the table exceeds the largest cap.
 It reads source only: a cap changed at run time by other means (a patched SDK, a proxy) is outside it.
 
