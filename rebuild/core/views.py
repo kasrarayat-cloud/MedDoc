@@ -731,27 +731,78 @@ def same_text(posted,stored):
     return posted==stored or (stored.startswith('\n') and posted==stored[1:])
 
 def notes_save_clears(e):
-    """Whether a changed notes save would clear something: the answer draft, statement decisions or accepted codes."""
-    return (bool(e.answers) or bool((e.template_review or {}).get('decisions'))
-            or CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).exists())
+    """What a changed notes save would clear, as the page's warning names it ('' when nothing): the same parts, from the
+    same counts, that the save audits and then states — so the warning names only what would be cleared (refutation round
+    4, R4-7), and it and the saved message cannot disagree."""
+    return listed(cleared_parts(review_state_counts(e)))
+
+ANSWER_STATES=('answers_accepted_suggestion','answers_left_blank','answers_edited_not_accepted','answers_reviewed_unedited',
+               'answers_unreviewed_unedited')
 
 def review_state_counts(e,codes=True):
-    """What clearing this draft discards, as counts only (never clinical text), for its audit row. The categories are
-    disjoint, as their names say: each answer is counted once, in the first that fits — an accepted suggestion (which is
-    also `edited` and may be reviewed), left blank, edited and not an accepted suggestion, or reviewed and unedited; each
-    statement decision once, reviewed or chosen and unreviewed; accepted codes only (refutation round 2, R2-4)."""
-    counts={'answers_accepted_suggestion':0,'answers_left_blank':0,'answers_edited_not_accepted':0,'answers_reviewed_unedited':0}
+    """What clearing this draft discards, as counts only (never clinical text), for its audit row.
+
+    An answer is counted only when it carries text or a decision — a review tick, an acceptance, "Leave blank — reviewed"
+    or an edit (to nothing, too). An empty field nobody decided (a `missing` field, or a conflict nobody resolved) holds
+    no answer to clear: counting it made notes with one supported answer and one empty field say "2 answers" (refutation
+    round 4, R4-3). Each counted answer is counted once, in the first of ANSWER_STATES that fits — an accepted suggestion
+    (which is also `edited` and may be reviewed), left blank, edited and not an accepted suggestion, reviewed and
+    unedited, or neither reviewed nor edited (so, since R4-3, carrying text) — so those states are disjoint and sum to
+    the answers counted (refutation round 2, R2-4). Across them, and NOT a further state to add to them,
+    `answers_with_clinician_review` counts the answers that carried a review tick, which only an owner or clinician can
+    set: two edited answers a clinician reviewed no longer audit exactly as two edits nobody reviewed (refutation round 3,
+    F3). Each statement decision is counted once: reviewed, or recorded and unreviewed — which includes a wording saved
+    exactly as the form rendered it, since a save records every statement's wording and the record cannot tell a
+    deliberate choice of the default from none, so the key does not say "chosen" (refutation round 3, F4). Accepted codes
+    only."""
+    from .generation import is_empty
+    counts=dict.fromkeys(ANSWER_STATES,0);counts['answers_with_clinician_review']=0
     for a in (e.answers or {}).values():
-        if not isinstance(a,dict):continue
-        if a.get('accepted_suggestion'):counts['answers_accepted_suggestion']+=1
-        elif a.get('status')=='left_blank':counts['answers_left_blank']+=1
-        elif a.get('status')=='edited':counts['answers_edited_not_accepted']+=1
-        elif a.get('reviewed'):counts['answers_reviewed_unedited']+=1
-    decisions=[d for d in ((e.template_review or {}).get('decisions') or {}).values() if isinstance(d,dict)]
+        # (a malformed entry from an earlier release is text if it is anything, so the save's count never hides it)
+        a=a if isinstance(a,dict) else {'text':str(a) if a else ''}
+        if a.get('accepted_suggestion'):state='answers_accepted_suggestion'
+        elif a.get('status')=='left_blank':state='answers_left_blank'
+        elif a.get('status')=='edited':state='answers_edited_not_accepted'
+        elif a.get('reviewed'):state='answers_reviewed_unedited'
+        elif not is_empty(a.get('text')):state='answers_unreviewed_unedited'
+        else:continue                                     # (an empty field nobody decided: nothing to clear)
+        counts[state]+=1;counts['answers_with_clinician_review']+=int(bool(a.get('reviewed')))
+    decisions=[d if isinstance(d,dict) else {} for d in ((e.template_review or {}).get('decisions') or {}).values()]
     counts.update(statements_reviewed=sum(1 for d in decisions if d.get('reviewed')),
-                  statements_chosen_unreviewed=sum(1 for d in decisions if not d.get('reviewed')),
+                  statements_recorded_unreviewed=sum(1 for d in decisions if not d.get('reviewed')),
                   codes_accepted=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0)
     return counts
+
+def cleared_parts(counts):
+    """What a changed notes save clears, as phrases read from its audited counts: each part is named only when its count
+    is not zero, so no sentence built from them can claim what the audit row does not record (refutation round 3, F2).
+    Within the answer draft, the decisions a clinician made — accepted suggestions and decisions to leave blank — are named
+    with the answers they are part of, beside the reviewed count that spans them: an acceptance made without the review
+    tick vanished from "(2 answers, 1 reviewed by a clinician)" while the audit recorded it (refutation round 4, R4-4)."""
+    def counted(number,noun,plural=None):return f'{number} '+(noun if number==1 else plural or noun+'s')
+    def reviewed(total,number):return (f'{number} reviewed by a clinician' if number else 'none reviewed' if total>1 else 'not reviewed')
+    answers=sum(counts[state] for state in ANSWER_STATES)
+    review=reviewed(answers,counts['answers_with_clinician_review'])
+    decisions=[(number,counted(number,noun,plural)) for number,noun,plural in (
+        (counts['answers_accepted_suggestion'],'accepted suggestion',None),
+        (counts['answers_left_blank'],'decision to leave blank','decisions to leave blank')) if number]
+    named=' and '.join(text for _,text in decisions)
+    if not decisions:draft=f'{counted(answers,"answer")}, {review}'
+    elif sum(number for number,_ in decisions)==answers:draft=f'{counted(answers,"answer")}: {named}; {review}'
+    else:draft=f'{counted(answers,"answer")}, including {named}; {review}'
+    statements=counts['statements_reviewed']+counts['statements_recorded_unreviewed']
+    parts=([f'the answer draft ({draft})'] if answers else [])
+    parts+=([f'{counted(statements,"saved prewritten statement wording")} ({reviewed(statements,counts["statements_reviewed"])})'] if statements else [])
+    parts+=([counted(counts['codes_accepted'],'accepted code')] if counts['codes_accepted'] else [])
+    return parts
+
+def listed(parts):
+    return ', '.join(parts[:-1])+' and '+parts[-1] if len(parts)>1 else ''.join(parts)
+
+def cleared_sentence(counts):
+    """What a changed notes save cleared, in words, from its audited counts (see `cleared_parts`)."""
+    parts=cleared_parts(counts)
+    return 'Cleared, and recorded under your name: '+listed(parts)+'. ' if parts else ''
 
 @require_POST
 @transaction.atomic
@@ -1147,6 +1198,14 @@ def finalize(request,pk):
                          else {k:v['text'] for k,v in e.answers.items()})
                 fill_template(original,version.fields,answers,out)
             out.chmod(0o600)
+            # ⚠️ THE REVISION IS NOT RENUMBERED HERE, DELIBERATELY: the record keeps the revision its review is bound to.
+            # The Word receipt's binding (`source_revision`) and each reviewed answer's `review_revision` name THIS
+            # revision, as did the trusted context the export was just filled under (the adapter refuses any other);
+            # renumbering would leave the finalized record contradicting its own receipt, and the release evidence
+            # (build-word-evidence.mjs) checks exactly that equality. Nothing may post to a finalized record anyway: every
+            # writer refuses the status, and the database refuses any update to the row — so the status, not the revision,
+            # is what stops a page opened before finalization (refutation round 4, R4-1: the code writers were the two that
+            # did not check it). No legitimate action after finalization posts a revision: export is a GET.
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)
         messages.success(request,'Finalized. The original structure is preserved in your export.')
@@ -1361,19 +1420,61 @@ def invite_accept(request,raw):
                 messages.success(request,'Invitation accepted; your personal welcome credit is available.' if welcome_credit_label() else 'Invitation accepted.');return redirect('login')
     return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
 
+#: ⚠️ A FINALIZED RECORD'S CODES ARE PART OF IT. Finalization does not renumber the revision (see `finalize`), so a Coding tab
+#: opened before it posts the current revision afterwards: its Accept set accepted_by and audited coding.accept after
+#: encounter.finalize, and its Suggest added a suggestion — while every other writer refused (refutation round 4, R4-1).
+#: The database guard covers the encounter row only, not its code suggestions, so both code writers check the status.
+FINALIZED_CODES='This document is finalized. Finalized documents are immutable.'
+#: ⚠️ A PAGE THAT POSTS NO REVISION IS NOT EVIDENCE THAT ANYTHING CHANGED. A page rendered before the code forms carried one
+#: was told "This document changed after you opened it" even when nothing had (refutation round 4, R4-7).
+PAGE_OUT_OF_DATE='This page is out of date and must be reloaded: it was opened before this version of QuillMD and does not say which version of the document it showed.'
+
+def notes_changed_since(e,revision):
+    """Whether this encounter's notes changed after the revision a page posted, read from the audit rows each notes change
+    leaves with the revision it made: a notes save, or a transcript an earlier release appended unreviewed."""
+    try:revision=int(revision)
+    except (TypeError,ValueError):return False
+    return AuditEvent.objects.filter(target=str(e.pk),action__in=['encounter.notes_saved','coding.invalidated_by_transcription'],
+                                     details__revision__gt=revision).exists()
+
+def coding_refusal(request,e,planned_notes=None):
+    """Why Suggest codes may not write to this encounter as the page posted it, as a refusal page; None when it may."""
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was suggested.',409)
+    if not request.POST.get('revision'):
+        return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was suggested. Reload the document, then suggest codes again.',409)
+    if request.POST.get('revision')!=str(e.revision) or (planned_notes is not None and e.notes!=planned_notes):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing was suggested. Reopen it to see the current notes before suggesting codes.',409)
+    return None
+
 @require_POST
 def coding(request,pk):
-    from .coding import suggest
+    from .coding import plan,suggest
+    # ⚠️ THE SUGGESTIONS ARE WORKED OUT BEFORE THE LOCK, AND ONLY WRITTEN UNDER IT. Holding the encounter's row lock for the
+    # whole pass let any member stall the document — 12,000 codes in 48,000 characters held it 70.6 s, and a page view
+    # waited 77.2 s (refutation round 4, R4-2). The plan is read from the notes at the page's revision; the write then takes
+    # the lock, as `accept_code` below, and re-checks that revision and those notes, so a suggestion is still never drawn
+    # from notes a concurrent save replaced (refutation round 3, F1) — that save now waits for the write alone.
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     membership(request.user,e.department)
-    result=suggest(e,request.user)
+    refused=coding_refusal(request,e)
+    if refused:return refused
+    planned=plan(e)
+    with transaction.atomic():
+        e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+        membership(request.user,e.department)
+        refused=coding_refusal(request,e,planned_notes=planned.notes)
+        if refused:return refused
+        result=suggest(e,request.user,planned)
     served=e.service_date.strftime('%d %B %Y')
+    from .coding import MAX_SUGGESTIONS
+    over=(f' {result.omitted} further documented code{" was" if result.omitted==1 else "s were"} not suggested: a document holds '
+          f'at most {MAX_SUGGESTIONS} code suggestions.' if result.omitted else '')
     if result.covered:
-        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service. Diagnosis inference is not enabled. CPT requires a licensed current feed.')
+        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:
         # A licensed CPT release can answer for a date no diagnosis release covers. Saying "nothing
         # was recorded" here would deny suggestions sitting on the page underneath the message.
-        messages.warning(request,f'No ICD-10-CM release covers the {served} date of service, so no diagnosis code was validated. {result.count} new suggestions came from {", ".join(result.versions)}. Import the diagnosis release in effect for that date.')
+        messages.warning(request,f'No ICD-10-CM release covers the {served} date of service, so no diagnosis code was validated. {result.count} new suggestions came from {", ".join(result.versions)}.{over} Import the diagnosis release in effect for that date.')
     else:
         messages.warning(request,f'No terminology release covers the {served} date of service, so nothing was validated and no suggestion was recorded. Import the release in effect for that date.')
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
@@ -1381,10 +1482,37 @@ def coding(request,pk):
 @require_POST
 @transaction.atomic
 def accept_code(request,pk,code_pk):
-    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    # ⚠️ UNDER THE ENCOUNTER'S ROW LOCK, AT THE REVISION THE PAGE SHOWED, like every other writer of its codes or review.
+    # Unlocked, an acceptance could commit after a notes save had counted what it would clear and before it cleared the
+    # codes: answered and audited as accepted, then deleted by the save, which said nothing of it (refutation round 3, F1).
+    # Now the two serialize: the save counts and names the accepted code, or this finds its code gone and says so.
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     membership(request.user,e.department,roles=['owner','clinician'])
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was accepted.',409)
     from .coding import applicable_releases,cpt_licensed
-    item=get_object_or_404(CodeSuggestion.objects.select_for_update(),pk=code_pk,encounter=e)
+    item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e).first()
+    posted=request.POST.get('revision')
+    if item is None:
+        # A stale revision proves the notes changed, not that an arbitrary missing code ID
+        # ever belonged to this encounter. State only availability and the observed change.
+        if CodeSuggestion.objects.filter(pk=code_pk).exists():raise Http404
+        if not posted:return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was accepted. Reload the document to see its current codes.',409)
+        if not notes_changed_since(e,posted):raise Http404
+        return document_refusal(request,e,'This code suggestion is unavailable. The notes changed after you opened the page, '
+                                          'which clears their code suggestions. Nothing was accepted. Reopen '
+                                          'it to see the current notes and codes.',409)
+    if not posted:return document_refusal(request,e,PAGE_OUT_OF_DATE+' Nothing was accepted. Reload the document to see its current codes.',409)
+    if posted!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
+                                          'was accepted. Reopen it to see the current notes and codes.',409)
+    if item.accepted_by_id:
+        # ⚠️ AN ACCEPTANCE BELONGS TO WHOEVER MADE IT. Accepting does not renumber the revision, so a page opened before
+        # clinician A accepted still posts the current revision, and B's Accept from it re-stamped the code as B's, with a
+        # second coding.accept (refutation round 4, R4-6). Refused, not answered as a no-op: B is told the acceptance is
+        # A's, by the email the page shows beside it, and when — nothing is written or audited.
+        when=timezone.localtime(item.accepted_at).strftime('%Y-%m-%d %H:%M %Z') if item.accepted_at else 'an unrecorded time'
+        return document_refusal(request,e,f'This code was already accepted by {item.accepted_by.email}, at {when}. '
+                                          'Nothing was accepted. Reopen the document to see its current codes.',409)
     if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
     if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
     if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied
@@ -1702,7 +1830,7 @@ def encounter_notes(request,pk):
     # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
     if transcript_job is None and same_text(notes,e.notes):
         messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
-    cleared=review_state_counts(e);clears=notes_save_clears(e)
+    cleared=review_state_counts(e)
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
@@ -1712,9 +1840,9 @@ def encounter_notes(request,pk):
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
               corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
-    # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2)
-    messages.success(request,('Notes saved. The answer draft, its review decisions and accepted codes were cleared, and the '
-                              'clearing is recorded under your name. ' if clears else 'Notes saved. ')+'Generate and review a new answer draft.')
+    # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2 — and
+    # exactly what it cleared, read from the counts just audited — refutation round 3, F2)
+    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+'Generate and review a new answer draft.')
     return redirect('encounter_detail',pk=pk)
 
 def review_transcript(job):

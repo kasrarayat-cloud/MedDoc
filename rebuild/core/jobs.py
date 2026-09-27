@@ -665,7 +665,7 @@ def run_one():
                 if len(e.notes)+len(text)+2>NOTE_LIMIT: raise NotAdoptedByUser(OVERFLOW_ERROR)
                 e.notes+='\n\n'+text; e.answers={}; e.status='draft'; e.revision+=1
                 CodeSuggestion.objects.filter(encounter=e).delete()
-                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department)
+                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision)
             if not (job.kind=='transcription' and job.config.get('transcript_review_required')):
                 e.template_review={}
                 e.save()
