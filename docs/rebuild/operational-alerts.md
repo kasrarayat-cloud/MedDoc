@@ -47,7 +47,10 @@ When an incident has ended and a new one opens inside the 24-hour interval, its
 first notice is still sent (subject `ESCALATION`) if it is more severe than every
 notice of the last 24 hours; otherwise the interval holds. A notice the state
 records but the sidecar does not describe counts as a failure for this purpose,
-so it can only hold the interval. Flapping at the same or a lower severity
+so it can only hold the interval. The converse is never trusted: a notice the
+sidecar stamps but the state records no request for (a check that stopped
+between writing the two files, before any request began) counts as not sent, so
+it can never hold anything. Flapping at the same or a lower severity
 therefore sends nothing extra, and healthy/failure flapping after a warning sends
 at most one extra notice a day.
 

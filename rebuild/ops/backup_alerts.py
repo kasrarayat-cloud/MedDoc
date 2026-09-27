@@ -854,7 +854,15 @@ def read_state():
         backup.require(value[key] is None or isinstance(value[key], str)
                        and re.fullmatch(r'[a-f0-9]{32}', value[key]), 'Invalid incident identity.')
     notices = read_notices() or {'incident': None, 'announced_at': no_announcements()}
-    state = dict(value, **closed_incident(), announced_at=dict(notices['announced_at']))
+    # ⚠️ A STAMP COUNTS ONLY IF status.json RECORDS A REQUEST NO EARLIER THAN IT. Every notice
+    # stamps its severity with the very instant status.json then records as last_attempt_at. A
+    # stamp later than that (or any stamp before status.json records a request at all) was written
+    # by a check that died between the ledger and status.json: no request ever began for it, and a
+    # notice nobody received must never hold the one that is owed. It is read as not sent.
+    backed = timestamp(value['last_attempt_at']) if value['last_attempt_at'] else None
+    announced_at = {level: when if when is not None and backed is not None and timestamp(when) <= backed
+                    else None for level, when in notices['announced_at'].items()}
+    state = dict(value, **closed_incident(), announced_at=announced_at)
     record = notices['incident']
     if value['incident_id'] is None:
         pass    # A closed incident: any older record describes an incident that is over.
@@ -1103,6 +1111,8 @@ def recent_severity_rank(state, at):
 
     ⚠️ A notice status.json records that the ledger does not (the previous release made it, or the
     ledger was new) counts as a FAILURE: an unknown notice can hold the cooldown, never lift it.
+    The converse never reaches here: a stamp the ledger holds that status.json records no request
+    for was dropped by read_state, because a notice nobody received must hold nothing.
     """
     def recent(when):
         return when is not None and (at - timestamp(when)).total_seconds() < COOLDOWN_SECONDS
