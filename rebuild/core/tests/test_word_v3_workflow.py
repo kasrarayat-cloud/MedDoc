@@ -633,13 +633,21 @@ class V3Generation(V3EncounterFixture, TestCase):
     def test_anything_else_is_held_for_the_clinician_with_its_quote(self):
         candidates = {"Smoker?": "former smoker", "Laterality": "left side",
                       "Symptoms (check all that apply)": "Pain, Redness", "Diabetes": "no"}
-        answers = self.generate("Smoker: former smoker\nLaterality: left side\n"
-                                "Symptoms (check all that apply): Pain, Redness\nDiabetes: no")
+        # Round 3 (R3-1): each labelled line in its own paragraph, so each is judged by the option rule alone. Written as
+        # one paragraph, 'Pain, Redness' (a list, not a plain value) also holds the lines above it; asserted below.
+        notes = ("Smoker: former smoker\n\nLaterality: left side\n\n"
+                 "Symptoms (check all that apply): Pain, Redness\n\nDiabetes: no")
+        one_paragraph = self.generate(notes.replace("\n\n", "\n"))
+        for label, candidate in candidates.items():
+            answer = self.answer(one_paragraph, label)
+            self.assertEqual((answer["status"], answer["text"], answer["held_candidate"]["text"]), ("conflict", "", candidate))
+        answers = self.generate(notes)
         for label, candidate in candidates.items():
             answer = self.answer(answers, label)
             self.assertEqual((answer["status"], answer["text"]), ("conflict", ""), label)
             self.assertEqual(answer["held_candidate"]["text"], candidate, label)
-            self.assertEqual([e["quote"] for e in answer["held_candidate"]["evidence"]], [candidate], label)
+            # The complete-sentence contract cites the whole source statement (label included), bound by its offsets.
+            self.assertEqual([e["quote"] for e in answer["held_candidate"]["evidence"]], [label.rstrip("?") + ": " + candidate], label)
             self.assertIn("NOT used as an answer", answer["held_candidate"]["reason"])
         page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
         self.assertIn("Read from the notes &mdash; not offered as an answer.", page)
@@ -652,7 +660,12 @@ class V3Generation(V3EncounterFixture, TestCase):
             self.assertEqual((self.answer(answers, label)["status"], self.answer(answers, label)["text"]), ("missing", ""), label)
 
     def test_table_rows_signature_and_initials_are_never_generated(self):
-        answers = self.generate("Referring physician: Dr Example\nTable: Aspirin | 81 mg | daily\n"
+        # Round 3 (R3-1): a never-generated label's line in the same paragraph is never a plain value of an asked question,
+        # so it holds the answer above it (asserted below); the signature block here is its own paragraph.
+        held = self.answer(self.generate("Referring physician: Dr Example\nClinician signature: Synthetic Alpha Clinician"),
+                           "Referring physician")
+        self.assertEqual((held["status"], held["text"], held["held_candidate"]["text"]), ("conflict", "", "Dr Example"))
+        answers = self.generate("Referring physician: Dr Example\n\nTable: Aspirin | 81 mg | daily\n"
                                 "Clinician signature: Synthetic Alpha Clinician\nPhysician initials: SAC")
         for label in ("Table", "Clinician signature", "Physician initials"):
             answer = self.answer(answers, label)
@@ -662,11 +675,18 @@ class V3Generation(V3EncounterFixture, TestCase):
                          "their labelled lines are still read as labelled, so the note stays fully labelled")
 
     def test_an_offer_on_an_option_question_names_a_printed_option_or_is_held(self):
-        answers = self.generate("Smoker: yes\nLaterality: left side\nPatient seen today.")
+        answers = self.generate("Smoker: yes\nLaterality: left side\n\nPatient seen today.")
         smoker, laterality = self.answer(answers, "Smoker?"), self.answer(answers, "Laterality")
-        self.assertEqual((smoker["status"], smoker["text"], smoker.get("suggestion")), ("conflict", "", "Yes"))
+        # Ordinary notes (B-G1): an unrelated complete sentence ('Patient seen today.') no longer holds every answer.
+        # The explicit labelled statement names a printed option, so it is filled; a governed note would still hold it.
+        # Round 2 (F2): the sentence is in its own paragraph here; written in the same paragraph it may correct the
+        # answers above it, and they are held (asserted below).
+        self.assertEqual((smoker["status"], smoker["text"]), ("supported", "Yes"))
         self.assertNotIn("suggestion", laterality, "a value that names no printed option is never one click away")
         self.assertEqual(laterality["held_candidate"]["text"], "left side")
+        answers = self.generate("Smoker: yes\nLaterality: left side\nPatient seen today.")
+        smoker = self.answer(answers, "Smoker?")
+        self.assertEqual((smoker["status"], smoker["text"], smoker["held_candidate"]["text"]), ("conflict", "", "yes"))
 
     def test_a_held_option_is_the_clinicians_decision_and_is_exported(self):
         self.generate("Referring physician: Dr Example\nLaterality: left side")

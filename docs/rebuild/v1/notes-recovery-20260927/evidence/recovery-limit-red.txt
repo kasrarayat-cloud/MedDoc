@@ -1,0 +1,22 @@
+E
+======================================================================
+ERROR: test_stored_draft_remains_reviewable_when_source_exceeds_unit_limit (core.tests.test_v3_ordinary_notes.RecoveredNoteContext.test_stored_draft_remains_reviewable_when_source_exceeds_unit_limit)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1305, in test_stored_draft_remains_reviewable_when_source_exceeds_unit_limit
+    governance = g.governance_for(notes, fields)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/generation.py", line 1449, in governance_for
+    note_units = source_units(notes, asked, context_labels=context)[0]
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/generation.py", line 379, in source_units
+    if len(units)>=1000: raise ValidationError('Source exceeds 1,000 complete statements; split explicitly. Nothing was truncated.')
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.core.exceptions.ValidationError: ['Source exceeds 1,000 complete statements; split explicitly. Nothing was truncated.']
+
+----------------------------------------------------------------------
+Ran 1 test in 0.253s
+
+FAILED (errors=1)
+Found 1 test(s).
+System check identified no issues (0 silenced).

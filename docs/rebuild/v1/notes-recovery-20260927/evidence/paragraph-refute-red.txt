@@ -1,0 +1,81 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FFFF
+======================================================================
+FAIL: test_repeated_hpi_occurrences_survive_worker_review_and_word_export (core.tests.test_v3_ordinary_notes.RecoveredParagraphExport.test_repeated_hpi_occurrences_survive_worker_review_and_word_export)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1398, in test_repeated_hpi_occurrences_survive_worker_review_and_word_export
+    self.assertEqual((answer['status'], answer['text']), ('supported', '\n'.join(quotes)))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient reports pain aft[77 chars]ng.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported',
++  'The patient reports pain after walking.\n'
++  'He rests for five minutes.\n'
++  'The patient reports pain after walking.')
+
+======================================================================
+FAIL: test_a_specific_clinical_question_is_not_a_generic_narrative_destination (core.tests.test_v3_ordinary_notes.RecoveredParagraphRefutation.test_a_specific_clinical_question_is_not_a_generic_narrative_destination) (label='Lt knee')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1356, in test_a_specific_clinical_question_is_not_a_generic_narrative_destination
+    self.assertEqual((out['status'], out['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'The patient has right knee p[39 chars]ng.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
++ ('conflict', '')
+- ('supported',
+-  'The patient has right knee pain.\nHe reports stiffness in the morning.')
+
+======================================================================
+FAIL: test_a_specific_clinical_question_is_not_a_generic_narrative_destination (core.tests.test_v3_ordinary_notes.RecoveredParagraphRefutation.test_a_specific_clinical_question_is_not_a_generic_narrative_destination) (label='Allergies')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1356, in test_a_specific_clinical_question_is_not_a_generic_narrative_destination
+    self.assertEqual((out['status'], out['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'The patient takes aspirin daily.\nShe also takes vitamin D.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'The patient takes aspirin daily.\nShe also takes vitamin D.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_intact_plan_preserves_repeated_instructions_as_separate_occurrences (core.tests.test_v3_ordinary_notes.RecoveredParagraphRefutation.test_intact_plan_preserves_repeated_instructions_as_separate_occurrences)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1367, in test_intact_plan_preserves_repeated_instructions_as_separate_occurrences
+    self.assertEqual((out['status'], out['text']), ('supported', '\n'.join(u['quote'] for u in units)))
+AssertionError: Tuples differ: ('sup[54 chars]ill wait five minutes.') != ('sup[54 chars]ill wait five minutes.\nThe patient will take one tablet now.')
+
+First differing element 1:
+'The [39 chars]will wait five minutes.'
+'The [39 chars]will wait five minutes.\nThe patient will take one tablet now.'
+
+  ('supported',
+-  'The patient will take one tablet now.\nShe will wait five minutes.')
+?                                          --------------------------- -
+
++  'The patient will take one tablet now.\n'
++  'She will wait five minutes.\n'
++  'The patient will take one tablet now.')
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.586s
+
+FAILED (failures=4)
+Destroying test database for alias 'default'...
+Found 3 test(s).
+System check identified no issues (0 silenced).
+exit 1

@@ -1,0 +1,7 @@
+batch paragraph-refute-mutants.py labels ['core.tests.test_v3_ordinary_notes.RecoveredParagraphRefutation'] sha 4375da5758ee5457
+BASELINE OK 1s 2  | 
+  P1 mutation applied: True
+P1 allow every named destination                                       KILLED   restored=True 1s 2 failures=2 | FAIL: test_a_specific_clinical_question_is_not_a_generic_narrative_destination  (label='Lt knee') ; FAIL: test_a_specific_clinical_question_is_not_a_generic_narrative_destination  (label='Allergies')
+  P2 mutation applied: True
+P2 drop repeated instruction occurrence                                KILLED   restored=True 1s 2 failures=1 | FAIL: test_intact_plan_preserves_repeated_instructions_as_separate_occurrences 
+final sha 4375da5758ee5457 equal True
