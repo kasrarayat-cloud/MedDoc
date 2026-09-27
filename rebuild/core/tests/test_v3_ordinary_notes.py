@@ -1012,6 +1012,50 @@ class RoundThreeRefutation(SimpleTestCase):
                 self.assertEqual(answer['status'], 'conflict' if held else 'supported', notes)
 
 
+class RoundThreeMutantPins(SimpleTestCase):
+    """Round 3, R3-7: each of these mutants of the round-2 rules survived the suite. Pinned with the refuter's probe, and,
+    where the round-3 repair holds that probe for another reason, with a probe only the pinned rule holds (stated)."""
+
+    def test_a_b_disregard_and_strike_that_are_self_corrections(self):
+        for notes in ('Allergies: penicillin, disregard that, amoxicillin.', 'Allergies: penicillin (strike that) amoxicillin.'):
+            with self.subTest(notes=notes):
+                held_with(self, notes, 'Allergies', notes, notes.split(': ', 1)[1])
+
+    def test_c_a_self_correction_is_read_with_invisible_characters_removed(self):
+        notes = 'Allergies: penicillin, so\u00adrry, amoxicillin.'
+        held_with(self, notes, 'Allergies', notes, notes.split(': ', 1)[1])
+
+    def test_d_a_cjk_full_stop_ends_a_sentence(self):
+        # The refuter's probe; since R3-1 its 'Allergies' value (not plain) also holds 'Smoker: yes.' ...
+        held_with(self, 'Smoker: yes.\nAllergies: none\u3002Sorry, smoker is no.', 'Smoker', 'Smoker: yes.', 'yes.')
+        # ... so a probe only the CJK stop holds: nothing else in it asks, points, corrects or runs on.
+        notes = 'Allergies: none\u3002Penicillin rash.'
+        held_with(self, notes, 'Allergies', notes, notes.split(': ', 1)[1])
+
+    def test_e_a_stop_inside_a_bracket_ends_a_sentence(self):
+        notes = 'Medications: warfarin 5 mg daily (since May.) Stopped last month.'
+        held_with(self, notes, 'Medications', notes, notes.split(': ', 1)[1])
+
+    def test_f_g_h_l_a_value_that_trails_off_or_asks_answers_nothing(self):
+        for value in ('penicillin\u2026', 'penicillin..', 'penicillin\uff1f', 'penicillin?)', 'penicillin?*'):
+            notes = 'Allergies: ' + value
+            with self.subTest(notes=notes):
+                held_with(self, notes, 'Allergies', notes, value)
+
+    def test_i_j_overleaf_and_beneath_point_elsewhere(self):
+        for value in ('details overleaf.', 'described beneath.'):
+            notes = 'Findings: ' + value
+            with self.subTest(notes=notes):
+                held_with(self, notes, 'Findings', notes, value)
+
+    def test_k_a_line_of_no_break_spaces_is_not_a_blank_line(self):
+        held_with(self, 'Smoker: yes.\n\u00a0\nSorry, I meant no.', 'Smoker', 'Smoker: yes.', 'yes.')
+
+    def test_n_see_after_opening_markup_points_elsewhere(self):
+        notes = 'Findings: (see attached report).'
+        held_with(self, notes, 'Findings', notes, notes.split(': ', 1)[1])
+
+
 class RoundThreeCost(SimpleTestCase):
     """R3-4/R3-5: the refuter's inputs, bounded in time (each was seconds to minutes on 1d66c798)."""
 
@@ -1150,3 +1194,83 @@ class RoundThreeThroughTheWorker(V3EncounterFixture, TestCase):
                                                  'Reason for visit': ['Reason for visit: knee pain.']})
         self.assertLess(elapsed, 5.0)
         self.assertEqual(answers[self.key('Allergies')]['status'], 'conflict')
+
+class RecoveredNoteContext(SimpleTestCase):
+    """Recovery findings: note-wide corrections, consent and intact ordinary narrative paragraphs."""
+
+    def test_a_blank_line_cannot_hide_a_spoken_allergy_correction(self):
+        for correction in ('Sorry, I mean amoxicillin.', 'So\u00adrry, I meant amoxicillin.'):
+            notes = 'Allergies: penicillin.\n\n' + correction
+            out = run(notes, {'Allergies': ['Allergies: penicillin.']})['Allergies']
+            self.assertEqual((out['status'], out['text']), ('conflict', ''))
+            self.assertNotIn('suggestion', out)
+            self.assertEqual(out['held_candidate']['text'], 'penicillin.')
+            self.assertTrue(any(correction in c['quote'] for c in out['held_candidate']['context']))
+
+    def test_consent_does_not_infer_that_a_separate_statement_is_unrelated(self):
+        for extra in ('Consent was withdrawn later that day.', 'It was withdrawn later that day.', 'Plan: consent Friday.'):
+            notes = 'Consent obtained: yes.\n\n' + extra
+            out = run(notes, {'Consent obtained': ['Consent obtained: yes.']})['Consent obtained']
+            self.assertEqual((out['status'], out['text']), ('conflict', ''))
+            self.assertNotIn('suggestion', out)
+            self.assertTrue(out['held_candidate']['context'])
+        self.assertEqual(run('Consent obtained: yes.', {'Consent obtained': ['Consent obtained: yes.']})
+                         ['Consent obtained']['text'], 'checked')
+
+    def test_existing_supported_drafts_are_held_by_page_and_finalization(self):
+        for label, notes, quote, text in (
+            ('Allergies', 'Allergies: penicillin.\n\nSorry, I mean amoxicillin.', 'Allergies: penicillin.', 'penicillin.'),
+            ('Consent obtained', 'Consent obtained: yes.\n\nConsent was withdrawn later that day.', 'Consent obtained: yes.', 'checked'),
+        ):
+            source = {'quote': quote, 'start': 0, 'end': len(quote)}
+            answer = {'text': text, 'status': 'supported', 'evidence': [source], 'reviewed': True}
+            governance = g.governance_for(notes, FIELDS)
+            page = g.as_currently_governed(governance, notes, {**answer, 'label': label})
+            self.assertEqual((page['status'], page['text']), ('conflict', ''))
+            key = next(f['key'] for f in FIELDS if f['label'] == label)
+            self.assertEqual(g.governed_decisions(notes, FIELDS, {key: answer}), [label])
+            accepted = {**answer, 'status': 'edited', 'suggestion': text, 'suggestion_evidence': [source],
+                        'accepted_suggestion': {'by': 'old-clinician'}}
+            self.assertEqual(g.governed_decisions(notes, FIELDS, {key: accepted}), [label])
+
+    def test_an_intact_ordinary_paragraph_can_fill_a_narrative_answer(self):
+        notes = 'The patient presents with right knee pain for three weeks. He reports stiffness in the morning.'
+        quotes = ['The patient presents with right knee pain for three weeks.', 'He reports stiffness in the morning.']
+        for kind in ('text', 'long_text'):
+            fields = [field('history', 'History of present illness', kind)]
+            out = run(notes, {'History of present illness': quotes}, fields=fields)['History of present illness']
+            self.assertEqual((out['status'], out['text']), ('supported', '\n'.join(quotes)))
+            self.assertEqual([e['quote'] for e in out['evidence']], quotes)
+            # A provider's order cannot reverse the source's clinical sequence.
+            reversed_out = run(notes, {'History of present illness': quotes[::-1]}, fields=fields)['History of present illness']
+            self.assertEqual(reversed_out, out)
+            for partial in ([quotes[0]], [quotes[1]]):
+                held = run(notes, {'History of present illness': partial}, fields=fields)['History of present illness']
+                self.assertEqual(held['status'], 'conflict')
+                self.assertNotIn('suggestion', held)
+
+    def test_complete_paragraph_does_not_release_correction_or_option_guards(self):
+        notes = 'The patient takes penicillin. Sorry, I mean amoxicillin.'
+        quotes = ['The patient takes penicillin.', 'Sorry, I mean amoxicillin.']
+        fields = [field('medication', 'Medications', 'long_text')]
+        self.assertEqual(run(notes, {'Medications': quotes}, fields=fields)['Medications']['status'], 'conflict')
+        notes = 'The patient smokes. He smokes daily.'
+        self.assertEqual(run(notes, {'Smoker': ['The patient smokes.', 'He smokes daily.']})['Smoker']['status'], 'conflict')
+
+    def test_intact_paragraph_relaxation_cannot_release_sides_rows_or_duplicate_destinations(self):
+        quotes = ['The patient has right knee pain.', 'He reports stiffness in the morning.']
+        notes = ' '.join(quotes)
+        for label in ('Left knee', 'Right knee', 'Examination — 1', 'Examination: knee', 'Row 1'):
+            fields = [field('one', label, 'long_text')]
+            self.assertEqual(run(notes, {label: quotes}, fields=fields)[label]['status'], 'conflict')
+        fields = [field('one', 'History'), field('two', 'Plan')]
+        out = run(notes, {'History': quotes, 'Plan': quotes}, fields=fields)
+        self.assertEqual({a['status'] for a in out.values()}, {'conflict'})
+        fields = [field('one', 'History'), field('two', 'History')]
+        self.assertEqual(run(notes, {'History': quotes}, fields=fields)['History']['status'], 'conflict')
+
+    def test_intact_ordinary_plan_preserves_each_instruction_and_its_sequence(self):
+        quotes = ['The patient will start physiotherapy twice weekly.', 'She will return to clinic in six weeks.']
+        fields = [field('plan', 'Plan', 'long_text')]
+        out = run(' '.join(quotes), {'Plan': quotes}, fields=fields)['Plan']
+        self.assertEqual((out['status'], out['text']), ('supported', '\n'.join(quotes)))
