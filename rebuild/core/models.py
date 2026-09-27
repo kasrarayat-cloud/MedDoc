@@ -256,6 +256,9 @@ class Payment(Entity):
     status=models.CharField(max_length=20,default='pending')
     request_key=models.CharField(max_length=64,unique=True,null=True)
     checkout_url=models.URLField(max_length=1000,blank=True)
+    # The Stripe mode the checkout was created in. NULL: recorded before the mode was stored, when only sandbox
+    # payments existed. Real data mode never spends money from a wallet any non-live payment funded.
+    livemode=models.BooleanField(null=True)
 class WebhookEvent(Entity):
     event_id=models.CharField(max_length=180,unique=True)
     kind=models.CharField(max_length=80)
@@ -267,6 +270,8 @@ class WebhookEvent(Entity):
     attempts=models.PositiveIntegerField(default=0)
     error=models.CharField(max_length=160,blank=True)
     processed_at=models.DateTimeField(null=True)
+    # The event's livemode as validated when recorded. NULL: recorded before it was stored (sandbox only then).
+    livemode=models.BooleanField(null=True)
 class Refund(Entity):
     payment=models.ForeignKey(Payment,on_delete=models.PROTECT)
     stripe_refund=models.CharField(max_length=200,unique=True)

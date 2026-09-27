@@ -1119,7 +1119,7 @@ def checkout(request):
             organization_id=payer.split(':',1)[1]
             if not Membership.objects.select_for_update().filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
             wallet,_=Wallet.objects.get_or_create(organization_id=organization_id,kind='paid')
-        p,created=Payment.objects.get_or_create(request_key=request_key,defaults={'user':request.user,'wallet':wallet,'amount_cents':amount_cents,'status':'creating'})
+        p,created=Payment.objects.get_or_create(request_key=request_key,defaults={'user':request.user,'wallet':wallet,'amount_cents':amount_cents,'status':'creating','livemode':live})
         if p.user_id!=request.user.pk or p.amount_cents!=amount_cents or p.wallet_id!=wallet.pk:raise ValidationError('A repeated checkout must use the original authorized balance and amount.')
         if not created:
             if p.checkout_url and p.status in ['pending','processing']:return redirect(p.checkout_url)

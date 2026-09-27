@@ -41,6 +41,26 @@ QuillMD refuses to start: QUILLMD_HTTPS must be 1; SESSION_COOKIE_SECURE must be
 
 `manage.py check` shows the same message, so a configuration can be tried before a restart.
 
+## Real mode never spends sandbox money
+
+**Real data mode runs on a database that has never held sandbox payments.** A database that took
+sandbox (test-card) payments keeps that money in paid wallets, and real mode refuses the sandbox
+refund that could remove it — so the only safe path is a database with no sandbox payment history.
+
+- Every `Payment` records the Stripe mode its checkout was created in, and every `WebhookEvent` the
+  `livemode` it was validated with (`livemode`, migration `0020`). Rows written before this change
+  carry `NULL` and count as sandbox: live mode did not exist then.
+- In real data mode `reserve()` refuses the whole request, before any hold, when the payer's paid
+  wallet was funded by any payment not recorded as live (a non-live `Payment` row on it, or a
+  `payment` ledger credit with no live `Payment`). Synthetic mode is unchanged.
+- **`manage.py real_mode_payment_check`** is read-only (it runs in a `READ ONLY` transaction and rolls
+  back) and exits 1 when the database holds any payment or Stripe event row not recorded as live,
+  or any paid wallet whose balance live payments do not wholly explain (a non-live credit, or a
+  balance that differs from its ledger). It prints counts only. **The launcher must run it before
+  starting real mode.** A check inside every process start is not used instead: settings and
+  `AppConfig.ready()` also run for `migrate`, `makemigrations`, the test runner and `collectstatic`,
+  often before the database exists or is migrated, and Django advises against queries there.
+
 ## The administrator surface behind a TLS proxy
 
 Before: `QUILLMD_ADMIN_SITE=1` forced `SECURE_PROXY_SSL_HEADER=None`, so behind a TLS-terminating
@@ -162,8 +182,8 @@ the outbox.
 - A `STRIPE_WEBHOOK_SECRET` copied from the **wrong endpoint** is well formed and cannot be detected
   at start: every live event would be refused (charged, never credited). It shows up only at the
   bounded live payment test, which must be run and checked before live payments are opened.
-- `Payment`, `Wallet` and `WebhookEvent` have no live/sandbox partition. Take live payments on a
-  database that has never held sandbox rows.
+- The production launcher must run `manage.py real_mode_payment_check` before starting real mode
+  (see *Real mode never spends sandbox money*); nothing in this change wires it in.
 - Backup, offsite and alert configurations (`ops/offsite_backup.py`, `ops/backup_alerts.py`) still
   require `synthetic_only: true` and will refuse to run for real data until requalified.
 - The launcher, units and role tools remain pinned to this host's private target.
