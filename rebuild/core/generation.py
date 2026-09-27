@@ -939,6 +939,16 @@ def readings(text):
         yield visible
 
 
+def safety_readings(text):
+    """Compatibility readings only for withholding; never labels, options, source spans or output."""
+    seen = set()
+    for source in (text, unicodedata.normalize('NFKC', text)):
+        for reading in readings(source):
+            if reading not in seen:
+                seen.add(reading)
+                yield reading
+
+
 @functools.lru_cache(maxsize=1)
 def invisibles():
     """The `translate` table that removes invisible characters and control characters (not U+2800, not whitespace;
@@ -1780,8 +1790,7 @@ def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_unit
         asked, context, _ = v3_generation_fields(fields, context_labels)
         try:
             note_units = v3_units if v3_units is not None else source_units(notes, asked, context_labels=context)[0]
-            corrections = [unit for unit in note_units
-                           if any(SELF_CORRECTION.search(reading) for reading in readings(unit['quote']))]
+            corrections = [unit for unit in note_units if v3_note_correction(unit['quote'])]
         except ValidationError:
             # An existing draft must remain reviewable even when its notes exceed generation's unit limit.
             # No automatic answer is released when this reader cannot establish its context.
@@ -1970,6 +1979,22 @@ POINTING_START = re.compile(r'^[\s*_~`"\'\u201c\u2018(\[]*see' + LETTER_AFTER, r
 #: word 'correction' is not here: the tab contract's `; correction,` and the governance reader's errata already read it.
 SELF_CORRECTION = re.compile(LETTER_BEFORE + r'(?:sorry|i\s+mean|i\s+meant|scratch\s+that|strike\s+that|disregard|no\s+wait'
                              r'|or\s+rather|actually)' + LETTER_AFTER, re.I)
+
+# Record edits can retract an earlier statement without repeating the form's label.
+# Both an action and a record reference are required: physical stitches/device removal
+# is not itself a correction. These cues only hold offers; they do not rewrite a record.
+V3_RETRACTION_ACTION = re.compile(LETTER_BEFORE + r'(?:delet(?:e|ed|ing|ion)|remov(?:e|ed|ing|al)'
+    r'|omit(?:s|ted|ting)?|retract(?:s|ed|ing|ion)?|withdraw(?:s|n|ing|al)?'
+    r'|strik(?:e|ing)|amend(?:s|ed|ing|ment)?|correct(?:s|ed|ing|ion)?'
+    r'|invalidat(?:e|ed|ing|ion))' + LETTER_AFTER, re.I)
+V3_RECORD_REFERENCE = re.compile(LETTER_BEFORE + r'(?:entr(?:y|ies)|statements?|declarations?'
+    r'|records?|chart|documentation|documented|annotations?|notes?)' + LETTER_AFTER, re.I)
+
+
+def v3_note_correction(text):
+    return any(SELF_CORRECTION.search(reading) or (
+        V3_RETRACTION_ACTION.search(reading) and V3_RECORD_REFERENCE.search(reading))
+        for reading in safety_readings(text))
 
 
 #: ⚠️ NARROWED ONLY WHERE THE SHAPE PROVES IT IS NOT A POINTER (round 3, R3-6), so every round-2 pointer is still held.
@@ -2220,9 +2245,10 @@ def v3_field_subjects(units, named, parsed):
                     or (label == 'examination' and prefix in ('neurological', 'heart and lung')
                         and question_key(named[label][0].get('context') or '') not in ('', 'examination'))
                     or (label == 'medications' and v3_medication_complement_holds(predicate))
-                    or any(m.group().casefold() not in local_words for text in readings(unit['quote'])
+                    or any(m.group().casefold() not in local_words for text in safety_readings(unit['quote'])
                            for m in UNSETTLED.finditer(text))
-                    or any(p.search(unit['quote']) for p in (INHERITED_SCOPE, SELF_CORRECTION))):
+                    or any(p.search(text) for text in safety_readings(unit['quote'])
+                           for p in (INHERITED_SCOPE, SELF_CORRECTION))):
                 unresolved.add(unit['id'])
                 continue
             matches.append((label, unit['start'] + match.start('head'), unit['start'] + match.end('head')))
@@ -2482,6 +2508,12 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                     pattern.search(text) for source in (value, unicodedata.normalize('NFKC', value))
                     for text in readings(source)
                     for pattern in (DENIAL, INHERITED_SCOPE, UNSETTLED, SELF_CORRECTION, SCOPE_POINTER))
+                # A nominal Plan's for-complement may explain an earlier finding
+                # or name its beneficiary. This new boundary cannot prove that
+                # relation independent merely because the Plan has a label.
+                nominal_plan = nominal_plan and not any(
+                    re.search(LETTER_BEFORE + r'for' + LETTER_AFTER, text, re.I)
+                    for text in safety_readings(value))
             narrative = (owner in general and (FINITE_STATEMENT_V3.search(
                 value if colon[block[0]['id']] else block[0]['quote']) or local_conditional or nominal_plan))
             factual = ((owner in clinical and (colon[block[0]['id']] or FINITE_STATEMENT_V3.search(block[0]['quote'])))
@@ -2494,12 +2526,12 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             unsettled = any(match.group().casefold() not in (set(local_words) | (
                                 PRESENTATION_TIME_WORDS if unit['id'] in age_presentations else set()))
                             for unit in block
-                            for text in readings(own[1] if unit is block[0] and own else unit['quote'])
+                            for text in safety_readings(own[1] if unit is block[0] and own else unit['quote'])
                             for match in UNSETTLED.finditer(text))
             safe = bool(scoped_words and ((owner and plain_value(value)) or (
                 (narrative or factual or patients[block[0]['id']]) and not unsettled
                 and not any(SELF_CORRECTION.search(text) or SCOPE_POINTER.search(text)
-                            for text in readings(value)))))
+                            for text in safety_readings(value)))))
             barriers[index] = safe
             blocks.append({'units': block, 'owner': owner, 'position': position,
                            'group_start': index - position, 'group_count': len(group_blocks)})
