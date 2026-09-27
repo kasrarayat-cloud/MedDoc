@@ -1986,12 +1986,15 @@ class Detector:
 
     @staticmethod
     def question_box_signing(text):
-        # The article makes "the initial report" an adjective phrase. Do not
-        # exempt bare "Initial", "Initials", initial-here, or any other marker.
-        reading = re.sub(r"\bthe\s+initial\s+report\b", "the report", text, flags=re.I)
+        # Only the demonstrated temporal/source-reference phrases qualify.
+        # A direct request about "the initial report" remains ambiguous, as do
+        # bare "Initial", "Initials", initial-here, and other signing markers.
+        reading = re.sub(r"\b(since|in\s+the\s+case\s+of)\s+the\s+initial\s+report\b",
+                         r"\1 the report", text, flags=re.I)
         # A signing verb still governs an adjective-bearing report (for example,
         # "Please sign the initial report here?"). The shared regex is unchanged.
-        if reading != text and re.search(r"\bsign\b", reading, re.I):
+        if reading != text and re.search(
+                r"\b(?:(?:counter|under|co|re)[ -]?)?sign(?:s|ed|ing|off|offs)?\b", reading, re.I):
             return True
         return SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
 
@@ -2048,7 +2051,9 @@ class Detector:
                     break
                 previous = previous.getprevious()
             reference = re.search(r"\b(?:above|previous|following)\s+(?:question|answer|section)\b|\bas above\b|\bsame as\b", raw, re.I)
-            signing = self.question_box_signing(raw + " " + context)
+            # Question and section are distinct source blocks: joining them can
+            # manufacture the adjective phrase across a real signing boundary.
+            signing = self.question_box_signing(raw) or self.question_box_signing(context)
             inline_answer = question is not None and (BOX in raw or CHECKED in raw or
                 bool(self.blank_spans(*self.ptext(question.el))))
             if not bordered or cell.info["span"] != 1 or cell.info["vmerge"] is not None:

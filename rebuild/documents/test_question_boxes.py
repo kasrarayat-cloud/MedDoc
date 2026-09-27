@@ -110,11 +110,22 @@ class QuestionBoxes(unittest.TestCase):
     def test_initial_report_adjective_is_not_a_signing_instruction(self):
         for phrase, accepted in (
             ('Please describe the changes since the initial report?', True),
+            ('Please describe changes in the case of the initial report?', True),
+            ('Please notarize the initial report?', False),
             ('Please describe the changes since the initial report, then initial here?', False),
             ('Please describe the initial report and provide initials?', False),
             ('Please describe the initial report and provide signature?', False),
             ('Please provide Initial?', False), ('Please provide Initials?', False),
             ('Please sign the initial report here?', False),
+            ('Please countersign the initial report?', False),
+            ('Please counter-sign the initial report?', False),
+            ('Has the initial report been countersigned?', False),
+            ('Please undersign the initial report?', False),
+            ('Please co-sign the initial report?', False),
+            ('Please re-sign the initial report?', False),
+            ('Please provide signoff on the initial report?', False),
+            ('Please describe signing the initial report?', False),
+            ('Please countersign since the initial report?', False),
             ('Please initial the report here?', False), ('Please initial here?', False)):
             with self.subTest(phrase=phrase):
                 doc = Document()
@@ -127,6 +138,19 @@ class QuestionBoxes(unittest.TestCase):
                     self.assertEqual(fields[0]['label'], phrase)
                     exported = w.fill(data(doc), fields, {fields[0]['key']: 'SYNTHETIC'})
                     self.assertEqual(w.text_of(w.SlotIndex(w.open_package(exported)).by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]'].el), 'SYNTHETIC')
+
+    def test_initial_adjective_cannot_cross_question_section_boundary(self):
+        for heading, question in (('Report', 'Please provide the initial'),
+                                  ('Initial', 'Please describe the initial report?'),
+                                  ('Please countersign the initial report', 'What changed?')):
+            with self.subTest(heading=heading, question=question):
+                doc = Document()
+                doc.add_paragraph(heading, style='Heading 1')
+                doc.add_paragraph(question)
+                box(doc)
+                result = w.inspect(data(doc))
+                self.assertEqual(result['fields'], [])
+                self.assertTrue(any('Signing or consent' in note for note in result['notes']))
 
     def test_inherited_heading_scope_and_unknown_or_cyclic_ancestry(self):
         for ancestor in ('Heading 1', 'Unknown', 'cycle'):
