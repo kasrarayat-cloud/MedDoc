@@ -973,6 +973,22 @@ class RoundThreeRefutation(SimpleTestCase):
                 answer = run(notes, {label: [notes]}, fields=ROUND3)[label]
                 self.assertEqual((answer['status'], answer['text']), ('supported', text), notes)
 
+    def test_r3_6_a_pointer_is_still_held_where_the_narrowed_shapes_do_not_prove_otherwise(self):
+        """Not the refuter's inputs: a minus sign is read through only right after a value, and 'see' opens an instruction
+        only with a time or frequency, within eight words, naming no other place in the record. Each of these is held."""
+        for value in ('-', 'effusion \u2014', 'as follows -', 'see Dr Smith.', 'see report in 2 weeks.',
+                      'see letter from 2 weeks ago.', 'see below for details in 2 weeks.',
+                      'see the patient and her husband together in clinic in two weeks.'):
+            notes = 'Findings: ' + value
+            with self.subTest(notes=notes):
+                held_with(self, notes, 'Findings', notes, value)
+        answer = run('Plan: see GP in 2 weeks.', {'Plan': ['Plan: see GP in 2 weeks.']}, fields=ROUND3)['Plan']
+        self.assertEqual((answer['status'], answer['text']), ('supported', 'see GP in 2 weeks.'))
+        # A later plain value with a closing minus sign passes rule (a) too.
+        out = run('Blood group: O-. Urine dipstick: nitrites -', {'Blood group': ['Blood group: O-.'],
+                                                                  'Urine dipstick': ['Urine dipstick: nitrites -']}, fields=ROUND3)
+        self.assertEqual((out['Blood group']['status'], out['Blood group']['text']), ('supported', 'O-.'))
+
     def test_an_unpunctuated_run_on_unit_is_held_for_every_question(self):
         """Pre-existing, listed by the previous repair: a single-line unpunctuated dictation was adopted whole as the answer
         to every free-text question asked. More than 25 words with no sentence end is a run-on, held."""

@@ -1606,9 +1606,38 @@ SELF_CORRECTION = re.compile(LETTER_BEFORE + r'(?:sorry|i\s+mean|i\s+meant|scrat
                              r'|or\s+rather|actually)' + LETTER_AFTER, re.I)
 
 
+#: ⚠️ NARROWED ONLY WHERE THE SHAPE PROVES IT IS NOT A POINTER (round 3, R3-6), so every round-2 pointer is still held.
+#: A MINUS SIGN closing a value is part of the value ('Blood group: O-', 'O\u2212.', 'Urine dipstick: nitrites -'): a
+#: hyphen-minus or U+2212 right after a letter or digit (one space at most), with closing marks after it, is read through
+#: before the ending is judged. An en or em dash, a lone dash, or a sign after a pointing word ('as follows -') still
+#: points onward.
+VALUE_SIGN = re.compile(r'(?<=[^\W_]) ?[\-\u2212][\s.!?;,*_~`"\'\u201d\u2019)\]]*$')
+#: 'see' opening an INSTRUCTION is not a pointer ('see in clinic in twelve months', 'see physiotherapist twice weekly for
+#: six weeks'): read as one only when the whole value is 'see' and at most eight more plain words single-spaced (no markup,
+#: no punctuation but one closing stop), one of them a time ('in two weeks') or a frequency ('twice', 'weekly'), and none a
+#: word that names another place in the record or a pointing word (`NOT_AN_INSTRUCTION`). Anything else that opens with
+#: 'see' - 'see next line', 'see beneath', '(see attached report)', 'see report in chart' - is still a pointer.
+SEE_INSTRUCTION = re.compile(r"see(?: [^\W_](?:[^\W_]|['\u2019\-])*+){1,8}\.?", re.I)
+TIMED = re.compile(LETTER_BEFORE + r'(?:(?:in|within|for|after|over) (?:[0-9]+|a|an|one|two|three|four|five|six|seven|eight|'
+                   r'nine|ten|eleven|twelve) (?:days?|weeks?|months?|years?|hours?)|once|twice|daily|weekly|fortnightly|'
+                   r'monthly|yearly|annually)' + LETTER_AFTER, re.I)
+NOT_AN_INSTRUCTION = re.compile(LETTER_BEFORE + r'(?:below|above|beneath|overleaf|follows?|following|next|previous|prior|'
+    r'earlier|attached|enclosed|separate(?:ly)?|over|listed|these|those|reports?|letters?|notes?|pages?|lines?|sheets?|charts?|'
+    r'appendix|addendum|ago|dated|from|as|see|results?|scans?|files?|records?|documents?|forms?|sections?|tables?|lists?|'
+    r'history|hpi|findings?|imaging|summary)' + LETTER_AFTER, re.I)
+
+
+def see_instruction(text):
+    """Whether a value opening with 'see' is an instruction by the shape above (`SEE_INSTRUCTION`, R3-6)."""
+    text = text.strip()
+    return bool(SEE_INSTRUCTION.fullmatch(text) and TIMED.search(text) and not NOT_AN_INSTRUCTION.search(text, 3))
+
+
 def points_elsewhere(text):
-    """Whether a value or sentence is shaped as a pointer to other lines (`POINTING_END`, `POINTING_START`)."""
-    return bool(POINTING_END.search(text) or POINTING_START.search(text))
+    """Whether a value or sentence is shaped as a pointer to other lines (`POINTING_END` once a closing minus sign is read
+    through, `POINTING_START` unless it opens an instruction)."""
+    return bool(POINTING_END.search(VALUE_SIGN.sub('', text, count=1))
+                or (POINTING_START.search(text) and not see_instruction(text)))
 
 
 #: ⚠️ FOR A HOLD, A STOP ENDS A SENTENCE UNLESS IT PROVABLY DOES NOT (round 3, R3-3). `ABBREVIATION` is the SPLITTER's
