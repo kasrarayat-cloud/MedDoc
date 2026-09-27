@@ -24,7 +24,7 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from .models import *
 from . import field_location
 from .forms import *
-from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
+from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit,client_address
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
@@ -126,7 +126,7 @@ def login_view(request):
     if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(next_url,allowed_hosts=set()):next_url=''
     if request.method=='POST' and form.is_valid():
         email=form.cleaned_data['email'].lower()
-        if not rate_limit('login-ip:'+request.META.get('REMOTE_ADDR',''),limit=40) or not rate_limit('login-email:'+email):
+        if not rate_limit('login-ip:'+client_address(request),limit=40) or not rate_limit('login-email:'+email):
             form.add_error(None,'Too many sign-in attempts. Try again later.')
         else:
             found=User.objects.filter(email__iexact=email).first()
@@ -158,7 +158,7 @@ def register(request):
     if settings.ADMIN_SITE: raise Http404
     form=RegisterForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
-        if not rate_limit('register:'+request.META.get('REMOTE_ADDR',''),limit=5):return HttpResponse('Try again later.',status=429)
+        if not rate_limit('register:'+client_address(request),limit=5):return HttpResponse('Try again later.',status=429)
         with transaction.atomic():
             user=form.save(commit=False);user.username=form.cleaned_data['email'];user.save()
             raw=token();verification=Verification.objects.create(user=user,token_hash=digest(raw),expires_at=timezone.now()+timedelta(hours=24))
