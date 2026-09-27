@@ -86,11 +86,15 @@ for a form generation is (request bytes + 12,000) input tokens plus 6,000 output
 (`core/generation.py`, `maximum_cost`), so a 20,000-byte request is bounded at
 32,000 x $2/M + 6,000 x $10/M = **$0.124**.
 
-**Output cap this table assumes:** the cap in this release's code, `max_tokens=6000` on each
-provider call (`core/generation.py`), so no row exceeds 6,000 output tokens per call. The separate
-Sonnet 5 migration stream sets 8,000 for its thinking-disabled profile and 16,000 for adaptive
-thinking. If that ships, the output term rises with the cap: by the same formula a 20,000-byte
-request is bounded at $0.144 (8,000) or $0.224 (16,000), and the High row must be recomputed.
+**Output cap this table assumes:** this release's code sets an output cap of 6,000 tokens on each
+provider call (`max_tokens=6000` on the Anthropic call, `max_output_tokens=6000` on the OpenAI call,
+`core/generation.py`), and no row of the table exceeds it. A test reads every provider call's cap
+and `maximum_cost` from the code; it fails if either stops being a single number equal to what this
+page states, or if any row of the table exceeds the cap. The separate Sonnet 5 migration stream sets
+8,000 for its thinking-disabled profile and 16,000 for adaptive thinking. If that ships, the output
+term rises with the cap (and that test fails until this page is updated): by the same formula a
+20,000-byte request is bounded at $0.144 (8,000) or $0.224 (16,000), and the High row must be
+recomputed.
 
 | Generation | Input tokens | Output tokens | Cost |
 | --- | ---: | ---: | ---: |

@@ -6,6 +6,7 @@ installer only against temporary directories.
 """
 import ast
 from decimal import Decimal, ROUND_HALF_UP
+import functools
 import hashlib
 import io
 import json
@@ -389,47 +390,192 @@ class ReleaseArtifactTests(unittest.TestCase):
         self.assertNotEqual(again.returncode, 0)  # never overwrites a recorded artifact
 
 
-def generation_bounds():
-    """From core/generation.py's syntax tree: maximum_cost's input overhead and output tokens, and every provider cap."""
+PROVIDER_CLIENTS = frozenset({'Anthropic', 'AsyncAnthropic', 'AnthropicBedrock', 'AnthropicVertex',
+                              'OpenAI', 'AsyncOpenAI', 'AzureOpenAI', 'AsyncAzureOpenAI'})
+PROVIDER_METHODS = frozenset({'create', 'parse', 'stream'})
+PROVIDER_RESOURCES = frozenset({'messages', 'responses', 'completions'})
+OUTPUT_CAPS = ('max_tokens', 'max_output_tokens')
+SKIPPED_DIRECTORIES = frozenset({'.venv', '.runtime', '.word-sdk', 'node_modules', '__pycache__', 'tests'})
+
+
+def application_sources():
+    """Every application Python file under rebuild/ (tests excluded); a provider call may live in any of them."""
+    for directory, names, files in os.walk(REBUILD):
+        names[:] = sorted(name for name in names if name not in SKIPPED_DIRECTORIES)
+        for name in sorted(files):
+            if name.endswith('.py') and not name.startswith('test_'):
+                yield Path(directory) / name
+
+
+class Unresolved(AssertionError):
+    """A value the cost document restates could not be traced to one number in the code."""
+
+
+def int_constants(tree):
+    """Names bound exactly once in the module, at module level, to an int literal."""
+    bindings = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            bindings[node.id] = bindings.get(node.id, 0) + 1
+        elif isinstance(node, ast.arg):
+            bindings[node.arg] = bindings.get(node.arg, 0) + 1
+    values = {}
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and isinstance(node.value, ast.Constant) and type(node.value.value) is int):
+            values[node.targets[0].id] = node.value.value
+    return {name: value for name, value in values.items() if bindings.get(name) == 1}
+
+
+def resolve(node, constants, where):
+    if isinstance(node, ast.Constant) and type(node.value) is int:
+        return node.value
+    if isinstance(node, ast.Name) and node.id in constants:
+        return constants[node.id]
+    raise Unresolved(f'{where}: {ast.unparse(node)} cannot be resolved to one number')
+
+
+def chain(node):
+    """['client', 'messages', 'create'] for client.messages.create; None when the root is not a name."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    return [node.id] + parts[::-1] if isinstance(node, ast.Name) else None
+
+
+def provider_caps(path):
+    """[(where, cap)] for every provider call in one file. Fails closed on anything it cannot trace:
+    a call without a cap, a cap that is not one number, `**` arguments, or a client used any other way."""
+    tree = ast.parse(path.read_text())
+    constants = int_constants(tree)
+    name = path.relative_to(REBUILD.parent)
+    clients = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            called = chain(node.value.func) or ['']
+            if called[-1] in PROVIDER_CLIENTS:
+                for target in node.targets:
+                    if not isinstance(target, ast.Name):
+                        raise Unresolved(f'{name}:{node.lineno}: a provider client bound to {ast.unparse(target)}')
+                    clients.add(target.id)
+    calls, parents = [], {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        called = chain(node.func) or []
+        is_provider = bool(called) and called[-1] in PROVIDER_METHODS and (
+            called[0] in clients or bool(PROVIDER_RESOURCES & set(called[1:-1])))
+        if is_provider or any(keyword.arg in OUTPUT_CAPS for keyword in node.keywords):
+            calls.append(node)
+    for node in ast.walk(tree):  # a client may only be the root of a provider call; anything else hides the cap
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in clients:
+            top = node
+            while isinstance(parents.get(top), ast.Attribute):
+                top = parents[top]
+            if not (isinstance(parents.get(top), ast.Call) and parents[top].func is top and top is not node
+                    and (chain(top) or [''])[-1] in PROVIDER_METHODS):
+                raise Unresolved(f'{name}:{node.lineno}: provider client {node.id} used other than as a provider call')
+    caps = []
+    for node in calls:
+        where = f'{name}:{node.lineno} {ast.unparse(node.func)}'
+        if any(keyword.arg is None for keyword in node.keywords):
+            raise Unresolved(f'{where}: ** arguments hide the output cap')
+        found = [keyword for keyword in node.keywords if keyword.arg in OUTPUT_CAPS]
+        if len(found) != 1:
+            raise Unresolved(f'{where}: {len(found)} output caps (exactly one is required)')
+        caps.append((where, resolve(found[0].value, constants, where)))
+    return caps
+
+
+@functools.lru_cache(maxsize=1)
+def all_provider_caps():
+    return tuple(cap for path in application_sources() for cap in provider_caps(path))
+
+
+def maximum_cost_terms():
+    """(input overhead tokens, output tokens) in core/generation.py's maximum_cost, each traced to one number."""
     tree = ast.parse(GENERATION.read_text())
-    caps = sorted({keyword.value.value for node in ast.walk(tree) if isinstance(node, ast.Call)
-                   for keyword in node.keywords
-                   if keyword.arg in ('max_tokens', 'max_output_tokens') and isinstance(keyword.value, ast.Constant)})
-    function = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == 'maximum_cost')
-    overheads = [node.right.value for node in ast.walk(function)
-                 if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add) and isinstance(node.right, ast.Constant)]
-    outputs = [node.args[0].value for node in ast.walk(function)
-               if isinstance(node, ast.Call) and getattr(node.func, 'id', '') == 'Decimal' and node.args
-               and isinstance(node.args[0], ast.Constant) and type(node.args[0].value) is int]
-    return overheads, outputs, caps
+    constants = int_constants(tree)
+    functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == 'maximum_cost']
+    if len(functions) != 1:
+        raise Unresolved(f'core/generation.py: {len(functions)} maximum_cost functions')
+    terms = {}
+    for node in ast.walk(functions[0]):
+        if (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult) and isinstance(node.right, ast.Subscript)
+                and isinstance(node.right.slice, ast.Constant)):
+            terms.setdefault(node.right.slice.value, []).append(node.left)
+    if sorted(terms) != ['input_per_million', 'output_per_million'] or any(len(v) != 1 for v in terms.values()):
+        raise Unresolved(f'core/generation.py maximum_cost: rate terms {sorted(terms)} are not one input and one output')
+    where = f'core/generation.py:{functions[0].lineno} maximum_cost'
+    inputs, output = terms['input_per_million'][0], terms['output_per_million'][0]
+    if not (isinstance(inputs, ast.Call) and chain(inputs.func) == ['Decimal'] and len(inputs.args) == 1
+            and isinstance(inputs.args[0], ast.BinOp) and isinstance(inputs.args[0].op, ast.Add)
+            and isinstance(inputs.args[0].left, ast.Call) and chain(inputs.args[0].left.func) == ['len']):
+        raise Unresolved(f'{where}: input term {ast.unparse(inputs)} is not Decimal(len(request) + overhead)')
+    if not (isinstance(output, ast.Call) and chain(output.func) == ['Decimal'] and len(output.args) == 1):
+        raise Unresolved(f'{where}: output term {ast.unparse(output)} is not Decimal(tokens)')
+    return resolve(inputs.args[0].right, constants, where), resolve(output.args[0], constants, where)
+
+
+def number(text):
+    return int(text.replace(',', ''))
 
 
 class ProductionCostDocumentTests(unittest.TestCase):
     """production-cost.md restates the application's own generation bound; its numbers must be the code's."""
 
-    def test_the_stated_bound_and_every_generation_row_agree_with_the_code(self):
-        overheads, outputs, caps = generation_bounds()
-        self.assertEqual((overheads, outputs, caps), ([12000], [6000], [6000]))
+    def test_every_provider_output_cap_is_one_number_and_the_one_the_document_states(self):
+        raw = COST_DOCUMENT.read_text()
+        text = ' '.join(raw.split())
+        stated = re.search(r'an output cap of ([0-9,]+) tokens on each provider call', text)
+        self.assertIsNotNone(stated, 'the document no longer states the output cap it assumes')
+        caps = all_provider_caps()
+        self.assertTrue(caps, 'no provider call was found, so nothing was checked')
+        for where, cap in caps:
+            with self.subTest(call=where):
+                self.assertEqual(cap, number(stated.group(1)))
+        bound = re.search(r'\(request bytes \+ ([0-9,]+)\) input tokens plus ([0-9,]+) output tokens', text)
+        self.assertIsNotNone(bound, 'the document no longer states the bound formula')
+        overhead, output = maximum_cost_terms()
+        self.assertEqual((overhead, output), (number(bound.group(1)), number(bound.group(2))))
+        # The bound is a bound only if it covers what a call can return.
+        self.assertGreaterEqual(output, max(cap for _, cap in caps))
+
+    def test_the_stated_bound_and_every_row_of_the_generation_table_agree_with_the_code(self):
         raw = COST_DOCUMENT.read_text()
         text = ' '.join(raw.split())
         rates = re.search(r'\$(\d+) per million input tokens, \$(\d+) per million output tokens', text)
         input_rate, output_rate = (Decimal(value) / 1000000 for value in rates.groups())
+        overhead, output = maximum_cost_terms()
+        cap = min(cap for _, cap in all_provider_caps())
         stated = re.search(r'a 20,000-byte request is bounded at (?:[^.]*?= )?\**\$([0-9]+\.[0-9]+)', text)
         self.assertIsNotNone(stated)
-        self.assertEqual(Decimal(stated.group(1)), (20000 + overheads[0]) * input_rate + outputs[0] * output_rate)
-        rows = re.findall(r'^\| (Low|Expected|High) \([^|]*\) \| ([0-9x, ]+) \| ([0-9x, ]+) \| \$([0-9.]+) \|$', raw, re.M)
-        self.assertEqual([row[0] for row in rows], ['Low', 'Expected', 'High'])
-
-        def tokens(cell):
-            calls, _, per_call = cell.rpartition(' x ')
-            return int(calls or 1), int(per_call.replace(',', ''))
-        for name, input_cell, output_cell, cost in rows:
-            with self.subTest(row=name):
-                calls, per_call_input = tokens(input_cell)
-                output_calls, per_call_output = tokens(output_cell)
+        self.assertEqual(Decimal(stated.group(1)), (20000 + overhead) * input_rate + output * output_rate)
+        lines = raw.splitlines()
+        header = lines.index('| Generation | Input tokens | Output tokens | Cost |')
+        self.assertTrue(re.fullmatch(r'\|(?: -+:? \|)+', lines[header + 1]), lines[header + 1])
+        rows = []
+        for line in lines[header + 2:]:
+            if not line.startswith('|'):
+                break
+            rows.append(line)
+        self.assertTrue(rows, 'the generation table has no rows')
+        cell = r'((?:[0-9]+ x )?[0-9]{1,3}(?:,[0-9]{3})*)'
+        for line in rows:
+            with self.subTest(row=line):
+                match = re.fullmatch(r'\| ([^|]+?) \| ' + cell + r' \| ' + cell + r' \| \$([0-9]+\.[0-9]{3}) \|', line)
+                self.assertIsNotNone(match, 'a row this check cannot read')  # fail closed on any other shape
+                label, input_cell, output_cell, cost = match.groups()
+                calls, _, per_call_input = input_cell.rpartition(' x ')
+                output_calls, _, per_call_output = output_cell.rpartition(' x ')
                 self.assertEqual(calls, output_calls)
-                self.assertLessEqual(per_call_output, caps[0])  # no call can return more than the cap
-                expected = calls * (per_call_input * input_rate + per_call_output * output_rate)
+                calls = int(calls or 1)
+                self.assertLessEqual(number(per_call_output), cap)  # no call can return more than the cap
+                expected = calls * (number(per_call_input) * input_rate + number(per_call_output) * output_rate)
                 self.assertEqual(Decimal(cost), expected.quantize(Decimal('0.001'), rounding=ROUND_HALF_UP))
 
 
