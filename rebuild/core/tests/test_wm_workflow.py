@@ -103,7 +103,8 @@ class WMDocumentWorkflow(TestCase):
         self.assertEqual(self.version.document_backend['backend'], BACKEND)
         self.assertEqual((len(self.version.fields), len(self.version.review_requirements)), (90, 14))
 
-    def prepare(self, *, positive=False, missing_measurement=False, long_answer=False, select_variants=True, heading=None):
+    def prepare(self, *, positive=False, missing_measurement=False, long_answer=False, select_variants=True, heading=None,
+                overrides=()):
         values = {}
         for field in self.version.fields:
             if field['kind'] == 'choice':
@@ -118,6 +119,7 @@ class WMDocumentWorkflow(TestCase):
             values['measurement_1_2'] = '650 ms'
             values['sdt_1706206184'] = ', however, there has been a recurrence.'
         if missing_measurement: values['measurement_15_1'] = ''
+        values.update(overrides)
         if long_answer: values['patient_name'] = 'SYNTHETIC 😀 ' + ('documented ' * 1800) + 'END-OF-COMPLETE-ANSWER'
         if heading:
             # A question whose own value introduces the lines after it, and a diameter below it the export can be read by.
@@ -193,6 +195,37 @@ class WMDocumentWorkflow(TestCase):
         self.assertEqual(hashlib.sha256(payload).hexdigest(), encounter.export_sha256)
         self.assertEqual(private_path(self.template.original_path).read_bytes(), self.original)
         return payload
+
+    def test_round_20_the_rewrite_advice_under_the_labelled_contract_names_the_route_that_completes(self):
+        """Round 20's page lens: with the narrative flag off (the default), the `&` advice named a spelling the engine
+        refuses there — it accepts a labelled answer only as its labelled line writes it — and a blank a documented field
+        refuses too. The advice now names the notes' line; review and finalization agree on the respelled answer."""
+        from core.views import WM_BLOCKERS
+        label = next(f['label'] for f in self.version.fields if f['key'] == 'location_11')
+        encounter = self.prepare(overrides={'location_11': 'thigh&mid calf'})
+        self.save(encounter)
+        reasons = lambda: [b['reason'] for b in encounter.template_review['assessment']['blockers'] if b['key'] == 'location_11']
+        self.assertEqual(reasons(), ['text_the_form_rewrites_labelled'])
+        self.assertIn('Change that line in the notes', WM_BLOCKERS['text_the_form_rewrites_labelled'])
+        self.values['location_11'] = 'thigh&Mid calf'                                # (the answer respelled alone …)
+        payload = self.payload(encounter)
+        payload['source_location_11'] = label + ': thigh&mid calf'
+        self.save(encounter, payload=payload)
+        self.assertEqual(reasons(), ['exact_labelled_source_required'])             # (… is refused at review, as the engine
+        self.assertFalse(encounter.template_review['assessment']['complete'])          #  refuses it at finalization)
+        self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'})
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.status, 'review')
+
+    def test_round_20_the_advised_line_completes_and_prints_as_written(self):
+        encounter = self.prepare(overrides={'location_11': 'thigh&Mid calf'})      # (the advised route: the line changed)
+        self.save(encounter)
+        reasons = lambda: [b['reason'] for b in encounter.template_review['assessment']['blockers'] if b['key'] == 'location_11']
+        self.assertEqual(reasons(), [])
+        exported = self.finalize(encounter)
+        with ZipFile(BytesIO(exported)) as zipped:
+            document = zipped.read('word/document.xml').decode()
+        self.assertIn('thigh&amp;Mid calf', document)                                   # (printed as written)
 
     def test_upload_generate_review_original_export_actual_identity_and_blank_measurement(self):
         encounter = self.prepare(missing_measurement=True)
@@ -944,6 +977,26 @@ class WMNarrativeWorkflow(TestCase):
             decision = encounter.template_review['decisions'][key]
             self.assertEqual((decision['variant'], decision['reviewed']), ('not_documented', False))
             self.assertIn('answers', kinds(key))
+
+    def test_round_20_an_employee_is_told_a_changed_source_was_not_kept(self):
+        """Round 20's page lens: an employee who left the clinician's wording and cited another sentence had the re-citation
+        dropped with only "Edits saved". The clinician's decision is still kept whole (round 19); the saver is told."""
+        encounter = self.replayed(self.PROVENANCE_NOTES, self.PROVENANCE_PICKS, self.PROVENANCE_STATEMENTS)
+        self.post_page(encounter)
+        kept = encounter.template_review['decisions']['claim_32']['evidence']
+        self.client.force_login(self.member('wm-employee-r20', 'employee'))
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        payload = BrowserSaveForm.of(page)
+        response = self.client.post(f'/encounters/{encounter.pk}/save/', payload, follow=True)
+        self.assertNotContains(response, 'was not kept')                                # (the control: nothing changed)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        payload = BrowserSaveForm.of(page)
+        payload['claim_source_claim_32'] = 'Clinical correlation with the above findings is required.'
+        response = self.client.post(f'/encounters/{encounter.pk}/save/', payload, follow=True)
+        encounter.refresh_from_db()
+        decision = encounter.template_review['decisions']['claim_32']
+        self.assertEqual((decision['variant'], decision['reviewed'], decision['evidence']), ('negative', False, kept))
+        self.assertContains(response, 'A statement source you changed was not kept')
 
     def test_round_18_a_cleared_answer_names_who_cleared_it(self):
         """Round 18 (provenance lens): a value the model read and a person deleted showed as a plain `missing`, as if the

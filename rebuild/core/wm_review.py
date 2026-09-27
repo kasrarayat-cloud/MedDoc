@@ -357,10 +357,14 @@ def _answer_assessment(encounter, actor, fields, requirements, narrative=None):
     for field in fields:
         # (the engine writes a table cell's answer through a replace that reads `&p`, `&l`, `&m`, `&b` and `&&` as
         # breaks: the export would differ from the reviewed answer — round 18's provenance lens, `thigh&mid calf`)
+        # (under the labelled contract the engine accepts an answer only as its labelled line writes it, so no respelling
+        # in the answer completes: the notes' line is what changes — round 20, the advice named a spelling the engine
+        # refuses there, and a blank a documented field refuses too)
         row = assessed[field['key']]
+        rewrites = 'text_the_form_rewrites' if narrative is not None else 'text_the_form_rewrites_labelled'
         if ('body_paragraph' not in (field.get('locator') or {}) and ENGINE_REWRITES.search(row.get('text') or '')
-                and 'text_the_form_rewrites' not in row['blockers']):
-            row['blockers'].append('text_the_form_rewrites')
+                and rewrites not in row['blockers']):
+            row['blockers'].append(rewrites)
     if narrative is not None:
         # Finalization's own recheck, run here with the same function (`generation.governed_decisions`), so review never
         # reports complete what finalization refuses — whatever evidence the answer now cites (round 4: an answer
