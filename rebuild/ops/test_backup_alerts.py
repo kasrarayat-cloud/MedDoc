@@ -392,9 +392,14 @@ class IncidentNotificationTests(unittest.TestCase):
         return json.loads((self.alerts / f'incident-{identity}-result.json').read_text())
 
     def legacy(self, **changes):
-        """Exactly what the previous release wrote: six keys, one attempt named by the incident."""
+        """Exactly what the previous release wrote: six keys, one attempt named by the incident.
+
+        Its last check is five minutes AFTER its notice, as the previous release leaves it once it has
+        checked again: equal times could not tell an opening read from the notice's receipt from
+        one read from the last check."""
         identity = 'c' * 32
-        value = dict({'format': 1, 'last_check_at': self.at.isoformat(), 'condition': 'offsite_policy_renewal_due',
+        value = dict({'format': 1, 'last_check_at': (self.at + timedelta(minutes=5)).isoformat(),
+                      'condition': 'offsite_policy_renewal_due',
                       'incident_id': identity, 'incident_attempt': identity,
                       'last_attempt_at': self.at.isoformat()}, **changes)
         a.backup.write_private(self.alerts / 'status.json', json.dumps(value).encode())
@@ -821,10 +826,11 @@ class IncidentNotificationTests(unittest.TestCase):
     def test_previous_release_state_without_an_attempt_upgrades_to_an_open_incident(self):
         self.legacy(incident_attempt=None, last_attempt_at=None)
         self.health.return_value = 'backup_failed'
-        a.check(self.at + timedelta(minutes=5))
+        a.check(self.at + timedelta(minutes=10))
         state = self.state()
+        # No notice to read an opening from: it was open no later than the previous release's last check.
         self.assertEqual((state['incident_id'], state['incident_opened_at'], state['incident_attempt_notice']),
-                         ('c' * 32, self.at.isoformat(), 'initial'))
+                         ('c' * 32, (self.at + timedelta(minutes=5)).isoformat(), 'initial'))
         self.sender.assert_called_once()
 
     def test_inconsistent_previous_release_state_fails_closed_without_email(self):
@@ -866,6 +872,8 @@ class IncidentNotificationTests(unittest.TestCase):
                         {'incident_conditions_announced': ['backup_stale', 'backup_stale']},
                         {'incident_conditions_announced': ['healthy', 'backup_stale']},
                         {'incident_attempt_count': True}, {'incident_attempt_count': 1},
+                        # More conditions announced than notices sent: every other invariant holds.
+                        {'incident_conditions_announced': ['backup_failed', 'backup_stale', 'backup_timeout']},
                         {'incident_attempt_notice': 'private-canary'}, {'incident_attempt_condition': 'backup_timeout'},
                         {'incident_opened_at': None}, {'incident_opened_at': 'private-canary'},
                         {'incident_attempt_notice': 'initial', 'incident_attempt_count': 1},
