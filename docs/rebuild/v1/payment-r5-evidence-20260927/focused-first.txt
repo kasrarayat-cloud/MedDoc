@@ -1,0 +1,22 @@
+Creating test database for alias 'default'...
+..../opt/meddoc-pro/.worktrees/v1-blockers/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-blockers/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.............................................................F....
+======================================================================
+FAIL: test_the_round_3_version_with_its_earlier_trigger_name_reverses_and_reapplies (core.tests.test_v1_payment_evidence_guards.ReversingAnEarlierPaymentModeMigration.test_the_round_3_version_with_its_earlier_trigger_name_reverses_and_reapplies)
+The second earlier 0020 guarded core_payment with payment_livemode_immutable (livemode only) and installed no
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_evidence_guards.py", line 202, in test_the_round_3_version_with_its_earlier_trigger_name_reverses_and_reapplies
+    self.assertEqual(reported(real_mode_payment_problems()),
+AssertionError: Items in the first set but not the second:
+'unexpected_row_triggers:core_payment'
+'webhook_livemode_immutable'
+
+----------------------------------------------------------------------
+Ran 70 tests in 14.125s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 70 test(s).
+System check identified no issues (0 silenced).

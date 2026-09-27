@@ -1,0 +1,173 @@
+Creating test database for alias 'default'...
+FFFFFFFFFFFFF/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-blockers/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...FF.FFFFF
+======================================================================
+FAIL: test_an_update_column_list_cannot_narrow_the_payment_guard (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_an_update_column_list_cannot_narrow_the_payment_guard)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 116, in test_an_update_column_list_cannot_narrow_the_payment_guard
+    self.assertEqual(guards.reported(problems), {'payment_evidence_immutable'}, problems)
+AssertionError: Items in the second set but not the first:
+'payment_evidence_immutable' : []
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_payment', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_payment', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_webhookevent', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_webhookevent', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_ledgerentry', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_ledgerentry', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_append_only')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_webhook_evidence_guard')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_payment_evidence_guard')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_livemode_guard')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_replacing_each_guard_function_body_with_a_noop_is_reported (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_replacing_each_guard_function_body_with_a_noop_is_reported) (function='quillmd_refuse_truncate')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 109, in test_replacing_each_guard_function_body_with_a_noop_is_reported
+    self.assertTrue(names.issubset(guards.reported(problems)), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_the_same_function_name_and_body_in_another_schema_is_not_the_installed_function (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_the_same_function_name_and_body_in_another_schema_is_not_the_installed_function)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 131, in test_the_same_function_name_and_body_in_another_schema_is_not_the_installed_function
+    self.assertEqual(guards.reported(billing.real_mode_payment_problems()), {'payment_evidence_immutable'})
+AssertionError: Items in the second set but not the first:
+'payment_evidence_immutable'
+
+======================================================================
+FAIL: test_current_replication_mode_must_be_origin (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_current_replication_mode_must_be_origin) (value='replica')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 154, in test_current_replication_mode_must_be_origin
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_current_replication_mode_must_be_origin (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_current_replication_mode_must_be_origin) (value='local')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 154, in test_current_replication_mode_must_be_origin
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_persistent_defaults_are_checked_for_the_database_and_runtime_role (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_persistent_defaults_are_checked_for_the_database_and_runtime_role) (statement=Composed([SQL('ALTER ROLE '), Identifier('quillmd_ci'), SQL(' SET session_replication_role = replica')]))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 170, in test_persistent_defaults_are_checked_for_the_database_and_runtime_role
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_persistent_defaults_are_checked_for_the_database_and_runtime_role (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_persistent_defaults_are_checked_for_the_database_and_runtime_role) (statement=Composed([SQL('ALTER DATABASE '), Identifier('test_quillmd_ci'), SQL(' SET session_replication_role = replica')]))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 170, in test_persistent_defaults_are_checked_for_the_database_and_runtime_role
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_persistent_defaults_are_checked_for_the_database_and_runtime_role (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_persistent_defaults_are_checked_for_the_database_and_runtime_role) (statement=Composed([SQL('ALTER ROLE '), Identifier('quillmd_ci'), SQL(' IN DATABASE '), Identifier('test_quillmd_ci'), SQL(' SET session_replication_role = replica')]))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 170, in test_persistent_defaults_are_checked_for_the_database_and_runtime_role
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_persistent_defaults_are_checked_for_the_database_and_runtime_role (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_persistent_defaults_are_checked_for_the_database_and_runtime_role) (statement=SQL('ALTER ROLE ALL SET session_replication_role = replica'))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 170, in test_persistent_defaults_are_checked_for_the_database_and_runtime_role
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_set_role_does_not_hide_the_runtime_roles_persistent_replication_mode (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_set_role_does_not_hide_the_runtime_roles_persistent_replication_mode)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 194, in test_set_role_does_not_hide_the_runtime_roles_persistent_replication_mode
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.837s
+
+FAILED (failures=20)
+Destroying test database for alias 'default'...
+Found 11 test(s).
+System check identified no issues (0 silenced).

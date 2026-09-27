@@ -1,0 +1,23 @@
+Found 1 test(s).
+System check identified no issues (0 silenced).
+
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-blockers/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F
+======================================================================
+FAIL: test_an_organization_payers_sandbox_money_refuses_a_promotional_hold_before_the_worker_sends (core.tests.test_v1_payment_refutation_r5.PaymentBehaviorPins.test_an_organization_payers_sandbox_money_refuses_a_promotional_hold_before_the_worker_sends)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 64, in test_an_organization_payers_sandbox_money_refuses_a_promotional_hold_before_the_worker_sends
+    generate.assert_not_called()
+  File "/usr/lib/python3.12/unittest/mock.py", line 905, in assert_not_called
+    raise AssertionError(msg)
+AssertionError: Expected 'generate' to not have been called. Called 1 times.
+Calls: [call('Symptoms: no chest pain', [{'key': 'symptoms', 'kind': 'text', 'label': 'Symptoms', 'locator': {'cell': 0}}], {}, context_labels=[])].
+
+----------------------------------------------------------------------
+Ran 1 test in 0.259s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...

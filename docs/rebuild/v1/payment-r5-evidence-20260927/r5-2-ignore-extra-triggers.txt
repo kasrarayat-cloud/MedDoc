@@ -1,0 +1,58 @@
+Found 1 test(s).
+System check identified no issues (0 silenced).
+
+Creating test database for alias 'default'...
+FFFFFF
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_payment', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_payment', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_webhookevent', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_webhookevent', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_ledgerentry', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+======================================================================
+FAIL: test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names) (table='core_ledgerentry', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 142, in test_extra_before_and_after_row_triggers_are_reported_without_printing_their_names
+    self.assertTrue(problems, 'an extra row trigger escaped the payment evidence check')
+AssertionError: [] is not true : an extra row trigger escaped the payment evidence check
+
+----------------------------------------------------------------------
+Ran 1 test in 0.106s
+
+FAILED (failures=6)
+Destroying test database for alias 'default'...

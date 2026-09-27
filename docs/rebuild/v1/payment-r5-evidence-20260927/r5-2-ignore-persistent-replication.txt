@@ -1,0 +1,42 @@
+Found 1 test(s).
+System check identified no issues (0 silenced).
+
+Creating test database for alias 'default'...
+FFFF
+======================================================================
+FAIL: test_persistent_defaults_are_checked_for_the_database_and_runtime_role (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_persistent_defaults_are_checked_for_the_database_and_runtime_role) (statement=Composed([SQL('ALTER ROLE '), Identifier('quillmd_ci'), SQL(' SET session_replication_role = replica')]))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 170, in test_persistent_defaults_are_checked_for_the_database_and_runtime_role
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_persistent_defaults_are_checked_for_the_database_and_runtime_role (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_persistent_defaults_are_checked_for_the_database_and_runtime_role) (statement=Composed([SQL('ALTER DATABASE '), Identifier('test_quillmd_ci'), SQL(' SET session_replication_role = replica')]))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 170, in test_persistent_defaults_are_checked_for_the_database_and_runtime_role
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_persistent_defaults_are_checked_for_the_database_and_runtime_role (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_persistent_defaults_are_checked_for_the_database_and_runtime_role) (statement=Composed([SQL('ALTER ROLE '), Identifier('quillmd_ci'), SQL(' IN DATABASE '), Identifier('test_quillmd_ci'), SQL(' SET session_replication_role = replica')]))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 170, in test_persistent_defaults_are_checked_for_the_database_and_runtime_role
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+======================================================================
+FAIL: test_persistent_defaults_are_checked_for_the_database_and_runtime_role (core.tests.test_v1_payment_refutation_r5.RuntimeReplicationPins.test_persistent_defaults_are_checked_for_the_database_and_runtime_role) (statement=SQL('ALTER ROLE ALL SET session_replication_role = replica'))
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 170, in test_persistent_defaults_are_checked_for_the_database_and_runtime_role
+    self.assertTrue(any('session_replication_role' in problem for problem in problems), problems)
+AssertionError: False is not true : []
+
+----------------------------------------------------------------------
+Ran 1 test in 0.066s
+
+FAILED (failures=4)
+Destroying test database for alias 'default'...

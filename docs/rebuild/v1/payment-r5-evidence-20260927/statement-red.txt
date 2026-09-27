@@ -1,0 +1,63 @@
+Creating test database for alias 'default'...
+FFFFFF
+======================================================================
+FAIL: test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names) (table='core_payment', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 158, in test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names
+    self.assertEqual(guards.reported(problems), {f'unexpected_statement_triggers:{table}'}, problems)
+AssertionError: Items in the second set but not the first:
+'unexpected_statement_triggers:core_payment' : []
+
+======================================================================
+FAIL: test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names) (table='core_payment', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 158, in test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names
+    self.assertEqual(guards.reported(problems), {f'unexpected_statement_triggers:{table}'}, problems)
+AssertionError: Items in the second set but not the first:
+'unexpected_statement_triggers:core_payment' : []
+
+======================================================================
+FAIL: test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names) (table='core_webhookevent', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 158, in test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names
+    self.assertEqual(guards.reported(problems), {f'unexpected_statement_triggers:{table}'}, problems)
+AssertionError: Items in the second set but not the first:
+'unexpected_statement_triggers:core_webhookevent' : []
+
+======================================================================
+FAIL: test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names) (table='core_webhookevent', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 158, in test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names
+    self.assertEqual(guards.reported(problems), {f'unexpected_statement_triggers:{table}'}, problems)
+AssertionError: Items in the second set but not the first:
+'unexpected_statement_triggers:core_webhookevent' : []
+
+======================================================================
+FAIL: test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names) (table='core_ledgerentry', timing='BEFORE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 158, in test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names
+    self.assertEqual(guards.reported(problems), {f'unexpected_statement_triggers:{table}'}, problems)
+AssertionError: Items in the second set but not the first:
+'unexpected_statement_triggers:core_ledgerentry' : []
+
+======================================================================
+FAIL: test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names (core.tests.test_v1_payment_refutation_r5.GuardDefinitionPins.test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names) (table='core_ledgerentry', timing='AFTER')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-blockers/rebuild/core/tests/test_v1_payment_refutation_r5.py", line 158, in test_extra_before_and_after_statement_triggers_are_reported_without_printing_their_names
+    self.assertEqual(guards.reported(problems), {f'unexpected_statement_triggers:{table}'}, problems)
+AssertionError: Items in the second set but not the first:
+'unexpected_statement_triggers:core_ledgerentry' : []
+
+----------------------------------------------------------------------
+Ran 1 test in 0.100s
+
+FAILED (failures=6)
+Destroying test database for alias 'default'...
+Found 1 test(s).
+System check identified no issues (0 silenced).

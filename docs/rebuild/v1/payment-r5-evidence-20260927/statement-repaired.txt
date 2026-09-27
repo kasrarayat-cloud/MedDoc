@@ -1,0 +1,5 @@
+baseline []
+after_statement_trigger ['unexpected_statement_triggers:core_payment']
+input_false_stored True
+after_relabel ['unexpected_statement_triggers:core_payment']
+transaction rolled back

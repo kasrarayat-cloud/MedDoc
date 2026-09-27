@@ -77,8 +77,11 @@ refund that could remove it — so the only safe path is a database with no sand
   the reverse drops every trigger `IF EXISTS`, including `payment_livemode_immutable`, the name an
   earlier version used. Two earlier versions of `0020` reached `release/v1` (one installed no
   trigger, one only the two `livemode` triggers); a database that applied either never receives the
-  rest (`migrate` plans nothing), so it is reversed and re-applied, and the launcher's check refuses
-  it until then.
+  rest (`migrate` plans nothing). It can reverse and re-apply only if it has no live rows. If live
+  payments or Stripe events were recorded after the earlier `0020`, reversal refuses and a
+  separately reviewed forward migration is required to install the missing guards while keeping
+  that evidence. Never delete or relabel live rows to make reversal pass. The launcher check
+  reports missing/altered guards until they are installed.
 - A paid wallet is **sandbox-funded** when any payment not recorded as live funded it: a paid
   non-live `Payment` on it, or a `payment` ledger credit with no live `Payment`. A checkout nobody
   paid (pending, expired, failed, uncertain) put no money in the wallet and does not count.
@@ -107,10 +110,28 @@ refund that could remove it — so the only safe path is a database with no sand
   (paid or not) or Stripe event row not recorded as live,
   or any paid wallet whose balance live payments do not wholly explain (a non-live credit, or a
   balance that differs from its ledger), or when any of the seven triggers above
-  (`core.billing.PAYMENT_EVIDENCE_GUARDS`) is missing, disabled, replica-only, conditional, of
-  another type or on another function — read from `pg_trigger`, since an amended migration never
-  re-runs where it was applied. It prints counts and trigger names only. **The launcher must run it
-  before starting real mode.** A check inside every process start is not used instead: settings and
+  (`core.billing.PAYMENT_EVIDENCE_GUARDS`) is missing, disabled, replica-only, or differs from its
+  installed full `pg_get_triggerdef` definition, schema-qualified function identity or `prosrc`
+  SHA256. This also catches an `UPDATE OF` column restriction and a same-named function in another
+  schema. The expected hashes are pinned to migration source, not learned from the inspected
+  database. Any additional row or statement trigger on those three tables refuses; the only exceptions are
+  PostgreSQL's internal foreign-key constraint triggers. Django creates no other row triggers
+  there in this schema. Unexpected trigger names and function bodies are never printed.
+
+  It also requires `session_replication_role=origin` both in the current connection and in the
+  effective persistent default for the active runtime role/database, read from `pg_db_role_setting`:
+  role+database overrides role, which overrides database, which overrides all roles/databases.
+  An unrelated role's setting does not apply. `SET ROLE` alone does not apply login defaults, so
+  reading only `current_setting` would miss a newly configured refusal condition. See PostgreSQL's
+  [role setting precedence](https://www.postgresql.org/docs/current/sql-alterrole.html) and
+  [replication setting behavior](https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-SESSION-REPLICATION-ROLE).
+
+  These are read-only catalog checks, since an amended migration never re-runs where it was
+  applied. Output is counts and fixed guard/check labels only. **The launcher must run the command
+  on the target database as its runtime role before starting real mode.** The result is evidence
+  at that moment, not a lock against an owner/superuser who can modify both the guards and the
+  checker, change permissions/configuration, or alter the database after it runs. A check inside
+  every process start is not used instead: settings and
   `AppConfig.ready()` also run for `migrate`, `makemigrations`, the test runner and `collectstatic`,
   often before the database exists or is migrated, and Django advises against queries there.
 
