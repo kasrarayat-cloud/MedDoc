@@ -188,6 +188,17 @@ class ControlledPrivateEmailTests(SimpleTestCase):
     def test_origin_never_embeds_gate_credentials(self):
         self.assertEqual(application_origin(), "https://app.quillmd.com:9443")
 
+    def test_an_empty_query_or_fragment_or_port_0_never_becomes_an_email_link(self):
+        """Round-2 note: 'https://app.quillmd.com:9443?' made links like '...:9443?/verify/TOKEN/'. Both email modes."""
+        for mode in ("file", "resend"):
+            for origin in ("https://app.quillmd.com:9443?", "https://app.quillmd.com#", "https://app.quillmd.com:0",
+                           "https://app.quillmd.com?/", "http://localhost:9130?", "http://localhost:0"):
+                with self.subTest(mode=mode, origin=origin), override_settings(QUILLMD_EMAIL_MODE=mode, QUILLMD_APP_BASE_URL=origin):
+                    with self.assertRaises(ImproperlyConfigured):
+                        application_origin()
+        with override_settings(QUILLMD_EMAIL_MODE="file", QUILLMD_APP_BASE_URL="http://localhost:9130/"):
+            self.assertEqual(application_origin(), "http://localhost:9130")
+
 
 class PrivateProxySettingTests(SimpleTestCase):
     def test_proxy_trust_is_explicit_and_cannot_change_admin_loopback_behavior(self):
