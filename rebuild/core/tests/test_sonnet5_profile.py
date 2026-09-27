@@ -968,12 +968,14 @@ class ModeSwitch(OutcomeFixture, TestCase):
         with override_settings(**SONNET_46):
             job = enqueue(encounter, self.user)
             row = admin_console.language_model_rows()[-1]
-        self.assertEqual(row, {'name': 'live generation jobs', 'value': '1 queued, 0 running (drained when both are 0)',
+        self.assertEqual(row, {'name': 'live generation jobs',
+                               'value': '1 queued, 0 running, 0 in reconciliation (drained when all three are 0)',
                                'severity': ''})
         with override_settings(**self.FIXTURE):
             row = admin_console.language_model_rows()[-1]
         self.assertEqual(row['name'], 'live generation jobs')
-        self.assertTrue(row['value'].startswith('1 queued, 0 running — QUILLMD_AI_MODE is not live, so the worker refuses'))
+        self.assertTrue(row['value'].startswith('1 queued, 0 running, 0 in reconciliation — QUILLMD_AI_MODE is not live, '
+                                                'so the worker refuses'), row['value'])
         self.assertEqual(row['severity'], 'warning')
         self.assertNotIn(str(job.pk), repr(row))
         self.assertNotIn(str(encounter.pk), repr(row))
@@ -981,7 +983,49 @@ class ModeSwitch(OutcomeFixture, TestCase):
         with override_settings(**self.FIXTURE):
             enqueue(self.fresh_encounter(), self.user)
             Job.objects.filter(pk=job.pk).update(state='succeeded')
-            self.assertTrue(admin_console.language_model_rows()[-1]['value'].startswith('0 queued, 0 running'))
+            row = admin_console.language_model_rows()[-1]
+            self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation — '), row['value'])
+            self.assertEqual(row['severity'], '')
+
+    def test_the_console_counts_running_and_reconciliation_jobs_and_drained_needs_all_three_at_0(self):
+        """F-B / F-F (round 4). The migration note defines drained as no generation queued, running OR in reconciliation,
+        but the row counted only queued and running, so a live job stranded in reconciliation (an uncertain provider outcome,
+        its hold kept) read '0 queued, 0 running (drained when both are 0)'. And replacing the running count with 0 survived
+        every test. The row counts all three, each from its own state, and only live generation jobs."""
+        from core import admin_console
+
+        def job(state, mode='live', kind='generation'):
+            encounter = self.fresh_encounter()
+            with override_settings(**dict(SONNET_46, AI_MODE=mode)):
+                config = g.configuration()
+            return Job.objects.create(encounter=encounter, user=self.user, kind=kind, state=state, config=config,
+                                      revision=encounter.revision, request_key=f'{kind}:{encounter.pk}:{state}:{mode}')
+
+        with override_settings(**SONNET_46):
+            job('running')
+            self.assertEqual(admin_console.language_model_rows()[-1],
+                             {'name': 'live generation jobs', 'severity': '',
+                              'value': '0 queued, 1 running, 0 in reconciliation (drained when all three are 0)'})
+            for state in ('reconciliation', 'reconciliation', 'reconciliation', 'running', 'queued'):
+                job(state)
+            # Not counted: a fixture job, a live transcription, and live generations that have ended.
+            job('reconciliation', mode='fixture')
+            job('running', mode='fixture')
+            job('reconciliation', kind='transcription')
+            for state in ('succeeded', 'failed', 'cancelled'):
+                job(state)
+            self.assertEqual(admin_console.language_model_rows()[-1]['value'],
+                             '1 queued, 2 running, 3 in reconciliation (drained when all three are 0)')
+            Job.objects.filter(kind='generation', config__mode='live', state__in=['queued', 'running']).update(state='failed')
+            # Nothing queued or running is NOT drained while a live job is still in reconciliation.
+            self.assertEqual(admin_console.language_model_rows()[-1]['value'],
+                             '0 queued, 0 running, 3 in reconciliation (drained when all three are 0)')
+        # Outside live mode a live job still in reconciliation is not drained either: the row warns.
+        with override_settings(**dict(SONNET_46, AI_MODE='fixture')):
+            row = admin_console.language_model_rows()[-1]
+        self.assertTrue(row['value'].startswith('0 queued, 0 running, 3 in reconciliation — QUILLMD_AI_MODE is not live'),
+                        row['value'])
+        self.assertEqual(row['severity'], 'warning')
 
 
 @override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
