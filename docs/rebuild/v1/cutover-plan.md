@@ -63,7 +63,8 @@ P7 and P9 are in hand or scheduled with dates. **No-go** if any BAA is refused.
 2. Accept the BAA in AWS Artifact from the management account (P2); save the PDF off-host.
 3. CloudTrail organization trail, GuardDuty, Config, S3 Block Public Access, EBS encryption by
    default with `alias/quillmd-production-data`; the two other keys.
-4. VPC 10.40.0.0/16, subnets, route tables, S3 gateway endpoint, security groups (section 8).
+4. VPC 10.40.0.0/16, subnets, route tables, S3 gateway endpoint, security groups
+   (`production-hosting.md` section 8).
 5. Backup account: vault, Vault Lock (compliance, cooling-off starts), logical-backup bucket with
    Object Lock, CloudTrail archive bucket. Production: AWS Backup plan (RDS daily, EBS hourly, copy).
 6. RDS: PostgreSQL 16, `quillmd-production`, db.t4g.medium Single-AZ in 1a, 20 GB gp3 with
@@ -75,7 +76,8 @@ P7 and P9 are in hand or scheduled with dates. **No-go** if any BAA is refused.
    exception rule forwarding `POST /billing/webhook/` (added only at G8); target group not yet
    registered.
 
-**Go** when checklist sections A (except A2-A6), B1, B3, B5-B8 and C1-C3 have evidence.
+**Go** when checklist rows A1 and A7-A10, B1, B3, B5-B8, C2 and the rule sets of C1 have evidence
+(C1's port scan, C3 and A11 follow at G3, when the instance exists).
 **Rollback:** delete nothing but empty, task-owned resources; the BAA and accounts stay.
 
 ### G2 Profile activation commit (half a day, reviewed PR)

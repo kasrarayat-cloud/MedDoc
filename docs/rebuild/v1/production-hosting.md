@@ -50,13 +50,14 @@ validated by `rebuild/ops/deployment_profile.py`:
 
 Refusals, all with fixed labels and all tested:
 
-- **Missing or unactivated record.** The RDS endpoint and the sha256 of the installed RDS CA bundle
-  cannot be known before provisioning; they are `null` in the checked-in record and
-  `load_production()` refuses it (`profile_not_activated`). The activation commit pins both, so
+- **Missing or unactivated record.** The RDS endpoint cannot be known before provisioning, and the
+  RDS CA bundle hash is pinned together with it from the bundle fetched for the host; both are
+  `null` in the checked-in record and `load_production()` refuses it (`profile_not_activated`). The activation commit pins both, so
   production services cannot start from an unreviewed value.
 - **Mixed record.** Any path overlapping a private path, the private account, identity numbers,
-  unit prefix, ports, database or role names, or the preview origin is `profile_mixed`. Unknown or
-  missing keys, wrong types and values outside the fixed vocabulary refuse too.
+  unit prefix, ports, database or role names is `profile_mixed`; the preview origin (it carries a
+  port) and any other malformed origin is `profile_value`. Unknown or missing keys, wrong types and
+  values outside the fixed vocabulary refuse too.
 - **Mixed environment.** The production launcher (`service_launcher.py --profile production`)
   refuses an environment file without `QUILLMD_DEPLOYMENT_PROFILE=production`, with another runtime
   user/database/endpoint, a Stripe key that is not a restricted live key, another email mode or
@@ -116,8 +117,8 @@ cache on 8 GiB. An optional LibreOffice render service (evidence rendering for W
 about 1 to 1.5 GiB per concurrent render; if it becomes part of production, move to `m7i.xlarge`
 (16 GiB). `m7i.large` is chosen over `t3.large` because the Word fill and audio normalisation are
 bursty CPU work and a burstable instance adds CPU-credit charges ($0.05 per vCPU-hour in unlimited
-mode) and throttling risk; Graviton types are excluded because the Word engine is a qualified
-x86_64 build.
+mode) and throttling risk; Graviton types are excluded because the qualified Word engine is a
+self-contained x86_64 .NET build and an ARM build would need its own qualification.
 
 **Storage growth.** Uploads are capped at 15 MB (`core/audio.py`, `core/security.py`); a browser
 recording of 8 minutes is typically 2 to 4 MB, and exports and provider receipts add about 0.2 MB per
@@ -178,7 +179,7 @@ volume, counts only).
    false, `DeletionProtection` true, engine major 16; accept the master user as maintenance role by
    membership in `rds_superuser` instead of `rolsuper`; create roles with only `LOGIN`/`NOLOGIN` and
    let the existing verify step assert that no managed role has a privileged flag; take role names
-   from the profile; run `verify` only against a drill instance (never live). Needed at cutover G5.
+   from the profile; run `verify` only against a drill instance (never live). Needed at cutover G4.
 2. `backup_restore.py` logical capture for production: source and identity from the profile and RDS;
    host `pg_dump --snapshot` over TLS; read files as root in a sandboxed oneshot (the private helper
    uses Docker); stream-encrypt so the 256 MiB Fernet plaintext limit does not cap growth; upload
@@ -236,7 +237,8 @@ section 4.5), Resend (no BAA; no PHI, section 16), Healthchecks.io (receives a b
   permissions after accepting the Artifact NDA; AWS recommends consulting legal first. Accept it **at
   the Organization level from the management account** ("all features" must be enabled): "All
   existing and subsequent member accounts are automatically covered". The acceptor is the owner as
-  the company's authorized representative. This is an owner act (class d: keys/contracts).
+  the company's authorized representative. This is an owner act (a contract, and the keys to the
+  accounts it covers).
 - **Accounts.** `quillmd-management` (Organization, billing, Artifact, Identity Center; no workloads),
   `quillmd-production` (all PHI resources), `quillmd-backup` (backup vault with Vault Lock, logical
   backup bucket with Object Lock, CloudTrail archive). A compromise of production credentials cannot
@@ -248,9 +250,12 @@ section 4.5), Resend (no BAA; no PHI, section 16), Healthchecks.io (receives a b
 - **People.** IAM Identity Center users with phishing-resistant MFA (hardware keys), two
   permission sets: `Operator` (SSM Session Manager to the instance, read-only elsewhere, no Secrets
   Manager read of the application secret) and `Administrator` (time-bound, used for declared acts).
+  A Session Manager shell can use sudo, so anyone with `Operator` is trusted with everything on the
+  host, including the rendered secrets and the state volume; the two sets differ in AWS API reach,
+  not in host reach. Keep the `Operator` group to the two custodians.
   No IAM users except break-glass. Root user of every account: hardware MFA, no access keys,
   credentials sealed under two-person custody (section 14).
-- **Machine identities.** Instance role: `ssm:*` core managed policy, `secretsmanager:GetSecretValue`
+- **Machine identities.** Instance role: the `AmazonSSMManagedInstanceCore` managed policy, `secretsmanager:GetSecretValue`
   on `quillmd-production/application-environment` only, `kms:Decrypt` via the secrets key,
   `s3:GetObject` on the release bucket, CloudWatch agent put-metric. During bootstrap only,
   `ec2:DescribeVolumes` and `kms:DescribeKey` (removed after). The application identity cannot use
@@ -292,8 +297,9 @@ other workload, project or co-tenant runs on it or in the production account.
 
 Chosen over Let's Encrypt on the host because:
 
-1. the TLS private key never exists on the host, so a host compromise cannot take it; ACM renews
-   automatically (host certbot also needs a working reload hook, which this programme has already
+1. the public certificate's private key never exists on the host, so a host compromise cannot take
+   it (the host holds only the self-signed key of the ALB-to-host hop, which proves nothing to a
+   browser); ACM renews automatically (host certbot also needs a working reload hook, which this programme has already
    had to repair once on the VPS);
 2. the instance has no Internet-facing port at all, only 8443 from the ALB;
 3. AWS WAF attaches to the ALB: managed rule groups and a per-IP rate-based rule protect login,
@@ -382,8 +388,9 @@ drill measures them before go-live and quarterly.
    a drill security group; restore the first EBS snapshot at or after T as a new volume.
 3. Launch a drill instance (same AMI) without the production role, attach the volume read-only at
    `/mnt/quillmd-drill-<same stamp>`.
-4. Run `ops/production_restore_check.py --expected-triggers 9` (the number recorded at activation)
-   with the backup role; it refuses the live endpoint and live mount.
+4. As root on the drill instance (the restored files are 0600 for uid 931), run
+   `ops/production_restore_check.py --expected-triggers 9` (the number recorded at activation) with
+   the backup role; it refuses the live endpoint and live mount and prints counts only.
 5. Record: restore start/end times (RTO), T versus the last write before the incident simulation
    (RPO), the check's counts. Delete the drill instance, volume and database; keep the record.
 6. Quarterly, also restore from the **backup account's** copies with the break-glass custodians, so
