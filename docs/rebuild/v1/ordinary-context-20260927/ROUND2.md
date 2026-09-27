@@ -1,3 +1,5 @@
+> Historical candidate1747 was independently refuted. See [ROUND3.md](ROUND3.md) for repaired source and retained failure evidence. The body below is preserved as the prior claim, not current clearance.
+
 # Ordinary context follow-up — 2026-09-27
 
 ## Current candidate

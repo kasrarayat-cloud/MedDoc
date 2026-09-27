@@ -1,0 +1,207 @@
+{
+  "disk_generation_sha256": "f6e8789f73cf006b05f2bd51bca78b6051610588746cef32cdf9af53f863d1c4",
+  "executed_override": "/opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.runtime/ordinary-context-refutation-20260927/generation-firstcandidate.py",
+  "cases": [
+    {
+      "case": "sibling-medications",
+      "notes": "Allergies: penicillin.\nSibling medications are warfarin.\nPlan: rest.",
+      "picks": {
+        "Medications": [
+          2
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: penicillin.",
+          "start": 0,
+          "end": 22,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Sibling medications are warfarin.",
+          "start": 23,
+          "end": 56,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan: rest.",
+          "start": 57,
+          "end": 68,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Sibling medications are warfarin.",
+              "start": 23,
+              "end": 56
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Sibling medications are warfarin.",
+            "evidence": [
+              {
+                "quote": "Sibling medications are warfarin.",
+                "start": 23,
+                "end": 56
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "donor-medications",
+      "notes": "Allergies: penicillin.\nDonor medications are warfarin.\nPlan: rest.",
+      "picks": {
+        "Medications": [
+          2
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: penicillin.",
+          "start": 0,
+          "end": 22,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Donor medications are warfarin.",
+          "start": 23,
+          "end": 54,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan: rest.",
+          "start": 55,
+          "end": 66,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Donor medications are warfarin.",
+              "start": 23,
+              "end": 54
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Donor medications are warfarin.",
+            "evidence": [
+              {
+                "quote": "Donor medications are warfarin.",
+                "start": 23,
+                "end": 54
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "planned-examination",
+      "notes": "Allergies: penicillin.\nPlanned examination will reveal a rash.\nPlan: rest.",
+      "picks": {
+        "Examination": [
+          2
+        ]
+      },
+      "units": [
+        {
+          "id": 1,
+          "quote": "Allergies: penicillin.",
+          "start": 0,
+          "end": 22,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Planned examination will reveal a rash.",
+          "start": 23,
+          "end": 62,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan: rest.",
+          "start": 63,
+          "end": 74,
+          "correction_value": null
+        }
+      ],
+      "answers": {
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Planned examination will reveal a rash.",
+              "start": 23,
+              "end": 62
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Planned examination will reveal a rash.",
+            "evidence": [
+              {
+                "quote": "Planned examination will reveal a rash.",
+                "start": 23,
+                "end": 62
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    }
+  ]
+}

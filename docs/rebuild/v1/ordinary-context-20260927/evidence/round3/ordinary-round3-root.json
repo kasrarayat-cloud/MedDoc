@@ -1,0 +1,490 @@
+{
+  "sha256": "166947914409a575269c2bd5e174bdc62b2ae73239ab0754900b85d32c84c24f",
+  "cases": [
+    {
+      "name": "sibling",
+      "notes": "Allergies: penicillin.\nSibling medications are warfarin.\nPlan: rest.",
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Sibling medications are warfarin.",
+              "start": 23,
+              "end": 56
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Sibling medications are warfarin.",
+            "evidence": [
+              {
+                "quote": "Sibling medications are warfarin.",
+                "start": 23,
+                "end": 56
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Sibling medications are warfarin.",
+                "start": 23,
+                "end": 56,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Medications": [
+          "Medications"
+        ]
+      }
+    },
+    {
+      "name": "donor",
+      "notes": "Allergies: penicillin.\nDonor medications are warfarin.\nPlan: rest.",
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Donor medications are warfarin.",
+              "start": 23,
+              "end": 54
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Donor medications are warfarin.",
+            "evidence": [
+              {
+                "quote": "Donor medications are warfarin.",
+                "start": 23,
+                "end": 54
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Donor medications are warfarin.",
+                "start": 23,
+                "end": 54,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Medications": [
+          "Medications"
+        ]
+      }
+    },
+    {
+      "name": "future",
+      "notes": "Allergies: penicillin.\nPlanned examination will reveal the lesion.\nPlan: rest.",
+      "answers": {
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Planned examination will reveal the lesion.",
+              "start": 23,
+              "end": 66
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Planned examination will reveal the lesion.",
+            "evidence": [
+              {
+                "quote": "Planned examination will reveal the lesion.",
+                "start": 23,
+                "end": 66
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Planned examination will reveal the lesion.",
+                "start": 23,
+                "end": 66,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Examination": [
+          "Examination"
+        ]
+      }
+    },
+    {
+      "name": "allergy-denial",
+      "notes": "Allergies: penicillin.\nAssessment: no penicillin allergy.",
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "penicillin.",
+            "evidence": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Assessment: no penicillin allergy.",
+                "start": 23,
+                "end": 57,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: no penicillin allergy.",
+              "start": 23,
+              "end": 57
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "no penicillin allergy.",
+            "evidence": [
+              {
+                "quote": "Assessment: no penicillin allergy.",
+                "start": 23,
+                "end": 57
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 0,
+                "end": 22,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Assessment: no penicillin allergy.",
+                "start": 23,
+                "end": 57,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Allergies": [
+          "Allergies"
+        ],
+        "Assessment": [
+          "Assessment"
+        ]
+      }
+    },
+    {
+      "name": "allergy-probable",
+      "notes": "Allergies: none.\nAssessment is a probable penicillin allergy.",
+      "answers": {
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Allergies: none.",
+              "start": 0,
+              "end": 16
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "none.",
+            "evidence": [
+              {
+                "quote": "Allergies: none.",
+                "start": 0,
+                "end": 16
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: none.",
+                "start": 0,
+                "end": 16,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Assessment is a probable penicillin allergy.",
+                "start": 17,
+                "end": 61,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment is a probable penicillin allergy.",
+              "start": 17,
+              "end": 61
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "a probable penicillin allergy.",
+            "evidence": [
+              {
+                "quote": "Assessment is a probable penicillin allergy.",
+                "start": 17,
+                "end": 61
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: none.",
+                "start": 0,
+                "end": 16,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Assessment is a probable penicillin allergy.",
+                "start": 17,
+                "end": 61,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Allergies": [
+          "Allergies"
+        ],
+        "Assessment": [
+          "Assessment"
+        ]
+      }
+    },
+    {
+      "name": "question",
+      "notes": "Plan: amoxicillin? Return if symptoms worsen.",
+      "answers": {
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "held_candidate": {
+            "text": "amoxicillin? Return if symptoms worsen.",
+            "evidence": [
+              {
+                "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+                "start": 0,
+                "end": 45
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+                "start": 0,
+                "end": 45,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Plan": [
+          "Plan"
+        ]
+      }
+    },
+    {
+      "name": "absent-referent",
+      "notes": "Plan: continue current medications.",
+      "answers": {
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 0,
+              "end": 35
+            }
+          ],
+          "held_candidate": {
+            "text": "continue current medications.",
+            "evidence": [
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 0,
+                "end": 35
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 0,
+                "end": 35,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Plan": [
+          "Plan"
+        ]
+      }
+    },
+    {
+      "name": "current-positive",
+      "notes": "Allergies: penicillin.\nCurrent medications are aspirin.\nPlan: rest.",
+      "answers": {
+        "Medications": {
+          "text": "Current medications are aspirin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Current medications are aspirin.",
+              "start": 23,
+              "end": 55
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_supported_refusals": {}
+    },
+    {
+      "name": "reference-positive",
+      "notes": "Medications: aspirin.\nPlan: continue current medications.",
+      "answers": {
+        "Medications": {
+          "text": "aspirin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Medications: aspirin.",
+              "start": 0,
+              "end": 21
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "continue current medications.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 22,
+              "end": 57
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_supported_refusals": {}
+    }
+  ],
+  "passed": true
+}
