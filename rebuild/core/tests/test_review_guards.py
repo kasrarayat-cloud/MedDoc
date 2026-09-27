@@ -438,6 +438,49 @@ class TheNotesPageSaysWhatAChangedSaveClears(OrdinaryDraft, TestCase):
         self.assertNotContains(response, 'were cleared')
 
 
+SAVED = 'Notes saved. '
+NEXT = 'Generate and review a new answer draft.'
+
+
+@override_settings(**TEST_SETTINGS)
+class TheSaveSaysExactlyWhatItCleared(OrdinaryDraft, TestCase):
+    """Refutation round 3, F2: after a changed notes save the message named the answer draft, its review decisions and
+    accepted codes whenever anything at all was cleared. After "Clear answers and review" left only an accepted code it
+    said all three were cleared while the audit recorded codes_accepted: 1; a fresh draft nobody reviewed, with no code,
+    got the same sentence. The message is now read from the counts the save audits."""
+
+    def saved(self, encounter):
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
+        self.assertEqual(encounter.answers, {})
+        return shown_messages(response)
+
+    def test_a_save_after_clearing_the_review_names_only_the_accepted_code(self):
+        encounter, _keys = self.reviewed_draft()
+        self.accepted_code(encounter)
+        self.post(f'/encounters/{encounter.pk}/clear-review/', encounter, {'confirm_clear': 'on'})
+        self.assertEqual((encounter.answers, encounter.template_review), ({}, {}))           # (the control: only the code)
+        said = self.saved(encounter)
+        self.assertEqual(last_event('encounter.notes_saved', encounter)['cleared']['codes_accepted'], 1)
+        self.assertIn(SAVED + 'Cleared, and recorded under your name: 1 accepted code. ' + NEXT, said)
+        for claim in ('answer draft', 'review decision', 'statement'):
+            self.assertNotIn(claim, said)
+
+    def test_a_save_over_a_draft_nobody_reviewed_names_only_the_draft(self):
+        encounter = self.drafted()
+        said = self.saved(encounter)
+        self.assertIn(SAVED + 'Cleared, and recorded under your name: the answer draft (2 answers, none reviewed). ' + NEXT, said)
+        for claim in ('review decision', 'accepted code', 'statement'):
+            self.assertNotIn(claim, said)
+
+    def test_a_save_over_statement_wordings_alone_names_them(self):
+        """M9's other half: a message whose clearing is read from the answers alone says nothing here."""
+        encounter, _keys = self.reviewed_draft()
+        Encounter.objects.filter(pk=encounter.pk).update(answers={}, template_review={'decisions': {'claim_1': {'variant': 'a'}}})
+        said = self.saved(encounter)
+        self.assertIn(SAVED + 'Cleared, and recorded under your name: 1 saved prewritten statement wording (not reviewed). '
+                      + NEXT, said)
+
+
 @override_settings(**TEST_SETTINGS)
 class ClearAnswersAndReviewToGenerateAgain(OrdinaryDraft, TestCase):
     """R1(c): the explicit way to generate again over a decided draft — POST only, owner or clinician, confirmed, refused
