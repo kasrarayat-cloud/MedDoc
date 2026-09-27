@@ -623,6 +623,7 @@ class Area:
     extra_slots: list = dfield(default_factory=list)   # parallel header/footer copies, option slots
     order: int = 0
     note: str = ""
+    capacity: int | None = None
 
 
 def clean_label(text: str) -> str:
@@ -993,6 +994,8 @@ class Detector:
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         self.surface_duplicates()
+        for a in self.areas:
+            a.capacity = self.capacity_for(a)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
 
@@ -1878,6 +1881,36 @@ class Detector:
             if INITIALS.search(header + " " + label) or re.search(r"\binitial", self.context_for(c), re.I):
                 self.add(Area("initials", label or header or "Initials", c, {"type": "none"}, context=self.context_for(c)))
 
+    def capacity_for(self, area):
+        """Characters an area can show without breaking the page: headers/footers, text boxes and narrow or
+        fixed-height cells are bounded; body paragraphs and growing table cells are not (None)."""
+        if area.kind not in ("text", "long_text", "date", "time"):
+            return None
+        slot = area.slot
+        chain, s = [], slot
+        while s is not None:
+            chain.append(s)
+            s = s.parent
+        bound = None
+        cell = self.host_cell(slot)
+        if cell is not None:
+            width = self.cell_twips(cell.parent, cell)
+            tr = cell.el.getparent()
+            trpr = tr.find(q("w:trPr")) if tr is not None else None
+            h = trpr.find(q("w:trHeight")) if trpr is not None else None
+            exact = h is not None and h.get(q("w:hRule")) == "exact"
+            per_line = max(1, int(width / 110))
+            if exact:
+                lines = max(1, int(float(h.get(q("w:val")) or 240) / 240))
+                bound = per_line * lines
+            elif width < 1440:
+                bound = per_line * 3
+        if slot.part != "word/document.xml":
+            bound = min(bound or 120, 120)
+        if any(x.kind == "txbx" for x in chain):
+            bound = min(bound or 120, 120)
+        return bound
+
     def surface_duplicates(self):
         """Identical label + context for different areas is never guessed between: each gets its position."""
         groups = {}
@@ -1940,6 +1973,8 @@ def area_to_field(n: int, area: Area) -> dict:
              "locator": locator}
     if area.options:
         field["options"] = list(area.options)
+    if area.capacity:
+        field["max_chars"] = int(area.capacity)
     return field
 
 
@@ -2431,6 +2466,9 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
             continue
         if isinstance(answer, str) and len(answer) > MAX_ANSWER:
             fail("An answer is longer than the form can take.", "invalid_answer")
+        if isinstance(answer, str) and field.get("max_chars") and len(answer) > int(field["max_chars"]):
+            fail("The answer for \"%s\" is longer than that space on the form can show (%d characters). Shorten it "
+                 "in review." % (field.get("label", "")[:60], int(field["max_chars"])), "answer_too_long")
         if field["kind"] in SIGNING_KINDS:
             fail("Signature and initials areas are signed by the clinician; they are never filled automatically.",
                  "invalid_answer")
