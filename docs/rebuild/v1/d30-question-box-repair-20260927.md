@@ -1,6 +1,6 @@
 # D30 separate question and answer boxes — bounded development repair
 
-Status: **local candidate; independent finished-diff refutation pending**. No deployment,
+Status: **local candidate; bounded independent finished-diff refutation complete**. No deployment,
 provider call, qualification campaign or corpus result replacement occurred.
 
 Worktree: `/opt/meddoc-pro/.worktrees/v1-word-d30`, branch `v1/word-d30`.
@@ -8,6 +8,32 @@ Base: `0b0395a0922f81f5a38526802136197a4bb74b28`.
 Engine SHA256: `d4d82856ca066c07b537f3c3d28f9a10b1b3bcbf441d516e6ba636699ea8bc77`.
 First frozen candidate: `75e545b2a6469b0d188c779f3c4ee9af02dfc7f5`;
 its refuted evidence remains preserved.
+
+## Consolidated custom Word compatibility status
+
+| Evidence layer / case | What is established | Required work or limitation |
+|---|---|---|
+| Original corpus provenance | Original **60 files / 44 declared lineages**: development 40/30 and historical holdout 20/14. All original records and first attempts remain. | This does not meet 60 independently authored templates. Supplemental provenance cannot replace failures or rewrite the denominator. |
+| Historical document proxies | Frozen candidate `79a5b2ec` recorded **3/40 development and 0/20 holdout**. Old “exports clean” counts 31/40 and 18/20 used an incomplete map and a scorer lacking checkbox correctness. | These are historical engine proxies, not current complete mapping, clinical workflow, model, rendered-control or native Word acceptance. No new automatic percentage is claimed. |
+| Fresh unseen qualification 20 | Custodian separately froze 20 independent lineages, authored 20 expected maps from originals alone and retained the sealed cohort. It contains 3 actual legacy DOC originals. Implementation received only aggregate metadata. | Current unqualified/refused DOC path imposes a **17/20 maximum**, below required 18/20. Execution is ineligible. Do not run, replace cases or turn a conditional funding request into authority. Native Word remains unavailable. |
+| File/parser acceptance | D30 editable DOCX opens and can be inspected. The retained D19 normalized DOCX can be inspected separately from its binary original. | File acceptance is not complete field mapping or faithful export. Legacy DOC conversion is unqualified; Python FOSS was rejected for demonstrated content/layout losses. The installed pinned LibreOffice route still needs qualification. This narrow legacy exception does not defer broad editable DOCX support. |
+| D19 containment | 17 physical areas are exposed: 3 ordinary blanks, 8 unresolved floating initials boxes and 6 protected signing details. Source-bound guards block every nonempty export and generation admission for the unqualified layout. | **Document FAIL.** Prior assisted exports preserved protected XML but long rendering clipped a box; text heuristics missed the loss. Refusal is containment, not compatibility. No native Word acceptance. |
+| D30 mapping and assisted workflow | **26 newly detected destinations**, all independently expected, plus **6 visible unassigned boxes**; 42 old fields preserved, 68 total. Actual A25 upload → mocked ordinary-source worker → review/correction → finalization/export passed missing/ordinary/long scenarios. | **Document FAIL.** Remaining boxes and pre-existing extras/options/type defects are unresolved. Clinician corrections are assisted workflow, not automatic recognition. A25 success does not certify all fields or Sonnet 5 behavior. |
+| D30 render and changed-file scope | Original/missing/ordinary 12 pages; long 13; zero measured text overlaps, all 90 long statements visible, affected pages visually compared. Final fields/warnings/hash match the earlier successful workflow/render candidate exactly. Passive inspection of 33 eligible originals found only D30 exposed to this rule. | Reuse that unchanged evidence and 32 structural exclusions; do not rerun unaffected maps. Other new destinations have mapping/structure evidence, not complete rendered workflows. Native Word checks remain unperformed. Seven held files remain outside execution; original development denominator stays 40. |
+
+**Required V1 engineering remains open:** complete common DOCX question detection,
+correct types/options and source destinations, visible uncertainty/correction paths,
+faithful missing/ordinary/long exports across each declared family, eligible independent
+corpus provenance, exact-model clinical behavior, and full app/render/native acceptance.
+The launch targets remain 54/60 overall, 18/20 holdout and 75% in every family, with any
+silent omission, wrong destination or clinical corruption blocking launch regardless
+of the aggregate. V1 is not complete; maintenance/synthetic-only admission must remain.
+
+Sources: preserved `word-compatibility-matrix.md`; custodian
+`corpus-custody-annotation-complete-20260927.md` and
+`original-development40-rights-reconciliation-20260927.md` (aggregate metadata only);
+`d19-signing-repair-20260927.md`; and the bounded evidence below. No new corpus,
+provider, native Word or paid verification was run to prepare this matrix.
 
 ## Independent expected areas and demonstrated failure
 
@@ -30,8 +56,8 @@ two generic warnings, with no warning identifying these omitted boxes.
 The historical result remains unchanged: 28 correct, 33 missed, one wrong and
 13 extra fields; document automatic success **false**. Its old `export_ok=true`
 describes exports of the incomplete detected map, not a complete clinical workflow.
-No percentage or corpus denominator was recomputed here. Original development40
-and original60 denominators remain unchanged.
+No percentage or corpus denominator was recomputed here. Original development 40
+and original 60 denominators remain unchanged.
 
 ## Repair and its boundary
 
@@ -106,6 +132,17 @@ inherited conditional borders, page-break spacers and inline-answer ambiguity
 remain refused. **40 final affected engine checks passed in 11.772 seconds**;
 the complete output is retained separately.
 
+The final independent refutation replayed the original eight artifacts and ran
+12 predeclared local structural controls: **NOTHING FOUND** on source
+`f170f5a7e10d557679d3fb6000948f7bd5df5e16`. Both demonstrated first-candidate
+defects are closed; their failed outputs remain preserved. The separate report
+is `d30-independent-20260927.md`, evidence commit
+`6c29cda4aee23a62756781c89c39483272f2d109`. It does not assert full document,
+corpus or native Word acceptance.
+
+The required CI document-module list now includes `documents.test_question_boxes`;
+the final affected run already exercised it. No additional campaign was started.
+
 This is **not full D30 success**: six boxes, pre-existing extras/options/type defects
 and whole-document clinical acceptance remain unresolved. Only A25 received the
 complete missing/ordinary/long rendered workflow here; the other new destinations
@@ -159,9 +196,9 @@ unopened for this task, and the original development denominator is still 40.
 
 ## Next safe action
 
-Refute this frozen finished diff independently, focusing on source/destination
-ownership, multiple questions, section scope, border precedence and preservation
-of existing fields. Integrate only after verified findings are repaired. Preserve
-the candidate, failed evidence and pending V1 blockers. No paid authority was used;
+The finished source and independent report have been handed to root for candidate
+integration; this branch does not deploy or push. Preserve the candidate, failed
+evidence and pending V1 blockers. No further corpus execution is authorized by
+this bounded repair. No paid authority was used;
 the isolated PostgreSQL 55702 test database was removed normally. No task process
 or deployment operation remains active.
