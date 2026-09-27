@@ -1640,6 +1640,26 @@ def points_elsewhere(text):
                 or (POINTING_START.search(text) and not see_instruction(text)))
 
 
+#: ⚠️ A RUN-ON IS HELD (round 3; the design's own rule, listed by the previous repair): an unpunctuated single-line
+#: dictation is ONE unit, and it was adopted whole as the answer to every free-text question asked. A value (or an
+#: unlabelled sentence) of more than `RUN_ON_WORDS` words is held when it has no sentence end, or no punctuation at all
+#: before its closing mark: nothing in it says where one statement stops and the next begins. A shorter one is judged
+#: by the other rules as before.
+RUN_ON_WORDS = 25
+SENTENCE_STOPS = '.!?\u2026\u3002\uff0e\uff01\uff1f\uff61'
+INNER_PUNCTUATION = re.compile(r'[,;:.!?\u2026\u3002\uff0e\uff01\uff1f\uff61\uff0c\uff1b\uff1a()\[\]\u2013\u2014]')
+
+
+def runs_on(text):
+    """Whether a unit's value is a run-on by the bound above."""
+    if len(text.split()) <= RUN_ON_WORDS:
+        return False
+    body = text.rstrip()
+    inside = body.rstrip(SENTENCE_STOPS + '"\'\u201d\u2019)]*_~`')
+    closed = any(character in SENTENCE_STOPS for character in body[len(inside):])
+    return not closed or not INNER_PUNCTUATION.search(inside)
+
+
 #: ⚠️ FOR A HOLD, A STOP ENDS A SENTENCE UNLESS IT PROVABLY DOES NOT (round 3, R3-3). `ABBREVIATION` is the SPLITTER's
 #: reading and takes any single letter for an initial, so 'screen for hepatitis C. She is not a smoker' and 'vitamin K.
 #: Warfarin was stopped last month.' were each one sentence, and what followed the letter changed nothing. Read through
@@ -1705,7 +1725,7 @@ def plain_value(value):
 
 
 def v3_shape_holds(quote, value):
-    """Rules (d)-(f) of contract v3 for one unit (`quote`, and its labelled `value` or the quote itself); rule (c), more
+    """Rules (d)-(g) of contract v3 for one unit (`quote`, and its labelled `value` or the quote itself); rule (c), more
     than one sentence in the unit, is `inner_sentence_end`. Read once per unit per validation (R3-4)."""
     return bool(
         # (d) A value that asks or trails off answers nothing ('Nausea, vomiting or abdominal pain?').
@@ -1713,7 +1733,9 @@ def v3_shape_holds(quote, value):
         # (e) Nor does one shaped as a pointer to other lines (F7).
         or points_elsewhere(value)
         # (f) A self-correction inside the sentence (read with invisible characters removed too).
-        or any(SELF_CORRECTION.search(reading) for reading in readings(quote)))
+        or any(SELF_CORRECTION.search(reading) for reading in readings(quote))
+        # (g) A run-on: many words and nothing that says where a statement ends (`runs_on`).
+        or runs_on(value))
 
 
 def paragraph_neighbours(notes, units, plain):

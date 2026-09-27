@@ -998,6 +998,18 @@ class RoundThreeRefutation(SimpleTestCase):
         for label in ('Chief complaint', 'Allergies', 'Plan'):
             with self.subTest(label=label):
                 held_with(self, notes, label, notes, notes)
+        # The bound, both sides: 25 words with no sentence end are judged as before; 26 are held. More than 25 words are
+        # held when nothing inside says where a statement ends, closed or not; with punctuation inside and a closing
+        # stop they are judged as before.
+        words = ('the patient reports pain in the right knee for three weeks after a fall at home and it is worse on '
+                 'stairs and at night')
+        self.assertEqual(len(words.split()), 25)
+        for notes, held in ((words, False), (words + ' today', True), (words + ', worse today and tomorrow too', True),
+                            (words + ' and worse today and tomorrow too.', True),
+                            (words + ', worse today and tomorrow too.', False)):
+            with self.subTest(notes=notes):
+                answer = run(notes, {'Chief complaint': [notes]}, fields=ROUND3)['Chief complaint']
+                self.assertEqual(answer['status'], 'conflict' if held else 'supported', notes)
 
 
 class RoundThreeCost(SimpleTestCase):
