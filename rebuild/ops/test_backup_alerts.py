@@ -133,14 +133,20 @@ class BackupAlertsTests(unittest.TestCase):
         self.assertEqual((code, result['alert']['outcome']), (1, 'pending'))
         self.sender.assert_called_once()
 
-    def test_crash_before_pending_receipt_fails_closed_without_email(self):
+    def test_crash_before_pending_receipt_never_sends_that_notice_and_announces_a_restart(self):
+        """This pinned a SILENT refusal, forever. FAIL CLOSED MEANS ALERT: the unrecorded notice is
+        still never sent, and the monitor restarts its record and says so."""
         self.health.return_value = 'backup_failed'
         with patch.object(a, 'attempt_alert', side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 a.check(self.at)
+        named = json.loads((self.alerts / 'status.json').read_text())['incident_attempt']
         result, code = a.check(self.at + timedelta(minutes=5))
-        self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
-        self.sender.assert_not_called()
+        self.assertEqual((code, result['condition'], result['state_unreadable']), (1, 'backup_failed', 'notice_record_missing'))
+        self.sender.assert_called_once()
+        self.assertIn('MONITOR RESTARTED', self.sender.call_args.args[1])
+        self.assertNotIn(named, self.sender.call_args.args[2])
+        self.assertFalse(list(self.alerts.glob(f'incident-{named}-*')))
 
     def test_authorized_test_exactly_once_separate_from_normal_backup_and_monitor_status(self):
         sentinel = self.backup_monitor / 'latest.json'
@@ -195,13 +201,18 @@ class BackupAlertsTests(unittest.TestCase):
         self.assertNotIn('canary', json.dumps(result))
         self.sender.assert_not_called()
 
-    def test_lost_mutable_state_with_durable_incident_evidence_refuses_resend(self):
+    def test_lost_mutable_state_is_announced_as_a_restart_never_a_resend(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
+        receipts = {path.name: path.read_bytes() for path in self.alerts.glob('incident-*-*.json')}
+        first = json.loads((self.alerts / 'status.json').read_text())['incident_attempt']
         (self.alerts / 'status.json').unlink()
         result, code = a.check(self.at + timedelta(days=2))
-        self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
-        self.sender.assert_called_once()
+        self.assertEqual((code, result['condition'], result['state_unreadable']), (1, 'backup_failed', 'state_missing'))
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('MONITOR RESTARTED', self.sender.call_args.args[1])
+        self.assertNotIn(first, self.sender.call_args.args[2], 'the first notice is not requested again')
+        self.assertEqual({name: (self.alerts / name).read_bytes() for name in receipts}, receipts)
 
     def test_malformed_receipt_schema_and_timestamps_do_not_produce_acceptance(self):
         self.assertEqual(a.test_alert(self.at)[1], 0)
@@ -274,10 +285,12 @@ class BackupAlertsTests(unittest.TestCase):
 
     def test_unknown_state_and_receipt_content_never_reaches_operator_output(self):
         a.backup.write_private(self.alerts / 'status.json', b'{"condition":"private-clinical-canary"}')
+        self.assertNotIn('canary', json.dumps(a.status(self.at)[0]))
         result, code = a.check(self.at)
-        self.assertEqual(code, 1)
+        self.assertEqual((code, result['state_unreadable']), (1, 'state_invalid'))
         self.assertNotIn('canary', json.dumps(result))
-        self.sender.assert_not_called()
+        self.sender.assert_called_once()                      # the restart notice: a label, no content
+        self.assertNotIn('canary', ''.join(self.sender.call_args.args[1:]))
 
     def test_all_generated_metadata_private(self):
         self.health.return_value = 'backup_failed'
@@ -714,7 +727,9 @@ class IncidentNotificationTests(unittest.TestCase):
         self.assertTrue(all((later - earlier).total_seconds() >= a.ESCALATION_SPACING_SECONDS
                             for earlier, later in zip(times, times[1:])))
 
-    def test_crash_between_persisting_an_escalation_and_its_request_fails_closed_without_email(self):
+    def test_crash_between_persisting_an_escalation_and_its_request_never_sends_it_and_restarts(self):
+        """This pinned monitoring_state_unavailable at +3 h, +30 h and +100 h with no email: silence
+        for ever. The unrecorded escalation is still never sent; the record restarts, announced."""
         self.health.return_value = 'backup_failed'
         a.check(self.at)
         before = self.state()
@@ -726,11 +741,16 @@ class IncidentNotificationTests(unittest.TestCase):
         self.assertNotEqual(persisted['incident_attempt'], before['incident_attempt'])
         self.assertEqual(persisted['incident_attempt_condition'], 'backup_stale')
         self.assertFalse(list(self.alerts.glob(f"incident-{persisted['incident_attempt']}-*")))
-        for hours in (3, 30, 100):
-            result, code = a.check(self.at + timedelta(hours=hours))
-            self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
-        self.assertEqual(a.status(self.at + timedelta(hours=100))[0]['condition'], 'monitoring_state_unavailable')
-        self.sender.assert_called_once()
+        shown, _ = a.status(self.at + timedelta(hours=2, minutes=1))
+        self.assertEqual((shown['condition'], shown['state_unreadable']), ('monitoring_state_unavailable', 'notice_record_missing'))
+        result, code = a.check(self.at + timedelta(hours=3))
+        self.assertEqual((code, result['condition'], result['state_unreadable'], self.sender.call_count),
+                         (1, 'backup_stale', 'notice_record_missing', 2))
+        self.assertIn('MONITOR RESTARTED', self.sent()[-1][0])
+        self.assertFalse(list(self.alerts.glob(f"incident-{persisted['incident_attempt']}-*")), 'never sent')
+        result, _ = a.check(self.at + timedelta(hours=4))
+        self.assertEqual((result['condition'], self.sender.call_count), ('backup_stale', 2))
+        self.assertEqual(a.status(self.at + timedelta(hours=4, minutes=1))[0]['condition'], 'backup_stale')
 
     def test_interrupted_escalation_request_is_pending_and_never_followed(self):
         self.health.return_value = 'backup_failed'
@@ -833,27 +853,32 @@ class IncidentNotificationTests(unittest.TestCase):
                          ('c' * 32, (self.at + timedelta(minutes=5)).isoformat(), 'initial'))
         self.sender.assert_called_once()
 
-    def test_inconsistent_previous_release_state_fails_closed_without_email(self):
-        # Each has a readable receipt, so only the incident invariants can refuse it.
-        for changes in ({'incident_attempt': 'd' * 32},
-                        {'incident_attempt': None, 'last_attempt_at': None, 'last_check_at': None}):
+    def test_inconsistent_previous_release_state_is_restarted_and_announced(self):
+        # Each has a readable receipt, so only the incident invariants can reject it.
+        for count, changes in enumerate(({'incident_attempt': 'd' * 32},
+                                         {'incident_attempt': None, 'last_attempt_at': None, 'last_check_at': None}), 1):
             with self.subTest(changes=changes):
                 for path in self.alerts.iterdir():
                     path.unlink()
                 self.legacy(**changes)
+                receipts = {path.name: path.read_bytes() for path in self.alerts.glob('incident-*-*.json')}
                 result, code = a.check(self.at + timedelta(days=2))
-                self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
-        self.sender.assert_not_called()
+                self.assertEqual((code, result['condition'], result['state_unreadable'], self.sender.call_count),
+                                 (1, 'healthy', 'incident_record_invalid', count))
+                self.assertEqual({name: (self.alerts / name).read_bytes() for name in receipts}, receipts)
+                self.assertEqual(a.check(self.at + timedelta(days=2, minutes=5))[0]['condition'], 'healthy')
 
-    def test_invalid_incident_records_fail_closed_without_email_or_disclosure(self):
-        """Each case tampers ONE file and leaves the other exactly as written, so a refusal can only
-        come from the check that case is aimed at (status.json alone would refuse everything)."""
+    def test_invalid_incident_records_are_restarted_without_disclosure(self):
+        """Each case tampers ONE file and leaves the other exactly as written, so the reason can only
+        come from the check that case is aimed at (status.json alone would reject everything). Each
+        runs on a fresh copy of the same directory, so no restart notice holds the next case's."""
         self.health.return_value = 'backup_failed'
         a.check(self.at)
         self.health.return_value = 'backup_stale'
         a.check(self.at + timedelta(hours=2))
         status = json.loads((self.alerts / 'status.json').read_text())
         ledger = self.ledger()
+        snapshot = {path.name: path.read_bytes() for path in self.alerts.iterdir()}
         self.assertEqual(a.read_state()['incident_attempt_notice'], 'escalation', 'the untampered pair is valid')
         cases = [('status', {'incident_opened_at': status['last_check_at']}),     # the format-2 shape
                  ('status', {'format': 2}), ('status', {'incident_id': None}),
@@ -882,27 +907,41 @@ class IncidentNotificationTests(unittest.TestCase):
                          'incident_attempt_condition': None},
                         {'unexpected': 'private-canary'}):
             cases.append(('record', changes))
-        for where, changes in cases:
+        for count, (where, changes) in enumerate(cases, 3):
             with self.subTest(where=where, changes=changes):
+                for path in self.alerts.iterdir():
+                    path.unlink()
+                for name, content in snapshot.items():
+                    a.backup.write_private(self.alerts / name, content)
                 (self.alerts / 'status.json').write_text(json.dumps(
                     dict(status, **changes) if where == 'status'
                     else dict(status, incident_id=None, incident_attempt=None) if where == 'stale' else status))
                 (self.alerts / a.NOTICES_FILE).write_text(json.dumps(
                     dict(ledger, incident=dict(ledger['incident'], **changes)) if where in ('record', 'stale')
                     else dict(ledger, **changes) if where == 'ledger' else ledger))
+                shown, _ = a.status(self.at + timedelta(days=2))
                 result, code = a.check(self.at + timedelta(days=2))
-                self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
-                self.assertNotIn('canary', json.dumps(result))
-        self.assertEqual(self.sender.call_count, 2)
+                reason = 'state_invalid' if where == 'status' else 'ledger_invalid'
+                self.assertEqual((shown['condition'], shown['state_unreadable']), ('monitoring_state_unavailable', reason))
+                self.assertEqual((code, result['condition'], result['state_unreadable'], self.sender.call_count),
+                                 (1, 'backup_stale', reason, count))
+                for text in (json.dumps(result), json.dumps(shown), *self.sent()[-1]):
+                    self.assertNotIn('canary', text)
 
-    def test_a_receipt_that_disagrees_with_state_fails_closed(self):
+    def test_a_receipt_that_disagrees_with_state_is_never_followed_and_the_record_restarts(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
         path = next(self.alerts.glob('incident-*-result.json'))
         path.write_text(json.dumps(dict(json.loads(path.read_text()), condition='backup_stale')))
+        tampered = path.read_bytes()
+        shown, _ = a.status(self.at + timedelta(days=2))
+        self.assertEqual((shown['condition'], shown['state_unreadable']), ('monitoring_state_unavailable', 'notice_record_mismatch'))
         result, code = a.check(self.at + timedelta(days=2))
-        self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
-        self.sender.assert_called_once()
+        self.assertEqual((code, result['condition'], result['state_unreadable']), (1, 'backup_failed', 'notice_record_mismatch'))
+        self.assertEqual(self.sender.call_count, 2)
+        self.assertIn('MONITOR RESTARTED', self.sent()[-1][0])
+        self.assertEqual(path.read_bytes(), tampered, 'a request record is evidence: never rewritten')
+        self.assertNotEqual(self.state()['incident_attempt'], path.name[len('incident-'):-len('-result.json')])
 
     def test_notices_carry_no_secret_and_the_summary_carries_no_identity(self):
         self.health.return_value = 'backup_failed'
@@ -1185,6 +1224,33 @@ class PreviousReleaseCompatibilityTests(unittest.TestCase):
         self.assertEqual(result['incident']['conditions_announced'], ['backup_stale'])
         self.assertEqual(self.sender.call_count, 1, 'nothing is owed: the previous release announced it')
 
+    def test_the_previous_release_runs_on_every_state_a_restart_leaves(self):
+        """FAIL CLOSED MEANS ALERT writes new shapes: a restart marker, the unreadable files kept under
+        names nothing reads, status.json replaced (never removed), and the restart's own notice, as
+        an incident's first notice or on its own. The previous release must run on each."""
+        self.health.return_value = 'backup_failed'
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        expected, _ = a.check(self.at)                                    # restart as the incident's first notice
+        self.assertTrue(expected['state_restarted'])
+        checked, shown, _ = self.previous_release_on_a_copy(self.at + timedelta(minutes=1))
+        self.assertEqual((checked['condition'], checked['alert']['outcome']), ('backup_failed', 'provider_accepted'))
+        self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable')
+        self.health.return_value = 'healthy'
+        (self.alerts / 'status.json').write_text('not json')
+        expected, _ = a.check(self.at + timedelta(hours=25))              # restart on its own, while healthy
+        self.assertEqual((expected['condition'], expected['state_restarted']), ('healthy', True))
+        checked, shown, _ = self.previous_release_on_a_copy(self.at + timedelta(hours=25, minutes=1))
+        self.assertEqual((checked['condition'], shown['condition']), ('healthy', 'healthy'))
+        self.old_sender.assert_not_called()
+        self.health.return_value = 'backup_failed'                        # killed after the restart, before any write
+        (self.alerts / 'status.json').write_text('not json')
+        with patch.object(a, 'write_state', side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=50))
+        self.assertEqual(json.loads((self.alerts / 'status.json').read_text())['condition'], 'monitoring_stale')
+        checked, shown, _ = self.previous_release_on_a_copy(self.at + timedelta(hours=50, minutes=1))
+        self.assertEqual(checked['condition'], 'backup_failed', 'status.json went missing inside a restart')
+        self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable')
+
 
 class CrossIncidentSeverityTests(unittest.TestCase):
     """A MORE SEVERE incident opening inside the between-incidents cooldown is not held by it."""
@@ -1419,30 +1485,46 @@ class IncidentLedgerTests(unittest.TestCase):
         self.assertIsNone(self.ledger()['incident'])
         self.assertEqual(self.ledger()['announced_at']['failure'], (self.at + timedelta(hours=1)).isoformat())
 
-    def test_unsafe_or_malformed_ledger_fails_closed_without_email(self):
+    def test_unsafe_or_malformed_ledger_restarts_once_a_day_without_following_or_disclosing_it(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
         path = self.alerts / a.NOTICES_FILE
         preserved = self.root / 'preserved-ledger'
         path.rename(preserved)
         path.symlink_to(preserved)
-        self.assertEqual(a.check(self.at + timedelta(days=2))[0]['condition'], 'monitoring_state_unavailable')
+        original = preserved.read_bytes()
+        result, _ = a.check(self.at + timedelta(days=2))
+        self.assertEqual((result['condition'], result['state_unreadable'], self.sender.call_count),
+                         ('backup_failed', 'ledger_invalid', 2))
+        self.assertEqual(preserved.read_bytes(), original, 'the link is kept, never followed or written through')
+        kept = [item for item in self.alerts.iterdir() if item.is_symlink()]
+        self.assertEqual([os.readlink(item) for item in kept], [str(preserved)])
+        self.assertFalse(path.is_symlink())
         path.unlink()
         a.backup.write_private(path, b'private-clinical-canary')
-        result, _ = a.check(self.at + timedelta(days=2))
-        self.assertEqual(result['condition'], 'monitoring_state_unavailable')
+        result, _ = a.check(self.at + timedelta(days=2, minutes=5))   # inside the day: held, and said so
+        self.assertEqual((result['condition'], result['state_unreadable'], result['state_restarted']),
+                         ('monitoring_state_unavailable', 'ledger_invalid', False))
         self.assertNotIn('canary', json.dumps(result))
-        self.sender.assert_called_once()
+        self.assertEqual(self.sender.call_count, 2)
+        result, _ = a.check(self.at + timedelta(days=3))
+        self.assertEqual((result['condition'], self.sender.call_count), ('backup_failed', 3))
+        self.assertNotIn('canary', ''.join(self.sender.call_args.args[1:]))
 
-    def test_lost_status_with_the_ledger_still_present_refuses(self):
+    def test_lost_status_with_the_ledger_still_present_is_restarted_and_announced(self):
+        """Not the fresh-monitor crash: this ledger keeps no layer, so nothing says what began."""
         self.health.return_value = 'backup_failed'
         a.check(self.at)
         for path in self.alerts.glob('incident-*-*.json'):
             path.unlink()
         (self.alerts / 'status.json').unlink()
         self.assertTrue((self.alerts / a.NOTICES_FILE).exists())
-        self.assertEqual(a.check(self.at + timedelta(days=2))[0]['condition'], 'monitoring_state_unavailable')
-        self.sender.assert_called_once()
+        ledger = (self.alerts / a.NOTICES_FILE).read_bytes()
+        result, _ = a.check(self.at + timedelta(days=2))
+        self.assertEqual((result['condition'], result['state_unreadable'], self.sender.call_count),
+                         ('backup_failed', 'state_missing', 2))
+        self.assertEqual([item.read_bytes() for item in self.alerts.glob('monitor-restart-*-incident-notices.json')],
+                         [ledger], 'the ledger is kept for diagnosis')
 
     def test_an_inconsistent_state_is_refused_on_the_way_out_and_nothing_is_written(self):
         self.health.return_value = 'backup_failed'
@@ -1578,9 +1660,10 @@ class IncidentLedgerTests(unittest.TestCase):
         a.check(self.at + timedelta(minutes=10))
         self.sender.assert_called_once()
 
-    def test_a_request_record_for_the_discarded_notice_refuses(self):
+    def test_an_unreadable_request_record_for_the_discarded_notice_restarts_and_never_sends_it(self):
         """The recovery discards a notice only because nothing can have been sent for it. If a request
-        record exists for it anyway, that premise is false: fail closed and send nothing."""
+        record exists for it that cannot be read, that premise cannot be checked: the discarded
+        notice is never sent, and the record restarts, announced (it used to refuse for ever)."""
         self.health.return_value = 'backup_failed'
         a.check(self.at)
         self.health.return_value = 'backup_stale'
@@ -1589,10 +1672,15 @@ class IncidentLedgerTests(unittest.TestCase):
             a.check(self.at + timedelta(hours=2))
         phantom = self.ledger()['incident']['incident_attempt']
         a.backup.write_private(self.alerts / f'incident-{phantom}-pending.json', b'{}')
-        for hours in (3, 30):
-            result, code = a.check(self.at + timedelta(hours=hours))
-            self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
-        self.sender.assert_called_once()
+        result, code = a.check(self.at + timedelta(hours=3))
+        self.assertEqual((code, result['condition'], result['state_unreadable'], self.sender.call_count),
+                         (1, 'backup_stale', 'notice_record_invalid', 2))
+        self.assertIn('MONITOR RESTARTED', self.sender.call_args.args[1])
+        self.assertNotIn(phantom, self.sender.call_args.args[2])
+        self.assertEqual((self.alerts / f'incident-{phantom}-pending.json').read_bytes(), b'{}')
+        self.assertFalse((self.alerts / f'incident-{phantom}-result.json').exists())
+        a.check(self.at + timedelta(hours=4))
+        self.assertEqual(self.sender.call_count, 2)
 
     def test_the_recovered_notice_is_exactly_the_one_status_json_names_even_a_reminder(self):
         """What is recovered is the committed record itself, not a guess at it: a reminder cannot be
@@ -1663,6 +1751,7 @@ class FailClosedMeansAlertTests(unittest.TestCase):
     has restarted its incident record from now; then it continues from a fresh, valid state. A
     possible duplicate is acceptable; permanent silence is not. Mocked transport only."""
     setUp = BackupAlertsTests.setUp
+    write_config = BackupAlertsTests.write_config
     state = IncidentNotificationTests.state
     sent = IncidentNotificationTests.sent
 
@@ -1750,6 +1839,68 @@ class FailClosedMeansAlertTests(unittest.TestCase):
         self.assertEqual((result['condition'], self.sender.call_count), ('backup_failed', 2),
                          'a restart notice announcing a healthy state held a failure')
         self.assertIn('Backup recovery requires attention', self.sent()[-1][0])
+
+    def test_without_a_working_email_configuration_nothing_is_restarted(self):
+        """Nothing can be sent, so nothing about the unreadable state may change: it is kept for the
+        check that can announce the restart."""
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        self.write_config(enabled=False)
+        result, code = a.check(self.at)
+        self.assertEqual((code, result['condition'], result['state_unreadable'], result['state_restarted'],
+                          result['next_state_notice_at']), (1, 'monitoring_state_unavailable', 'state_invalid', False, None))
+        self.assertEqual(sorted(path.name for path in self.alerts.iterdir()), ['monitor.lock', 'status.json'])
+        self.assertEqual((self.alerts / 'status.json').read_bytes(), b'not json')
+        self.sender.assert_not_called()
+        self.write_config()
+        self.assertEqual(a.check(self.at + timedelta(minutes=5))[0]['state_restarted'], True)
+        self.sender.assert_called_once()
+
+    def test_a_restart_counts_toward_the_day_only_once_its_request_began(self):
+        """A restart stopped before its notice's request began sent nothing, so it holds nothing: the
+        next check restarts again and announces it."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        (self.alerts / 'status.json').write_text('not json')
+        with patch.object(a, 'attempt_alert', side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                a.check(self.at + timedelta(hours=1))
+        markers = [path for path in self.alerts.iterdir() if a.RESTART_MARKER.fullmatch(path.name)]
+        self.assertEqual(len(markers), 1)
+        self.assertFalse(a.requested('incident-' + a.RESTART_MARKER.fullmatch(markers[0].name)[1]))
+        result, _ = a.check(self.at + timedelta(hours=1, minutes=5))
+        self.assertEqual((result['state_unreadable'], result['state_restarted'], self.sender.call_count),
+                         ('notice_record_missing', True, 2))
+        self.assertIn('MONITOR RESTARTED', self.sent()[-1][0])
+
+    def test_a_restart_marker_that_cannot_be_read_or_lies_in_the_future_holds_nothing(self):
+        self.health.return_value = 'backup_failed'
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        a.check(self.at + timedelta(days=3))                                   # a clock three days fast
+        self.assertEqual(self.sender.call_count, 1)
+        (self.alerts / 'status.json').write_text('not json')
+        result, _ = a.check(self.at)                                           # corrected
+        self.assertEqual((result['state_restarted'], self.sender.call_count), (True, 2),
+                         'a restart stamped in the future held the next for three days')
+        (self.alerts / 'status.json').write_text('not json')
+        for marker in self.alerts.glob('monitor-restart-*.json'):
+            if a.RESTART_MARKER.fullmatch(marker.name):
+                marker.write_text('private-clinical-canary')
+        result, _ = a.check(self.at + timedelta(minutes=5))
+        self.assertEqual((result['state_restarted'], self.sender.call_count), (True, 3))
+        self.assertNotIn('canary', json.dumps(result) + ''.join(self.sent()[-1]))
+
+    def test_an_uncertain_restart_notice_is_never_followed_or_repeated(self):
+        self.health.return_value = 'backup_failed'
+        a.backup.write_private(self.alerts / 'status.json', b'not json')
+        self.sender.side_effect = RuntimeError('provider-canary')
+        result, code = a.check(self.at)
+        self.assertEqual((code, result['condition'], result['state_restarted']), (1, 'alert_delivery_unconfirmed', True))
+        self.sender.side_effect = None
+        for hours in (1, 25, 49):
+            result, code = a.check(self.at + timedelta(hours=hours))
+            self.assertEqual((code, result['condition']), (1, 'alert_delivery_unconfirmed'))
+            self.assertNotIn('state_unreadable', result)
+        self.sender.assert_called_once()
 
 
 class RecoveryStageTests(unittest.TestCase):
