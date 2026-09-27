@@ -29,9 +29,11 @@ Nothing here is assumed, clicked or accepted on the owner's behalf.
 
 ## 4. Accounts and money (owner)
 
-- AWS Organization with management and production accounts. Monthly budget: **about $197 (lean) to $279
-  (load balancer + Multi-AZ database)**, plus a $15–25 allowance for unverified line items
-  (`production-cost.md`). This is an approval, not a purchase made here.
+- AWS Organization with management, production and backup accounts. Infrastructure budget at verified
+  us-east-1 prices (`production-cost.md`): **$152.08 low / $179.34 expected / $453.40 high per month**, plus
+  about $15–25/month of unverified allowances (WAF, GuardDuty, Config, custom metrics). Capacity assumption
+  (expected): 10 invited doctors, 15 encounters per doctor per working day. Provider usage (model,
+  transcription) is passed through to doctors at 1.5×. This is an approval, not a purchase made here.
 - Stripe live: verified account, restricted live key, webhook endpoint registration, and one bounded live payment
   (≤ $5) to prove crediting.
 - An outside-host heartbeat account (for example Healthchecks.io) and its check URL.
