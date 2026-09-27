@@ -223,10 +223,12 @@ volume, counts only).
    account's S3 bucket with Object Lock; key in the backup account's Secrets Manager plus a sealed
    offline copy. This is the provider-independent logical layer; it is required within 30 days of
    go-live, not at go-live, because AWS Backup already provides a locked, separate-account copy.
-3. The admin console's backup panel (`publish_operations_status`) reads the private B2 status; in
-   production it should publish AWS Backup job results and RDS latest-restorable-time through a
-   read-only role. Until then the panel reads "never published", which the console already shows
-   honestly, and the SNS alarms are the backup signal.
+3. The admin backup panel now has a prepared AWS metadata publisher (`publish_operations_status
+   --profile production`), with exact RDS/EBS and source/copy recovery-point coverage through
+   operator-only read roles. See [implementation and activation inputs](aws-backup-status-20260927.md).
+   It is not installed: the actual account/configuration and read permissions remain to qualify.
+   Capture status never establishes a restore drill or delivered alert; those remain separate
+   evidence. Until a production publisher runs, the panel continues to show "never published".
 
 ## 5. AWS services and HIPAA eligibility
 

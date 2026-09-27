@@ -105,7 +105,7 @@ for key in PROFILE_SHA256 REGION INSTALL_ROOT APP_ROOT STATE_ROOT CONFIGURATION_
   [ -n "${P[$key]:-}" ] || refuse "profile value $key is missing"
 done
 INGRESS_DIRECTORY="${P[CONFIGURATION_ROOT]}/ingress"
-UNITS=(environment doctor admin worker heartbeat)
+UNITS=(environment doctor admin worker heartbeat operations-status)
 
 # --- artifact: verified before anything else happens ---------------------------------------------
 # The profile sha ties the artifact to this script's profile BYTES, not to this script's commit: an
@@ -301,7 +301,8 @@ install -m 0644 "$script_dir/cloudwatch-agent.json" "$config/cloudwatch-agent.js
 
 # --- 8 units and proxy ----------------------------------------------------------------------------
 declare -A unit_hashes=()
-for unit in "${P[UNIT_PREFIX]}"{environment,doctor,admin,worker,heartbeat}.service "${P[UNIT_PREFIX]}heartbeat.timer"; do
+for unit in "${P[UNIT_PREFIX]}"{environment,doctor,admin,worker,heartbeat,operations-status}.service \
+            "${P[UNIT_PREFIX]}"{heartbeat,operations-status}.timer; do
   source_unit="$app/deploy/production/$unit"
   [ -f "$source_unit" ] || refuse "the release lacks $unit"
   [ ! -e "/etc/systemd/system/$unit" ] || refuse "/etc/systemd/system/$unit already exists"

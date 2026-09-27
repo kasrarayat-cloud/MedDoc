@@ -1,0 +1,19 @@
+Creating test database for alias 'default'...
+............../opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-host-readiness/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...........
+----------------------------------------------------------------------
+Ran 25 tests in 14.492s
+
+OK
+Destroying test database for alias 'default'...
+Found 25 test(s).
+System check identified no issues (0 silenced).
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).
+Published backup status: healthy (healthy).
+Published backup status: offsite_stale (failure).

@@ -254,3 +254,13 @@ Every later release is installed the way recovery works: a new instance from the
 the new release artifact, the state volume moved over in a declared maintenance window, forward
 migrations through the wrapper, proofs, target swap. The recovery path is therefore exercised on
 every release instead of only in drills.
+
+
+### Production backup panel preparation (2026-09-27)
+
+The root operator AWS metadata collector, explicit production publisher and disabled service/timer
+are prepared. Use [the configuration, read-role and publication-exclusion steps](aws-backup-status-20260927.md)
+during the authorized target cutover. Validate the real account and exact installed profile first;
+run one publisher and inspect its row before enabling the timer. A capture-current warning still
+requires the independent restore drill and delivered-alert gates. This package provides no actual
+AWS execution, restore or alert-delivery evidence.
