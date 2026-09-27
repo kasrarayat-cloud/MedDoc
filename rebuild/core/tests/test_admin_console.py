@@ -5,11 +5,15 @@ would read as arbitrary assertions otherwise.
 """
 from datetime import timedelta
 from decimal import Decimal
+import io
+import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.template import Context, Template
+from django.template.loader import render_to_string
 from django.template.defaultfilters import floatformat
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -613,6 +617,50 @@ class PublishedOperationsStatus(ConsoleFixture):
             with self.assertRaises(SystemExit):
                 command.Command().handle(dry_run=False, interval_seconds=300)
         self.assertEqual(ServiceHealth.objects.get(key='backup').severity, 'failure')
+
+
+class PublishedOperationsCarryTheirStaleness(SimpleTestCase):
+    """⚠️ R3-2, round 3. The monitor's status() marks a report made while a check was running
+    (`check_running`: it shows the last completed check) and one made from a state it could not read
+    (`state_unreadable`, with the backup condition computed anyway). The publisher's allowlist dropped
+    both, so the console never learned it was looking at a stale or unreadable state. No database:
+    the publisher runs with --dry-run, which writes nothing, and the page is rendered directly."""
+
+    MARKED = {'check_running': True, 'state_unreadable': 'state_invalid', 'backup_condition': 'backup_failed',
+              'backup_severity': 'failure', 'next_state_notice_at': '2026-09-21T12:00:00+00:00',
+              'last_state_notice_condition': 'healthy'}
+
+    def test_the_publisher_carries_the_monitors_own_staleness(self):
+        from core.management.commands import publish_operations_status as command
+        report = {'condition': 'monitoring_state_unavailable', 'severity': 'failure', 'healthy': False,
+                  'action': 'Inspect.', 'clinical_content_included': False, 'local_capture': {'stale': False},
+                  'monitor_age_seconds': 60, **self.MARKED}
+        output = io.StringIO()
+        with patch.object(command, 'collect', return_value=(report, 1)):
+            command.Command(stdout=output).publish(300, dry_run=True)
+        payload = json.loads(output.getvalue())['payload']
+        self.assertEqual({key: payload.get(key) for key in self.MARKED}, self.MARKED,
+                         'the publisher dropped what says the report is stale or unreadable')
+        # The existing keys keep their meaning.
+        self.assertEqual((payload['local_capture'], payload['monitor_age_seconds']), ({'stale': False}, 60))
+
+    def test_the_console_says_when_it_shows_a_stale_or_unreadable_monitor_state(self):
+        def page(payload):
+            row = {'key': 'backup', 'name': 'Backup and recovery', 'published': True, 'severity': 'failure',
+                   'status': 'monitoring_state_unavailable', 'detail': 'Inspect.', 'computed_at': None,
+                   'age_seconds': 30, 'stale': False, 'failed': False, 'payload': payload}
+            with override_settings(STORAGES=ISOLATED['STORAGES']):
+                return render_to_string('admin_services.html', {
+                    'published': [row], 'processing': {}, 'email': {}, 'configuration': {}, 'is_admin_site': True,
+                    'user': SimpleNamespace(email='operator@synthetic.invalid', username='operator')})
+        body = page(self.MARKED)
+        for text in ('A monitor check was running', 'the last completed check',
+                     'could not read its own state', 'state_invalid', 'Backup condition now: backup_failed (failure)',
+                     'Next restart notice no earlier than 2026-09-21T12:00:00+00:00'):
+            self.assertTrue(text in body, f'the page does not say: {text}')
+        quiet = page({'check_running': False})
+        for text in ('A monitor check was running', 'could not read its own state'):
+            self.assertFalse(text in quiet, f'the positive control: an ordinary row says neither ({text})')
 
 
 class SecondRoundFindings(ConsoleFixture):

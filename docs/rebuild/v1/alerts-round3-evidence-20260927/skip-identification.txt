@@ -1,0 +1,8 @@
+test_the_candidate_is_actually_found_in_this_checkout (ops.test_word_multicolumn_scope.DeclaredSourceScope.test_the_candidate_is_actually_found_in_this_checkout)
+THE ANTI-VACUOUS CONTROL. If the comparison below ever skips, this fails instead. ... skipped 'This candidate is merged; its scope is fixed in the merge commit and is not re-judged against a later branch.'
+test_the_declaration_matches_this_candidates_real_change_exactly (ops.test_word_multicolumn_scope.DeclaredSourceScope.test_the_declaration_matches_this_candidates_real_change_exactly) ... skipped 'This candidate is merged; its scope is fixed in the merge commit and is not re-judged against a later branch.'
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.022s
+
+OK (skipped=2)

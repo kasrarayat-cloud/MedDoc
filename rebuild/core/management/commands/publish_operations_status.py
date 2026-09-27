@@ -44,9 +44,17 @@ from ops import activation_exclusion as exclusion
 #: Keys of the aggregator's report that are safe and useful to retain. Anything the aggregator
 #: might add later is dropped rather than published blind: a redaction allowlist only works if
 #: it is an allowlist.
+#:
+#: ⚠️ AND WHAT SAYS THE REPORT IS STALE IS PART OF THE REPORT (R3-2, round 3). `check_running`
+#: marks a report made while a monitor check was running (it shows the last completed check), and
+#: `state_unreadable` one made from a monitor state that could not be read, with the backup
+#: condition computed anyway and when the next restart notice may be sent. Dropping them published
+#: a stale or unreadable state as though it were current. Fixed labels, booleans and timestamps only.
 PAYLOAD_KEYS = ('local_capture', 'offsite', 'external_monitor', 'alert',
                 'offsite_recovery_verified', 'outside_host_failure_detection',
-                'clinical_content_included', 'monitor_age_seconds', 'stale_after_seconds')
+                'clinical_content_included', 'monitor_age_seconds', 'stale_after_seconds',
+                'check_running', 'state_unreadable', 'backup_condition', 'backup_severity',
+                'next_state_notice_at', 'last_state_notice_condition')
 
 
 def collect():

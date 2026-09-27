@@ -14,6 +14,7 @@ import secrets
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from urllib.parse import urlsplit
 
@@ -778,6 +779,44 @@ STATUS_KEYS = ('format', 'last_check_at', 'condition', 'incident_id', 'incident_
 NOTICES_FILE = 'incident-notices.json'
 RECORD_KEYS = tuple(closed_incident())
 
+#: ⚠️ FAIL CLOSED MEANS ALERT, NOT SILENCE: the lead's design rule for this monitor, 2026-09-27.
+#: A state this release cannot validate or recover must never leave the monitor refusing forever
+#: with no email. At most once per RESTART_INTERVAL_SECONDS it sends an operator notice saying it
+#: could not read its own state (one of these labels, never any content), what the backup condition
+#: is now, and that it has restarted its incident record from now; then it continues from a fresh,
+#: valid state. A possible duplicate email is acceptable; permanent silence is not.
+UNREADABLE = ('state_missing',            # status.json is absent while incident records remain
+              'state_invalid',            # status.json is unsafe, unparseable or malformed
+              'ledger_invalid',           # incident-notices.json is unsafe, unparseable or malformed
+              'notice_record_missing',    # a notice the state names has no request record
+              'notice_record_invalid',    # a notice's request record is unsafe or malformed
+              'notice_record_mismatch',   # a request record and the state disagree about a notice
+              'incident_record_invalid')  # the incident record breaks its own invariants
+RESTART_INTERVAL_SECONDS = 24 * 3600
+#: One per restart, reserved before anything is changed. Named so that no release's lost-state
+#: guard (`incident-*`) reads it, and nothing but the once-a-day limit ever does.
+RESTART_MARKER = re.compile(r'monitor-restart-([a-f0-9]{32})\.json')
+
+
+class Unreadable(Exception):
+    """A monitor state this release cannot validate or recover, and which of UNREADABLE it is."""
+
+    def __init__(self, reason):
+        backup.require(reason in UNREADABLE, 'Unknown monitor state failure.')
+        super().__init__(reason)
+        self.reason = reason
+
+
+@contextmanager
+def unreadable(reason):
+    """Any failure inside is this one; a more specific one raised deeper keeps its own label."""
+    try:
+        yield
+    except Unreadable:
+        raise
+    except Exception:
+        raise Unreadable(reason) from None
+
 
 def no_announcements():
     return {level: None for level in SEVERITY_RANK}
@@ -866,7 +905,9 @@ def read_notices():
     validate_layer(value)
     committed = value['committed']
     if committed is not None:
-        backup.require(type(committed) is dict and set(committed) == {'status', 'incident', 'announced_at'},
+        # Only a notice keeps what it superseded, and a notice names its incident and itself.
+        backup.require(type(committed) is dict and set(committed) == {'status', 'incident', 'announced_at'}
+                       and value['incident'] is not None and value['incident']['incident_attempt'] is not None,
                        'Invalid incident notices.')
         validate_status(committed['status'])
         validate_layer(committed)
@@ -880,25 +921,70 @@ def requested(prefix):
                for suffix in ('-pending.json', '-result.json'))
 
 
-def uncommitted(notices, status):
-    """⚠️ THE LEDGER RAN AHEAD OF status.json: a notice's first write landed and its second did not.
+def notice_time(notices):
+    """When the ledger's newest notice was made: a notice stamps its own severity with the very
+    instant status.json records as its last_attempt_at, and nothing later rewrites the layer that
+    still keeps what it superseded."""
+    record = notices['incident']
+    return notices['announced_at'][severity(record['incident_attempt_condition'])]
 
-    status.json is still EXACTLY the one the check began from, which the ledger kept as it wrote the
-    notice. status.json is the commit point, and a request only ever begins after both writes, so
-    the notice the ledger names never began: its layer is discarded and the one it superseded is
-    read. The next check then plans whatever is owed, as though the crashed check never ran.
+
+def committed_by(notices, status):
+    """Whether status.json records the ledger's newest notice: its incident, itself, and its time."""
+    record = notices['incident']
+    return ((status['incident_id'], status['incident_attempt'], status['last_attempt_at'])
+            == (record['incident_id'], record['incident_attempt'], notice_time(notices)))
+
+
+def layer_in_force(notices, status):
+    """⚠️ WHICH LEDGER LAYER DESCRIBES status.json. The ledger may have run ahead of it.
+
+    A notice's first write lands the ledger with the layer it supersedes kept beside it, and only
+    then is status.json (the commit point) written. A request only ever begins after both. So the
+    newer layer is read only if status.json records THAT notice (its incident, its own identity and
+    its time), or its own request record shows it began and status.json has been rewritten since by
+    a release that keeps no ledger. Otherwise the notice never began, and the kept layer is read.
+
+    ⚠️ status.json IS NOT REQUIRED TO BE BYTE-FOR-BYTE WHAT THE CRASHED CHECK BEGAN FROM (F1, round
+    2). The previous release, run after a rollback, rewrites status.json without opening the ledger:
+    its check time and condition on every check, and a first notice or a close of its own. Requiring
+    equality dropped the kept layer the moment that happened, and the monitor refused forever.
+
+    ⚠️ AND A REQUEST RECORD UNDER THE SAME NAME IS NOT PROOF THAT THIS NOTICE BEGAN. A first notice
+    is named by its incident, and the previous release names its own first notice for the same
+    incident the same way; that record announces its own condition at its own time. Only a record
+    of this notice (its condition, at its time) says it began.
     """
     committed = notices['committed']
-    if committed is None or committed['status'] != status:
-        return None
-    discarded = notices['incident'] and notices['incident']['incident_attempt']
-    backup.require(discarded and discarded != status['incident_attempt']
-                   and not requested('incident-' + discarded),
-                   'Incident notice already requested.')
+    if committed is None or committed_by(notices, status):
+        return notices
+    record, when = notices['incident'], notice_time(notices)
+    prefix = 'incident-' + record['incident_attempt']
+    if requested(prefix):
+        with unreadable('notice_record_invalid'):
+            began = attempt_record(prefix)
+        if (began['condition'], began['attempted_at']) == (record['incident_attempt_condition'], when):
+            return notices
     return committed
 
 
-def read_state():
+def read_state(*, last_completed=False):
+    """The merged state: status.json, the ledger layer in force, and what a first notice the previous
+    release made announced. ⚠️ Raises Unreadable, with its label, for ANY state this release cannot
+    validate or recover: check() then restarts the record and says so (FAIL CLOSED MEANS ALERT).
+
+    `last_completed` is for a reader that could not wait out a running check (see settled()): a
+    notice that check is making right now (and only that check: mark_in_flight) is not yet part of
+    any completed state, so the state that check began from, which its ledger keeps, is read instead."""
+    try:
+        return merged_state(last_completed)
+    except Unreadable:
+        raise
+    except Exception:
+        raise Unreadable('incident_record_invalid') from None
+
+
+def merged_state(last_completed):
     path = DIRECTORY / 'status.json'
     if not path.exists() and not path.is_symlink():
         # Partial recovery may lose mutable state while retaining a durable
@@ -908,25 +994,37 @@ def read_state():
         if evidence == [DIRECTORY / NOTICES_FILE]:
             # ...with one exception that is provably no loss: a fresh monitor's very first notice
             # whose ledger landed and whose status.json never did. The ledger kept the pristine
-            # state that check began from, and no request record exists (uncommitted() checks).
-            backup.require(uncommitted(read_notices(), {key: pristine[key] for key in STATUS_KEYS}),
-                           'Incident state is missing.')
-        else:
-            backup.require(not evidence, 'Incident state is missing.')
+            # state that check began from, and no request record exists (the only file is the ledger).
+            with unreadable('ledger_invalid'):
+                notices = read_notices()
+            if (notices['committed'] is None
+                    or notices['committed']['status'] != {key: pristine[key] for key in STATUS_KEYS}):
+                raise Unreadable('state_missing')
+        elif evidence:
+            raise Unreadable('state_missing')
         return pristine
-    value = json.loads(backup.read_private(path, 65536))
-    validate_status(value)
-    notices = read_notices() or {'incident': None, 'announced_at': no_announcements(), 'committed': None}
-    notices = uncommitted(notices, value) or notices
-    # ⚠️ A STAMP COUNTS ONLY IF status.json RECORDS A REQUEST NO EARLIER THAN IT. Every notice
-    # stamps its severity with the very instant status.json then records as last_attempt_at. A
-    # stamp later than that (or any stamp before status.json records a request at all) was written
-    # by a check that died between the ledger and status.json: no request ever began for it, and a
-    # notice nobody received must never hold the one that is owed. It is read as not sent.
-    backed = timestamp(value['last_attempt_at']) if value['last_attempt_at'] else None
-    announced_at = {level: when if when is not None and backed is not None and timestamp(when) <= backed
-                    else None for level, when in notices['announced_at'].items()}
-    state = dict(value, **closed_incident(), announced_at=announced_at)
+    with unreadable('state_invalid'):
+        value = json.loads(backup.read_private(path, 65536))
+        validate_status(value)
+    with unreadable('ledger_invalid'):
+        notices = read_notices() or {'incident': None, 'announced_at': no_announcements(), 'committed': None}
+    kept = notices['committed']
+    if (last_completed and kept is not None and (value == kept['status'] or committed_by(notices, value))
+            and in_flight(DIRECTORY / NOTICES_FILE)):
+        # A notice in flight IN THE CHECK RUNNING NOW, which holds its ledger (mark_in_flight): its
+        # ledger (and perhaps status.json) landed, and that check has not finished. A ledger no running
+        # check holds was left by a check that died, and reads exactly as it would with the lock free
+        # (R3-2, round 3): a pending notice it left is unconfirmed, never hidden behind the state before.
+        value, notices = kept['status'], kept
+    else:
+        notices = layer_in_force(notices, value)
+    # ⚠️ EVERY STAMP IN THE LAYER IN FORCE IS A NOTICE THAT WAS MADE. A stamp for a notice that never
+    # began can only come from a notice write whose status.json never landed, and layer_in_force has
+    # already discarded that layer. A stamp LATER than status.json's last_attempt_at is therefore not
+    # evidence of an unsent notice (F2, round 2): a close writes status.json first with its times read
+    # as now after a fast clock, and one stopped before the ledger leaves the ledger's stamps unread-
+    # as-now. Dropping them turned a real warning into an unknown notice that held a failure a day.
+    state = dict(value, **closed_incident(), announced_at=dict(notices['announced_at']))
     record = notices['incident']
     if value['incident_id'] is None:
         pass    # A closed incident: any older record describes an incident that is over.
@@ -934,16 +1032,17 @@ def read_state():
                                                                             value['incident_attempt']):
         state.update(record)
     else:
-        # status.json names an incident the ledger does not describe: the previous release opened
-        # it or made its first notice, or a crash fell between the two writes of one check. Either
-        # way it can only be that shape: at most a first notice, named by the incident itself
-        # (anything else fails the invariants below). What that notice announced is read from its
-        # own durable record rather than assumed.
+        # status.json names an incident the ledger (the layer in force) does not describe: the
+        # previous release opened it or made its first notice. It can only be that shape: at most
+        # a first notice, named by the incident itself (anything else fails the invariants below).
+        # What that notice announced is read from its own durable record rather than assumed.
         same = record is not None and record['incident_id'] == value['incident_id']
         state.update(incident_id=value['incident_id'],
                      incident_opened_at=record['incident_opened_at'] if same else value['last_check_at'])
         if value['incident_attempt']:
-            first = attempt_record('incident-' + value['incident_attempt'])
+            prefix = 'incident-' + value['incident_attempt']
+            with unreadable('notice_record_invalid' if requested(prefix) else 'notice_record_missing'):
+                first = attempt_record(prefix)
             state.update(incident_attempt=value['incident_attempt'], incident_attempt_notice='initial',
                          incident_attempt_condition=first['condition'], incident_attempt_count=1,
                          incident_conditions_announced=[first['condition']])
@@ -953,24 +1052,152 @@ def read_state():
             known = state['announced_at'].get(level)
             if level in SEVERITY_RANK and (known is None or timestamp(known) < timestamp(first['attempted_at'])):
                 state['announced_at'][level] = first['attempted_at']
-    validate_incident(state)
-    backup.require(state['incident_attempt'] is None or state['last_attempt_at'] is not None,
-                   'Invalid incident record.')
+    with unreadable('incident_record_invalid'):
+        validate_incident(state)
+        backup.require(state['incident_attempt'] is None or state['last_attempt_at'] is not None,
+                       'Invalid incident record.')
     return state
 
 
-def write_state(state, supersedes=None):
+def named_notice(state):
+    """The durable request record of the notice the state names (None if it names none), held to
+    what the state says it announced."""
+    if not state['incident_attempt']:
+        return None
+    prefix = 'incident-' + state['incident_attempt']
+    with unreadable('notice_record_invalid'):
+        exists = requested(prefix)
+    with unreadable('notice_record_invalid' if exists else 'notice_record_missing'):
+        record = attempt_record(prefix)
+    if record['condition'] != state['incident_attempt_condition']:
+        raise Unreadable('notice_record_mismatch')
+    return record
+
+
+def restart_marker(path):
+    """A restart marker's (reason, reserved_at), or None for anything that is not one: nothing read
+    from it but a fixed label and a time ever leaves this function."""
+    try:
+        marker = json.loads(backup.read_private(path, 4096))
+        backup.require(type(marker) is dict and set(marker) == {'format', 'reason', 'reserved_at'}
+                       and type(marker['format']) is int and marker['format'] == 1
+                       and marker['reason'] in UNREADABLE, 'Invalid restart marker.')
+        return marker['reason'], timestamp(marker['reserved_at'])
+    except Exception:
+        return None
+
+
+def restart_hold(at):
+    """The restart notice that holds the next one: the LAST sent in the RESTART_INTERVAL before `at`,
+    as {'until': when the next may be sent, 'condition': what it announced}; None if none holds.
+
+    A restart counts once a request record for its notice exists: a restart that stopped before its
+    request began sent nothing and holds nothing. A marker or request record that cannot be read
+    holds nothing either, and a time later than now (a clock that ran fast) is not within the
+    interval: each can cost a duplicate at most, never a day of silence more.
+
+    ⚠️ AND IT HOLDS ONLY WHAT IT ANNOUNCED (R3-1, round 3). What that notice announced is read from
+    its own request record, and restart_held() never holds a condition more severe than that. The
+    limit used to hold everything: a restart notice that announced a healthy backup held a failure
+    that followed two hours later for the rest of the day, with no email and no report of it.
+    """
+    latest = None
+    for path in DIRECTORY.glob('monitor-restart-*.json'):
+        match = RESTART_MARKER.fullmatch(path.name)
+        if not match or not requested('incident-' + match[1]):
+            continue
+        marker = restart_marker(path)
+        if marker is None:
+            continue
+        when = marker[1]
+        if not 0 <= (at - when).total_seconds() < RESTART_INTERVAL_SECONDS or latest and when <= latest[0]:
+            continue
+        try:
+            announced = attempt_record('incident-' + match[1])['condition']
+        except Exception:
+            continue
+        latest = (when, announced)
+    if latest is None:
+        return None
+    return {'until': latest[0] + timedelta(seconds=RESTART_INTERVAL_SECONDS), 'condition': latest[1]}
+
+
+def rank(condition):
+    return SEVERITY_RANK.get(severity(condition), 0)
+
+
+def restart_held(hold, condition):
+    """Whether `hold` holds a restart notice for `condition`: the incident rule (plan_notice, 1),
+    applied to restarts. It is measured against the LAST restart notice, so the same or a lower
+    severity is held for the day and only a strict rise is announced; a rise needs a lower notice
+    first, so at most one restart notice per severity is sent inside a day."""
+    return hold is not None and rank(condition) <= rank(hold['condition'])
+
+
+def replace_status(value):
+    """status.json replaced atomically WITHOUT reading what it replaces, which may be unreadable."""
+    fd, temporary = tempfile.mkstemp(prefix='.status-', dir=DIRECTORY)
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump(value, stream, sort_keys=True)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, DIRECTORY / 'status.json')
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+def restart_record(identity, reason, at, marks=None):
+    """⚠️ RESTART THE INCIDENT RECORD FROM NOW, KEEPING EVERYTHING THAT COULD NOT BE READ.
+
+    1. Reserve the restart under its notice's identity (its marker counts once a request exists).
+    2. Keep status.json and the ledger for diagnosis under names nothing reads. Hard links, so
+       status.json is never missing: the previous release refuses a directory without one.
+    3. Replace status.json with the pristine state and drop the ledger's name. Request records are
+       immutable evidence and are never touched; nothing names the unreadable ones any more.
+
+    The check holds the marker (mark_in_flight) from before status.json is replaced until its state
+    is final, so a reader that cannot wait reports the unreadable state being replaced, never the
+    fresh record as though a check had completed on it.
+    """
+    marker = DIRECTORY / f'monitor-restart-{identity}.json'
+    backup.write_private(marker, json.dumps({'format': 1, 'reason': reason, 'reserved_at': at.isoformat()},
+                                            sort_keys=True).encode() + b'\n')
+    if marks is not None:
+        mark_in_flight(marker, marks)
+    status, ledger = DIRECTORY / 'status.json', DIRECTORY / NOTICES_FILE
+    for path in (status, ledger):
+        if path.exists() or path.is_symlink():
+            kept = DIRECTORY / f'monitor-restart-{identity}-{path.name}'
+            try:
+                os.link(path, kept, follow_symlinks=False)
+            except OSError:
+                os.rename(path, kept)             # not linkable (a directory, say): moved instead
+    pristine = initial_state()
+    replace_status({key: pristine[key] for key in STATUS_KEYS})
+    if ledger.exists() or ledger.is_symlink():
+        os.unlink(ledger)
+
+
+def write_state(state, supersedes=None, marks=None):
     """Two files and one rule: status.json is the commit point, and the ledger describes it.
 
     While an incident is open the ledger is written FIRST. A write that makes a NOTICE passes what
     it supersedes (the exact status.json the check began from and the ledger layer describing it),
     and the ledger keeps that until the check's next write. So a crash between the two files leaves
-    status.json byte-for-byte what the ledger kept, and read_state reads the kept layer: the notice
-    status.json never named is discarded, provably unsent, because a request only begins after both
-    writes. Any other write in an open incident changes nothing status.json names, so the ledger's
+    a status.json that does not record the notice (as the check found it, or as a release without
+    the ledger has rewritten it since), and read_state reads the kept layer (layer_in_force): the
+    notice is discarded, provably unsent, because a request only begins after both writes. Any
+    other write in an open incident changes nothing status.json names, so the ledger's
     record still matches it. When the incident is closed status.json goes first, so the ledger's
     older record is inert from the moment it lands. The ledger is created on first need: a monitor
     that has never announced anything has no ledger.
+
+    A notice's write passes the check's `marks`: the check then holds the ledger it just wrote until
+    its state is final, which is what tells a reader the notice is in flight in the check running
+    now rather than left by a check that died (mark_in_flight).
 
     The state is held to the same invariants on the way OUT as on the way in: an inconsistent
     incident is refused here (and the check fails closed) rather than persisted for the next
@@ -984,6 +1211,9 @@ def write_state(state, supersedes=None):
     notices = {'format': 1, **layer(state), 'committed': supersedes}
     if state['incident_id']:
         scheduled.atomic_status(ledger, notices)
+        if supersedes is not None and marks is not None:
+            # Held until the check's state is final: its notice is in flight (settled()).
+            mark_in_flight(ledger, marks)
         scheduled.atomic_status(DIRECTORY / 'status.json', status)
     else:
         scheduled.atomic_status(DIRECTORY / 'status.json', status)
@@ -1022,37 +1252,165 @@ def lock_file(fd):
 
 @contextmanager
 def locked():
+    """The monitor lock, held EXCLUSIVE for a whole check. Yields the check's in-flight marks
+    (mark_in_flight), all released by the time the lock is."""
     backup.private_dir(DIRECTORY)
     fd = os.open(DIRECTORY / 'monitor.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    marks = []
     try:
         lock_file(fd)
         hold(fd, fcntl.LOCK_EX, LOCK_WAIT_SECONDS)
-        yield
+        yield marks
+    finally:
+        release(marks)
+        os.close(fd)
+
+
+def mark_in_flight(path, marks):
+    """⚠️ WHAT THE RUNNING CHECK IS DOING NOW, PROVABLY (R3-2, round 3).
+
+    A reader that cannot wait out a check (settled()) must not show a notice or a restart that check
+    is making as though it were complete. But the files alone cannot say WHICH check made them: a
+    check killed mid-request leaves exactly the files a live one has, and the reader then hid the
+    dead check's unconfirmed notice behind the state before it. So the check holds the file that
+    describes what it has in flight (the ledger layer a notice keeps, a restart's marker) EXCLUSIVE
+    until its state is final, and a reader probes it (in_flight). A lock dies with its process: only
+    the check running now can hold one, and nothing a dead check left is ever read as in flight.
+
+    Opened read-only and non-blocking, never followed. A mark that cannot be taken within the lock
+    wait (a reader's probe, which lasts microseconds, cannot outlast it) is simply not taken: the
+    reader then reads the notice as a dead check's, unconfirmed, which is never silence.
+    """
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        hold(fd, fcntl.LOCK_EX, LOCK_WAIT_SECONDS)
+    except BlockingIOError:
+        os.close(fd)
+        return
+    marks.append(fd)
+
+
+def release(marks):
+    while marks:
+        os.close(marks.pop())
+
+
+def in_flight(path):
+    """Whether the check running now holds `path` as the mark of what it has in flight."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
     finally:
         os.close(fd)
+    return False
+
+
+def restart_in_flight():
+    """The label of the restart the check running now is making, or None."""
+    for path in DIRECTORY.glob('monitor-restart-*.json'):
+        if RESTART_MARKER.fullmatch(path.name) and in_flight(path):
+            marker = restart_marker(path)
+            if marker:
+                return marker[0]
+    return None
 
 
 @contextmanager
 def reading():
-    """A consistent read of what check() writes: the same lock, held SHARED.
+    """A consistent read of what check() writes: the same lock, held SHARED. Yields whether it is
+    held: False when a check still holds it after READ_WAIT_SECONDS, for the caller to read the last
+    completed state instead (settled()), never to report the monitor broken.
 
     ⚠️ OPENED READ-ONLY AND NEVER CREATED. The publisher calls status() from a unit whose
     ProtectSystem=strict sandbox grants no write to this directory, so an O_CREAT or O_RDWR open
     here would fail there on every tick. flock needs no write access. With no lock file no check
     has ever run in this directory, so there is no writer to be consistent with.
+
+    ⚠️ AND NON-BLOCKING, THEN REFUSED UNLESS A PRIVATE REGULAR FILE (R3-5, round 3). Opening a FIFO
+    for reading blocks until a writer appears: a FIFO in the lock's place hung status(), and every
+    publisher tick with it. lock_file() refuses it, exactly as check() refuses it.
     """
     try:
-        fd = os.open(DIRECTORY / 'monitor.lock', os.O_RDONLY | os.O_NOFOLLOW)
+        fd = os.open(DIRECTORY / 'monitor.lock', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
         fd = None
     try:
+        held = True
         if fd is not None:
             lock_file(fd)
-            hold(fd, fcntl.LOCK_SH, READ_WAIT_SECONDS)
-        yield
+            try:
+                hold(fd, fcntl.LOCK_SH, READ_WAIT_SECONDS)
+            except BlockingIOError:
+                held = False
+        yield held
     finally:
         if fd is not None:
             os.close(fd)
+
+
+#: A read made while a check holds the lock is repeated until status.json is the same before and
+#: after it, this many times at most, this far apart: a check writes it at most three times.
+SETTLE_ATTEMPTS = 20
+SETTLE_PAUSE_SECONDS = 0.05
+
+
+def fingerprint(path):
+    """Enough of a file to tell whether it was replaced, without following or trusting it."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    except OSError as failure:
+        return ('unopenable', failure.errno)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > 65536:
+            return ('other', info.st_ino, info.st_mode, info.st_size)
+        chunks = []
+        while chunk := os.read(fd, 65537):
+            chunks.append(chunk)
+        return b''.join(chunks)
+    finally:
+        os.close(fd)
+
+
+def settled():
+    """⚠️ THE LAST COMPLETED STATE, READ WITHOUT THE LOCK A RUNNING CHECK HOLDS (F4, round 2).
+
+    The check unit may run for 60 s, longer than a reader can wait. Every file a check writes is
+    replaced atomically, and status.json is written by every write, so a read during which
+    status.json did not change sees what a crash at that instant would leave: a state read_state
+    recovers exactly as the next check would. The one thing no crash leaves is what the running
+    check has in flight, and only what that check holds (mark_in_flight) is read so: a notice as the
+    state its check began from, a restart as the unreadable state it replaces. Request records are
+    immutable once written.
+    """
+    path = DIRECTORY / 'status.json'
+    for _ in range(SETTLE_ATTEMPTS):
+        before = fingerprint(path)
+        try:
+            restarting = restart_in_flight()
+            if restarting:
+                # ⚠️ A RESTART IN FLIGHT (R3-2, round 3): the fresh record it has just written is not a
+                # completed state. The last completed state is the unreadable one it replaces.
+                raise Unreadable(restarting)
+            state = read_state(last_completed=True)
+            outcome = (state, named_notice(state))
+        except Unreadable as failure:
+            outcome = failure
+        if fingerprint(path) == before:
+            if isinstance(outcome, Unreadable):
+                raise outcome
+            return outcome
+        time.sleep(SETTLE_PAUSE_SECONDS)
+    raise Unreadable('state_invalid')
 
 
 @contextmanager
@@ -1096,6 +1454,15 @@ def notice_message(condition, at, prefix, *, test=False, notice='initial', incid
               'This message confirms neither offsite recovery nor outside-host monitoring.\n')
     lines = f'UTC check: {at.isoformat()}\nReference: {prefix}\n' + ERRORS[condition] + footer
     header = 'QuillMD private synthetic environment: operational backup notification.\n'
+    if not test and incident and incident.get('restart'):
+        # FAIL CLOSED MEANS ALERT. The reason is a fixed label: nothing read from the state reaches here.
+        backup.require(incident['restart'] in UNREADABLE and notice == 'initial', 'Unknown restart notice.')
+        return ('[QuillMD operations] MONITOR RESTARTED: the backup monitor could not read its own state',
+                header + 'MONITOR RESTARTED: the backup monitor could not read its own incident state '
+                + f'(reason: {incident["restart"]}), so it has restarted its incident record from this check. '
+                + 'Notices sent before this one are not carried forward, so this may repeat one you already '
+                + 'hold. The unreadable files are kept beside the new record for diagnosis.\n'
+                + f'Condition: {condition}\nSeverity: {severity(condition)}\n' + lines)
     if test or notice == 'initial':
         subject = ('[QuillMD operations] ESCALATION: a more severe backup incident opened'
                    if incident and incident.get('lifted_over') else
@@ -1226,15 +1593,19 @@ def incident_summary(state, at, *, latest_confirmed, deferred_until=None):
 def recent_severity_rank(state, at):
     """The highest severity announced in the COOLDOWN_SECONDS before `at`, across incidents.
 
-    ⚠️ A notice status.json records that the ledger does not (the previous release made it, or the
+    ⚠️ A notice status.json records that no stamp reaches (the previous release made it, or the
     ledger was new) counts as a FAILURE: an unknown notice can hold the cooldown, never lift it.
-    The converse never reaches here: a stamp the ledger holds that status.json records no request
-    for was dropped by read_state, because a notice nobody received must hold nothing.
+    A stamp reaches it when it is no earlier than it: every notice stamps its severity with its own
+    time, and a close stopped between its writes can leave that stamp later than status.json's time
+    for it (read as now after a fast clock), never earlier. The converse never reaches here: a
+    notice that never began was discarded with its layer by read_state, so it holds nothing.
     """
     def recent(when):
         return when is not None and (at - timestamp(when)).total_seconds() < COOLDOWN_SECONDS
     rank = max([SEVERITY_RANK[level] for level, when in state['announced_at'].items() if recent(when)], default=0)
-    if recent(state['last_attempt_at']) and state['last_attempt_at'] not in state['announced_at'].values():
+    last = state['last_attempt_at']
+    if recent(last) and not any(when is not None and timestamp(when) >= timestamp(last)
+                                for when in state['announced_at'].values()):
         rank = SEVERITY_RANK['failure']
     return rank
 
@@ -1352,24 +1723,46 @@ def check(at=None):
         # `ReadWritePaths` grant and is therefore writable exactly when recovery is not.
         _record_recovery_failure(error)
     try:
-        with locked():
-            state = read_state()
+        with locked() as marks:
+            # ⚠️ FAIL CLOSED MEANS ALERT. A state this release cannot validate or recover is not a
+            # reason to refuse for ever: it is restarted, and the restart is announced (at most once
+            # a day). Until the notice is actually sent, nothing about the unreadable state changes.
+            try:
+                state = read_state()
+                latest = named_notice(state)
+                unreadable_state = None
+            except Unreadable as failure:
+                state, latest, unreadable_state = initial_state(), None, failure.reason
             began = superseded(state)
             not_after(state, at)
             try:
                 values = read_configuration()
             except Exception:
+                if unreadable_state:
+                    # Nothing can be sent, so nothing is restarted: the state stays exactly as found.
+                    # The backup condition is still computed and reported (R3-1).
+                    return state_unavailable(unreadable_state, at, observed(at)), 1
                 state.update(last_check_at=at.isoformat(), condition='alert_configuration_unavailable')
                 write_state(state)
                 return report(state['condition'], checked_at=state['last_check_at']), 1
-            condition = backup_condition(at)
-            recovery = recovery_status(at)
-            local_capture = local_capture_status(at)
-            if condition == 'healthy':
-                condition = recovery['condition']
-            external = external_heartbeat(at, healthy=condition == 'healthy' or condition in WARNINGS, execute=True)
-            if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
-                condition = 'external_monitor_unconfirmed'
+            # ⚠️ THE BACKUP CONDITION IS COMPUTED WHATEVER THE MONITOR'S OWN STATE (R3-1, round 3): the
+            # once-a-day restart limit is decided by it, and a held restart still reports it.
+            condition, recovery, local_capture = current_condition(at)
+            hold = restart_hold(at) if unreadable_state else None
+            # A held restart sends nothing, so it pings nothing either: an outside heartbeat that
+            # stops while the monitor cannot read its state is itself an alert.
+            held = restart_held(hold, condition)
+            external = external_heartbeat(at, healthy=condition == 'healthy' or condition in WARNINGS,
+                                          execute=not held)
+            condition = heartbeat_condition(condition, external)
+            if held and restart_held(hold, condition):
+                # Inside the day, no more severe than the last restart notice: refuse without a change,
+                # and say what is held, what the backup is now and when the next may be sent.
+                return state_unavailable(unreadable_state, at, (condition, recovery, local_capture, external),
+                                         hold=hold), 1
+            restart = secrets.token_hex(16) if unreadable_state else None
+            if restart:
+                restart_record(restart, unreadable_state, at, marks)
             state.update(last_check_at=at.isoformat(), condition=condition)
             alert = deferred_until = None
             lifted = False
@@ -1377,12 +1770,10 @@ def check(at=None):
                 state.update(closed_incident())
             elif condition not in UNANNOUNCED:
                 if not state['incident_id']:
-                    state.update(incident_id=secrets.token_hex(16), incident_opened_at=at.isoformat())
+                    # A restart's incident is named by the restart, so its notice is the incident's first.
+                    state.update(incident_id=restart or secrets.token_hex(16), incident_opened_at=at.isoformat())
                 notice = None
                 if state['incident_attempt']:
-                    latest = attempt_record('incident-' + state['incident_attempt'])
-                    backup.require(latest['condition'] == state['incident_attempt_condition'],
-                                   'Alert receipt and monitor state disagree.')
                     alert = public_receipt(latest)
                     # ⚠️ NEVER FOLLOW AN UNCONFIRMED NOTICE. A pending or uncertain request keeps
                     # the incident at alert_delivery_unconfirmed for operator review; a later
@@ -1403,7 +1794,8 @@ def check(at=None):
                     announced = state['incident_conditions_announced']
                     context = {'opened_at': state['incident_opened_at'], 'previous': state['incident_attempt_condition'],
                                'count': state['incident_attempt_count'] + 1,
-                               'lifted_over': recent_severity_rank(state, at) if lifted else None}
+                               'lifted_over': recent_severity_rank(state, at) if lifted else None,
+                               'restart': unreadable_state if restart else None}
                     # The first notice keeps the incident's identity (the receipt name every release uses);
                     # every later notice is a new request with its own identity and receipt.
                     identity = state['incident_id'] if notice == 'initial' else secrets.token_hex(16)
@@ -1413,24 +1805,76 @@ def check(at=None):
                                  incident_conditions_announced=(announced if condition in announced
                                                                 else announced + [condition]))
                     state['announced_at'][severity(condition)] = at.isoformat()
-                    # Persist the identity before sending: a crash between state
-                    # and pending receipt fails closed, requiring operator review. A crash
-                    # between the ledger and status.json leaves `began` to be read instead.
-                    write_state(state, supersedes=began)
+                    # Persist the identity before sending: a crash between state and pending receipt
+                    # leaves a notice with no request record, which the next check restarts from and
+                    # announces. A crash between the ledger and status.json leaves `began` to be read.
+                    write_state(state, supersedes=began, marks=marks)
                     alert = attempt_alert(values, condition, identity, at, notice=notice, incident=context)
+            if restart and state['incident_attempt'] != restart:
+                # Nothing to announce as an incident (healthy, or in progress): the restart is still
+                # announced, on its own. Sent before the record is written, which already reads fresh.
+                alert = attempt_alert(values, condition, restart, at, incident={'restart': unreadable_state})
             write_state(state)
+            release(marks)                       # final: nothing is in flight any more
             incident = incident_summary(state, at, deferred_until=deferred_until,
                                         latest_confirmed=bool(alert and alert['outcome'] == 'provider_accepted'))
             if alert and alert['outcome'] in {'pending', 'uncertain_no_retry'}:
-                return report('alert_delivery_unconfirmed', checked_at=state['last_check_at'], alert=alert,
-                              recovery=recovery, local_capture=local_capture, external=external,
-                              incident=incident), 1
-            result = report(condition, checked_at=state['last_check_at'], alert=alert,
-                            recovery=recovery, local_capture=local_capture, external=external,
-                            incident=incident)
+                result = report('alert_delivery_unconfirmed', checked_at=state['last_check_at'], alert=alert,
+                                recovery=recovery, local_capture=local_capture, external=external,
+                                incident=incident)
+            else:
+                result = report(condition, checked_at=state['last_check_at'], alert=alert,
+                                recovery=recovery, local_capture=local_capture, external=external,
+                                incident=incident)
+            if restart:
+                result.update(state_unreadable=unreadable_state, state_restarted=True)
+                return result, 1
+            if result['condition'] == 'alert_delivery_unconfirmed':
+                return result, 1
             return result, 0 if result['healthy'] or condition in WARNINGS | {'offsite_renewal_in_progress'} else 1
     except Exception:
         return report('monitoring_state_unavailable'), 1
+
+
+def current_condition(at):
+    """The backup condition now, before the outside heartbeat: (condition, recovery, local_capture)."""
+    condition = backup_condition(at)
+    recovery = recovery_status(at)
+    local_capture = local_capture_status(at)
+    if condition == 'healthy':
+        condition = recovery['condition']
+    return condition, recovery, local_capture
+
+
+def heartbeat_condition(condition, external):
+    if (condition == 'healthy' or condition in WARNINGS) and external['outcome'] in {
+            'configuration_or_state_invalid', 'pending', 'uncertain_no_retry'}:
+        return 'external_monitor_unconfirmed'
+    return condition
+
+
+def observed(at):
+    """The backup condition and its evidence, read-only (the heartbeat is never sent from here):
+    (condition, recovery, local_capture, external)."""
+    condition, recovery, local_capture = current_condition(at)
+    external = external_heartbeat(at)
+    return heartbeat_condition(condition, external), recovery, local_capture, external
+
+
+def state_unavailable(reason, at, observation, *, hold=None, checked=True):
+    """The report of a monitor that could not read its own state and did not restart it: why (a
+    label), what the backup condition is now (R3-1: always computed, never held back), when the next
+    restart notice may be sent (None where nothing holds it, or nothing can be sent at all) and what
+    the last restart notice announced."""
+    condition, recovery, local_capture, external = observation
+    result = report('monitoring_state_unavailable', checked_at=at.isoformat() if checked else None,
+                    recovery=recovery, local_capture=local_capture, external=external)
+    result.update(state_unreadable=reason, backup_condition=condition, backup_severity=severity(condition),
+                  next_state_notice_at=hold['until'].isoformat() if restart_held(hold, condition) else None,
+                  last_state_notice_condition=hold['condition'] if hold else None)
+    if checked:
+        result['state_restarted'] = False
+    return result
 
 
 def test_alert(at=None):
@@ -1450,11 +1894,19 @@ def test_alert(at=None):
 
 def status(at=None):
     at = at or now()
+    running = False
     try:
         backup.private_dir(DIRECTORY)
-        with reading():
-            state = read_state()
-            alert = receipt('incident-' + state['incident_attempt']) if state['incident_attempt'] else None
+        with reading() as held:
+            running = not held
+            if held:
+                state = read_state()
+                latest = named_notice(state)
+            else:
+                # A check is running and has held the lock past READ_WAIT_SECONDS: report the last
+                # completed state and say so, never the monitor broken merely because it is running.
+                state, latest = settled()
+        alert = public_receipt(latest) if latest else None
         try:
             read_configuration()
         except Exception:
@@ -1487,8 +1939,19 @@ def status(at=None):
                         recovery=recovery, local_capture=local_capture_status(at), external=external,
                         incident=incident)
         result.update(monitor_age_seconds=int(age) if age is not None else None,
-                      stale_after_seconds=STALE_SECONDS)
+                      stale_after_seconds=STALE_SECONDS, check_running=not held)
         return result, 0 if result['healthy'] or condition in WARNINGS | {'offsite_renewal_in_progress'} else 1
+    except Unreadable as failure:
+        # Read-only: the next check restarts the record and announces it (FAIL CLOSED MEANS ALERT),
+        # unless the last restart notice holds it. The backup condition is reported either way (R3-1).
+        try:
+            result = state_unavailable(failure.reason, at, observed(at), hold=restart_hold(at), checked=False)
+        except Exception:
+            result = report('monitoring_state_unavailable')
+            result['state_unreadable'] = failure.reason
+        # While a check runs this is the last completed state, and it says so (R3-2, round 3).
+        result['check_running'] = running
+        return result, 1
     except Exception:
         return report('monitoring_state_unavailable'), 1
 
