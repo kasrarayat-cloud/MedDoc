@@ -1,0 +1,12 @@
+{
+  "result": "NOTHING FOUND",
+  "pure_probe_cases": 49,
+  "network": "denied",
+  "database": "denied",
+  "sha256": {
+    "core/generation.py": "d41774829e0a7d0d6ca072279850689e07ea02b9661295f6dc2151427b625ab7",
+    "core/mapping_jobs.py": "897e72d3bf822a3f29b6bfbb1ab0f5c761dd066d231b6a319d7b7232c496d554",
+    "core/management/commands/audit_billing.py": "836ae17d64dc4c2004cf3d0029ee5a12405da3b336720cc5c702a752d27c7a27",
+    "core/tests/test_sonnet5_settlement.py": "a59e9f2c8559b09dc97e5b9c25ae1e03647c7ab491ac8f513056fa29bcb1951d"
+  }
+}

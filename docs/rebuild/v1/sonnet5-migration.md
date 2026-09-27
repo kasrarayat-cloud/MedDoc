@@ -217,3 +217,23 @@ before any hold, and the page re-quotes under the rollback values.
 - **Refusal billing.** Anthropic's rule for refusals that arrive before any output is documented for other models. For
   Sonnet 5's cyber refusals it is inferred. An absorbed refusal records the metered tokens as platform cost, and
   `stop_details_category` is kept for reconciliation.
+
+
+## Integrated WM/mapping settlement correction — 2026-09-27
+
+New generic, WM narrative and mapping receipts now use one Anthropic settlement function. Where the native
+response supplies cache-write lifetime counts, five-minute writes are priced at 1.25× input and one-hour writes
+at 2× input; their sum must reconcile with total cache writes. New receipts retain both counts; the independent
+billing audit recomputes them. Historical records lacking those counts keep the original formula and exact
+Decimal representation. No old record, request profile, retail multiplier or cached output was rewritten.
+This does not enable prompt caching or send a request. Current native rates were rechecked against
+[Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing): Sonnet5 $2/$10 per million input/output,
+$2.50 five-minute write, $4 one-hour write, $0.20 cache read, applicable US inference1.1×.
+
+Combined mapping/WM/profile settlement checks:37 PASS43.858s. Independent refutation:49 pure cases, sockets
+and database connections denied, including all cache categories/geographies/discounts, historical exact
+representation, and mapping delegation; NOTHING FOUND within that scope. Evidence: integration-evidence-20260927.
+No paid generation, served-worker Sonnet5 proof or agreement claim follows from these offline checks.
+
+The drain row now reads **live language-model jobs** and includes template-scoped mapping operations as well
+as clinical generation. All queued/running/reconciliation counts must be zero before a model/profile switch.

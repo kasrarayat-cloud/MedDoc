@@ -34,8 +34,14 @@ def recompute_list_cost(provider, units, rates):
         outputs=Decimal(units['output_tokens'])
         written=Decimal(units.get('cache_creation_tokens',0))
         if provider.startswith('openai:'):inputs-=cached
+        cache_cost=written*Decimal(rates['input_per_million'])*Decimal('1.25')
+        if provider.startswith('anthropic:') and any(key in units for key in ('cache_creation_5m_tokens','cache_creation_1h_tokens')):
+            short=units.get('cache_creation_5m_tokens');long=units.get('cache_creation_1h_tokens')
+            if any(type(value) is not int or value<0 for value in (short,long)) or short+long!=written:
+                raise ValueError('Recorded cache-write metering does not reconcile')
+            cache_cost=(Decimal(short)*Decimal('1.25')+Decimal(long)*2)*Decimal(rates['input_per_million'])
         # `thinking_tokens` is deliberately absent: thinking is already inside output_tokens, which is what is billed.
-        cost=(inputs*Decimal(rates['input_per_million'])+cached*Decimal(rates['cached_per_million'])+outputs*Decimal(rates['output_per_million'])+written*Decimal(rates['input_per_million'])*Decimal('1.25'))/1000000
+        cost=(inputs*Decimal(rates['input_per_million'])+cached*Decimal(rates['cached_per_million'])+outputs*Decimal(rates['output_per_million'])+cache_cost)/1000000
         geo=us_inference_multiplier(provider,units,rates)
         return cost*geo if geo!=1 else cost
     if provider.startswith('deepgram:'):

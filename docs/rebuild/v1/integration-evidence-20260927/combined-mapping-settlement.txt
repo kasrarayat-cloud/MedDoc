@@ -1,0 +1,11 @@
+Creating test database for alias 'default'...
+../opt/meddoc-pro/.worktrees/v1-release/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-release/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...................................
+----------------------------------------------------------------------
+Ran 37 tests in 43.858s
+
+OK
+Destroying test database for alias 'default'...
+Found 37 test(s).
+System check identified no issues (0 silenced).

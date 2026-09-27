@@ -2412,15 +2412,24 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     return output
 
 def anthropic_settlement(response,r,config):
-    """One settlement formula for both Anthropic generation contracts; historical receipts stay unchanged."""
+    """One formula for new Anthropic receipts; historical receipts stay unchanged."""
     u=response.usage
     cached=getattr(u,'cache_read_input_tokens',0) or 0
     written=getattr(u,'cache_creation_input_tokens',0) or 0
     units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens}
+    cache=getattr(u,'cache_creation',None)
+    cache_cost=written*r['input_per_million']*Decimal('1.25')
+    if cache is not None:
+        short=getattr(cache,'ephemeral_5m_input_tokens',None)
+        long=getattr(cache,'ephemeral_1h_input_tokens',None)
+        if any(type(value) is not int or value<0 for value in (short,long,written)) or short+long!=written:
+            raise ValueError('Provider cache-write metering does not reconcile.')
+        units.update(cache_creation_5m_tokens=short,cache_creation_1h_tokens=long)
+        cache_cost=(short*Decimal('1.25')+long*Decimal(2))*r['input_per_million']
     # New receipts carry the metered geography, the thinking share of the output and why generation stopped.
     units.update(anthropic_usage_facts(response))
     provider=f"anthropic:{config['model']}"
-    list_cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+written*r['input_per_million']*Decimal('1.25')+u.output_tokens*r['output_per_million'])/1000000
+    list_cost=(u.input_tokens*r['input_per_million']+cached*r['cached_per_million']+cache_cost+u.output_tokens*r['output_per_million'])/1000000
     geo=us_inference_multiplier(provider,units)
     if geo!=1: list_cost*=geo
     discount=discount_rate(config);cost=discounted_cost(list_cost,discount)

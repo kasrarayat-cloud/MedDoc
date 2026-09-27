@@ -69,17 +69,10 @@ def send(compiled,config):
         raise NoProviderRequest('Mapping request setup failed before submission.') from exc
     # Exceptions from create itself remain unknown: the provider may have received it.
     response=client.messages.create(**compiled['request'])
-    u=response.usage
-    cached=getattr(u,'cache_read_input_tokens',0) or 0;written=getattr(u,'cache_creation_input_tokens',0) or 0
-    units={'input_tokens':u.input_tokens,'cached_input_tokens':cached,'cache_creation_tokens':written,'output_tokens':u.output_tokens,
-           'response_model':getattr(response,'model',''),**generation.anthropic_usage_facts(response)}
     rates=generation.rates(config);provider=f"anthropic:{config['model']}"
-    cost=(u.input_tokens*rates['input_per_million']+cached*rates['cached_per_million']+
-          written*rates['input_per_million']*Decimal('1.25')+u.output_tokens*rates['output_per_million'])/1000000
-    geo=generation.us_inference_multiplier(provider,units);cost*=geo
-    discount=generation.discount_rate(config);recorded=generation.cost_rates(rates,cost,discount)
-    if geo!=1:recorded['inference_geo_multiplier']=str(geo)
-    return response,generation.discounted_cost(cost,discount),units,recorded,provider,getattr(response,'_request_id','') or '',getattr(response,'id','') or '',False
+    cost,units,recorded=generation.anthropic_settlement(response,rates,config)
+    units['response_model']=getattr(response,'model','')
+    return response,cost,units,recorded,provider,getattr(response,'_request_id','') or '',getattr(response,'id','') or '',False
 
 def parse_response(raw,simulated):
     if simulated:return raw

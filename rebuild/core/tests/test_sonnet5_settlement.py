@@ -63,6 +63,23 @@ class SettlementFidelity(SimpleTestCase):
         _, units, _, _, _ = self.settle(SONNET_5, 'global')
         self.assertNotIn('thinking_tokens', units)                    # recorded only when the provider reports it
 
+    def test_mixed_cache_lifetimes_are_metered_at_their_actual_rates(self):
+        cost,units,rates,provider,_=self.settle(SONNET_5,'us',cache_creation={
+            'ephemeral_5m_input_tokens':5,'ephemeral_1h_input_tokens':7})
+        expected=(self.standard('2','10','.2')+Decimal(7)*2*Decimal('.75')/1000000)*Decimal('1.1')
+        self.assertEqual(cost,expected)
+        self.assertEqual((units['cache_creation_5m_tokens'],units['cache_creation_1h_tokens']),(5,7))
+        self.assertEqual(recompute_cost(provider,units,rates,False),cost)
+        for edit in ({'cache_creation_1h_tokens':8},{'cache_creation_5m_tokens':None},
+                     {'cache_creation_5m_tokens':-1,'cache_creation_1h_tokens':13}):
+            with self.subTest(edit=edit),self.assertRaises(ValueError):
+                recompute_list_cost(provider,{**units,**edit},rates)
+
+    def test_inconsistent_provider_cache_lifetimes_cannot_be_settled(self):
+        with self.assertRaises(ValueError):
+            self.settle(SONNET_5,'global',cache_creation={
+                'ephemeral_5m_input_tokens':5,'ephemeral_1h_input_tokens':8})
+
     def test_metered_us_inference_is_billed_at_1_1_on_claude_4_6_and_later_only(self):
         for overrides, rate in ((SONNET_5, ('2', '10', '0.20')), (SONNET_46, ('3', '15', '0.30'))):
             with self.subTest(model=overrides['AI_MODEL']):
