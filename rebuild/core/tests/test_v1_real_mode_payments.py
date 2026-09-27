@@ -16,7 +16,7 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, connection, transaction
 from django.test import TestCase, override_settings
 
 from core.billing import reserve, sandbox_funded
@@ -516,3 +516,67 @@ class RealModeWorkerNeverSpendsAHoldOnSandboxMoney(SyntheticFixture, TestCase):
         self.assertTrue(generate.called)
         wallet = Wallet.objects.get(user=self.user, kind='paid')
         self.assertEqual((wallet.balance, wallet.reserved), (Decimal('8.5'), 0))
+
+
+@override_settings(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES,
+                   QUILLMD_WELCOME_CREDIT=Decimal('0'))
+class RecordedPaymentModeIsImmutable(SyntheticFixture, TestCase):
+    """Round-3 refutation F3: once recorded, Payment.livemode and WebhookEvent.livemode never change (a database trigger,
+    like 0008's signed-evidence guard). Otherwise one UPDATE turns sandbox evidence into 'live', and both the launcher's
+    check and reserve() believe it."""
+    setUp = stripe_live.LiveCheckoutAndSettlement.setUp
+    checkout = stripe_live.LiveCheckoutAndSettlement.checkout
+    signed = stripe_live.LiveCheckoutAndSettlement.signed
+    sandbox_top_up = RealModeNeverSpendsSandboxMoney.sandbox_top_up
+
+    def assert_mode_refused(self, model, pk, values):
+        before = model.objects.get(pk=pk).livemode
+        for value in values:
+            with self.subTest(model=model.__name__, before=before, after=value):
+                with self.assertRaisesRegex(DatabaseError, 'payment mode is immutable'), transaction.atomic():
+                    model.objects.filter(pk=pk).update(livemode=value)
+        self.assertIs(model.objects.get(pk=pk).livemode, before)
+
+    def test_P3_sandbox_evidence_cannot_be_relabelled_live(self):
+        """The refuter's P3: update(livemode=True) on a recorded sandbox event and payment succeeded, and then
+        real_mode_payment_problems() returned [] and sandbox_funded() False."""
+        payment, wallet = self.sandbox_top_up()
+        row = WebhookEvent.objects.get(event_id='evt_sandbox-top-up')
+        self.assert_mode_refused(WebhookEvent, row.pk, (True, None))
+        self.assert_mode_refused(Payment, payment.pk, (True, None))
+        with self.assertRaisesRegex(DatabaseError, 'payment mode is immutable'), transaction.atomic(), connection.cursor() as cursor:
+            cursor.execute('UPDATE core_payment SET livemode = true WHERE id = %s', [payment.pk])
+        with self.assertRaisesRegex(DatabaseError, 'payment mode is immutable'), transaction.atomic():
+            payment.livemode = True
+            payment.save()
+        from core.billing import real_mode_payment_problems
+        self.assertEqual(len(real_mode_payment_problems()), 3)
+        self.assertTrue(sandbox_funded(wallet))
+
+    def test_rows_recorded_before_the_mode_was_stored_cannot_be_given_one(self):
+        wallet = Wallet.objects.get(user=self.user, kind='paid')
+        payment = Payment.objects.create(user=self.user, wallet=wallet, amount_cents=500, stripe_session='cs_legacy_mode',
+                                         status='pending', livemode=None)
+        row = WebhookEvent.objects.create(event_id='evt_legacy_mode', kind='checkout.session.completed', payload_hash='0' * 64,
+                                          object_data={}, livemode=None)
+        self.assert_mode_refused(Payment, payment.pk, (True, False))
+        self.assert_mode_refused(WebhookEvent, row.pk, (True, False))
+
+    @override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE)
+    def test_live_evidence_cannot_be_relabelled_sandbox_or_unknown(self):
+        self.checkout('live-mode-fixed')
+        payment = Payment.objects.get(stripe_session='cs_live-mode-fixed')
+        self.assertEqual(self.signed(event(True, paid_session(payment, True, 'pi_live_fixed'), 'evt_live_fixed')).status_code, 200)
+        self.assert_mode_refused(Payment, payment.pk, (False, None))
+        self.assert_mode_refused(WebhookEvent, WebhookEvent.objects.get(event_id='evt_live_fixed').pk, (False, None))
+
+    def test_every_other_field_still_updates_and_a_same_value_save_passes(self):
+        payment, _ = self.sandbox_top_up()
+        row = WebhookEvent.objects.get(event_id='evt_sandbox-top-up')
+        WebhookEvent.objects.filter(pk=row.pk).update(attempts=row.attempts + 1, error='synthetic', status='processed')
+        Payment.objects.filter(pk=payment.pk).update(checkout_url='https://checkout.stripe.com/c/pay/synthetic-2')
+        payment.refresh_from_db()
+        payment.save()  # Every column, livemode unchanged.
+        WebhookEvent.objects.filter(pk=row.pk).update(livemode=False)  # The same value is not a change.
+        self.assertIs(Payment.objects.get(pk=payment.pk).livemode, False)
+        self.assertEqual(WebhookEvent.objects.get(pk=row.pk).attempts, row.attempts + 1)
