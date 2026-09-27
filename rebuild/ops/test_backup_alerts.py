@@ -485,7 +485,7 @@ class IncidentNotificationTests(unittest.TestCase):
         subject, body = self.sent()[-1]
         self.assertEqual(subject, '[QuillMD operations] REMINDER: backup recovery incident still open')
         for text in ('Condition: backup_failed', 'Severity: failure', 'open for at least 24 hours 0 minutes',
-                     'since ' + self.at.isoformat(), 'notice 2', 'still open'):
+                     'open since no later than ' + self.at.isoformat(), 'notice 2', 'still open'):
             self.assertIn(text, body)
         state = self.state()
         self.assertEqual((state['incident_attempt_notice'], state['incident_attempt_count'],

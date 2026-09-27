@@ -901,7 +901,7 @@ def notice_message(condition, at, prefix, *, test=False, notice='initial', incid
                          + f'Condition: {condition}\n' + lines)
     opened = timestamp(incident['opened_at'])
     open_for = (f'Incident open for at least {duration((at - opened).total_seconds())}, '
-                f'since {opened.isoformat()}. This is notice {incident["count"]} for this incident.\n')
+                f'open since no later than {opened.isoformat()}. This is notice {incident["count"]} for this incident.\n')
     if notice == 'escalation':
         previous = incident['previous']
         movement = SEVERITY_RANK[severity(condition)] - SEVERITY_RANK[severity(previous)]
