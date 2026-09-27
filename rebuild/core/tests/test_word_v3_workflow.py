@@ -869,6 +869,49 @@ class V3BoxNumbers(V3Fixture, TestCase):
         self.assertFalse(MappingConfirmation.objects.filter(version=stale).exists())
 
 
+@override_settings(**V3)
+class V3MixedBoxNumbers(V3Fixture, TestCase):
+    """R1 end to end: on a line mixing a checkbox control with printed boxes, the page counts every box the preview
+    shows, the location names the clinician's box among them, and the export ticks exactly that box."""
+
+    def setUp(self):
+        super().setUp()
+        from documents.test_word_v3 import mixed_side_bytes
+        self.template, version = self.uploaded(data=mixed_side_bytes(), name="Synthetic side")
+        side = next(f for f in version.fields if f["label"] == "Side")
+        self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_save", "mapping_version": version.pk,
+                                                             "remove_" + side["key"]: "on"})
+        self.version = self.latest(self.template)
+
+    def test_box_two_is_the_control_the_preview_shows_second(self):
+        from documents.test_word_v3 import controls_shown
+        page = self.client.get(f"/templates/{self.template.pk}/").content.decode()
+        row = page[page.index('data-v3-place="word/document.xml#b/p[1]"'):]
+        row = row[:row.index("</tr>")]
+        self.assertIn("Side: ☐ Right ☐ Left ☐ Bilateral", row)
+        self.assertIn("3 printed boxes", row)
+        response = self.client.post(f"/templates/{self.template.pk}/", {"action": "v3_add", "mapping_version": self.version.pk,
+                                    "slot": "word/document.xml#b/p[1]", "kind": "checkbox", "label": "Left", "box": "2"})
+        self.assertEqual(response.status_code, 302, getattr(response, "context", None) and response.context.get("v3_error"))
+        latest = self.latest(self.template)
+        added = next(f for f in latest.fields if f.get("origin") == "manual")
+        rows = self.client.get(f"/templates/{self.template.pk}/").context["v3_rows"]
+        self.assertIn("printed box 2 of 3", next(r for r in rows if r["key"] == added["key"])["location"])
+        latest = self.confirm(self.template, latest)
+        self.assertEqual(self.new_encounter(latest, notes="Synthetic side notes").status_code, 302)
+        encounter = Encounter.objects.get()
+        payload = {"revision": encounter.revision, "answer_" + added["key"]: "checked"}
+        for f in latest.fields:
+            payload["reviewed_" + f["key"]] = "on"
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/save/", payload).status_code, 302)
+        response = self.client.post(f"/encounters/{encounter.pk}/finalize/", {"revision": encounter.revision + 1, "reviewed": "on"}, follow=True)
+        encounter = Encounter.objects.get()
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        exported = private_path(encounter.export_path).read_bytes()
+        self.assertIn("Side: ☐ Right ☒ Left ☐ Bilateral", part_text(exported))
+        self.assertEqual(controls_shown(exported), [("☒", "1")])
+
+
 def two_knees_form_bytes():
     doc = Document()
     doc.add_paragraph("Synthetic knee examination")

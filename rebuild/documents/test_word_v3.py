@@ -908,5 +908,131 @@ class ControlsInBoxCells(unittest.TestCase):
         self.assertIn("checkbox control beside another box", str(refused.exception))
 
 
+def mixed_side_bytes(control="sdt"):
+    """The refuter's p2 input: one printed line mixing a checkbox control between two printed glyph boxes."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee note")
+    p = doc.add_paragraph("Side: ☐ Right ")
+    if control == "sdt":
+        p._p.append(checkbox_control())
+    else:
+        ff_field(p, "checkbox", name="Left")
+    p._p.append(text_run(" Left ☐ Bilateral"))
+    return docx_bytes(doc)
+
+
+def mixed_cell_bytes():
+    """D03's shape (DEV corpus, place b/tbl[0]/tr[17]/tc[0]/p[4]): printed boxes and two checkbox controls on one
+    line in a table cell, and a cell mixing a printed box, a control and a printed box."""
+    doc = Document()
+    doc.add_paragraph("Synthetic social history")
+    table = doc.add_table(rows=2, cols=1)
+    p = table.cell(0, 0).paragraphs[0]
+    p.add_run("☐ Alcohol beverages: ☐ Wine [")
+    p._p.append(checkbox_control())
+    p._p.append(text_run(" Red "))
+    p._p.append(checkbox_control())
+    p._p.append(text_run(" White ], ☐ Other:__________"))
+    q = table.cell(1, 0).paragraphs[0]
+    q.add_run("☐ Mild ")
+    q._p.append(checkbox_control())
+    q._p.append(text_run(" Moderate ☐ Severe"))
+    return docx_bytes(doc)
+
+
+def glyphs_shown(data, contains):
+    """The printed text (glyphs, controls as their glyph) of the exported paragraph containing `contains`."""
+    return next(line for line in paragraphs_bytes(data) if contains in line)
+
+
+class MixedBoxNumbers(unittest.TestCase):
+    """R1: the box number a clinician gives counts EXACTLY the boxes the place's preview shows, in its order - printed
+    glyph boxes and checkbox controls alike - and the export ticks exactly that box, whatever its kind."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def form(self, data, name):
+        path = self.dir / name
+        path.write_bytes(data)
+        return path, {row["slot"]: row for row in outline_template(path)["slots"]}
+
+    def add_and_fill(self, path, slot, box, label):
+        field = locate_fields(path, [{"slot": slot, "kind": "checkbox", "label": label, "glyph": box - 1}])["fields"][0]
+        out = self.dir / ("%s-%d.docx" % (label.replace(" ", "-"), box))
+        fill_template(path, [field], {field["key"]: True}, out)
+        return field, out.read_bytes()
+
+    def test_a_line_mixing_a_control_counts_every_box_it_shows(self):
+        path, places = self.form(mixed_side_bytes(), "side.docx")
+        for slot in ("word/document.xml#b/p[1]", "word/document.xml#b/p[1]/glyphs"):
+            self.assertEqual(places[slot]["preview"], "Side: ☐ Right ☐ Left ☐ Bilateral")
+            self.assertEqual(places[slot]["boxes"], 3, slot)
+        _, out = self.add_and_fill(path, "word/document.xml#b/p[1]", 2, "Left")
+        self.assertEqual(controls_shown(out), [("☒", "1")], "box 2 is the control printed before 'Left'")
+        self.assertEqual(glyphs_shown(out, "Right"), "Side: ☐ Right ☒ Left ☐ Bilateral")
+        _, out = self.add_and_fill(path, "word/document.xml#b/p[1]/glyphs", 3, "Bilateral")
+        self.assertEqual((controls_shown(out), glyphs_shown(out, "Right")), ([("☐", "0")], "Side: ☐ Right ☐ Left ☒ Bilateral"))
+        _, out = self.add_and_fill(path, "word/document.xml#b/p[1]", 1, "Right")
+        self.assertEqual((controls_shown(out), glyphs_shown(out, "Right")), ([("☐", "0")], "Side: ☒ Right ☐ Left ☐ Bilateral"))
+        with self.assertRaises(DocumentError) as refused:
+            self.add_and_fill(path, "word/document.xml#b/p[1]", 4, "Beyond")
+        self.assertIn("That place has 3 printed boxes", str(refused.exception))
+
+    def test_a_legacy_checkbox_on_the_line_is_numbered_where_it_shows(self):
+        path, places = self.form(mixed_side_bytes("ff"), "side-ff.docx")
+        self.assertEqual((places["word/document.xml#b/p[1]"]["preview"], places["word/document.xml#b/p[1]"]["boxes"]),
+                         ("Side: ☐ Right ☐ Left ☐ Bilateral", 3))
+        _, out = self.add_and_fill(path, "word/document.xml#b/p[1]", 2, "Left")
+        self.assertEqual(control_states(self.dir / "Left-2.docx"), ([], ["1"]))
+        self.assertEqual(glyphs_shown(out, "Right"), "Side: ☐ Right  Left ☐ Bilateral")
+
+    def test_d03s_red_wine_is_the_third_box_shown(self):
+        path, places = self.form(mixed_cell_bytes(), "social.docx")
+        line = "word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"
+        self.assertEqual(places[line]["preview"], "☐ Alcohol beverages: ☐ Wine [☐ Red ☐ White ], ☐ Other:__________")
+        self.assertEqual(places[line]["boxes"], 5)
+        _, out = self.add_and_fill(path, line, 3, "Red wine")
+        self.assertEqual(controls_shown(out)[:2], [("☒", "1"), ("☐", "0")], "box 3 is the control before 'Red'")
+        self.assertIn("☐ Other", glyphs_shown(out, "Alcohol"))
+        _, out = self.add_and_fill(path, line, 5, "Other drink")
+        self.assertEqual(controls_shown(out)[:2], [("☐", "0"), ("☐", "0")])
+        self.assertIn("☒ Other", glyphs_shown(out, "Alcohol"))
+
+    def test_a_cell_counts_its_controls_as_its_preview_shows_them(self):
+        path, places = self.form(mixed_cell_bytes(), "severity.docx")
+        cell = "word/document.xml#b/tbl[0]/tr[1]/tc[0]"
+        self.assertEqual((places[cell]["preview"], places[cell]["boxes"]), ("☐ Mild ☐ Moderate ☐ Severe", 3))
+        _, out = self.add_and_fill(path, cell, 2, "Moderate")
+        self.assertEqual(controls_shown(out)[2:], [("☒", "1")])
+        self.assertEqual(glyphs_shown(out, "Mild"), "☐ Mild ☒ Moderate ☐ Severe")
+        _, out = self.add_and_fill(path, cell, 3, "Severe")
+        self.assertEqual((controls_shown(out)[2:], glyphs_shown(out, "Mild")), ([("☐", "0")], "☐ Mild ☐ Moderate ☒ Severe"))
+
+    def test_a_cell_whose_preview_does_not_show_its_boxes_refuses_a_number(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = "Fever"
+        cell = table.cell(0, 1).paragraphs[0]
+        cell.add_run("☐ Yes ")
+        ff_field(cell, "checkbox", name="FeverNo")             # a legacy checkbox: the cell's text does not show it
+        cell._p.append(text_run(" No"))
+        path, places = self.form(docx_bytes(doc), "fever.docx")
+        tc, line = "word/document.xml#b/tbl[0]/tr[0]/tc[1]", "word/document.xml#b/tbl[0]/tr[0]/tc[1]/p[0]"
+        self.assertEqual((places[tc]["preview"], places[tc]["boxes"], places[tc].get("unnumbered_boxes")), ("☐ Yes No", 0, True))
+        with self.assertRaises(DocumentError) as refused:
+            self.add_and_fill(path, tc, 2, "No fever")
+        self.assertEqual(refused.exception.code, "invalid_mapping")
+        self.assertIn("choose the line inside the cell, or the checkbox itself", str(refused.exception))
+        self.assertEqual((places[line]["preview"], places[line]["boxes"]), ("☐ Yes ☐ No", 2))
+        _, out = self.add_and_fill(path, line, 2, "No fever")
+        self.assertEqual(control_states(self.dir / "No-fever-2.docx"), ([], ["1"]))
+
+
 if __name__ == "__main__":
     unittest.main()
