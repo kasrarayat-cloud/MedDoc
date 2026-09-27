@@ -17,7 +17,10 @@ from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import DatabaseError, connection, transaction
-from django.test import TestCase, override_settings
+from django.db.migrations.exceptions import IrreversibleError
+from django.db.migrations.executor import MigrationExecutor
+from django.db.migrations.recorder import MigrationRecorder
+from django.test import TestCase, TransactionTestCase, override_settings
 
 from core.billing import reserve, sandbox_funded
 from core.models import AuditEvent, Job, LedgerEntry, Payment, ProviderReceipt, Reservation, Usage, Wallet, WebhookEvent
@@ -585,3 +588,66 @@ class RecordedPaymentModeIsImmutable(SyntheticFixture, TestCase):
         WebhookEvent.objects.filter(pk=row.pk).update(livemode=False)  # The same value is not a change.
         self.assertIs(Payment.objects.get(pk=payment.pk).livemode, False)
         self.assertEqual(WebhookEvent.objects.get(pk=row.pk).attempts, row.attempts + 1)
+
+
+@override_settings(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES,
+                   QUILLMD_WELCOME_CREDIT=Decimal('0'))
+class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
+    """Round-3 refutation F5: reversing 0020 drops livemode, and re-applying it records every row NULL, which real mode
+    treats as sandbox money it never spends. So the reverse refuses while any row is recorded as live; a database with
+    no live rows still reverses."""
+    setUp = stripe_live.LiveCheckoutAndSettlement.setUp
+    checkout = stripe_live.LiveCheckoutAndSettlement.checkout
+    signed = stripe_live.LiveCheckoutAndSettlement.signed
+    sandbox_top_up = RealModeNeverSpendsSandboxMoney.sandbox_top_up
+    job = RealModeNeverSpendsSandboxMoney.job
+    BEFORE_0020 = [('core', '0019_clinicinvitation')]
+
+    def to_leaf(self):
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
+
+    @staticmethod
+    def schema():
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM information_schema.columns WHERE column_name = 'livemode' "
+                           "AND table_name IN ('core_payment', 'core_webhookevent')")
+            columns = cursor.fetchone()[0]
+            cursor.execute("SELECT count(*) FROM pg_trigger WHERE tgname IN ('payment_livemode_immutable', 'webhook_livemode_immutable')")
+            triggers = cursor.fetchone()[0]
+            cursor.execute("SELECT count(*) FROM pg_proc WHERE proname = 'quillmd_livemode_guard'")
+            functions = cursor.fetchone()[0]
+        return columns, triggers, functions
+
+    def test_P4_reversing_0020_refuses_while_live_evidence_exists(self):
+        """The refuter's P4: a live payment, 0020 reversed and re-applied: the payment read NULL and reserve() refused a
+        wallet only live money funded, permanently."""
+        with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
+            self.checkout('live-before-rollback')
+            live = Payment.objects.get(stripe_session='cs_live-before-rollback')
+            self.assertEqual(self.signed(event(True, paid_session(live, True, 'pi_live_rb'), 'evt_live_rb')).status_code, 200)
+        try:
+            with self.assertRaisesRegex(IrreversibleError, r'1 payment row\(s\) and 1 Stripe event row\(s\) are recorded as live') as refused:
+                MigrationExecutor(connection).migrate(self.BEFORE_0020)
+            for private in (live.stripe_session, 'pi_live_rb', 'evt_live_rb', str(live.pk), self.user.email):
+                self.assertNotIn(private, str(refused.exception))
+            self.assertIn(('core', '0020_payment_livemode'), MigrationRecorder(connection).applied_migrations())
+            self.assertEqual(self.schema(), (2, 2, 1))
+            self.assertIs(Payment.objects.get(pk=live.pk).livemode, True)
+            self.assertIs(WebhookEvent.objects.get(event_id='evt_live_rb').livemode, True)
+            with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
+                self.assertFalse(sandbox_funded(Wallet.objects.get(user=self.user, kind='paid')))
+                reserve(self.job('after-refused-rollback'), Decimal('2'))
+        finally:
+            self.to_leaf()
+
+    def test_a_database_without_live_rows_still_reverses_and_reapplies(self):
+        payment, _ = self.sandbox_top_up()
+        try:
+            MigrationExecutor(connection).migrate(self.BEFORE_0020)
+            self.assertNotIn(('core', '0020_payment_livemode'), MigrationRecorder(connection).applied_migrations())
+            self.assertEqual(self.schema(), (0, 0, 0))
+        finally:
+            self.to_leaf()
+        self.assertEqual(self.schema(), (2, 2, 1))
+        self.assertIsNone(Payment.objects.get(pk=payment.pk).livemode)
