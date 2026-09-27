@@ -1139,6 +1139,39 @@ class ConcurrentStatusReadTests(unittest.TestCase):
         self.assertEqual(checked['condition'], 'backup_timeout', 'a status reader made the check refuse')
         self.assertEqual(self.sender.call_count, 3)
 
+    def test_waiting_for_a_reader_is_bounded_so_a_parallel_check_is_still_refused(self):
+        a.check(self.at)
+        before = (self.alerts / 'status.json').read_bytes()
+        descriptor = os.open(self.alerts / 'monitor.lock', os.O_RDWR)
+        self.addCleanup(os.close, descriptor)
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)      # a parallel check, holding on
+        started = datetime.now(timezone.utc)
+        with patch.object(a, 'LOCK_WAIT_SECONDS', 0.5):
+            result, code = a.check(self.at + timedelta(minutes=5))
+        waited = (datetime.now(timezone.utc) - started).total_seconds()
+        self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
+        self.assertGreaterEqual(waited, 0.5)
+        self.assertLess(waited, 10, 'the wait for a reader is not bounded')
+        self.assertEqual((self.alerts / 'status.json').read_bytes(), before)
+        self.sender.assert_not_called()
+
+    def test_status_takes_the_lock_without_creating_or_writing_anything(self):
+        """The publisher runs status() in a sandbox with no write grant to this directory, so the
+        reader's lock is opened read-only and never created: a writable open would fail there."""
+        self.assertEqual(a.status(self.at)[0]['condition'], 'monitoring_stale')   # fresh: no lock file yet
+        self.assertEqual(list(self.alerts.iterdir()), [], 'status() created something')
+        a.check(self.at)
+        real, opened = os.open, []
+
+        def recording(path, flags, *args, **kwargs):
+            opened.append((str(path), flags))
+            return real(path, flags, *args, **kwargs)
+        with patch.object(a.os, 'open', side_effect=recording):
+            self.assertEqual(a.status(self.at + timedelta(minutes=1))[0]['condition'], 'healthy')
+        writable = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
+        self.assertEqual([flags & writable for path, flags in opened if path.endswith('monitor.lock')], [0])
+        self.assertEqual([path for path, flags in opened if flags & writable and path.startswith(str(self.alerts))], [])
+
 
 class TransportImportPathTests(unittest.TestCase):
     """⚠️ configured_transport() inserted rebuild/ into sys.path on EVERY call, unconditionally.

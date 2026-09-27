@@ -14,6 +14,7 @@ import secrets
 import stat
 import subprocess
 import sys
+import time
 from urllib.parse import urlsplit
 
 import requests
@@ -990,19 +991,68 @@ def write_state(state, supersedes=None):
             scheduled.atomic_status(ledger, notices)
 
 
+#: ⚠️ status() holds the monitor lock SHARED while it reads the state files, for milliseconds. A
+#: check that meets such a reader waits this long rather than refusing as though it met a parallel
+#: check: the publisher's status() and this check run on independent five-minute timers, and a
+#: reader must never turn a tick into monitoring_state_unavailable. A parallel CHECK holds the lock
+#: for its whole run and is still refused once this bound passes.
+LOCK_WAIT_SECONDS = 2
+#: How long status() waits for a running check to finish writing before it reads.
+READ_WAIT_SECONDS = 30
+
+
+def hold(fd, operation, seconds):
+    deadline = time.monotonic() + seconds
+    while True:
+        try:
+            fcntl.flock(fd, operation | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.05)
+
+
+def lock_file(fd):
+    info = os.fstat(fd)
+    backup.require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
+                   and stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1,
+                   'Invalid monitor lock.')
+
+
 @contextmanager
 def locked():
     backup.private_dir(DIRECTORY)
     fd = os.open(DIRECTORY / 'monitor.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
-        info = os.fstat(fd)
-        backup.require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid()
-                       and stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1,
-                       'Invalid monitor lock.')
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_file(fd)
+        hold(fd, fcntl.LOCK_EX, LOCK_WAIT_SECONDS)
         yield
     finally:
         os.close(fd)
+
+
+@contextmanager
+def reading():
+    """A consistent read of what check() writes: the same lock, held SHARED.
+
+    ⚠️ OPENED READ-ONLY AND NEVER CREATED. The publisher calls status() from a unit whose
+    ProtectSystem=strict sandbox grants no write to this directory, so an O_CREAT or O_RDWR open
+    here would fail there on every tick. flock needs no write access. With no lock file no check
+    has ever run in this directory, so there is no writer to be consistent with.
+    """
+    try:
+        fd = os.open(DIRECTORY / 'monitor.lock', os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        fd = None
+    try:
+        if fd is not None:
+            lock_file(fd)
+            hold(fd, fcntl.LOCK_SH, READ_WAIT_SECONDS)
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 @contextmanager
@@ -1378,14 +1428,15 @@ def status(at=None):
     at = at or now()
     try:
         backup.private_dir(DIRECTORY)
-        state = read_state()
+        with reading():
+            state = read_state()
+            alert = receipt('incident-' + state['incident_attempt']) if state['incident_attempt'] else None
         try:
             read_configuration()
         except Exception:
             return report('alert_configuration_unavailable', checked_at=state['last_check_at']), 1
         age = (at - timestamp(state['last_check_at'])).total_seconds() if state['last_check_at'] else None
         condition = 'monitoring_stale' if age is None or not 0 <= age <= STALE_SECONDS else state['condition']
-        alert = receipt('incident-' + state['incident_attempt']) if state['incident_attempt'] else None
         if alert and alert['outcome'] in {'pending', 'uncertain_no_retry'} and condition != 'monitoring_stale':
             condition = 'alert_delivery_unconfirmed'
         recovery = recovery_status(at)
