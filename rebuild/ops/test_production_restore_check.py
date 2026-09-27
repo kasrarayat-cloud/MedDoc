@@ -43,12 +43,12 @@ def migration_bodies():
 class FakeDatabase:
     """Answers the check's queries from fixed rows; any other statement is a test failure."""
 
-    def __init__(self, files, triggers=17, disabled=0, violations=None):
+    def __init__(self, files, triggers=39, disabled=0, violations=None):
         self.files = files
         bodies = migration_bodies()
         self.triggers = []
         for i, (table, name, function, kind) in enumerate(restore_check.integrity_contract.GUARDS[:triggers]):
-            event = {23: 'INSERT OR UPDATE', 27: 'DELETE OR UPDATE', 19: 'UPDATE', 34: 'TRUNCATE'}[kind]
+            event = {7:'INSERT', 23: 'INSERT OR UPDATE', 27: 'DELETE OR UPDATE', 19: 'UPDATE', 34: 'TRUNCATE'}[kind]
             each = 'ROW' if kind & 1 else 'STATEMENT'
             definition = f'CREATE TRIGGER {name} BEFORE {event} ON public.{table} FOR EACH {each} EXECUTE FUNCTION {function}()'
             self.triggers.append((table,name,function,kind,'D' if i < disabled else 'O',definition,
@@ -63,7 +63,7 @@ class FakeDatabase:
         for name, statement in backup.INVARIANTS.items():
             if text == statement:
                 return [(self.violations.get(name, 0),)]
-        for kind, statement in backup.FILE_QUERIES:
+        for kind, statement in backup.FILE_QUERIES + [('preserved','SELECT storage_key,sha256 FROM core_preservedfile')]:
             if text == statement:
                 return [(path, sha) for path, sha, row_kind in self.files if row_kind == kind]
         if text == restore_check.TABLES:
@@ -108,7 +108,7 @@ class RestoreCheckTests(unittest.TestCase):
             self.files.append((relative, hashlib.sha256(data).hexdigest(), kind))
 
     def test_a_consistent_restore_passes_with_counts_only(self):
-        report = restore_check.check(FakeDatabase(self.files), self.state, 17)
+        report = restore_check.check(FakeDatabase(self.files), self.state, 39)
         self.assertTrue(report['passed'])
         self.assertEqual(report['files'], {'referenced': 3, 'missing': 0, 'hash_mismatched': 0, 'passed': True})
         self.assertEqual((report['tables'], report['rows']), (2, 6))
@@ -117,7 +117,7 @@ class RestoreCheckTests(unittest.TestCase):
     def test_missing_or_changed_files_fail(self):
         (self.state / 'files' / self.files[0][0]).unlink()
         (self.state / 'files' / self.files[1][0]).write_bytes(b'changed')
-        report = restore_check.check(FakeDatabase(self.files), self.state, 17)
+        report = restore_check.check(FakeDatabase(self.files), self.state, 39)
         self.assertFalse(report['passed'])
         self.assertEqual((report['files']['missing'], report['files']['hash_mismatched']), (1, 1))
 
@@ -127,14 +127,14 @@ class RestoreCheckTests(unittest.TestCase):
         path = self.state / 'files' / self.files[0][0]
         path.unlink()
         path.symlink_to(target)
-        self.assertEqual(restore_check.check(FakeDatabase(self.files), self.state, 17)['files']['missing'], 1)
+        self.assertEqual(restore_check.check(FakeDatabase(self.files), self.state, 39)['files']['missing'], 1)
 
     def test_trigger_count_disabled_trigger_or_invariant_violation_fails(self):
         for database, failed in ((FakeDatabase(self.files, triggers=8), 'triggers'),
                                  (FakeDatabase(self.files, disabled=1), 'triggers'),
                                  (FakeDatabase(self.files, violations={'wallet_bounds': 1}), 'invariants')):
             with self.subTest(failed=failed):
-                report = restore_check.check(database, self.state, 17)
+                report = restore_check.check(database, self.state, 39)
                 self.assertFalse(report['passed'])
                 self.assertFalse(report[failed]['passed'])
 
@@ -148,9 +148,9 @@ class RestoreCheckTests(unittest.TestCase):
                 database = FakeDatabase(self.files)
                 row = list(database.triggers[0]); row[column] = value
                 database.triggers[0] = tuple(row)
-                report = restore_check.check(database, self.state, 17)
+                report = restore_check.check(database, self.state, 39)
                 self.assertFalse(report['passed'])
-                self.assertEqual(report['triggers']['found'],17)
+                self.assertEqual(report['triggers']['found'],39)
 
     def test_missing_extra_duplicate_and_legacy_count_cannot_certify_the_release(self):
         contract = restore_check.integrity_contract
@@ -158,10 +158,10 @@ class RestoreCheckTests(unittest.TestCase):
         for rows, count in ((database.triggers,9), (database.triggers,True),
                             (database.triggers[1:],16),
                             (database.triggers+[database.triggers[0]],18),
-                            ([('invented','O')]*17,17)):
+                            ([('invented','O')]*39,39)):
             self.assertFalse(contract.assess(rows,[('public','origin')],count)['passed'])
         for context in ([('public','replica')],[('other','origin')],[]):
-            self.assertFalse(contract.assess(database.triggers,context,17)['passed'])
+            self.assertFalse(contract.assess(database.triggers,context,39)['passed'])
 
     def test_function_contract_matches_reviewed_migration_literals(self):
         bodies = migration_bodies()
@@ -170,17 +170,17 @@ class RestoreCheckTests(unittest.TestCase):
 
     def test_unsafe_or_conflicting_references_refuse(self):
         with self.assertRaises(RuntimeError):
-            restore_check.check(FakeDatabase([('../escape', '', 'original')]), self.state, 17)
+            restore_check.check(FakeDatabase([('../escape', '', 'original')]), self.state, 39)
         conflicting = [(self.files[0][0], 'a' * 64, 'original'), (self.files[0][0], 'b' * 64, 'export')]
         with self.assertRaisesRegex(restore_check.CheckError, '^conflicting_file_hashes$'):
-            restore_check.check(FakeDatabase(conflicting), self.state, 17)
+            restore_check.check(FakeDatabase(conflicting), self.state, 39)
 
     def test_main_refuses_the_unactivated_profile_without_connecting(self):
         errors = io.StringIO()
         with patch.object(restore_check, 'connect', side_effect=AssertionError('connected')), \
                 patch('sys.stderr', errors), patch('sys.stdout', io.StringIO()):
             self.assertEqual(restore_check.main(['--database-host', DRILL, '--state-root', '/mnt/quillmd-drill-20261101t0300',
-                                                 '--credentials', '/nonexistent', '--expected-triggers', '17']), 1)
+                                                 '--credentials', '/nonexistent', '--expected-triggers', '39']), 1)
         self.assertEqual(json.loads(errors.getvalue()), {'passed': False, 'refused': 'profile_not_activated'})
 
 

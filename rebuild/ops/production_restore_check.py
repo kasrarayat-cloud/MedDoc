@@ -21,7 +21,7 @@ and the live endpoint and live state root are refused, so the tool cannot be poi
 
     python3 ops/production_restore_check.py --database-host <drill endpoint> \
         --state-root /mnt/quillmd-drill-20261101t0300 --credentials <role credential file> \
-        --expected-triggers 17
+        --expected-triggers 39
 """
 import argparse
 import hashlib
@@ -82,7 +82,7 @@ def check(query, state_root, expected_triggers):
     trigger_report = integrity_contract.assess(triggers, query(integrity_contract.CONTEXT), expected_triggers)
     invariants = {name: query(statement)[0][0] for name, statement in backup.INVARIANTS.items()}
     references = {}
-    for _, statement in backup.FILE_QUERIES:
+    for _, statement in backup.FILE_QUERIES + [('preserved','SELECT storage_key,sha256 FROM core_preservedfile')]:
         for relative, expected in query(statement):
             backup.safe_relative(relative)
             previous = references.get(relative, '')

@@ -13,4 +13,4 @@ class ReleaseIntegrityContract(TestCase):
             context = cursor.fetchall()
         report = integrity_contract.assess(rows,context,len(integrity_contract.GUARDS))
         self.assertTrue(report['passed'],report)
-        self.assertEqual(report['found'],17)
+        self.assertEqual(report['found'],39)

@@ -1,6 +1,7 @@
 # Retention and deletion readiness — operator preparation
 
-**Status: read-only inventory implemented; policy unset; purge unavailable. B-L6 remains open.**
+**Status: read-only inventory and local preservation enforcement prepared; policy unset; purge unavailable. B-L6 remains open.**
+The September27 continuation adds the hold registry, protected prior values/files, administration and cleanup controls described in `retention-preservation-20260927.md`. The inventory below records the earlier baseline; its statements that no hold registry exists are superseded by that implementation report. Disposition, deletion, external-copy and restored-backup reconciliation remain open.
 This is engineering preparation, not a legal retention schedule or authority to destroy records.
 No retention duration is selected by this package. The owner/counsel must identify applicable
 requirements and authoritative start events; unsupported events need additional engineering.

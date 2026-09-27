@@ -17,6 +17,26 @@
     "downloaded_exports": "unresolved"
   },
   "classes": {
+    "retention_holds": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "retention_hold_releases": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "preserved_clinical_rows": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "preserved_file_references": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
     "accounts": {
       "mode": "unresolved",
       "anchor": null,

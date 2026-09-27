@@ -19,6 +19,10 @@ MAX_POLICY_BYTES=65536
 # class: (model label, optional fixed filter, permitted explicitly chosen review anchors,
 #         immutable/protected-for-this-tool). A count is rows/references, never verified files.
 CATALOG={
+ 'retention_holds':('core.RetentionHold',{},('created_at',),True),
+ 'retention_hold_releases':('core.RetentionHoldRelease',{},('created_at',),True),
+ 'preserved_clinical_rows':('core.PreservedRecord',{},('created_at',),True),
+ 'preserved_file_references':('core.PreservedFile',{},('created_at',),True),
  'accounts':('core.User',{},('date_joined',),False),
  'organizations':('core.Organization',{},('created_at',),False),
  'departments':('core.Department',{},('created_at',),False),
@@ -166,7 +170,7 @@ def report(policy,now=None):
         raise PolicyError('standalone_postgresql_read_only_transaction_required')
     now=now or timezone.now()
     if timezone.is_naive(now):raise PolicyError('aware_timestamp_required')
-    blockers=['tombstone_and_deletion_workflow_not_implemented','legal_hold_enforcement_not_implemented',
+    blockers=['tombstone_and_deletion_workflow_not_implemented','legal_hold_external_and_restore_reconciliation_unverified',
               'external_policy_authority_not_verified','purge_unavailable']
     if any(rule.mode=='unresolved' for rule in policy.classes.values()):blockers.append('schedule_incomplete')
     if any(state=='unresolved' for state in policy.coverage.values()):blockers.append('external_coverage_unresolved')

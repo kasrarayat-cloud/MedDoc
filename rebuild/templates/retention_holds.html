@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Preservation holds{% endblock %}
+{% block breadcrumb %}Preservation holds{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Clinical data preservation</div><h1>Preservation holds</h1><p>Keep the evidence covered by a recorded preservation instruction. Holds have no automatic expiry.</p></div><div class="actions"><a class="button secondary" href="{% url 'admin_dashboard' %}">Back to administration</a></div></div>
+<div class="notice"><p>Clinicians can continue correcting records. Prior values and held files remain protected. Ending a hold does not delete preserved evidence or authorize deletion. External copies and restored backups require separate reconciliation.</p></div>
+<section class="section" id="create-hold"><div class="section-heading"><h2>Register a hold</h2></div>
+<p class="small muted">Choose the narrowest scope covered by the instruction. Do not enter patient details or the instruction's text here.</p>
+<form method="post" data-submit-once>{% csrf_token %}<input type="hidden" name="action" value="create">{{ create_form.as_p }}<button type="submit">Register preservation hold</button></form>
+</section>
+<section class="section" id="holds"><div class="section-heading"><h2>Recorded holds</h2></div>
+{% if rows %}<div class="table-wrap"><table><thead><tr><th scope="col">Hold / scope</th><th scope="col">Status</th><th scope="col">Authority</th><th scope="col">Recorded by</th></tr></thead><tbody>
+{% for row in rows %}<tr><td><span class="mono">{{ row.pk }}</span><span class="subline">{{ row.scope|capfirst }}</span><span class="subline mono">{% firstof row.organization_id row.department_id row.patient_id row.encounter_id 'All clinical data' %}</span></td>
+<td>{% if row.release %}<span class="badge">Released</span><span class="subline">{{ row.release.created_at|date:'Y-m-d H:i' }} UTC</span>{% else %}<span class="badge warning">Active</span>{% endif %}</td>
+<td><details><summary>Instruction fingerprints</summary><p class="mono">{{ row.authority_sha256 }}</p>{% if row.release %}<p>Release: <span class="mono">{{ row.release.authority_sha256 }}</span></p>{% endif %}</details></td>
+<td>{{ row.created_by.email }}<span class="subline">{{ row.created_at|date:'Y-m-d H:i' }} UTC</span>{% if row.release %}<span class="subline">Released by {{ row.release.created_by.email }}</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="small muted">No preservation holds have been registered.</p>{% endif %}
+{% include 'pagination.html' with navigation=navigation %}
+</section>
+<section class="section" id="release-hold"><div class="section-heading"><h2>Record release authority</h2></div><p>The administrator who registered a hold cannot release it. A second administrator must check the recorded release instruction.</p>
+<form method="post" data-submit-once>{% csrf_token %}<input type="hidden" name="action" value="release">{{ release_form.as_p }}<button type="submit" class="secondary">Record hold release</button></form></section>
+{% endblock %}

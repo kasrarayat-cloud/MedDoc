@@ -168,6 +168,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "retention_holds",
+        "retention_hold_releases",
+        "preserved_clinical_rows",
+        "preserved_file_references",
         "accounts",
         "organizations",
         "departments",
@@ -207,6 +211,182 @@
         "terminology_codes"
       ],
       "properties": {
+        "retention_holds": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "retention_hold_releases": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "preserved_clinical_rows": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "preserved_file_references": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
         "accounts": {
           "oneOf": [
             {

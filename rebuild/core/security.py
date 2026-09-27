@@ -49,7 +49,8 @@ def store_upload(upload,category='originals',max_bytes=15*1024*1024):
                 if count>max_bytes: raise ValidationError('File exceeds upload limit.')
                 f.write(chunk)
     except Exception:
-        path.unlink(missing_ok=True)
+        from .retention import cleanup_file
+        cleanup_file(path)
         raise
     return relative
 

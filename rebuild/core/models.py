@@ -31,6 +31,51 @@ class Entity(models.Model):
     created_at=models.DateTimeField(auto_now_add=True)
     class Meta: abstract=True
 
+class RetentionHold(Entity):
+    """Preservation instruction; the reference is a document hash, never clinical prose.
+
+    Scope is immutable. Ending a hold appends a separate release; preserved evidence
+    survives release. No duration or deletion authority is inferred from this row.
+    """
+    scope=models.CharField(max_length=16)
+    organization=models.ForeignKey('Organization',null=True,on_delete=models.PROTECT)
+    department=models.ForeignKey('Department',null=True,on_delete=models.PROTECT)
+    patient=models.ForeignKey('Patient',null=True,on_delete=models.PROTECT)
+    encounter=models.ForeignKey('Encounter',null=True,on_delete=models.PROTECT)
+    authority_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+    request_key=models.UUIDField(unique=True)
+    class Meta:
+        constraints=[models.CheckConstraint(name='retention_hold_one_scope',condition=(
+            models.Q(scope='global',organization__isnull=True,department__isnull=True,patient__isnull=True,encounter__isnull=True)
+            |models.Q(scope='organization',organization__isnull=False,department__isnull=True,patient__isnull=True,encounter__isnull=True)
+            |models.Q(scope='department',organization__isnull=True,department__isnull=False,patient__isnull=True,encounter__isnull=True)
+            |models.Q(scope='patient',organization__isnull=True,department__isnull=True,patient__isnull=False,encounter__isnull=True)
+            |models.Q(scope='encounter',organization__isnull=True,department__isnull=True,patient__isnull=True,encounter__isnull=False)))]
+
+class RetentionHoldRelease(Entity):
+    hold=models.OneToOneField(RetentionHold,on_delete=models.PROTECT,related_name='release')
+    authority_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class PreservedRecord(Entity):
+    """Private clinical evidence captured by PostgreSQL before a held row changes.
+
+    Not an audit log or an admin-console response. Contains patient information;
+    uses the clinical database's access/backup boundary. Append-only at the DB.
+    """
+    source_table=models.CharField(max_length=64)
+    source_id=models.UUIDField()
+    operation=models.CharField(max_length=6)
+    hold_ids=models.JSONField()
+    prior_record=models.JSONField()
+
+class PreservedFile(Entity):
+    storage_key=models.CharField(max_length=100,unique=True)
+    sha256=models.CharField(max_length=64)
+    byte_count=models.PositiveBigIntegerField()
+    hold_ids=models.JSONField()
+
 class ProviderIdentifiers:
     @property
     def legacy_resource_identifier(self):
