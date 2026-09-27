@@ -1,0 +1,59 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FFFF
+======================================================================
+FAIL: test_stale_reviewed_assessment_cannot_finalize_past_a_fullwidth_denial (core.tests.test_v3_ordinary_topics.CompleteNominalPlanWorkflow.test_stale_reviewed_assessment_cannot_finalize_past_a_fullwidth_denial)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 230, in test_stale_reviewed_assessment_cannot_finalize_past_a_fullwidth_denial
+    self.assert_stale_denial_cannot_finalize('ｎｏ')
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 215, in assert_stale_denial_cannot_finalize
+    self.assertEqual((assessment['status'], assessment['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'infection.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'infection.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_visible_compatibility_denials_cannot_release_the_opposite_assessment (core.tests.test_v3_ordinary_topics.NominalPlanTopic.test_visible_compatibility_denials_cannot_release_the_opposite_assessment) (denial='ｎｏ', finding='infection.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 75, in test_visible_compatibility_denials_cannot_release_the_opposite_assessment
+    self.assertFalse(g.plain_value(plan))
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_visible_compatibility_denials_cannot_release_the_opposite_assessment (core.tests.test_v3_ordinary_topics.NominalPlanTopic.test_visible_compatibility_denials_cannot_release_the_opposite_assessment) (denial='ｎｏ', finding='active bacterial infection.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 77, in test_visible_compatibility_denials_cannot_release_the_opposite_assessment
+    self.assertEqual((answers['Assessment']['status'], answers['Assessment']['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'active bacterial infection.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'active bacterial infection.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_compatibility_reading_only_withholds_and_does_not_create_plain_answers (core.tests.test_v3_ordinary_topics.NominalPlanTopic.test_compatibility_reading_only_withholds_and_does_not_create_plain_answers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-topics/rebuild/core/tests/test_v3_ordinary_topics.py", line 87, in test_compatibility_reading_only_withholds_and_does_not_create_plain_answers
+    self.assertFalse(g.plain_value(value), value)
+AssertionError: True is not false : ｎｏ infection.
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.323s
+
+FAILED (failures=4)
+Preserving test database for alias 'default'...
+Found 3 test(s).
+System check identified no issues (0 silenced).
