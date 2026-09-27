@@ -866,7 +866,9 @@ def read_notices():
     validate_layer(value)
     committed = value['committed']
     if committed is not None:
-        backup.require(type(committed) is dict and set(committed) == {'status', 'incident', 'announced_at'},
+        # Only a notice keeps what it superseded, and a notice names its incident and itself.
+        backup.require(type(committed) is dict and set(committed) == {'status', 'incident', 'announced_at'}
+                       and value['incident'] is not None and value['incident']['incident_attempt'] is not None,
                        'Invalid incident notices.')
         validate_status(committed['status'])
         validate_layer(committed)
@@ -880,21 +882,49 @@ def requested(prefix):
                for suffix in ('-pending.json', '-result.json'))
 
 
-def uncommitted(notices, status):
-    """⚠️ THE LEDGER RAN AHEAD OF status.json: a notice's first write landed and its second did not.
+def notice_time(notices):
+    """When the ledger's newest notice was made: a notice stamps its own severity with the very
+    instant status.json records as its last_attempt_at, and nothing later rewrites the layer that
+    still keeps what it superseded."""
+    record = notices['incident']
+    return notices['announced_at'][severity(record['incident_attempt_condition'])]
 
-    status.json is still EXACTLY the one the check began from, which the ledger kept as it wrote the
-    notice. status.json is the commit point, and a request only ever begins after both writes, so
-    the notice the ledger names never began: its layer is discarded and the one it superseded is
-    read. The next check then plans whatever is owed, as though the crashed check never ran.
+
+def committed_by(notices, status):
+    """Whether status.json records the ledger's newest notice: its incident, itself, and its time."""
+    record = notices['incident']
+    return ((status['incident_id'], status['incident_attempt'], status['last_attempt_at'])
+            == (record['incident_id'], record['incident_attempt'], notice_time(notices)))
+
+
+def layer_in_force(notices, status):
+    """⚠️ WHICH LEDGER LAYER DESCRIBES status.json. The ledger may have run ahead of it.
+
+    A notice's first write lands the ledger with the layer it supersedes kept beside it, and only
+    then is status.json (the commit point) written. A request only ever begins after both. So the
+    newer layer is read only if status.json records THAT notice (its incident, its own identity and
+    its time), or its own request record shows it began and status.json has been rewritten since by
+    a release that keeps no ledger. Otherwise the notice never began, and the kept layer is read.
+
+    ⚠️ status.json IS NOT REQUIRED TO BE BYTE-FOR-BYTE WHAT THE CRASHED CHECK BEGAN FROM (F1, round
+    2). The previous release, run after a rollback, rewrites status.json without opening the ledger:
+    its check time and condition on every check, and a first notice or a close of its own. Requiring
+    equality dropped the kept layer the moment that happened, and the monitor refused forever.
+
+    ⚠️ AND A REQUEST RECORD UNDER THE SAME NAME IS NOT PROOF THAT THIS NOTICE BEGAN. A first notice
+    is named by its incident, and the previous release names its own first notice for the same
+    incident the same way; that record announces its own condition at its own time. Only a record
+    of this notice (its condition, at its time) says it began.
     """
     committed = notices['committed']
-    if committed is None or committed['status'] != status:
-        return None
-    discarded = notices['incident'] and notices['incident']['incident_attempt']
-    backup.require(discarded and discarded != status['incident_attempt']
-                   and not requested('incident-' + discarded),
-                   'Incident notice already requested.')
+    if committed is None or committed_by(notices, status):
+        return notices
+    record, when = notices['incident'], notice_time(notices)
+    prefix = 'incident-' + record['incident_attempt']
+    if requested(prefix):
+        began = attempt_record(prefix)
+        if (began['condition'], began['attempted_at']) == (record['incident_attempt_condition'], when):
+            return notices
     return committed
 
 
@@ -908,8 +938,10 @@ def read_state():
         if evidence == [DIRECTORY / NOTICES_FILE]:
             # ...with one exception that is provably no loss: a fresh monitor's very first notice
             # whose ledger landed and whose status.json never did. The ledger kept the pristine
-            # state that check began from, and no request record exists (uncommitted() checks).
-            backup.require(uncommitted(read_notices(), {key: pristine[key] for key in STATUS_KEYS}),
+            # state that check began from, and no request record exists (the only file is the ledger).
+            notices = read_notices()
+            backup.require(notices['committed'] is not None
+                           and notices['committed']['status'] == {key: pristine[key] for key in STATUS_KEYS},
                            'Incident state is missing.')
         else:
             backup.require(not evidence, 'Incident state is missing.')
@@ -917,7 +949,7 @@ def read_state():
     value = json.loads(backup.read_private(path, 65536))
     validate_status(value)
     notices = read_notices() or {'incident': None, 'announced_at': no_announcements(), 'committed': None}
-    notices = uncommitted(notices, value) or notices
+    notices = layer_in_force(notices, value)
     # ⚠️ A STAMP COUNTS ONLY IF status.json RECORDS A REQUEST NO EARLIER THAN IT. Every notice
     # stamps its severity with the very instant status.json then records as last_attempt_at. A
     # stamp later than that (or any stamp before status.json records a request at all) was written
@@ -934,11 +966,10 @@ def read_state():
                                                                             value['incident_attempt']):
         state.update(record)
     else:
-        # status.json names an incident the ledger does not describe: the previous release opened
-        # it or made its first notice, or a crash fell between the two writes of one check. Either
-        # way it can only be that shape: at most a first notice, named by the incident itself
-        # (anything else fails the invariants below). What that notice announced is read from its
-        # own durable record rather than assumed.
+        # status.json names an incident the ledger (the layer in force) does not describe: the
+        # previous release opened it or made its first notice. It can only be that shape: at most
+        # a first notice, named by the incident itself (anything else fails the invariants below).
+        # What that notice announced is read from its own durable record rather than assumed.
         same = record is not None and record['incident_id'] == value['incident_id']
         state.update(incident_id=value['incident_id'],
                      incident_opened_at=record['incident_opened_at'] if same else value['last_check_at'])
@@ -965,9 +996,10 @@ def write_state(state, supersedes=None):
     While an incident is open the ledger is written FIRST. A write that makes a NOTICE passes what
     it supersedes (the exact status.json the check began from and the ledger layer describing it),
     and the ledger keeps that until the check's next write. So a crash between the two files leaves
-    status.json byte-for-byte what the ledger kept, and read_state reads the kept layer: the notice
-    status.json never named is discarded, provably unsent, because a request only begins after both
-    writes. Any other write in an open incident changes nothing status.json names, so the ledger's
+    a status.json that does not record the notice (as the check found it, or as a release without
+    the ledger has rewritten it since), and read_state reads the kept layer (layer_in_force): the
+    notice is discarded, provably unsent, because a request only begins after both writes. Any
+    other write in an open incident changes nothing status.json names, so the ledger's
     record still matches it. When the incident is closed status.json goes first, so the ledger's
     older record is inert from the moment it lands. The ledger is created on first need: a monitor
     that has never announced anything has no ledger.
