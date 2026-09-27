@@ -327,6 +327,38 @@ class BackupAlertsTests(unittest.TestCase):
         self.sender.assert_not_called()
 
 
+class IncidentEscalationReproductionTests(unittest.TestCase):
+    """⚠️ THE DEFECT, AS IT HAPPENED ON THE SYNTHETIC HOST, 2026-09-23..26.
+
+    An incident opened on an offsite renewal-due WARNING at 05:05Z and its one alert
+    was attempted. At 22:05Z the same incident became `offsite_policy_expired` — a
+    FAILURE — and every later check only replayed the first receipt, so nobody was told
+    that the warning had become a failure. Isolated: every send is the mocked transport.
+    """
+    setUp = BackupAlertsTests.setUp
+
+    def test_escalation_within_an_open_incident_is_announced(self):
+        start = datetime(2026, 9, 23, 5, 5, tzinfo=timezone.utc)
+        self.recovery.return_value['condition'] = 'offsite_policy_renewal_due'
+        result, code = a.check(start)
+        self.assertEqual((code, result['severity']), (0, 'warning'))
+        self.assertEqual(self.sender.call_count, 1)
+        # The warning persists through the day: still one notice, no storm.
+        for hour in range(1, 17):
+            a.check(start + timedelta(hours=hour))
+        self.assertEqual(self.sender.call_count, 1)
+        escalated = datetime(2026, 9, 23, 22, 5, tzinfo=timezone.utc)
+        self.recovery.return_value['condition'] = 'offsite_policy_expired'
+        result, code = a.check(escalated)
+        self.assertEqual((code, result['condition'], result['severity']),
+                         (1, 'offsite_policy_expired', 'failure'))
+        self.assertEqual(self.sender.call_count, 2,
+                         'the warning became a failure inside the open incident and nobody was told')
+        subject, body = self.sender.call_args.args[1:]
+        self.assertIn('ESCALATION', subject)
+        self.assertIn('Condition: offsite_policy_expired', body)
+
+
 class RecoveryStageTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
