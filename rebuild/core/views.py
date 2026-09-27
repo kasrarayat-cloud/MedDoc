@@ -497,15 +497,22 @@ def notes_save_clears(e):
             or CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).exists())
 
 def review_state_counts(e,codes=True):
-    """What clearing this draft discards, as counts only (never clinical text), for its audit row."""
-    answers=[a for a in (e.answers or {}).values() if isinstance(a,dict)]
+    """What clearing this draft discards, as counts only (never clinical text), for its audit row. The categories are
+    disjoint, as their names say: each answer is counted once, in the first that fits — an accepted suggestion (which is
+    also `edited` and may be reviewed), left blank, edited and not an accepted suggestion, or reviewed and unedited; each
+    statement decision once, reviewed or chosen and unreviewed; accepted codes only (refutation round 2, R2-4)."""
+    counts={'answers_accepted_suggestion':0,'answers_left_blank':0,'answers_edited_not_accepted':0,'answers_reviewed_unedited':0}
+    for a in (e.answers or {}).values():
+        if not isinstance(a,dict):continue
+        if a.get('accepted_suggestion'):counts['answers_accepted_suggestion']+=1
+        elif a.get('status')=='left_blank':counts['answers_left_blank']+=1
+        elif a.get('status')=='edited':counts['answers_edited_not_accepted']+=1
+        elif a.get('reviewed'):counts['answers_reviewed_unedited']+=1
     decisions=[d for d in ((e.template_review or {}).get('decisions') or {}).values() if isinstance(d,dict)]
-    return {'answers_reviewed':sum(1 for a in answers if a.get('reviewed')),
-            'answers_edited':sum(1 for a in answers if a.get('status')=='edited'),
-            'answers_accepted':sum(1 for a in answers if a.get('accepted_suggestion')),
-            'answers_left_blank':sum(1 for a in answers if a.get('status')=='left_blank'),
-            'statement_decisions':len(decisions),'statement_reviews':sum(1 for d in decisions if d.get('reviewed')),
-            'codes_accepted':CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0}
+    counts.update(statements_reviewed=sum(1 for d in decisions if d.get('reviewed')),
+                  statements_chosen_unreviewed=sum(1 for d in decisions if not d.get('reviewed')),
+                  codes_accepted=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0)
+    return counts
 
 @require_POST
 @transaction.atomic
