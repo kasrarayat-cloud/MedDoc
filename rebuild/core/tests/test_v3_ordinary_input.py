@@ -232,3 +232,93 @@ class InlineOwnershipRefutation(SimpleTestCase):
             self.assertEqual((answer['status'], answer['text']), ('supported', 'Yes'))
             reading = g.governance_for(notes, FIELDS)[11]['preceding']
             self.assertEqual(reading['inline_options'], set())
+
+
+class CompleteValueEvidenceContext(SimpleTestCase):
+    fields = [*FIELDS, field('recent', 'Seen recently', 'choice', ['Yes', 'No'])]
+
+    def test_complete_value_keeps_the_same_context_as_its_labelled_source_unit(self):
+        for notes, label, held in (
+            ('Father: MI at 50. Smoker: No.', 'Smoker', True),
+            ('Family hx: father had an MI. Smoker: No.', 'Smoker', True),
+            ('Smoker: No.\nThe patient drinks socially but smokes daily.', 'Smoker', True),
+            ('Seen recently: No.\nPatient seen today.', 'Seen recently', True),
+            ('Patient presents with knee pain. Smoker: No.', 'Smoker', False),
+            ('Smoker: No.\nThe patient drinks socially.', 'Smoker', False),
+        ):
+            for quote in (label + ': No.', 'No.'):
+                with self.subTest(notes=notes, quote=quote):
+                    start = notes.index(quote)
+                    evidence = [{'quote': quote, 'start': start, 'end': start + len(quote)}]
+                    self.assertTrue(g.v3_labelled_source(notes, g.recognized_labels(self.fields),
+                                                        g.question_key(label), evidence))
+                    answer = {'status': 'supported', 'text': 'No', 'reviewed': True, 'evidence': evidence}
+                    governance = g.governance_for(notes, self.fields)
+                    page = g.as_currently_governed(governance, notes, {**answer, 'label': label})
+                    self.assertEqual((page['status'], page['text']), ('conflict', '') if held else ('supported', 'No'))
+                    key = next(f['key'] for f in self.fields if f['label'] == label)
+                    self.assertEqual(g.governed_decisions(notes, self.fields, {key: answer}), [label] if held else [])
+                    offer = {'text': 'No', 'status': 'edited', 'suggestion': 'No',
+                             'suggestion_evidence': evidence, 'accepted_suggestion': True, 'reviewed': True}
+                    self.assertEqual(g.governed_decisions(notes, self.fields, {key: offer}), [label] if held else [])
+
+    def test_binding_requires_the_complete_quote_and_exact_offsets(self):
+        notes = 'Father: MI at 50. Smoker: No.'
+        reading = g.governance_for(notes, self.fields)[11]['preceding']
+        start = notes.index('No.')
+        good = {'quote': 'No.', 'start': start, 'end': start + 3}
+        bound = g.v3_evidence_units(reading, [good])
+        self.assertEqual([u['quote'] for u in bound.values()], ['Smoker: No.'])
+        for bad in ({**good, 'quote': 'No', 'end': start + 2}, {**good, 'start': start - 1},
+                    {**good, 'end': start + 2}, {**good, 'quote': 'Yes'}):
+            self.assertEqual(g.v3_evidence_units(reading, [bad]), {})
+        self.assertFalse(g.v3_labelled_source(notes, g.recognized_labels(self.fields), 'seen recently', [good]))
+        self.assertIn('Seen recently', g.governed_decisions(notes, self.fields, {'recent': {
+            'status': 'supported', 'text': 'No', 'reviewed': True, 'evidence': [good]}}))
+
+
+@override_settings(**LIVE)
+class CompleteValueEvidenceWorkflow(V3EncounterFixture, TestCase):
+    def setUp(self):
+        with patch('core.tests.test_word_v3_workflow.build_intake_form',
+                   side_effect=lambda path: ordinary_input_form(path, ['Smoker'])):
+            super().setUp()
+
+    def stored_value(self, notes):
+        start = notes.index('No.')
+        self.encounter.notes = notes
+        self.encounter.answers = {self.key('Smoker'): {'status': 'supported', 'text': 'No', 'reviewed': True,
+            'evidence': [{'quote': 'No.', 'start': start, 'end': start + 3}]}}
+        self.encounter.save(update_fields=['notes', 'answers'])
+
+    def test_old_supported_value_cannot_skip_page_save_or_finalization_context(self):
+        self.stored_value('Father: MI at 50. Smoker: No.')
+        page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        row = page.context['answer_rows'][0]
+        self.assertEqual((row['status'], row['text']), ('conflict', ''))
+        self.finalize(); self.encounter.refresh_from_db()
+        self.assertNotEqual(self.encounter.status, 'finalized')
+        self.assertFalse(self.encounter.export_path)
+        self.assertEqual(self.save({'Smoker': 'No'}).status_code, 302)
+        self.encounter.refresh_from_db()
+        # An unchanged stale page is not a new clinician decision. Its stored
+        # status stays supported, but the current page and finalization hold it.
+        self.assertEqual(self.encounter.answers[self.key('Smoker')]['status'], 'supported')
+        self.finalize(); self.encounter.refresh_from_db()
+        self.assertNotEqual(self.encounter.status, 'finalized')
+        self.assertFalse(self.encounter.export_path)
+        self.assertEqual(self.save({'Smoker': ''}, extra={'held_shown_' + self.key('Smoker'): '1'}).status_code, 302)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.answers[self.key('Smoker')]['status'], 'conflict')
+        self.finalize(); self.encounter.refresh_from_db()
+        self.assertNotEqual(self.encounter.status, 'finalized')
+        self.assertFalse(self.encounter.export_path)
+
+    def test_patient_value_evidence_still_saves_finalizes_and_exports_checked_option(self):
+        self.stored_value('Patient presents with knee pain. Smoker: No.')
+        page = self.client.get(f'/encounters/{self.encounter.pk}/')
+        self.assertEqual(page.context['answer_rows'][0]['status'], 'supported')
+        self.assertEqual(self.save({'Smoker': 'No'}).status_code, 302)
+        self.finalize(); self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.status, 'finalized')
+        self.assertIn('Smoker  ☐ Yes  ☒ No', part_text(private_path(self.encounter.export_path).read_bytes()))

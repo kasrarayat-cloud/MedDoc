@@ -2303,7 +2303,18 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     parsed = ({u['id']: value for u, value in zip(units, parsed_units)} if parsed_units is not None else
               {u['id']: tab_source_value(u['quote'], labels) for u in units})
     subjects, subject_spans, clinical, ambiguous_subjects, unresolved_subjects = v3_field_subjects(units, named, parsed)
-    colon = {u['id']: bool(labelled_value(u['quote'], labels)) for u in units}
+    colon_values = {u['id']: labelled_value(u['quote'], labels) for u in units}
+    colon = {key: bool(value) for key, value in colon_values.items()}
+    # Stored option evidence may be the complete labelled VALUE rather than the
+    # whole source unit (the same two forms v3_labelled_source accepts). Bind its
+    # exact quote and offsets to that unit for context; never use containment or
+    # discard the label's neighbouring source. Stored evidence itself is unchanged.
+    evidence_units = {(u['start'], u['end'], u['quote']): u for u in units}
+    for unit in units:
+        value = colon_values[unit['id']]
+        if value and value[1]:
+            start = unit['start'] + value[2]
+            evidence_units[(start, start + len(value[1]), value[1])] = unit
     # Inline options inside a prose-opening line need an established source
     # context too. A sentence boundary after "Father: ..." grants no patient
     # ownership. Keep this identical in generation and stored-answer governance.
@@ -2456,7 +2467,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                          and (plain_value(parsed[u['id']][1]) or (len(named[parsed[u['id']][0]]) == 1
                               and plain_printed_side_option(named[parsed[u['id']][0]][0], parsed[u['id']][1]))))
                     for u in units]
-    return {'units': units, 'spans': {(u['start'], u['end']): u for u in units}, 'parsed': parsed,
+    return {'units': units, 'evidence_units': evidence_units, 'parsed': parsed,
             'colon': colon, 'before': before, 'independent': independent, 'general': general, 'groups': groups,
             'inline_options': inline_options,
             'ends_read': ends_read, 'shapes_read': shapes_read, 'blocks': blocks, 'block_of': block_of,
@@ -2474,6 +2485,12 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
 
 
 
+def v3_evidence_units(reading, evidence):
+    """Resolve only an exact whole source unit or its complete labelled value."""
+    return {unit['id']: unit for entry in evidence
+            if (unit := reading['evidence_units'].get((entry.get('start'), entry.get('end'), entry.get('quote'))))}
+
+
 def v3_scope_selection(reading, label, evidence):
     """Complete source blocks keep their own context without inheriting another topic.
 
@@ -2483,8 +2500,7 @@ def v3_scope_selection(reading, label, evidence):
     label = question_key(label)
     if label in reading['ambiguous_subjects'] or label in reading['coupled']:
         return {'before': set(), 'after': set(), 'complete': set()}
-    spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
-    chosen = {reading['spans'][span]['id'] for span in spans if span in reading['spans']}
+    chosen = set(v3_evidence_units(reading, evidence))
     before, after, complete = set(), set(), set()
     after.update(chosen & reading['ancillary_relations'].get(label, {}).keys())
     for index in {reading['block_of'][unit] for unit in chosen}:
@@ -2515,13 +2531,13 @@ def v3_preceding_warnings(reading, label, evidence):
     """The same paragraph/source-block context on generation, page, save and finalize."""
     if not reading: return []
     label = question_key(label)
-    spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
+    selected = v3_evidence_units(reading, evidence)
     scoped = v3_scope_selection(reading, label, evidence)
     complete = set()
     if label in reading['general']:
         for group in reading['groups']:
             if len(group) > 1 and not any(reading['parsed'][u['id']] for u in group):
-                if all((u['start'], u['end']) in spans for u in group):
+                if all(u['id'] in selected for u in group):
                     complete.update(u['id'] for u in group)
     warnings = {unit['id']: unit for unit in reading['units']
                 if unit['id'] in reading['conditional_unsafe'] or unit['id'] in reading['coupled'].get(label, ()) or (label in reading['ambiguous_subjects']
@@ -2531,9 +2547,7 @@ def v3_preceding_warnings(reading, label, evidence):
         index = bisect.bisect_right(starts, start) - 1
         if index >= 0:
             unit = reading['units'][index]; warnings[unit['id']] = unit
-    for span in spans:
-        unit = reading['spans'].get(span)
-        if not unit: continue
+    for unit in selected.values():
         subject = reading['subjects'][unit['id']]
         if unit['id'] in reading['unresolved_subjects'] or (subject and subject != label):
             warnings[unit['id']] = unit
