@@ -751,9 +751,16 @@ def save_answers(request,pk):
         if any(decisions[key]['evidence']!=previous_decisions[key].get('evidence') for key in kept):
             review_errors.append('A statement source you changed was not kept: a statement keeps the clinician\'s wording and '
                                  'sources until a clinician reviews it. Ask a clinician to change the source.')
-        if any(isinstance(decision,dict) and decision.get('reviewed') for decision in previous_decisions.values()):
-            review_errors.append('The prewritten statement choices a clinician reviewed were kept but are no longer reviewed. '
-                                 'A clinician must review them again.')
+        # (each named for what happened to it: a wording the saver replaced is never reported as kept — refutation R3)
+        named=lambda keys:'; '.join(row['label'] for row in e.template_version.review_requirements if row['key'] in keys)
+        replaced={key for key in decisions if isinstance(previous_decisions.get(key),dict) and key not in kept}
+        if replaced:
+            review_errors.append('Your save replaced the chosen statement wording for: '+named(replaced)+'. '
+                                 'A clinician must review the new wording.')
+        kept_reviewed={key for key in kept if previous_decisions[key].get('reviewed')}
+        if kept_reviewed:
+            review_errors.append('The statement choices a clinician reviewed were kept but are no longer reviewed: '
+                                 +named(kept_reviewed)+'. A clinician must review them again.')
     if clinician:
         try:
             resolved=wm_resolve(e,request.user,decisions)
@@ -782,11 +789,16 @@ def save_answers(request,pk):
     stored=(e.template_review or {}).get('decisions') or {}
     withdrawn_statement_reviews=sorted(key for key,decision in previous_decisions.items()
                                        if isinstance(decision,dict) and decision.get('reviewed') and not (stored.get(key) or {}).get('reviewed'))
+    # Which statement's wording this save changed, as identifiers only (statement key, wording ids), never the text.
+    statement_wording_changes=[{'statement':key,'from':decision.get('variant'),'to':stored[key].get('variant')}
+                               for key,decision in sorted(previous_decisions.items())
+                               if isinstance(decision,dict) and isinstance(stored.get(key),dict)
+                               and decision.get('variant')!=stored[key].get('variant')]
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
           accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn),
           left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews,
-          withdrawn_statement_reviews=withdrawn_statement_reviews)
+          withdrawn_statement_reviews=withdrawn_statement_reviews,statement_wording_changes=statement_wording_changes)
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)

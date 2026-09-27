@@ -467,13 +467,23 @@ class EmployeeSaveKeepsStatementDecisions(OfflineWordForm):
                          reviewed['decisions']['claim_32']['evidence'])
         self.assertContains(response, 'A statement source you changed was not kept')
 
-    def test_a_wording_the_employee_changes_is_kept_as_the_employees_unreviewed_choice(self):
+    def test_a_wording_the_employee_replaces_is_named_as_replaced_and_audited(self):
+        """R3: an employee replacing the wording a clinician reviewed was told the reviewed choices were "kept", and the
+        audit recorded only the withdrawn review — not that the wording changed."""
         self.clinician_reviews()
         self.client.force_login(self.member('wm-guards-employee-3', 'employee'))
-        self.save({'claim_variant_claim_32': 'negative'})
+        response = self.save({'claim_variant_claim_32': 'negative'})
         decision = self.encounter.template_review['decisions']['claim_32']
         self.assertEqual((decision['variant'], decision['reviewed']), ('negative', False))
-
+        warnings = [str(message) for message in response.context['messages']]
+        self.assertIn('Review remains incomplete: Your save replaced the chosen statement wording for: Prewritten statement: '
+                      'Right saphenous reflux finding. A clinician must review the new wording.', warnings)
+        self.assertIn('Review remains incomplete: The statement choices a clinician reviewed were kept but are no longer '
+                      'reviewed: Prewritten statement: Exam type; Prewritten statement: Signer identity. A clinician must '
+                      'review them again.', warnings)
+        event = last_event('encounter.answers_saved', self.encounter)
+        self.assertEqual(event.get('statement_wording_changes'), [{'statement': 'claim_32', 'from': 'not_assessed', 'to': 'negative'}])
+        self.assertNotIn('reflux', json.dumps(event))                      # (identifiers only, never clinical text)
 
 
 class WordNotesSaveAndClear(OfflineWordForm):
