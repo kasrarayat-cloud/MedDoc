@@ -1,0 +1,10 @@
+{
+  "ci-33759-core.log": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-33759-core.log",
+    "sha256": "0242d1dda336f54214e2c173410296eed38820d33a5ab94f2fe3d90dcc838aa5"
+  },
+  "ci-33759-support-completed-job.log": {
+    "path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/ci-33759-support-completed-job.log",
+    "sha256": "46fcd0bc533cb36d3ef2024bdffeec88979622c56acc96463a397b275bef58ea"
+  }
+}

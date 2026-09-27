@@ -19,3 +19,10 @@ The first full operations pass (1155tests/82.390s) retained **2 failures,1 error
 Four offline orchestration controls prove exact command union, stop-on-each-failure, unknown-mode refusal and aggregate acceptance for success/failure/cancelled/skipped/empty. They stub command execution; the next CI run must supply actual execution evidence.
 
 All initial failures and full output are retained by hash in manifest.json. No provider call, production backup, policy renewal, reservation or deployment occurred.
+
+
+## Exact33759 completed result and schema-test repair
+
+Run36354278599 finished **failure**. Core ran2,047 tests in1035.245s with exactly one failing subtest: the old SDK-schema constraint test expected301-character labels to reject, while the reviewed contract permits1,000 Unicode code points. The required aggregate correctly failed. Support passed20 reviewer-SSH controls,211 document tests,1,155 operations tests and90 named adapter/kernel checks; dependency audit found no known vulnerabilities. Four operations skips remain explicit: two host-worker identity checks cannot run without installed workers; two historical candidate-scope checks refer to an already-merged candidate. Browser15/WM9/input8, marketing andsecrets passed. Complete logs and all first results are retained.
+
+Root reproduced the same schema failure locally (3tests/1failure). Test-only91db0eb7 changes the rejected label to1,001 and adds astral1,001 rejection; it also asserts complete301/1,000 ASCII/astral labels survive unchanged. Empty label and invalid glyph constraints remain. All4 affected tests pass0.062s, including the actual SDK body through MockTransport with network denied. No application code, schema bound, request, reservation or provider call changed. Independent review and next exact-head CI remain pending at this entry;33759 is not relabelled green.

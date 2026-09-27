@@ -1,0 +1,90 @@
+{
+  "passed": true,
+  "synthetic_only": true,
+  "generation": "fixture, no provider requests",
+  "backend": {
+    "backend": "wm-iov-foss-v2",
+    "source_sha256": "c1852a492221cfa0d144c9c0a60b700a7363a2cca7630aa988ee8b6329e1868b",
+    "mapping_digest": "0fcc5e36dfe589a190a726f059c45b10364f3d02f312aea5fc8935d16ea05072"
+  },
+  "checks": [
+    {
+      "name": "Synthetic doctor login and fixture spending boundary",
+      "passed": true
+    },
+    {
+      "name": "Upload preserved WM IOV original with 90 fields",
+      "passed": true
+    },
+    {
+      "name": "WM positive: notes → fixture answers → reviewed export",
+      "passed": true
+    },
+    {
+      "name": "WM absent: notes → fixture answers → reviewed export",
+      "passed": true
+    },
+    {
+      "name": "WM no_prior: notes → fixture answers → reviewed export",
+      "passed": true
+    },
+    {
+      "name": "WM asymptomatic: notes → fixture answers → reviewed export",
+      "passed": true
+    },
+    {
+      "name": "WM long: notes → fixture answers → reviewed export",
+      "passed": true
+    },
+    {
+      "name": "Conflicting source blocks finalization; source correction clears review",
+      "passed": true
+    },
+    {
+      "name": "Same-department sharing and cross-department/organization denial",
+      "passed": true
+    }
+  ],
+  "exports": [
+    {
+      "scenario": "positive",
+      "encounter": "http://127.0.0.1:9130/encounters/b8912261-39d6-4084-bbcd-3fdafea0e296/",
+      "exportURL": "http://127.0.0.1:9130/encounters/b8912261-39d6-4084-bbcd-3fdafea0e296/export/",
+      "path": "/home/runner/work/MedDoc/MedDoc/rebuild/.runtime/wm-browser-artifacts/positive.docx",
+      "sha256": "90680ebbfee0af553205b898c17d1700600b5273f819e95b219db01e60f35f28",
+      "bytes": 45664
+    },
+    {
+      "scenario": "absent",
+      "encounter": "http://127.0.0.1:9130/encounters/490c3d5f-dcdc-4ad3-8892-396b22131f59/",
+      "exportURL": "http://127.0.0.1:9130/encounters/490c3d5f-dcdc-4ad3-8892-396b22131f59/export/",
+      "path": "/home/runner/work/MedDoc/MedDoc/rebuild/.runtime/wm-browser-artifacts/absent.docx",
+      "sha256": "4da80f783a19b4eabe79105bf64dcbd1cb438e8c2d94da109933068677a49eeb",
+      "bytes": 45623
+    },
+    {
+      "scenario": "no_prior",
+      "encounter": "http://127.0.0.1:9130/encounters/1de19f6e-6a5e-42de-a6e5-c4128c1a6f43/",
+      "exportURL": "http://127.0.0.1:9130/encounters/1de19f6e-6a5e-42de-a6e5-c4128c1a6f43/export/",
+      "path": "/home/runner/work/MedDoc/MedDoc/rebuild/.runtime/wm-browser-artifacts/no_prior.docx",
+      "sha256": "0835c36da4849b4ce4acc38fd7b21a9208f8dcfd1a7b5b533b3d07fd87de8012",
+      "bytes": 45496
+    },
+    {
+      "scenario": "asymptomatic",
+      "encounter": "http://127.0.0.1:9130/encounters/e28a2e97-16fe-4f0f-b1b1-3d7180a02e18/",
+      "exportURL": "http://127.0.0.1:9130/encounters/e28a2e97-16fe-4f0f-b1b1-3d7180a02e18/export/",
+      "path": "/home/runner/work/MedDoc/MedDoc/rebuild/.runtime/wm-browser-artifacts/asymptomatic.docx",
+      "sha256": "9ba7e7f4ac9ac8ee63bdb7455f104485d2d5abd204d50aaae334b149b028a9da",
+      "bytes": 45403
+    },
+    {
+      "scenario": "long",
+      "encounter": "http://127.0.0.1:9130/encounters/4c9512d1-04d4-4527-af26-ec4506895af7/",
+      "exportURL": "http://127.0.0.1:9130/encounters/4c9512d1-04d4-4527-af26-ec4506895af7/export/",
+      "path": "/home/runner/work/MedDoc/MedDoc/rebuild/.runtime/wm-browser-artifacts/long.docx",
+      "sha256": "f9cc008473d258832fc1f870be1f3a2cd75d2926473be29d49f5a5d347fecdbf",
+      "bytes": 45756
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+2026-09-27T22:28:05.0777511Z FAIL: test_local_strict_mapping_validation_still_rejects_constraints (core.tests.test_anthropic_schema_compatibility.NativeSchemaCompatibility.test_local_strict_mapping_validation_still_rejects_constraints) (key='label', value='xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+2026-09-27T22:28:05.0783536Z ----------------------------------------------------------------------
+2026-09-27T22:28:05.0787147Z Traceback (most recent call last):
+2026-09-27T22:28:05.0800158Z   File "/home/runner/work/MedDoc/MedDoc/rebuild/core/tests/test_anthropic_schema_compatibility.py", line 63, in test_local_strict_mapping_validation_still_rejects_constraints
+2026-09-27T22:28:05.0802405Z     with self.subTest(key=key, value=value), self.assertRaises(ValidationError):
+2026-09-27T22:28:05.0804016Z                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-09-27T22:28:05.0805166Z AssertionError: ValidationError not raised
+2026-09-27T22:28:05.0805741Z 
+2026-09-27T22:28:05.0806276Z ----------------------------------------------------------------------
+2026-09-27T22:28:05.0807098Z Ran 2047 tests in 1035.245s
+2026-09-27T22:28:05.0807568Z 
+2026-09-27T22:28:05.0807937Z FAILED (failures=1)
+2026-09-27T22:28:05.0808765Z Destroying test database for alias 'default' ('test_quillmd_ci')...

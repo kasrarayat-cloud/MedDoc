@@ -162,3 +162,8 @@ The reviewed long-question repair cf04596e is locally integrated. Full labels/co
 Draft PR #1288's first run passed2,043 core and204 document tests plus browser/accessibility, marketing and secrets checks, but its application job timed out before operations/adapter/audit completed. Four backup fixture clocks were repaired without changing production policy guards. The final workflow partitions core/support into two bounded jobs while preserving the required aggregate and every check. Final candidate CI and artifact identities live in the actionable runtime checkpoint; no result is inferred from an in-progress job.
 
 The next safe engineering sequence remains the open B-G1 source-span/actor/destination/governing-context acceptance contract and B-W1 option/dependency/full-document completeness, using the retained failures. These are internal work, not all funding blockers. Additional corpus rights/lineage, native desktop access, approved exact-model verification and actual production/provider agreements remain external dependencies. No V1 completion or launch date is claimed.
+
+
+## Exact33759 CI outcome
+
+The second run finished with one stale test expectation:core2,047 tests, one failure expecting301-character labels to reject despite the reviewed1,000-code-point contract. The aggregate failed as intended. All other jobs passed, including211 document/1,155 operations tests (four explicit skips),90 actual adapter/kernel checks, browser/accessibility, marketing andsecrets. A test-only boundary correction91db0eb7 passes its four focused SDK/local-validation tests; production bytes remain unchanged. The failed full run remains failed. The actionable checkpoint records the next exact candidate and its actual CI result.

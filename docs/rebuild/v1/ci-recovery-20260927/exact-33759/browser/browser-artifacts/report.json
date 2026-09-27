@@ -1,0 +1,64 @@
+{
+  "checks": [
+    {
+      "name": "Desktop sign-in page and accessibility",
+      "passed": true
+    },
+    {
+      "name": "Mobile sign-in page and accessibility",
+      "passed": true
+    },
+    {
+      "name": "Individual synthetic doctor authentication",
+      "passed": true
+    },
+    {
+      "name": "Mobile workspace accessibility and navigation",
+      "passed": true
+    },
+    {
+      "name": "Desktop workspace accessibility and fixture disclosure",
+      "passed": true
+    },
+    {
+      "name": "Create a document from seeded patient and original form",
+      "passed": true
+    },
+    {
+      "name": "Generate supported answers with explicit zero fixture charge",
+      "passed": true
+    },
+    {
+      "name": "Supported answers retain source evidence",
+      "passed": true
+    },
+    {
+      "name": "Save clinician review decisions",
+      "passed": true
+    },
+    {
+      "name": "Finalize reviewed document and export the original format",
+      "passed": true
+    },
+    {
+      "name": "Doctor cannot access administrator console",
+      "passed": true
+    },
+    {
+      "name": "Administrator authenticates with MFA and has financial-only access",
+      "passed": true
+    },
+    {
+      "name": "Admin financial drill-down renders explicit fixture costs without clinical notes",
+      "passed": true
+    },
+    {
+      "name": "Admin filters disclose empty matches and audit retains readable drill-downs",
+      "passed": true
+    },
+    {
+      "name": "No client-side JavaScript errors",
+      "passed": true
+    }
+  ]
+}

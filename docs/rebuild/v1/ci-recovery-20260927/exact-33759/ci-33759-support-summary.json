@@ -1,0 +1,383 @@
+{
+  "source_commit": "33759ab04c9e0bb6ab93554efec37e9c35abe8f1",
+  "job_id": 108718764320,
+  "log_sha256": "46fcd0bc533cb36d3ef2024bdffeec88979622c56acc96463a397b275bef58ea",
+  "summaries": [
+    "2026-09-27T22:10:37.5888303Z Ran 20 tests in 4.062s",
+    "2026-09-27T22:10:37.5888894Z OK",
+    "2026-09-27T22:11:50.9874394Z Ran 211 tests in 72.640s",
+    "2026-09-27T22:11:50.9875106Z OK",
+    "2026-09-27T22:13:01.1001239Z Ran 1155 tests in 69.000s",
+    "2026-09-27T22:13:01.1001949Z OK (skipped=4)",
+    "2026-09-27T22:13:51.1071420Z No known vulnerabilities found"
+  ],
+  "skips": [
+    "2026-09-27T22:12:04.1451022Z test_it_describes_this_host_correctly (test_audio_submission_activation.TheWorkerIsIdentifiedByMoreThanItsPid.test_it_describes_this_host_correctly) ... skipped 'Worker identification NOT EXERCISED: the worker is inactive on this host'",
+    "2026-09-27T22:12:51.3180924Z test_it_describes_this_host_correctly (test_recording_repair_activation.TheWorkerIsIdentifiedByMoreThanItsPid.test_it_describes_this_host_correctly) ... skipped 'Worker identification NOT EXERCISED: the worker is inactive on this host'",
+    "2026-09-27T22:13:00.9565090Z THE ANTI-VACUOUS CONTROL. If the comparison below ever skips, this fails instead. ... skipped 'This candidate is merged; its scope is fixed in the merge commit and is not re-judged against a later branch.'",
+    "2026-09-27T22:13:00.9612041Z test_the_declaration_matches_this_candidates_real_change_exactly (test_word_multicolumn_scope.DeclaredSourceScope.test_the_declaration_matches_this_candidates_real_change_exactly) ... skipped 'This candidate is merged; its scope is fixed in the merge commit and is not re-judged against a later branch.'"
+  ],
+  "adapter_checks": [
+    {
+      "name": "v2_canonical_90_fields_14_requirements",
+      "pass": true
+    },
+    {
+      "name": "all_source_labels_unique_including_requirements",
+      "pass": true
+    },
+    {
+      "name": "positive_actual_export",
+      "pass": true
+    },
+    {
+      "name": "positive_all28_control_ids_and_original_options_preserved",
+      "pass": true
+    },
+    {
+      "name": "positive_actual_signer_and_timestamp",
+      "pass": true
+    },
+    {
+      "name": "positive_original_questions_and_layout_structure",
+      "pass": true
+    },
+    {
+      "name": "positive_headers_media_semantics",
+      "pass": true
+    },
+    {
+      "name": "positive_all_resolved_statements_visible",
+      "pass": true
+    },
+    {
+      "name": "positive_no_placeholder_or_duplicate_is",
+      "pass": true
+    },
+    {
+      "name": "positive_every_supported_answer_complete",
+      "pass": true
+    },
+    {
+      "name": "positive_replaces_both_fixed_negatives",
+      "pass": true
+    },
+    {
+      "name": "absent_actual_export",
+      "pass": true
+    },
+    {
+      "name": "absent_all28_control_ids_and_original_options_preserved",
+      "pass": true
+    },
+    {
+      "name": "absent_actual_signer_and_timestamp",
+      "pass": true
+    },
+    {
+      "name": "absent_original_questions_and_layout_structure",
+      "pass": true
+    },
+    {
+      "name": "absent_headers_media_semantics",
+      "pass": true
+    },
+    {
+      "name": "absent_all_resolved_statements_visible",
+      "pass": true
+    },
+    {
+      "name": "absent_no_placeholder_or_duplicate_is",
+      "pass": true
+    },
+    {
+      "name": "absent_every_supported_answer_complete",
+      "pass": true
+    },
+    {
+      "name": "no_prior_actual_export",
+      "pass": true
+    },
+    {
+      "name": "no_prior_all28_control_ids_and_original_options_preserved",
+      "pass": true
+    },
+    {
+      "name": "no_prior_actual_signer_and_timestamp",
+      "pass": true
+    },
+    {
+      "name": "no_prior_original_questions_and_layout_structure",
+      "pass": true
+    },
+    {
+      "name": "no_prior_headers_media_semantics",
+      "pass": true
+    },
+    {
+      "name": "no_prior_all_resolved_statements_visible",
+      "pass": true
+    },
+    {
+      "name": "no_prior_no_placeholder_or_duplicate_is",
+      "pass": true
+    },
+    {
+      "name": "no_prior_every_supported_answer_complete",
+      "pass": true
+    },
+    {
+      "name": "no_prior_preserves_empty_controls_and_explicit_side_claims",
+      "pass": true
+    },
+    {
+      "name": "asymptomatic_actual_export",
+      "pass": true
+    },
+    {
+      "name": "asymptomatic_all28_control_ids_and_original_options_preserved",
+      "pass": true
+    },
+    {
+      "name": "asymptomatic_actual_signer_and_timestamp",
+      "pass": true
+    },
+    {
+      "name": "asymptomatic_original_questions_and_layout_structure",
+      "pass": true
+    },
+    {
+      "name": "asymptomatic_headers_media_semantics",
+      "pass": true
+    },
+    {
+      "name": "asymptomatic_all_resolved_statements_visible",
+      "pass": true
+    },
+    {
+      "name": "asymptomatic_no_placeholder_or_duplicate_is",
+      "pass": true
+    },
+    {
+      "name": "asymptomatic_every_supported_answer_complete",
+      "pass": true
+    },
+    {
+      "name": "no_symptoms_clean_visible_indication",
+      "pass": true
+    },
+    {
+      "name": "long_actual_export",
+      "pass": true
+    },
+    {
+      "name": "long_all28_control_ids_and_original_options_preserved",
+      "pass": true
+    },
+    {
+      "name": "long_actual_signer_and_timestamp",
+      "pass": true
+    },
+    {
+      "name": "long_original_questions_and_layout_structure",
+      "pass": true
+    },
+    {
+      "name": "long_headers_media_semantics",
+      "pass": true
+    },
+    {
+      "name": "long_all_resolved_statements_visible",
+      "pass": true
+    },
+    {
+      "name": "long_no_placeholder_or_duplicate_is",
+      "pass": true
+    },
+    {
+      "name": "long_every_supported_answer_complete",
+      "pass": true
+    },
+    {
+      "name": "full_long_answer_without_truncation",
+      "pass": true
+    },
+    {
+      "name": "right_evidence_cannot_support_left_treatment",
+      "pass": true
+    },
+    {
+      "name": "right_evidence_cannot_support_left_treatment_no_export",
+      "pass": true
+    },
+    {
+      "name": "bare_statement_is_not_side_bound_evidence",
+      "pass": true
+    },
+    {
+      "name": "bare_statement_is_not_side_bound_evidence_no_export",
+      "pass": true
+    },
+    {
+      "name": "conflicting_explicit_own_label_cannot_be_ignored",
+      "pass": true
+    },
+    {
+      "name": "conflicting_explicit_own_label_cannot_be_ignored_no_export",
+      "pass": true
+    },
+    {
+      "name": "positive_selection_with_negative_variant_rejected",
+      "pass": true
+    },
+    {
+      "name": "positive_selection_with_negative_variant_rejected_no_export",
+      "pass": true
+    },
+    {
+      "name": "no_prior_variant_cannot_hide_supported_treatment_fields",
+      "pass": true
+    },
+    {
+      "name": "no_prior_variant_cannot_hide_supported_treatment_fields_no_export",
+      "pass": true
+    },
+    {
+      "name": "same_vein_cannot_be_absent_and_reflux_positive",
+      "pass": true
+    },
+    {
+      "name": "same_vein_cannot_be_absent_and_reflux_positive_no_export",
+      "pass": true
+    },
+    {
+      "name": "prior_indication_cannot_conflict_with_bilateral_none",
+      "pass": true
+    },
+    {
+      "name": "prior_indication_cannot_conflict_with_bilateral_none_no_export",
+      "pass": true
+    },
+    {
+      "name": "global_negative_cannot_ignore_template_positive_duration",
+      "pass": true
+    },
+    {
+      "name": "global_negative_cannot_ignore_template_positive_duration_no_export",
+      "pass": true
+    },
+    {
+      "name": "not_assessed_side_cannot_hide_recorded_measurements",
+      "pass": true
+    },
+    {
+      "name": "not_assessed_side_cannot_hide_recorded_measurements_no_export",
+      "pass": true
+    },
+    {
+      "name": "unknown_variant_rejected",
+      "pass": true
+    },
+    {
+      "name": "unknown_variant_rejected_no_export",
+      "pass": true
+    },
+    {
+      "name": "every_changed_variant_requires_explicit_review",
+      "pass": true
+    },
+    {
+      "name": "every_changed_variant_requires_explicit_review_no_export",
+      "pass": true
+    },
+    {
+      "name": "changed_actual_signer_invalidates_visible_review_hash",
+      "pass": true
+    },
+    {
+      "name": "changed_actual_signer_invalidates_visible_review_hash_no_export",
+      "pass": true
+    },
+    {
+      "name": "clinician_identity_cannot_come_from_notes",
+      "pass": true
+    },
+    {
+      "name": "clinician_identity_cannot_come_from_notes_no_export",
+      "pass": true
+    },
+    {
+      "name": "tributary_evidence_not_transferable",
+      "pass": true
+    },
+    {
+      "name": "tributary_evidence_not_transferable_no_export",
+      "pass": true
+    },
+    {
+      "name": "documented_measurement_cannot_be_silently_omitted",
+      "pass": true
+    },
+    {
+      "name": "documented_measurement_cannot_be_silently_omitted_no_export",
+      "pass": true
+    },
+    {
+      "name": "wrong_measurement_unit_rejected",
+      "pass": true
+    },
+    {
+      "name": "wrong_measurement_unit_rejected_no_export",
+      "pass": true
+    },
+    {
+      "name": "oversize_is_refused_not_truncated",
+      "pass": true
+    },
+    {
+      "name": "oversize_is_refused_not_truncated_no_export",
+      "pass": true
+    },
+    {
+      "name": "stale_source_review_rejected",
+      "pass": true
+    },
+    {
+      "name": "stale_source_review_rejected_no_export",
+      "pass": true
+    },
+    {
+      "name": "stale_mapping_rejected",
+      "pass": true
+    },
+    {
+      "name": "stale_mapping_rejected_no_export",
+      "pass": true
+    },
+    {
+      "name": "unknown_original_refused_before_sdk",
+      "pass": true
+    },
+    {
+      "name": "unknown_original_refused_before_sdk_no_export",
+      "pass": true
+    },
+    {
+      "name": "duplicate_request_keys_refused",
+      "pass": true
+    },
+    {
+      "name": "duplicate_request_keys_refused_no_export",
+      "pass": true
+    },
+    {
+      "name": "normalized_complete_own_label_matches_core",
+      "pass": true
+    },
+    {
+      "name": "original_upload_unchanged",
+      "pass": true
+    }
+  ],
+  "adapter_check_count": 90
+}
