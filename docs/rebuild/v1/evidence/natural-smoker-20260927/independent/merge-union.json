@@ -1,0 +1,15 @@
+{
+  "root": "f94ce0c0acb9e7bf446f60d515804b7450e69df5",
+  "author": "368ccb7fbd344302eafaa22810be06855a58932b",
+  "merged": "68d52d7a6c728691801eabfd1b2ebbe19f99ea3a",
+  "author_defs": [
+    "judged_context",
+    "v3_option_answer"
+  ],
+  "root_defs": [
+    "v3_adopted",
+    "v3_generation_fields"
+  ],
+  "overlap": [],
+  "all_preserved": true
+}

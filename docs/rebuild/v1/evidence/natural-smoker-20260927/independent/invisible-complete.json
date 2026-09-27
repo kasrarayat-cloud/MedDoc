@@ -1,0 +1,43 @@
+{
+  "notes": "\u200bThe patient is a nonsmoker.",
+  "units": [
+    {
+      "id": 1,
+      "quote": "\u200bThe patient is a nonsmoker.",
+      "start": 0,
+      "end": 28,
+      "correction_value": null
+    }
+  ],
+  "answer": {
+    "text": "",
+    "status": "conflict",
+    "evidence": [
+      {
+        "quote": "\u200bThe patient is a nonsmoker.",
+        "start": 0,
+        "end": 28
+      }
+    ],
+    "reviewed": false,
+    "own_evidence": [
+      {
+        "quote": "\u200bThe patient is a nonsmoker.",
+        "start": 0,
+        "end": 28
+      }
+    ],
+    "held_candidate": {
+      "text": "\u200bThe patient is a nonsmoker.",
+      "evidence": [
+        {
+          "quote": "\u200bThe patient is a nonsmoker.",
+          "start": 0,
+          "end": 28
+        }
+      ],
+      "context": [],
+      "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+    }
+  }
+}

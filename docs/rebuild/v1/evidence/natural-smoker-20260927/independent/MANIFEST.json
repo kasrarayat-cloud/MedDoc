@@ -1,0 +1,18 @@
+{
+  "CHECKPOINT.txt": "97e470b708c21ddb53000fd85e78c25307b8c8f6f0f15247ff71b897a17ab32e",
+  "REPORT.md": "c77b4d50f8ad584970ae06650fb477f15d7899267590ee2cdf1c271d76181422",
+  "SHA256.json": "28c2e287ca6b5d9cec5afa9e64893bb2260745f6b134ec3ac53006d6daf7c815",
+  "base.json": "63b43c18e165da2c61701df825ea16de3d85350fc96d218dd800ca10b2c3c69b",
+  "candidate.json": "ee7f745683688038fb6a4810ea5ca7f2d6850d5533f7da15b68743a715e3edac",
+  "delta.json": "fb734d56423435daac88f99f0742bebace3d75d10313dbbeec9ef70a584779a9",
+  "generation-base.py": "72904344de7344345d9a9cedfc526fcec79a5d0ff522ba22d6bc78e1b178fb30",
+  "generation-candidate.py": "bb81dd8117dfe53737b5f37cf5482801260ac7655316dabf424908c68463996f",
+  "invisible-complete.json": "7bb0f0baf4d9988451a9ffa8d258d97158a1c25150b4fce23b70c1ef99b999c2",
+  "invisible-complete.py": "df2fd00a3fc61a884d60bfac82ca208049119c4910c8f6a4aca1eaa2591f8afa",
+  "merge-union.json": "883ff61105c3684032507ca0a6187c8fec92ebf1b1a1d8f884d656bea52ba8ce",
+  "natural-smoker-stored-root-after-corrected.json": "9adb68df88c9b310ab8dbf7461e474d91b15213a7b1d8172ab8aae11e36614e4",
+  "natural-smoker-stored-root-red.json": "9452ef71e0cf0cc117e34245824018e0baa766a077d642b5996d830ce16474a5",
+  "natural-smoker-stored-root.py": "9844269a68b60fd65f3f1dcbcd4181e83e57802d30517f312caebdb745a00ac5",
+  "probe.py": "42843838101b666d15726ff9bebfef243b0cd3c6f8be9857f311608200cbe0a3",
+  "v3_nonsmoker-candidate.py": "953f75c941311eb64e4efff7429b107656be148924b8b38f3a634c182546fb48"
+}

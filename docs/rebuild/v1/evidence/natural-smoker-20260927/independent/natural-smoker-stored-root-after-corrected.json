@@ -1,0 +1,29 @@
+{
+  "source_sha256": "bb81dd8117dfe53737b5f37cf5482801260ac7655316dabf424908c68463996f",
+  "cases": [
+    {
+      "notes": "The patient is a nonsmoker.",
+      "governed": [],
+      "evidence": [
+        {
+          "quote": "The patient is a nonsmoker.",
+          "start": 0,
+          "end": 27
+        }
+      ]
+    },
+    {
+      "notes": "The patient is a nonsmoker.\n\nThe patient smokes daily.",
+      "governed": [
+        "Smoker"
+      ],
+      "evidence": [
+        {
+          "quote": "The patient is a nonsmoker.",
+          "start": 0,
+          "end": 27
+        }
+      ]
+    }
+  ]
+}

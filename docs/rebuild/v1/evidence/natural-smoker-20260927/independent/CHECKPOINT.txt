@@ -1,0 +1,1 @@
+Finished bounded natural-Smoker refutation. NOTHING FOUND introduced. No process remains. Candidate and evidence preserved; root notified.
