@@ -1592,6 +1592,31 @@ def sided_grid_bytes(side="Left", *, heading=False, after=False):
 
 
 class RoundThreeRemainingDefects(unittest.TestCase):
+    def test_a_row_side_governs_multiple_details_until_the_next_printed_side(self):
+        from documents import word_v3
+        doc = Document()
+        table = doc.add_table(rows=1, cols=6)
+        for column, text in enumerate(("Right lung", "Effusion: ____", "Consolidation: ____",
+                                       "Left lung", "Effusion: ____", "Consolidation: ____")):
+            table.cell(0, column).text = text
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        self.assertEqual([f["label"] for f in fields], ["Right lung — Effusion", "Right lung — Consolidation",
+                                                     "Left lung — Effusion", "Left lung — Consolidation"])
+
+    def test_paired_side_cells_govern_only_their_own_answer(self):
+        from documents import word_v3
+        for right, left in (("Right", "Left"), ("Right knee", "Left knee")):
+            doc = Document()
+            table = doc.add_table(rows=1, cols=4)
+            for column, text in enumerate((right, "Effusion: __________", left, "Effusion: __________")):
+                table.cell(0, column).text = text
+            data = docx_bytes(doc)
+            fields = word_v3.inspect(data)["fields"]
+            self.assertEqual([f["label"] for f in fields], [right + " — Effusion", left + " — Effusion"])
+            exported = Document(io.BytesIO(word_v3.fill(data, fields, {fields[0]["key"]: "Absent", fields[1]["key"]: "Present"})))
+            self.assertEqual([c.text for c in exported.tables[0].rows[0].cells],
+                             [right, "Effusion: Absent", left, "Effusion: Present"])
+
     def test_a_separate_side_cell_qualifies_the_question_even_after_the_boxes(self):
         from documents import word_v3
         for side in ("L", "R", "Left", "Right", "Bilateral"):
@@ -1608,6 +1633,40 @@ class RoundThreeRemainingDefects(unittest.TestCase):
         from documents import word_v3
         field = next(f for f in word_v3.inspect(sided_grid_bytes(heading=True))["fields"] if "Effusion" in f["label"])
         self.assertIn("Left knee", field["label"])
+
+    def test_units_and_questionnaire_phrases_are_not_sides(self):
+        from documents.word_v3 import side_phrase
+        for text in ("per L", "l. other – specify", "l. I got the help I wanted", "The services were right for me"):
+            self.assertFalse(side_phrase(text), text)
+        for text in ("L", "R", "(L)", "Left knee", "Right side", "Costophrenical pathologies (right)"):
+            self.assertTrue(side_phrase(text), text)
+
+    def test_a_heading_in_another_table_cell_does_not_govern_the_next_row(self):
+        from documents import word_v3
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).paragraphs[0].add_run("Right leg").bold = True
+        table.cell(0, 1).paragraphs[0].add_run("Left leg").bold = True
+        table.cell(1, 0).text = "Notes: __________"
+        table.cell(1, 1).text = "Notes: __________"
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        labels = [f["label"] for f in fields]
+        self.assertIn("Right leg — Notes", labels)
+        self.assertIn("Left leg — Notes", labels)
+        self.assertFalse(any("Left leg — Right leg" in label or "Right leg — Left leg" in label for label in labels))
+
+    def test_a_repeated_side_header_in_one_table_resets_the_side(self):
+        from documents import word_v3
+        doc = Document()
+        table = doc.add_table(rows=4, cols=2)
+        for row, side in ((0, "Right leg"), (2, "Left leg")):
+            table.cell(row, 0).text = side
+            table.cell(row, 1).text = "Measurement"
+            table.cell(row + 1, 0).text = "Vein diameter"
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        questions = [f for f in fields if "Vein diameter" in f["label"]]
+        self.assertEqual([f["label"] for f in questions],
+                         ["Right leg — Vein diameter — Measurement", "Left leg — Vein diameter — Measurement"])
 
     def test_duplicate_context_uses_readable_line_text(self):
         from documents import word_v3
@@ -1651,6 +1710,32 @@ class RoundThreeRemainingDefects(unittest.TestCase):
         data = docx_bytes(doc)
         with self.assertRaises(word_v3.V3Failure):
             word_v3.locate(data, [{"slot": "word/document.xml#b/p[0]", "kind": "checkbox", "label": "Symptom", "box": 1}])
+
+    def test_private_use_symbol_codes_match_the_control_state(self):
+        from documents import word_v3
+        control = checkbox_control(checked=True)
+        state = control.find(qn("w:sdtPr") + "/{%s}checkbox/{%s}checkedState" % (W14, W14))
+        state.set("{%s}val" % W14, "F0FE")
+        content = control.find(qn("w:sdtContent"))
+        content.find(qn("w:r") + "/" + qn("w:t")).text = "\u00fe"
+        self.assertIs(word_v3.sdt_checkbox_state(control), True)
+
+    def test_a_control_printing_multiple_glyphs_is_unread(self):
+        from documents import word_v3
+        control = checkbox_control(checked=True)
+        control.find(qn("w:sdtContent") + "/" + qn("w:r") + "/" + qn("w:t")).text = "☒☐"
+        self.assertIsNone(word_v3.sdt_checkbox_state(control))
+
+    def test_a_wrapped_paragraphs_box_is_read_by_the_cell_writer(self):
+        from documents import word_v3
+        doc = Document()
+        cell = doc.add_table(rows=1, cols=1).cell(0, 0)
+        control = checkbox_control(checked=True)
+        cell.paragraphs[0]._p.append(control)
+        wrap_in_control(cell.paragraphs[0]._p)
+        self.assertEqual(word_v3.cell_boxes(cell._tc), [("sdt", control)])
+        word_v3.set_cell_box(cell._tc, False)
+        self.assertIs(word_v3.sdt_checkbox_state(control), False)
 
 
 if __name__ == "__main__":

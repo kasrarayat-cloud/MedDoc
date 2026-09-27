@@ -1,0 +1,102 @@
+{
+  "before": "8d231ca9a1526b6d1ec05c4d589180fc7c37d67536f7808c274073b6078ee450",
+  "after": "8d231ca9a1526b6d1ec05c4d589180fc7c37d67536f7808c274073b6078ee450",
+  "results": [
+    {
+      "mutant": "F1_nested_control",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 0,
+      "errors": 1
+    },
+    {
+      "mutant": "P1_wrapped_cell",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 0,
+      "errors": 1
+    },
+    {
+      "mutant": "P2_own_paragraph",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    },
+    {
+      "mutant": "P2_unattributed",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    },
+    {
+      "mutant": "F2_scope_identity",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 10,
+      "errors": 0
+    },
+    {
+      "mutant": "F2_heading",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    },
+    {
+      "mutant": "F3_readable_context",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    },
+    {
+      "mutant": "F4_preview",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    },
+    {
+      "mutant": "F5_Ma_addressable",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    },
+    {
+      "mutant": "F5_Mc_cell_paragraphs",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    },
+    {
+      "mutant": "F5_Md_symbol",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    },
+    {
+      "mutant": "F5_Me_many_glyphs",
+      "applied": true,
+      "killed": true,
+      "tests": 1,
+      "failures": 1,
+      "errors": 0
+    }
+  ]
+}

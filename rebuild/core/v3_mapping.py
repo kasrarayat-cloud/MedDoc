@@ -311,15 +311,20 @@ def open_places(outline_rows, fields, query=''):
 
 
 def missing_boxes(fields, outline_rows):
-    """Labels of fields with a printed glyph box the form does not have: a box every place's `box_keys` in the
-    outline leaves out (a number beyond the glyph boxes of its line, or a line the form lacks)."""
+    """Reject every unaddressable box reference before confirmation, including controls and legacy fields.
+    Cell writers address a whole cell (possibly blank), so they require an addressable cell rather than a glyph."""
     from documents.word_v3 import box_key
     shown = {key for row in outline_rows or [] for key in row.get('box_keys') or [] if key}
+    cells = {row['slot'] for row in outline_rows or []
+             if row.get('kind') == 'tc' and not row.get('unnumbered_boxes')}
     found = []
     for field in fields or []:
         target = (field.get('locator') or {}).get('target') or {}
         for box in target.get('boxes') or []:
-            if box.get('kind') == 'glyph' and box_key(box) not in shown:
+            kind = box.get('kind')
+            valid = (box_key(box) in shown if kind in ('glyph', 'sdt', 'ff') else
+                     _slot(box.get('part', ''), box.get('slot', '')) in cells if kind in ('cell', 'cell_text') else False)
+            if not valid:
                 found.append(label_of(field))
                 break
     return found

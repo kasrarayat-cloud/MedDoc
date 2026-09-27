@@ -702,6 +702,14 @@ LABEL_END = re.compile(r"[:?]\s*$|[–—-]\s*$")
 OPTION_WORD = re.compile(r"^(?:y|n|yes|no|m|f|male|female|n/?a|nd|unk|unknown|not known|true|false|done|not done|normal|abnormal|"
                          r"present|absent|positive|negative|pos|neg|[0-9]{1,2}|[+\-]|none|mild|moderate|severe|left|right|l|r|"
                          r"bilateral|pass|fail|ok|agree|disagree|always|often|sometimes|rarely|never)\.?$", re.I)
+SIDE_WORD = re.compile(r"\b(?:left(?!\s+(?:blank|empty|unchanged)\b)|right(?!\s+for\b)|bilateral|lt|rt|bil)\b", re.I)
+
+
+def side_phrase(text):
+    """A printed side phrase; a unit 'per L' or a questionnaire list marker 'l.' is not a side."""
+    return bool(SIDE_WORD.search(text) or re.fullmatch(r"\(?[LR]\)?[.:]?", text.strip(), re.I) or
+                re.match(r"^(?:[LR][.)]?|\([LR]\))\s+(?:side|knee|leg|hip|arm|ankle|foot|hand|wrist|elbow|shoulder|eye|ear)\b",
+                         text, re.I))
 FIELDISH = re.compile(r"\b(?:date|time|name|signature|signed|initials?|comments?|notes?|number|no\.|#|dose|amount|result|"
                       r"value|score|site|code|address|phone|reason|description|details?|id)\b", re.I)
 YESNO = re.compile(r"^(?:y|n|yes|no|n/?a|nd|unk|unknown|not known|not applicable|n/a or nd|na or nd|not done|done)\.?$", re.I)
@@ -821,6 +829,10 @@ class Detector:
                 bold = runs and all(r.find(q("w:rPr")) is not None and r.find(q("w:rPr")).find(q("w:b")) is not None
                                     and (r.find(q("w:rPr")).find(q("w:b")).get(q("w:val")) or "1") not in ("0", "false") for r in runs)
                 result = bool(bold) and not LABEL_END.search(txt) and len(txt.split()) <= 12
+            # A plain printed side heading is still part of the question's identity.
+            # It need not use a Word heading style: e.g. 'Left knee:' over a grid.
+            if side_phrase(txt) and txt.endswith(":") and len(txt.split()) <= 6 and "\x00" not in self.ptext(p)[0]:
+                result = True
         self._is_heading[id(p)] = result
         return result
 
@@ -1147,11 +1159,92 @@ class Detector:
         self.rule_initial_boxes()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
+        self.qualify_sides()
         self.surface_duplicates()
         for a in self.areas:
             a.capacity = self.capacity_for(a)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
+
+    def qualify_sides(self):
+        """A side printed in another row cell or its heading belongs to the question used for source matching.
+        Checkbox/option cells are excluded: their 'Left'/'Right' words are possible answers, not a governing side.
+        Stored mappings are never rewritten; this qualifies only newly detected areas."""
+        area_cells = {}
+        cell_owners = {}
+        for number, area in enumerate(self.areas):
+            slots = [area.slot] + area.extra_slots
+            for box in area.target.get("boxes", []):
+                slot = self.index.by_id.get("%s#%s" % (box.get("part"), box.get("slot")))
+                if slot is not None:
+                    slots.append(slot)
+            cells = {cell.id for slot in slots if (cell := self.host_cell(slot)) is not None}
+            area_cells[number] = cells
+            for identity in cells:
+                cell_owners.setdefault(identity, set()).add(number)
+        for number, area in enumerate(self.areas):
+            if side_phrase(area.label):
+                continue
+            scope = []
+            cell = self.host_cell(area.slot)
+            if cell is not None:
+                row = sorted(self.grid(cell.parent).get(cell.info["row"], []), key=lambda c: c.info["col"])
+                positions = [i for i, c in enumerate(row) if c.id in area_cells[number]]
+                if positions:
+                    # A row can contain independent Right/Left sections. Use its
+                    # nearest preceding side, including for several detail answers
+                    # under that side. A trailing side cannot cross another answer.
+                    before = list(reversed(row[:min(positions)]))
+                    after = row[max(positions) + 1:]
+                    for candidates, preceding in ((before, True), (after, False)):
+                        for candidate in candidates:
+                            if cell_owners.get(candidate.id, set()) - {number}:
+                                if preceding:
+                                    continue
+                                break
+                            text = clean_label(self.cell_text(candidate))
+                            objects = self.cell_objects(candidate)
+                            if any(c in objects for c in (BOX, CHECKED, "\x00")) or \
+                                    checkbox_nodes(candidate.el, own=False) or is_blank_text(text):
+                                if preceding:
+                                    continue
+                                break
+                            if side_phrase(text) and text not in (clean_label(o) for o in area.options):
+                                scope.append(text)
+                                break
+                        if scope:
+                            break
+                if not scope:
+                    # Side sections can repeat within one table. The nearest label row owns
+                    # this section; the table's first column heading may name the opposite leg.
+                    for row in sorted((r for r in self.grid(cell.parent) if r < cell.info["row"]), reverse=True):
+                        if self.row_kind(cell.parent, row) != "label":
+                            continue
+                        header = clean_label(self.text_at(cell.parent, row, cell.info["col"]))
+                        phrases = [header] if side_phrase(header) else [clean_label(self.cell_text(c))
+                                   for c in self.grid(cell.parent)[row] if side_phrase(clean_label(self.cell_text(c)))]
+                        scope.extend(s for s in phrases if s not in (clean_label(o) for o in area.options))
+                        break
+            if not scope:
+                # A heading in another cell or a previous answer must not govern this field.
+                # Walk actual containers, considering only preceding sibling headings.
+                place = area.slot
+                while place is not None:
+                    siblings = place.parent.children if place.parent is not None else self.index.roots
+                    previous = [p for p in siblings if p.part == place.part and p.kind == "p" and p.seq < place.seq
+                                and id(p.el) not in self.claimed and self.is_heading(p.el)]
+                    if previous:
+                        head = clean_label(self.text(previous[-1].el))
+                        if side_phrase(head):
+                            scope.append(head)
+                        break
+                    place = place.parent
+            # Keep each complete source phrase; truncating it could remove its side.
+            scope = list(dict.fromkeys(s for s in scope if s and
+                                      not re.search(r"(?<!\w)" + re.escape(s) + r"(?!\w)", area.label, re.I)))
+            if scope:
+                area.label = " — ".join(scope + [area.label])
+                area.context = " > ".join(dict.fromkeys(s for s in scope + [area.context] if s))[:300]
 
     def label_before_object(self, slot, obj_el) -> str:
         """Text before an inline object in its paragraph (after any previous object); else row label / column header /
@@ -1361,7 +1454,11 @@ class Detector:
                     row_question = bool(question)
                     question = question or clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
                     cells = list(dict.fromkeys(c for c in (self.owning_cell(p) for p in g["paras"]) if c is not None))
-                    if row_question and (len(units) > 1 or not options[0]) and cells and self.unattributed_row_boxes(cells):
+                    header = clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                    choices = {o.lower().rstrip(".") for o in options}
+                    independent_question = len(cells) == 1 and header and not is_option_word(header) and \
+                        (choices >= {"yes", "no"} or choices >= {"y", "n"})
+                    if row_question and not independent_question and (len(units) > 1 or not options[0]) and cells and self.unattributed_row_boxes(cells):
                         # ⚠️ THE ROW PRINTS ANOTHER BOX THESE WERE NOT GIVEN: they are some of the row's options, never
                         # its question - a lone No box labelled with the row's question was ticked by 'Chest pain: yes'
                         # (round 3 P2). Refused, with a note, rather than guessed.
@@ -2100,7 +2197,15 @@ class Detector:
             if len(group) < 2:
                 continue
             for n, a in enumerate(group, 1):
-                where = "table row %d" % (a.slot.info["row"] + 1) if a.slot.kind == "tc" else a.slot.path
+                cell = self.host_cell(a.slot)
+                para = self.host_paragraph(a.slot)
+                if cell is not None:
+                    where = "table row %d: %s" % (cell.info["row"] + 1, self.cell_text(cell)[:100])
+                elif para is not None:
+                    preceding = [s for s in self.index.slots if s.part == para.part and s.kind == "p" and s.seq < para.seq]
+                    where = "line %d: %s" % (len(preceding) + 1, self.text(para.el)[:100])
+                else:
+                    where = "printed question %d: %s" % (n, a.label[:100])
                 a.context = ("%s · occurrence %d of %d (%s)" % (context, n, len(group), where)).strip(" ·")[:300]
                 a.note = "duplicate label: position shown"
 
@@ -3307,10 +3412,10 @@ def outline(data: bytes) -> dict:
         refs = place_box_refs(detector.index, s)
         row = {"slot": s.id, "kind": s.kind, "part": "body" if s.part == "word/document.xml" else
                ("header" if "header" in s.part else "footer"),
-               "preview": re.sub(r"\s+", " ", preview.replace("\x00", "▢")).strip()[:120],
+               "preview": re.sub(r"\s+", " ", preview.replace("\x00", "[text field]")).strip()[:120],
                "context": detector.heading_before(s)[:120],
                "control": s.info.get("type") or s.info.get("field") or "", "boxes": len(refs or [])}
-        if refs and s.kind in ("p", "glyphs", "tc"):
+        if refs:
             row["box_keys"] = [box_key(ref) if ref is not None else None for ref in refs]
         if refs is None:
             row["unnumbered_boxes"] = True

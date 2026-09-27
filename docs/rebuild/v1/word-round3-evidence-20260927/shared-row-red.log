@@ -1,0 +1,28 @@
+F
+======================================================================
+FAIL: test_a_row_side_governs_multiple_details_until_the_next_printed_side (documents.test_word_v3.RoundThreeRemainingDefects.test_a_row_side_governs_multiple_details_until_the_next_printed_side)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word/rebuild/documents/test_word_v3.py", line 1603, in test_a_row_side_governs_multiple_details_until_the_next_printed_side
+    self.assertEqual([f["label"] for f in fields], ["Right lung — Effusion", "Right lung — Consolidation",
+AssertionError: Lists differ: ['Rig[17 chars]n', 'Left lung — Consolidation', 'Left lung — [22 chars]ion'] != ['Rig[17 chars]n', 'Right lung — Consolidation', 'Left lung —[35 chars]ion']
+
+First differing element 1:
+'Left lung — Consolidation'
+'Right lung — Consolidation'
+
+  ['Right lung — Effusion',
+-  'Left lung — Consolidation',
+?   ^^^
+
++  'Right lung — Consolidation',
+?   ^^^^
+
+   'Left lung — Effusion',
+-  'Consolidation']
++  'Left lung — Consolidation']
+
+----------------------------------------------------------------------
+Ran 1 test in 0.083s
+
+FAILED (failures=1)

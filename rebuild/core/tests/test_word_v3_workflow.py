@@ -1156,16 +1156,17 @@ class V3SideInQuestions(V3Fixture, TestCase):
         answer = self.generated(version, "(L) Effusion: Yes\n").answers[field["key"]]
         self.assertEqual((answer["status"], answer["text"]), ("supported", "Yes"))
 
-    def test_a_repeated_label_is_shown_with_its_context_on_the_review_page(self):
+    def test_side_columns_qualify_their_questions_on_the_review_page(self):
         template, _ = self.uploaded(data=two_sides_grid_bytes(), name="Synthetic sides")
         version = self.confirm(template)
         self.assertEqual([(f["label"], f["context"]) for f in version.fields],
-                         [("Effusion", "Effusion > Right knee"), ("Effusion", "Effusion > Left knee")])
+                         [("Right knee — Effusion", "Right knee > Effusion > Right knee"),
+                          ("Left knee — Effusion", "Left knee > Effusion > Left knee")])
         encounter = self.generated(version, "Synthetic knee notes")
         page = self.client.get(f"/encounters/{encounter.pk}/").content.decode()
-        self.assertIn("Effusion &gt; Right knee", page)
-        self.assertIn("Effusion &gt; Left knee", page)
-        self.assertLess(page.index("Effusion &gt; Right knee"), page.index("Effusion &gt; Left knee"))
+        self.assertIn("Right knee — Effusion", page)
+        self.assertIn("Left knee — Effusion", page)
+        self.assertLess(page.index("Right knee — Effusion"), page.index("Left knee — Effusion"))
 
 
 def repeated_option_form_bytes():
