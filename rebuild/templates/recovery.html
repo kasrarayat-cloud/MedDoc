@@ -23,13 +23,13 @@
       <h2>{% if mode == 'verification' %}Request verification{% else %}Recover your account{% endif %}</h2>
       {% if sent %}
         <p role="status">If this address is eligible, a link has been prepared. Requests are limited to protect your account.</p>
-        {% if email_live %}<p>Check your inbox. This page cannot confirm whether a message was submitted or delivered.</p>{% else %}<div class="notice">Private outbox only: email delivery is not live. Your platform operator can securely provide your test link.</div>{% endif %}
+        {% if email_live %}<p>Check your inbox. This page cannot confirm whether a message was submitted or delivered.</p>{% else %}<div class="notice">Private outbox only: email delivery is not live. Your platform operator can securely provide your {% if synthetic_only %}test {% endif %}link.</div>{% endif %}
       {% else %}
         <p>Enter the email address for your individual account.</p>
         <form method="post" data-submit-once>{% csrf_token %}{{ form.as_p }}<button type="submit">{% if mode == 'verification' %}Prepare verification link{% else %}Prepare recovery link{% endif %}</button></form>
       {% endif %}
     {% endif %}
-    <div class="auth-footer"><p><a href="{% url 'login' %}">Return to sign in</a></p><p class="small">Private testing environment. Use synthetic patient information.</p></div>
+    <div class="auth-footer"><p><a href="{% url 'login' %}">Return to sign in</a></p>{% if synthetic_only %}<p class="small">Private testing environment. Use synthetic patient information.</p>{% endif %}</div>
   </div></main>
 </div>
 {% endblock %}

@@ -328,6 +328,10 @@ def configuration_rows():
         'gates': [
             {'name': 'SYNTHETIC_ONLY', 'value': str(settings.SYNTHETIC_ONLY)},
             {'name': 'STRIPE_LIVE_ENABLED', 'value': str(settings.STRIPE_LIVE_ENABLED)},
+            {'name': 'QUILLMD_DATA_MODE', 'value': settings.QUILLMD_DATA_MODE},
+            {'name': 'QUILLMD_REGISTRATION', 'value': settings.QUILLMD_REGISTRATION},
+            {'name': 'QUILLMD_STRIPE_MODE', 'value': settings.QUILLMD_STRIPE_MODE},
+            {'name': 'QUILLMD_MFA_REQUIRED_ALL', 'value': str(settings.QUILLMD_MFA_REQUIRED_ALL)},
             {'name': 'ADMIN_SITE', 'value': str(settings.ADMIN_SITE)},
             {'name': 'Database', 'value': settings.DATABASES['default']['NAME']},
             {'name': 'Release', 'value': settings.RELEASE_SHA},

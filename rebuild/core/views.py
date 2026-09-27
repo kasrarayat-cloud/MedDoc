@@ -111,7 +111,13 @@ WM_BLOCKERS={
 #: SYNTHETIC_ONLY flipped to False — every check that read /health/ as evidence of
 #: synthetic-only operation was reading a label that could not disagree with itself.
 #: It is now derived from the setting the seed and verification commands actually enforce.
-def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-only' if settings.SYNTHETIC_ONLY else 'live','surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
+#: 'real' only when the declared data mode is real (settings refused to start otherwise). The guard
+#: switched off WITHOUT the declared real profile — reachable only by overriding settings — still
+#: reports 'live', so the positive control above keeps a value that cannot pass for either mode.
+def health_data_mode():
+    if settings.SYNTHETIC_ONLY:return 'synthetic-only'
+    return 'real' if getattr(settings,'QUILLMD_DATA_MODE','synthetic')=='real' else 'live'
+def health(request): return JsonResponse({'status':'ok','data_mode':health_data_mode(),'surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
 
 @require_http_methods(['GET','POST'])
 def login_view(request):

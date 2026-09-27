@@ -1,16 +1,30 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth.forms import UserCreationForm
 from django.utils import timezone
 from .models import User, Department, Patient, TemplateVersion, Membership, latest_service_date
 from .security import departments
 
+
+class SyntheticAttestation:
+    """Drops the synthetic-data attestation when QUILLMD_DATA_MODE=real.
+
+    In synthetic mode the checkbox is required exactly as before. In real mode the statement is
+    false by design, so asking for it would train people to tick a box that says the opposite of
+    what they are doing. Checked at construction, so it follows the setting a test overrides.
+    """
+    def drop_synthetic_attestation(self):
+        if not settings.SYNTHETIC_ONLY: self.fields.pop('synthetic_only',None)
+
 class LoginForm(forms.Form):
     email=forms.EmailField(widget=forms.EmailInput(attrs={'autocomplete':'email'}))
     password=forms.CharField(widget=forms.PasswordInput(attrs={'autocomplete':'current-password'}))
     otp=forms.CharField(label='Authenticator code (administrators)',required=False,max_length=6,widget=forms.TextInput(attrs={'autocomplete':'one-time-code','inputmode':'numeric'}))
-class RegisterForm(UserCreationForm):
+class RegisterForm(SyntheticAttestation,UserCreationForm):
     synthetic_only=forms.BooleanField(label='I will use synthetic test data only.')
     class Meta: model=User; fields=['email','first_name','last_name']
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs); self.drop_synthetic_attestation()
     def clean_email(self): return self.cleaned_data['email'].lower().strip()
 class OTPForm(forms.Form):
     code=forms.CharField(label='Six-digit authenticator code',min_length=6,max_length=6)
@@ -34,12 +48,14 @@ class UploadForm(ScopedForm):
     synthetic_only=forms.BooleanField(label='This is a blank form with no patient data.')
 class MappingForm(forms.Form):
     labels=forms.JSONField(label='Field labels',help_text='JSON object mapping field keys to question labels. Locations cannot be changed; saving creates a new version.')
-class PatientForm(ScopedForm):
+class PatientForm(SyntheticAttestation,ScopedForm):
     department=forms.ModelChoiceField(queryset=Department.objects.none())
     display_name=forms.CharField(max_length=140)
     reference=forms.CharField(max_length=100)
     synthetic_only=forms.BooleanField(label='This is a synthetic test patient.')
-class EncounterForm(ScopedForm):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs); self.drop_synthetic_attestation()
+class EncounterForm(SyntheticAttestation,ScopedForm):
     patient=forms.ModelChoiceField(queryset=Patient.objects.none())
     template_version=forms.ModelChoiceField(queryset=TemplateVersion.objects.none(),label='Template and mapping version')
     notes=forms.CharField(label='Type source notes (or add voice next)',required=False,widget=forms.Textarea(attrs={'rows':9}),max_length=50000,help_text='Type documented facts here, or leave this blank to record or upload audio after creating the document. Review is required before export.')
@@ -50,6 +66,7 @@ class EncounterForm(ScopedForm):
         self.fields['patient'].queryset=Patient.objects.filter(department__in=departments(user)).select_related('department')
         self.fields['template_version'].queryset=TemplateVersion.objects.filter(template__department__in=departments(user)).select_related('template').order_by('template__name','-number')
         self.fields['service_date'].initial=timezone.localdate()
+        self.drop_synthetic_attestation()
     def clean_service_date(self):
         service_date=self.cleaned_data['service_date']
         if service_date>latest_service_date(): raise forms.ValidationError('The date of service or discharge cannot be in the future.')
@@ -77,6 +94,10 @@ class VoiceForm(forms.Form):
                           help_text='Up to 15 MB: about 1½ minutes of CD-quality WAV. Use MP3, M4A or the browser recorder for longer recordings.',
                           widget=forms.ClearableFileInput(attrs={'accept':'.wav,.webm,.mp3,.m4a,audio/*'}))
     consent=forms.BooleanField(label='Send this synthetic recording for transcription; charge provider usage × 1.5, never more than the limit shown.')
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        if not settings.SYNTHETIC_ONLY:
+            self.fields['consent'].label='Send this recording for transcription; charge provider usage × 1.5, never more than the limit shown.'
 class ReconciliationForm(forms.Form):
     evidence_kind=forms.ChoiceField(choices=[('', 'Select the authenticated evidence type'),('provider_report', 'Provider cost report or export (not an invoice)'),('invoice', 'Provider invoice')],label='Evidence type')
     reconciled_cost=forms.DecimalField(min_value=0,max_digits=24,decimal_places=11,label='Reconciled actual provider cost (USD, up to 11 decimals)')

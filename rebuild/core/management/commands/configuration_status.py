@@ -72,4 +72,8 @@ class Command(BaseCommand):
         self.stdout.write('Release gates:')
         self.stdout.write(f'  SYNTHETIC_ONLY: {settings.SYNTHETIC_ONLY}')
         self.stdout.write(f'  STRIPE_LIVE_ENABLED: {settings.STRIPE_LIVE_ENABLED}')
+        self.stdout.write(f'  QUILLMD_DATA_MODE: {settings.QUILLMD_DATA_MODE}')
+        self.stdout.write(f'  QUILLMD_REGISTRATION: {settings.QUILLMD_REGISTRATION}')
+        self.stdout.write(f'  QUILLMD_STRIPE_MODE: {settings.QUILLMD_STRIPE_MODE}')
+        self.stdout.write(f'  QUILLMD_MFA_REQUIRED_ALL: {settings.QUILLMD_MFA_REQUIRED_ALL}')
         self.stdout.write(f'  database: {settings.DATABASES["default"]["NAME"]}')

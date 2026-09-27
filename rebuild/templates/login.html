@@ -17,7 +17,7 @@
     <div class="auth-footer">
       <p><a href="{% url 'recovery_request' %}">Forgot your password?</a>{% if not is_admin_site %} · <a href="{% url 'verification_resend' %}">Resend verification</a>{% endif %}</p>
       {% if not is_admin_site %}<p>New to QuillMD? <a href="{% url 'register' %}">Create an account</a></p>{% endif %}
-      <p class="small">Private testing environment. Use synthetic patient information.</p>
+      {% if synthetic_only %}<p class="small">Private testing environment. Use synthetic patient information.</p>{% endif %}
     </div>
   </div></main>
 </div>

@@ -1,6 +1,8 @@
 from pathlib import Path
 import os
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
+from quillmd import application_profile as _profile
 BASE_DIR = Path(__file__).resolve().parent.parent
 # systemd reads the operator-owned EnvironmentFile before dropping to the
 # dedicated identity. That identity deliberately cannot open the source file.
@@ -13,7 +15,20 @@ SECRET_KEY = os.environ['QUILLMD_SECRET_KEY']
 DEBUG = False
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', 'app.quillmd.com', 'admin.quillmd.com']
 ADMIN_SITE = os.getenv('QUILLMD_ADMIN_SITE', '0') == '1'
-SYNTHETIC_ONLY = True  # Deliberate release gate; requires verified processing controls to change.
+# V1 application profile. Every default keeps the private synthetic system exactly as it was;
+# an unrecognised value refuses instead of selecting a mode. See docs/rebuild/v1/application-settings.md.
+try:
+    QUILLMD_DATA_MODE=_profile.choice(os.environ,'QUILLMD_DATA_MODE',_profile.DATA_MODES,'synthetic')
+    QUILLMD_REGISTRATION=_profile.choice(os.environ,'QUILLMD_REGISTRATION',_profile.REGISTRATION_MODES,'open')
+    QUILLMD_STRIPE_MODE=_profile.choice(os.environ,'QUILLMD_STRIPE_MODE',_profile.STRIPE_MODES,'test')
+    QUILLMD_MFA_REQUIRED_ALL=_profile.flag(os.environ,'QUILLMD_MFA_REQUIRED_ALL','0')
+    QUILLMD_WELCOME_CREDIT=_profile.welcome_credit(os.environ)
+    QUILLMD_DEEPGRAM_SMART_FORMAT=_profile.choice(os.environ,'QUILLMD_DEEPGRAM_SMART_FORMAT',_profile.BOOLEAN_WORDS,'false')
+    QUILLMD_DEEPGRAM_MIP_OPT_OUT=_profile.choice(os.environ,'QUILLMD_DEEPGRAM_MIP_OPT_OUT',_profile.BOOLEAN_WORDS,'true')
+except _profile.ProfileError as exc:
+    raise ImproperlyConfigured(str(exc)) from None
+# Deliberate release gate. 'real' is accepted only with the production-required settings below.
+SYNTHETIC_ONLY = QUILLMD_DATA_MODE == 'synthetic'
 RELEASE_SHA = os.getenv('QUILLMD_RELEASE_SHA', 'development-unrecorded')
 INSTALLED_APPS = ['django.contrib.auth','django.contrib.contenttypes','django.contrib.sessions','django.contrib.messages','django.contrib.staticfiles','django_otp','django_otp.plugins.otp_totp','core']
 MIDDLEWARE = ['django.middleware.security.SecurityMiddleware','django.middleware.clickjacking.XFrameOptionsMiddleware','core.preview_access.PreviewAccessMiddleware','whitenoise.middleware.WhiteNoiseMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.common.CommonMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware','django_otp.middleware.OTPMiddleware','django.contrib.messages.middleware.MessageMiddleware','core.middleware.AccessMiddleware']
@@ -80,7 +95,7 @@ AI_OUTPUT_RATE=os.getenv('QUILLMD_AI_OUTPUT_RATE','')
 AI_CACHED_RATE=os.getenv('QUILLMD_AI_CACHED_RATE','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
 STRIPE_WEBHOOK_SECRET=os.getenv('STRIPE_WEBHOOK_SECRET','')
-STRIPE_LIVE_ENABLED=False
+STRIPE_LIVE_ENABLED=QUILLMD_STRIPE_MODE=='live'
 # Who may change Department.organization_pays — i.e. which balance a department is billed to.
 # OFF by default and deliberately: the instruction is that this belongs to an explicitly
 # authorized platform owner / billing role, and this deployment has not established one.
@@ -94,3 +109,13 @@ LOGGING['filters'] = {'preview_csrf_redaction': {'()': 'core.preview_logging.Pre
 LOGGING['loggers']['django.security.csrf'] = {'handlers': ['console'], 'level': 'WARNING', 'propagate': False, 'filters': ['preview_csrf_redaction']}
 
 SECURE_HSTS_SECONDS=31536000 if SESSION_COOKIE_SECURE else 0
+
+# Refuse to start rather than serve real patient data, or take live payments, half-configured.
+# The messages name settings, never their values.
+_refusals=[]
+if QUILLMD_DATA_MODE=='real':
+    _refusals+=_profile.real_mode_problems(os.environ,allowed_hosts=ALLOWED_HOSTS,session_cookie_secure=SESSION_COOKIE_SECURE,csrf_cookie_secure=CSRF_COOKIE_SECURE,email_mode=QUILLMD_EMAIL_MODE,app_base_url=QUILLMD_APP_BASE_URL)
+if QUILLMD_STRIPE_MODE=='live':
+    _refusals+=_profile.stripe_live_problems(os.environ,allowed_hosts=ALLOWED_HOSTS,secret_key=STRIPE_SECRET_KEY,webhook_secret=STRIPE_WEBHOOK_SECRET,app_base_url=QUILLMD_APP_BASE_URL)
+if _refusals:
+    raise ImproperlyConfigured('QuillMD refuses to start: '+'; '.join(_refusals)+'.')
