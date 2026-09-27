@@ -1140,3 +1140,47 @@ class AFinalizedRecordIsNotReReviewedByItsReader(OfflineWordForm):
         page = self.page()
         errors = {row['key']: row['review_errors'] for row in page.context['answer_rows']}
         self.assertTrue(all(errors.values()), errors)
+
+
+# ── refutation round 4 ────────────────────────────────────────────────────────────────────────────────────────────
+FINALIZED = 'This document is finalized.'
+
+
+@override_settings(**TEST_SETTINGS)
+class CodeWritersRefuseAFinalizedRecord(OrdinaryDraft, TestCase):
+    """Refutation round 4, R4-1: finalization does not renumber the revision, so a Coding tab opened before it (an offer on
+    the page, at revision R) still posts the current revision afterwards. Its Accept answered 302, set accepted_by and
+    audited coding.accept after encounter.finalize; its Suggest added a suggestion and audited coding.suggest. Every other
+    writer already refused a finalized record."""
+    CODED = 'Symptoms: No chest pain.\nExamination: Normal gait, documented as R00.0 and R00.1.'
+    finalize = OrdinaryDraft.workflow.finalize
+
+    def test_a_coding_page_opened_before_finalization_changes_nothing_after_it(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        code = synthetic_code()
+        self.generate(encounter)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter, {**{'answer_' + k: a['text'] for k, a in encounter.answers.items()},
+                                                                   **{'reviewed_' + k: 'on' for k in encounter.answers}})
+        url, fields = page_form(self.client.get(f'/encounters/{encounter.pk}/?tab=coding'), '/coding/')
+        self.assertEqual(self.client.post(url, fields).status_code, 302)
+        offer = CodeSuggestion.objects.get(encounter=encounter)
+        # (a second documented code, in the release but not yet suggested: what a stale Suggest would add)
+        Code.objects.create(release=code.release, code='R00.1', description='Synthetic fixture; no clinical use')
+        page = self.client.get(f'/encounters/{encounter.pk}/?tab=coding')
+        stale = [(page_form(page, f'/coding/{offer.pk}/accept/'), 'Nothing was accepted.'), (page_form(page, '/coding/'), 'Nothing was suggested.')]
+        revision = encounter.revision
+        self.finalize(encounter)
+        self.assertEqual((encounter.status, encounter.revision), ('finalized', revision))   # (the premise: the revision stayed)
+        said = []
+        for (url, fields), nothing in stale:
+            self.assertEqual(fields.get('revision'), str(revision))
+            refused = self.client.post(url, fields)
+            text = html.unescape(refused.content.decode())
+            said.append((refused.status_code, FINALIZED in text, nothing in text))
+        offer.refresh_from_db()
+        # (as a whole, so a failure shows both writers: status and words; then the acceptance, the suggestions, the audit)
+        self.assertEqual((said, offer.accepted_by_id, CodeSuggestion.objects.filter(encounter=encounter).count(),
+                          AuditEvent.objects.filter(action='coding.accept').count(),
+                          AuditEvent.objects.filter(action='coding.suggest').count()),   # (1: the one before finalization)
+                         ([(409, True, True)] * 2, None, 1, 0, 1))
