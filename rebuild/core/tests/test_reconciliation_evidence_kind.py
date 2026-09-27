@@ -130,4 +130,8 @@ class EvidenceKindMigration(PolicyFixture,TransactionTestCase):
             self.assertEqual(ledger_before,list(LedgerEntry.objects.order_by('pk').values_list('pk','amount','kind','key','balance_after')))
             self.assertFalse(Usage.objects.get(pk=usage.pk).reconciliation.invoice_reconciled)
         finally:
-            MigrationExecutor(connection).migrate(after_target)
+            # ⚠️ RESTORE THE LATEST SCHEMA, NOT 0017. Rolling forward only to `after_target` left every later
+            # migration (0018 onward) unapplied for the rest of the run, so each TransactionTestCase after this one
+            # ran against a schema missing their tables and columns.
+            executor=MigrationExecutor(connection)
+            executor.migrate([key for key in executor.loader.graph.leaf_nodes() if key[0]=='core'])
