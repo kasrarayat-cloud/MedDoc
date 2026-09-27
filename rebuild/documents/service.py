@@ -23,8 +23,20 @@ class DocumentError(ValueError):
         self.code = code
 
 
+def word_engine():
+    """The Word contract used for NEW inspections: 'v3' or 'legacy'. Stored mappings always fill under the
+    contract they were made with."""
+    try:
+        from django.conf import settings
+        value = getattr(settings, "QUILLMD_WORD_ENGINE", "legacy")
+    except Exception:
+        value = "legacy"
+    return value if value in ("v3", "legacy") else "legacy"
+
+
 def _run(path, operation, mapping=None, answers=None, output_path=None, *,
-         document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None):
+         document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,
+         engine=None, targets=None):
     source = Path(path)
     try:
         fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -50,7 +62,8 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
     with tempfile.TemporaryDirectory(prefix="quillmd-parser-") as directory:
         workspace = Path(directory)
         (workspace / ("input" + suffix)).write_bytes(payload)
-        request = {"operation": operation, "format": suffix[1:], "mapping": mapping, "answers": answers}
+        request = {"operation": operation, "format": suffix[1:], "mapping": mapping, "answers": answers,
+                   "engine": engine or "legacy", "targets": targets}
         raw_request = json.dumps(request, ensure_ascii=False).encode()
         if len(raw_request) > 2 * 1024 * 1024:
             raise DocumentError("Mapping and answers exceed the 2 MiB processing limit.", "answer_limit")
@@ -102,7 +115,7 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
             export = workspace / ("output" + suffix)
             if not export.is_file() or export.is_symlink() or not 0 < export.stat().st_size <= MAX_OUTPUT:
                 raise DocumentError("The document export is invalid.", "invalid_export")
-            if suffix == ".docx":
+            if suffix == ".docx" and response.get("contract") != "v3":
                 # Output-only WM pagination: each limb repeats its own heading/units; long location
                 # rows may flow across pages. Applied before hashing, so the recorded export_sha256
                 # describes the stored bytes and the uploaded original is never rewritten.
@@ -125,9 +138,21 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
         return response
 
 
-def inspect_template(path):
+def inspect_template(path, *, engine=None):
     """Inspect a newly stored original. Raises DocumentError for unsafe/unsupported files."""
-    return _run(path, "inspect")
+    return _run(path, "inspect", engine=engine or word_engine())
+
+
+def outline_template(path):
+    """Every place of a contract v3 Word original a clinician can map by hand (read-only)."""
+    return _run(path, "outline", engine="v3")
+
+
+def locate_fields(path, targets: list):
+    """Clinician-chosen places -> contract v3 fields with verified anchors (recorded as manual)."""
+    if not isinstance(targets, list) or len(targets) > 200:
+        raise DocumentError("Add at most 200 fields at a time.", "invalid_mapping")
+    return _run(path, "locate", engine="v3", targets=targets)
 
 
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,

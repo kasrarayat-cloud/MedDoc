@@ -393,11 +393,17 @@ class Labels(dict):
         return self.__dict__['_stated']
 
 
+def question_key(label):
+    """THE label normalizer: how a notes line's label and a form question are compared (trimmed, a trailing ':' or
+    '?' dropped, case folded). The mapping review flags repeated questions with this same function."""
+    return str(label or '').strip().rstrip(':?').casefold()
+
+
 def recognized_labels(fields, context_labels=()):
     """Keep actual label punctuation as well as the existing canonical alias."""
     aliases=Labels()
     for label in [field['label'] for field in fields]+list(context_labels):
-        canonical=label.strip().rstrip(':?').casefold()
+        canonical=question_key(label)
         aliases[canonical]=canonical
         aliases[label.strip().casefold()]=canonical
     return aliases
@@ -442,12 +448,12 @@ def fixture(notes,fields,*,context_labels=(),evidence_contract=None):
     if evidence_contract != 'legacy' and tab_evidence_contract(fields):
         units,_=source_units(notes,fields,context_labels=context_labels)
         for f in fields:
-            label=f['label'].strip().rstrip(':?').casefold()
+            label=question_key(f['label'])
             quotes=[u['quote'] for u in units if (p:=labelled_value(u['quote'],labels)) and p[0]==label and p[1]]
             result.append(Selection(key=f['key'],quotes=quotes,conflict=False))
         return Selections(fields=result)
     for f in fields:
-        label=f['label'].strip().rstrip(':?').casefold()
+        label=question_key(f['label'])
         quotes=[]
         for line in notes.splitlines():
             parsed=labelled_value(line,labels)
@@ -1564,7 +1570,7 @@ def judged_context(governance, notes, index, label, evidence):
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
     anywhere, by_label, value_of, memo = index
-    key = str(label or '').strip().rstrip(':?').casefold()
+    key = question_key(label)
     own = by_label.get(key, {})
     # Every other place its quotes occur where this question may select them: a quote anywhere or under this label;
     # an own-label line's VALUE under this label (`SYMPTOMS:  chest pain` repeats `Symptoms: chest pain`, tenth pass).
@@ -1765,7 +1771,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=()):
             output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,
                               'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
             continue
-        label=field['label'].strip().rstrip(':?').casefold()
+        label=question_key(field['label'])
         allowed={}; explicit={}
         for unit in units:
             quote=unit['quote']; parsed=tab_source_value(quote,labels)
@@ -1860,7 +1866,7 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
             output[item.key]={'text':'','status':'conflict','evidence':[],'reviewed':False,'reason':'Instruction-like source text requires manual review.'}; continue
         evidence=[]
         field=next(f for f in fields if f['key']==item.key)
-        label=field['label'].strip().rstrip(':?').casefold()
+        label=question_key(field['label'])
         allowed={}
         explicit={}
         offset=0
@@ -1947,12 +1953,159 @@ def refuse_switched_mode(config):
     if now_live and not queued_live: _refuse_profile(MODE_ENTERED_LIVE)
 
 
+# ─── contract v3 Word forms ────────────────────────────────────────────────────────────────────────────────────────
+#: ⚠️ NEVER GENERATED: the clinician enters table rows; signature and initials are signed by hand on the printed form.
+#: Their labels still reach the validator as context labels, so a notes line under one of them is read as labelled for
+#: ANOTHER question and can never be offered to a generated field.
+V3_NEVER_GENERATED = ('table_rows', 'signature', 'initials')
+V3_NOT_GENERATED_REASON = {
+    'table_rows': 'Table rows are entered by the clinician; they are never generated from notes.',
+    'signature': 'Signed by hand on the printed form; never filled.',
+    'initials': 'Initialled by hand on the printed form; never filled.'}
+V3_OPTION_REASON = ('Read from the notes but NOT used as an answer: this question takes an option printed on the form, '
+                    'and its own labelled line in the notes does not name exactly one of them. Choose the option '
+                    'yourself if the notes support it, or choose "Leave blank — reviewed".')
+V3_CHECKBOX_REASON = ('Read from the notes but NOT used as an answer: this box is ticked only when its own labelled line '
+                      'in the notes says yes, checked or present. Tick it yourself if the notes support it, or choose '
+                      '"Leave blank — reviewed". An empty box is never read as No.')
+
+
+def v3_generation_fields(fields, context_labels=()):
+    """Contract v3: the fields the extractive generation is asked about, and the context labels it reads with."""
+    from .v3_mapping import is_v3_fields
+    if not is_v3_fields(fields):
+        return fields, context_labels, None
+    asked = [f for f in fields if f.get('kind') not in V3_NEVER_GENERATED]
+    held = [f['label'] for f in fields if f.get('kind') in V3_NEVER_GENERATED]
+    return asked, list(context_labels) + held, fields
+
+
+def v3_labelled_source(notes, labels, label, evidence):
+    """True when every evidence entry is THIS question's own labelled line, or the complete value after its label.
+    An option is never read from free text: an unlabelled line does not say which question it answers."""
+    if not evidence:
+        return False
+    for entry in evidence:
+        start, quote = entry.get('start'), entry.get('quote')
+        offset, found = 0, None
+        for line in notes.splitlines(keepends=True):       # the validator's own line reading, offsets included
+            if offset <= start < offset + len(line):
+                found = line
+                break
+            offset += len(line)
+        parsed = labelled_value(found, labels) if found is not None else None
+        if not parsed or parsed[0] != label or not parsed[1]:
+            return False
+        whole = found.strip()
+        if not ((quote == parsed[1] and start == offset + parsed[2])
+                or (quote == whole and start == offset + found.index(whole))):
+            return False
+    return True
+
+
+def v3_option_value(field, text):
+    """The text form of an option answer read from the notes, or None unless the value names the printed options
+    exactly (trimmed, ignoring case). A checkbox takes only an explicit yes, checked or present."""
+    from .v3_mapping import CHECKBOX_YES, CHECKED, option_for
+    lines = [line for line in str(text or '').split('\n') if line.strip()]
+    if field.get('kind') == 'checkbox':
+        return CHECKED if len(lines) == 1 and lines[0].strip().lower() in CHECKBOX_YES else None
+    options = field.get('options') or []
+    # ⚠️ An option printed more than once (labelled 'Left', 'Left (2)') is named by its words at every printing: the
+    # notes saying 'Left' do not say which one, so the answer is held rather than given to the first printing.
+    from documents.word_v3 import printed_options
+    printed = [str(word).strip().lower() for word in printed_options(field)]
+    if any(printed.count(line.strip().lower()) > 1 for line in lines):
+        return None
+    chosen = [option_for(options, line) for line in lines]
+    if not chosen or None in chosen or (field.get('kind') == 'choice' and len(chosen) != 1):
+        return None
+    return '\n'.join(option for option in options if option in chosen)
+
+
+def v3_option_answer(field, answer, notes, labels):
+    """An option question's generated answer: filled ONLY with the printed option its own labelled value names
+    exactly; otherwise held for the clinician with the candidate and its source lines. Absence stays missing."""
+    label = question_key(field['label'])
+    reason = V3_CHECKBOX_REASON if field.get('kind') == 'checkbox' else V3_OPTION_REASON
+
+    def named(text, evidence):
+        return v3_option_value(field, text) if v3_labelled_source(notes, labels, label, evidence) else None
+
+    if answer.get('suggestion'):
+        evidence = answer.get('suggestion_evidence') or []
+        value = named(answer['suggestion'], evidence)
+        if value is not None:
+            return {**answer, 'suggestion': value}
+        kept = {k: v for k, v in answer.items() if k not in ('suggestion', 'suggestion_evidence', 'reason')}
+        return {**kept, 'held_candidate': {'text': answer['suggestion'], 'evidence': evidence, 'context': [], 'reason': reason}}
+    if answer.get('status') == 'supported' and answer.get('text'):
+        own = answer.get('own_evidence') or answer.get('evidence') or []
+        value = named(answer['text'], own)
+        if value is not None:
+            return {**answer, 'text': value}
+        return {**answer, 'status': 'conflict', 'text': '', 'evidence': own,
+                'held_candidate': {'text': answer['text'], 'evidence': own, 'context': [], 'reason': reason}}
+    return answer
+
+
+V3_REPEATED_REASON = ('This question appears {count} times on the form; the notes do not say which one, so none of them '
+                      'was filled. Enter each answer yourself, or rename the questions in the form mapping so each label '
+                      'names one of them.')
+
+
+def v3_repeated(answer, count):
+    """A question whose label the form repeats: a labelled line cannot say which one it answers, so the candidate is
+    kept with its source lines and nothing is filled or offered. Absence stays missing."""
+    held = answer.get('held_candidate') or {}
+    candidate = answer.get('text') or answer.get('suggestion') or held.get('text') or ''
+    if not candidate and answer.get('status') == 'missing':
+        return answer
+    own = (answer.get('own_evidence') or answer.get('suggestion_evidence') or held.get('evidence')
+           or answer.get('evidence') or [])
+    kept = {k: v for k, v in answer.items() if k not in ('suggestion', 'suggestion_evidence', 'reason')}
+    return {**kept, 'status': 'conflict', 'text': '', 'evidence': own,
+            'held_candidate': {'text': candidate, 'evidence': own, 'context': held.get('context') or [],
+                               'reason': V3_REPEATED_REASON.format(count=count)}}
+
+
+def v3_adopted(fields, answers, notes, generated, context_labels=()):
+    """Every field of a v3 mapping: text kinds exactly as the extractive validator adopted them, option kinds only
+    when the notes name a printed option exactly, and table rows, signature and initials never generated.
+
+    ⚠️ A LABEL THE FORM REPEATS NAMES NO ONE QUESTION (refutation F4): 'Pain?' under RIGHT KNEE and 'PAIN' under
+    LEFT KNEE read the same, so 'Pain: yes' filled both knees. When two or more generated fields share a
+    question_key, a labelled line fills NONE of them; each is held for the clinician."""
+    labels = recognized_labels(generated, context_labels)
+    repeats = collections.Counter(question_key(f['label']) for f in generated)
+    out = {}
+    for field in fields:
+        kind = field.get('kind')
+        if kind in V3_NEVER_GENERATED:
+            out[field['key']] = {'text': '', 'status': 'missing', 'evidence': [], 'reviewed': False,
+                                 'reason': V3_NOT_GENERATED_REASON[kind]}
+            continue
+        answer = answers[field['key']]
+        count = repeats[question_key(field['label'])]
+        if count > 1:
+            answer = v3_repeated(answer, count)
+        elif kind in ('choice', 'multi_choice', 'checkbox'):
+            answer = v3_option_answer(field, answer, notes, labels)
+        out[field['key']] = answer
+    return out
+
+
 def generate(notes,fields,config=None,*,context_labels=()):
     config=config or configuration()
+    # Contract v3 only: the provider is asked about the generated kinds, with the others' labels as context labels.
+    # Every other form reaches the unchanged request below with its fields and context labels untouched.
+    fields,context_labels,v3_fields=v3_generation_fields(fields,context_labels)
     if len(notes)>50000 or len(fields)>100: raise ValidationError('Source exceeds supported limits; split explicitly. Nothing was truncated.')
     if config['mode']!='live':
         contract=None if config.get('prompt_version') in TAB_PROMPT_VERSIONS else 'legacy'
-        return validate_selections(notes,fields,fixture(notes,fields,context_labels=context_labels,evidence_contract=contract),context_labels=context_labels,evidence_contract=contract),Decimal('0'),{}, {},'synthetic-extractive-fixture','',True
+        answers=validate_selections(notes,fields,fixture(notes,fields,context_labels=context_labels,evidence_contract=contract),context_labels=context_labels,evidence_contract=contract)
+        if v3_fields is not None:answers=v3_adopted(v3_fields,answers,notes,fields,context_labels)
+        return answers,Decimal('0'),{}, {},'synthetic-extractive-fixture','',True
     # Resolved first: a job whose recorded profile cannot be sent is refused before anything is built or sent.
     profile=job_request_profile(config)
     natural=tab_evidence_contract(fields) and config.get('prompt_version') in TAB_PROMPT_VERSIONS
@@ -2001,6 +2154,7 @@ def generate(notes,fields,config=None,*,context_labels=()):
         if geo!=1: recorded['inference_geo_multiplier']=str(geo)
         raw={'anthropic_response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels),
              'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
+        if v3_fields is not None:raw['v3_fields']=v3_fields
         return raw,cost,units,recorded,provider,getattr(response,'_request_id',None) or '',False
     from openai import OpenAI
     client=OpenAI(timeout=profile['timeout_seconds'],max_retries=0)
@@ -2016,6 +2170,7 @@ def generate(notes,fields,config=None,*,context_labels=()):
     discount=discount_rate(config);cost=discounted_cost(list_cost,discount)
     raw={'response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels),
          'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
+    if v3_fields is not None:raw['v3_fields']=v3_fields
     return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
@@ -2027,12 +2182,17 @@ def validated(result):
         selections=schema.model_validate_json(content)
         if schema is UnitSelections:
             selections=unit_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()))
-        return validate_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()),evidence_contract=result.get('evidence_contract','legacy'))
+        return v3_result(result,validate_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()),evidence_contract=result.get('evidence_contract','legacy')))
     if isinstance(result,dict) and 'response' in result:
         response=result['response']
         if response.status!='completed' or response.output_parsed is None: raise ValidationError('Provider output was incomplete or refused. No answers were adopted.')
         selections=response.output_parsed
         if result.get('evidence_contract')==TAB_CONTRACT:
             selections=unit_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()))
-        return validate_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()),evidence_contract=result.get('evidence_contract','legacy'))
+        return v3_result(result,validate_selections(result['notes'],result['fields'],selections,context_labels=result.get('context_labels',()),evidence_contract=result.get('evidence_contract','legacy')))
     return result
+
+def v3_result(result,answers):
+    """A live provider result for a v3 mapping gets the same option rule as the fixture; any other form is unchanged."""
+    if not result.get('v3_fields'):return answers
+    return v3_adopted(result['v3_fields'],answers,result['notes'],result['fields'],result.get('context_labels',()))

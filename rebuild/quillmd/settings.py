@@ -79,6 +79,11 @@ SECURE_REFERRER_POLICY='same-origin'
 X_FRAME_OPTIONS='DENY'
 LOGIN_URL='/login/'
 DEFAULT_AUTO_FIELD='django.db.models.BigAutoField'
+# Word contract for NEW template inspections: 'legacy' (v1/v2 tables, placeholders, tab lines) or 'v3' (every
+# structure, clinician-reviewed mapping). Stored mappings always fill under the contract that made them.
+QUILLMD_WORD_ENGINE=os.getenv('QUILLMD_WORD_ENGINE','legacy')
+if QUILLMD_WORD_ENGINE not in ('legacy','v3'):
+    raise ImproperlyConfigured("QUILLMD_WORD_ENGINE must be 'legacy' or 'v3'.")
 QUILLMD_EMAIL_MODE=os.getenv('QUILLMD_EMAIL_MODE','file')
 EMAIL_BACKEND='core.email_backend.ResendEmailBackend' if QUILLMD_EMAIL_MODE=='resend' else 'core.email_backend.PrivateFileEmailBackend'
 EMAIL_FILE_PATH=STATE_DIR/'mail'
