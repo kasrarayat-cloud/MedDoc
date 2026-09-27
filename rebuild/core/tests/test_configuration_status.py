@@ -127,9 +127,23 @@ class ConfigurationStatusNamesTheModel(SimpleTestCase):
         self.assertIn('ANTHROPIC_API_KEY: present', report)
 
     def test_the_rollback_profile_is_named_as_the_unchanged_legacy_request(self):
-        report, _ = self.report(**SONNET_46)
-        self.assertIn('request profile: legacy', report)
+        report, config = self.report(**SONNET_46)
+        self.assertEqual(config['request_profile'], g.LEGACY_PROFILE)
+        self.assertIn('request profile: legacy (the pre-profile request, unchanged) '
+                      + json.dumps(g.LEGACY_PROFILE, sort_keys=True), report)
         self.assertIn(f'pricing_version: {ROLLBACK_FINGERPRINT}', report)
+
+    def test_the_4_6_model_with_us_geography_is_not_called_the_pre_profile_request(self):
+        """S5-R2. The rollback values with QUILLMD_AI_INFERENCE_GEO=us left in place send `inference_geo`, hold 1.1x and
+        fingerprint away from fcc80267 — and the screen called that 'legacy (the pre-profile request, unchanged)', which is
+        the very line the rollback check looks for. 'legacy' is printed only when the profile IS the legacy profile."""
+        report, config = self.report(**dict(SONNET_46, AI_INFERENCE_GEO='us'))
+        self.assertNotEqual(config['request_profile'], g.LEGACY_PROFILE)
+        self.assertNotIn('request profile: legacy', report)
+        self.assertNotIn('the pre-profile request, unchanged', report)
+        self.assertIn('request profile: NOT the pre-profile request: legacy-v1 plus inference_geo us '
+                      + json.dumps(config['request_profile'], sort_keys=True), report)
+        self.assertNotIn(ROLLBACK_FINGERPRINT, report)
 
     def test_an_invalid_profile_is_named_as_refusing_every_generation(self):
         report, _ = self.report(**dict(SONNET_5, AI_EFFORT='max'))

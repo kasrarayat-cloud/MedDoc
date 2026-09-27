@@ -163,9 +163,11 @@ id with its own expected model, rates and version.
 
 ## Rolling back
 
-Set the rollback values, restart the three services, and confirm that `configuration_status` shows
-`request profile: legacy` and `configured-v1:fcc80267…`. Jobs already queued under Sonnet 5 keep their Sonnet 5
-snapshot, so drain first.
+Set the rollback values, restart the three services, and confirm that `configuration_status` shows exactly
+`request profile: legacy (the pre-profile request, unchanged)` and `configured-v1:fcc80267…`. If
+`QUILLMD_AI_INFERENCE_GEO=us` was left set, the line reads `request profile: NOT the pre-profile request: legacy-v1 plus
+inference_geo us` instead: that request sends `inference_geo`, holds 1.1× and has a different `pricing_version`, so it is
+not the rollback. Jobs already queued under Sonnet 5 keep their Sonnet 5 snapshot, so drain first.
 
 ## Open, and not decidable in code
 

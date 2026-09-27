@@ -110,7 +110,15 @@ class Command(BaseCommand):
             self.stdout.write('  request profile: INVALID — every generation is refused before any request: '
                               + profile['invalid'])
         else:
-            kind = ('legacy (the pre-profile request, unchanged)' if {k: v for k, v in profile.items() if k != 'inference_geo'}
-                    == generation.LEGACY_PROFILE else 'explicit')
+            # ⚠️ 'legacy' ONLY FOR THE EXACT PRE-PROFILE REQUEST. The label used to be chosen after dropping
+            # `inference_geo` from the comparison, so claude-sonnet-4-6 with QUILLMD_AI_INFERENCE_GEO=us — which SENDS
+            # inference_geo, holds 1.1x and fingerprints away from fcc80267 — read 'legacy (the pre-profile request,
+            # unchanged)', and the rollback check that looks for that line was met by a request that is not the rollback.
+            if profile == generation.LEGACY_PROFILE:
+                kind = 'legacy (the pre-profile request, unchanged)'
+            elif {k: v for k, v in profile.items() if k != 'inference_geo'} == generation.LEGACY_PROFILE:
+                kind = f'NOT the pre-profile request: legacy-v1 plus inference_geo {profile["inference_geo"]}'
+            else:
+                kind = 'explicit'
             self.stdout.write(f'  request profile: {kind} {json.dumps(profile, sort_keys=True)}')
         self.stdout.write(f'  pricing_version: {config["pricing_version"]}')
