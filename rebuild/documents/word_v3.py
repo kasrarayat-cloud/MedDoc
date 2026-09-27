@@ -485,6 +485,21 @@ def row_of(tc):
     return next(tc.iterancestors(q("w:tr")), None)
 
 
+def own_paragraph_slots(cell) -> list:
+    """A table cell slot's own paragraph slots in order: direct ones and those inside block-level content controls
+    wrapping them (never a nested table's or a text box's)."""
+    out = []
+
+    def walk(slot):
+        for c in slot.children:
+            if c.kind == "p":
+                out.append(c)
+            elif c.kind == "sdt":
+                walk(c)
+    walk(cell)
+    return out
+
+
 class SlotIndex:
     """Every slot of the content parts in document order, with element and sibling lookups."""
 
@@ -1054,6 +1069,38 @@ class Detector:
         """hidden_boxes, once per region (a paragraph or a table cell)."""
         return region_hidden(self.index, region)
 
+    def owning_cell(self, pslot):
+        """The table cell whose OWN paragraph `pslot` is - directly, or inside block-level content controls wrapping it
+        (w:tc/w:sdt/w:p) - else None. A nested table's or a text box's paragraph is not its outer cell's own."""
+        s = pslot.parent
+        while s is not None and s.kind == "sdt":
+            s = s.parent
+        return s if s is not None and s.kind == "tc" else None
+
+    def own_paragraphs(self, cell) -> list:
+        """A cell's own paragraphs in order: direct ones and those inside block-level content controls wrapping them.
+        ⚠️ Direct children only made a box in a wrapped paragraph a stranger to its cell: detected alone as 'Checkbox'
+        while the row's No box took the row's question (round 3 P2)."""
+        return own_paragraph_slots(cell)
+
+    def unattributed_row_boxes(self, cells) -> bool:
+        """Whether the row of `cells` prints a box (or holds a checkbox control) in another cell answering the same row
+        label - between the label cells around them - than `cells`, the cells a group of boxes was read from."""
+        first = cells[0]
+        row = sorted((c for c in self.grid(first.parent).get(first.info["row"], []) if c.info["vmerge"] != "continue"),
+                     key=lambda c: c.info["col"])
+        if first not in row:
+            return False
+        at = row.index(first)
+        stretch = []
+        for side in (reversed(row[:at]), row[at + 1:]):
+            for c in side:
+                if self.is_label_cell(c):
+                    break
+                stretch.append(c)
+        return any(c not in cells and (BOX in self.cell_text(c) or CHECKED in self.cell_text(c) or checkbox_nodes(c.el, own=False))
+                   for c in stretch)
+
     # -- adding ----------------------------------------------------------------------------------------------------
     def add(self, area: Area):
         self._order += 1
@@ -1218,11 +1265,11 @@ class Detector:
                 continue
             units = self.box_units(s)
             cell = self.host_cell(s)
-            if not leftovers and cell is not None and s.parent is cell and \
+            if not leftovers and cell is not None and self.owning_cell(s) is cell and \
                     not any(clean_label(u[1]) for u in units) and not clean_label(units[0][2]) and \
                     self.column_header(cell.parent, cell.info["col"], cell.info["row"]):
                 continue
-            if cell is not None and s.parent is cell and len(units) == 1 and self.pure_option_cell(cell, s, units[0]):
+            if cell is not None and self.owning_cell(s) is cell and len(units) == 1 and self.pure_option_cell(cell, s, units[0]):
                 opt = option_text(units[0][2]) if clean_label(units[0][2]) else option_text(units[0][1])
                 units = [[units[0][0], opt, ""]]
                 self._pure[id(s)] = cell
@@ -1249,11 +1296,11 @@ class Detector:
                     if ia is not None and ib is not None and 0 < ib - ia <= 2 and \
                             not any(self.text(x.el).strip() for x in sibs[ia + 1:ib]):
                         joined = True
-                elif cell is not None and self.host_cell(last_p) is not None and last_p.parent.parent is cell.parent \
+                elif cell is not None and self.owning_cell(last_p) is not None and self.owning_cell(last_p).parent is cell.parent \
                         and not current["question_from_cell"]:
-                    lc = self.host_cell(last_p)
-                    first_l = next((c for c in lc.children if c.kind == "p"), None)
-                    first_c = next((c for c in cell.children if c.kind == "p"), None)
+                    lc = self.owning_cell(last_p)
+                    first_l = next(iter(self.own_paragraphs(lc)), None)
+                    first_c = next(iter(self.own_paragraphs(cell)), None)
                     same_row = lc.info["row"] == cell.info["row"] or abs(lc.info["row"] - cell.info["row"]) == 1
                     if first_l is last_p and first_c is pslot and same_row and \
                             not self.row_label(cell.parent, cell.info["row"], cell.info["col"]):
@@ -1269,7 +1316,7 @@ class Detector:
 
     def pure_option_cell(self, cell, pslot, unit) -> bool:
         """A cell that holds one box and a short option word ('Yes ☐' / '☐ No') and nothing else."""
-        if len([c for c in cell.children if c.kind == "p" and self.text(c.el).strip()]) != 1:
+        if len([c for c in self.own_paragraphs(cell) if self.text(c.el).strip()]) != 1:
             return False
         before, after = clean_label(unit[2]), clean_label(unit[1])
         opt = before or after
@@ -1306,11 +1353,23 @@ class Detector:
             question = clean_label(units[0][2])
             host = pslot
             used_para = None
+            row_question = False
             if not question:
                 cell = self.host_cell(pslot)
-                if cell is not None and next((c for c in cell.children if c.kind == "p"), None) is pslot:
-                    question = self.row_label(cell.parent, cell.info["row"], cell.info["col"]) or \
-                        clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                if cell is not None and next(iter(self.own_paragraphs(cell)), None) is pslot:
+                    question = self.row_label(cell.parent, cell.info["row"], cell.info["col"])
+                    row_question = bool(question)
+                    question = question or clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                    cells = list(dict.fromkeys(c for c in (self.owning_cell(p) for p in g["paras"]) if c is not None))
+                    if row_question and (len(units) > 1 or not options[0]) and cells and self.unattributed_row_boxes(cells):
+                        # ⚠️ THE ROW PRINTS ANOTHER BOX THESE WERE NOT GIVEN: they are some of the row's options, never
+                        # its question - a lone No box labelled with the row's question was ticked by 'Chest pain: yes'
+                        # (round 3 P2). Refused, with a note, rather than guessed.
+                        self.notes.append("Boxes in the '%s' row were left for manual mapping: the row prints another box "
+                                          "beside them, so which of the row's options they are is not known." % question[:60])
+                        for p in g["paras"]:
+                            self.claimed.add(id(p.el))
+                        continue
                 if not question:
                     prev = self.previous_paragraph(pslot)
                     if prev is not None and BOX not in self.ptext(prev.el)[0]:
@@ -3185,7 +3244,7 @@ def place_box_refs(index, slot):
     if slot.kind in ("p", "glyphs"):
         return _paragraph_refs(index, slot if slot.kind == "p" else slot.parent)
     if slot.kind == "tc":
-        refs = [ref for c in slot.children if c.kind == "p" for ref in _paragraph_refs(index, c)]
+        refs = [ref for c in own_paragraph_slots(slot) for ref in _paragraph_refs(index, c)]
         for ref in refs:
             if ref is None or ref["kind"] == "ff":
                 return None
