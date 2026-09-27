@@ -6856,3 +6856,140 @@ class ReviewRound19(SimpleTestCase):
                  'The left great saphenous vein at the saphenofemoral junction measures' + ' 5 mm lt' * 6000 + '.')
         line = notes.split('\n')[1]
         self.assertLess(self.cold_cpu(lambda: decide(notes, {'measurement_1_1': ('7.4 mm', [line], {})})), 5.0)
+
+
+U20 = 'Unilateral study excluding the right leg.\n'
+V20 = 'The great saphenous vein measures 9.6 mm at the saphenofemoral junction with reflux of 2.1 seconds.'
+S20 = 'Saphenous reflux is present in the great saphenous vein.'
+RL20 = 'RIGHT LEG:\nThe great saphenous vein measures 6.1 mm at the saphenofemoral junction\n'
+HELD_20 = [  # (id, notes, key, value) — each must be HELD at pre-fill
+    # (an exclusion's clause of its own places only what is in it — R20-01)
+    ('R20-01a', 'Saphenous reflux is present in the great saphenous vein except on the right side, which is competent.',
+     'sdt_-213273323', 'reflux positive.'),
+    ('R20-01b', 'Saphenous reflux is present in the great saphenous vein except on the right at that level.', 'sdt_-213273323',
+     'reflux positive.'),
+    ('R20-01c', 'Except for the right leg, which was examined last week, the great saphenous vein measures 9.6 mm at the '
+     'saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+    ('R20-01d', 'Excluding the right leg, which is normal, the great saphenous vein measures 9.6 mm at the saphenofemoral '
+     'junction with reflux of 2.1 seconds.', 'measurement_1_2', '2100 ms'),
+    ('R20-01e', 'Except on the right we found that the great saphenous vein measures 9.6 mm at the saphenofemoral junction.',
+     'measurement_1_1', '9.6 mm'),
+    ('R20-01f', 'Apart from the right great saphenous vein, which is normal, the great saphenous vein measures 9.6 mm at the '
+     'saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+    ('R20-01g', 'Unlike the left leg, which is normal, the great saphenous vein measures 9.6 mm at the saphenofemoral '
+     'junction.', 'measurement_15_1', '9.6 mm'),
+    # (a set-apart side in the paragraph before a sentence that names none — R20-02)
+    ('R20-02a', U20 + V20, 'measurement_1_1', '9.6 mm'),
+    ('R20-02b', U20 + V20, 'measurement_1_2', '2100 ms'),
+    ('R20-02c', 'Duplex performed on both legs except the right. The great saphenous vein measures 9.6 mm at the '
+     'saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+    ('R20-02d', 'All segments were imaged except on the right; the great saphenous vein measures 9.6 mm at the '
+     'saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+    ('R20-02e', '(The right leg was scanned in 2023.)\nGreat saphenous vein 9.6 mm at the saphenofemoral junction.',
+     'measurement_1_1', '9.6 mm'),
+    ('R20-02f', U20 + S20, 'sdt_-213273323', 'reflux positive.'),
+    # (and as another value's rival: the set-apart sentence's value may be either leg's)
+    ('R20-02g', 'The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.\n' + U20.replace('\n', '')
+     + '\nThe great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_15_1', '5.0 mm'),
+    ('R20-01h', 'The left great saphenous vein measures 5.0 mm at the saphenofemoral junction.\nExcept for the right leg, which is '
+     'normal, the great saphenous vein measures 9.6 mm at the saphenofemoral junction.', 'measurement_15_1', '5.0 mm'),
+    # (`maybe`/`perhaps` beside the value, whatever marks stand between — R20-03)
+    ('R20-03a', 'Right GSV SFJ 6.1 mm (perhaps artifact), reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('R20-03b', 'Right GSV SFJ 6.1 mm (maybe), reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('R20-03c', 'Right GSV SFJ 6.1 mm [perhaps], reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('R20-03d', 'Right GSV SFJ 6.1 mm "maybe", reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('R20-03e', 'Right GSV SFJ 6.1 mm ... maybe, reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('R20-03f', 'Right GSV SFJ 6.1 mm: maybe, reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('R20-03g', 'Right GSV SFJ, maybe, 6.1 mm, reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('R20-03h', 'Right GSV SFJ perhaps; 6.1 mm, reflux 2.1 s.', 'measurement_1_1', '6.1 mm'),
+    ('R20-03i', 'RIGHT LEG:\nAt the saphenofemoral junction the right great saphenous vein is 6.1 mm (perhaps artifact) with '
+     'reflux of 2.1 seconds.', 'measurement_1_1', '6.1 mm'),
+    # (a side bracket below the value with a number but no measured value on its line is a remark — R20-04)
+    ('R20-04a', RL20 + '(left) - repeat 09/25/2026', 'measurement_1_1', '6.1 mm'),
+    ('R20-04b', RL20 + '(left) - repeated x2', 'measurement_1_1', '6.1 mm'),
+    ('R20-04c', RL20 + '(L) - 2nd look', 'measurement_1_1', '6.1 mm'),
+    ('R20-04d', RL20 + '(left), 2 views', 'measurement_1_1', '6.1 mm'),
+    ('R20-04e', RL20 + '(left) see image 3', 'measurement_1_1', '6.1 mm'),
+    # (words of the limb's own between an exclusion and its side — R20-06)
+    ('R20-06a', 'Except for the painful right leg, the great saphenous vein measures 9.6 mm at the saphenofemoral junction.',
+     'measurement_1_1', '9.6 mm'),
+    ('R20-06b', "The great saphenous vein measures 9.6 mm at the saphenofemoral junction except in the patient's right leg.",
+     'measurement_1_1', '9.6 mm'),
+    ('R20-06c', 'The great saphenous vein measures 9.6 mm at the saphenofemoral junction except in the symptomatic right leg.',
+     'measurement_1_1', '9.6 mm'),
+    ('R20-06d', 'The great saphenous vein measures 9.6 mm at the saphenofemoral junction except in the painful left leg, which '
+     'measures 5.0 mm there.', 'measurement_15_1', '5.0 mm'),
+]
+STATEMENTS_20 = [  # (id, notes, statement, variant) — never pre-selected
+    ('R20-01a', HELD_20[0][1], 'claim_32', 'positive'),
+    ('R20-01b', HELD_20[1][1], 'claim_32', 'positive'),
+    ('R20-02f', U20 + S20, 'claim_32', 'positive'),
+]
+REASONS_20 = [  # (id, notes, key, value, the reason a set-apart sentence's hold must not replace) — R20-05
+    ('R20-05a', 'The right great saphenous vein possibly measures 9.6 mm at the saphenofemoral junction, unlike the left.',
+     'measurement_1_1', '9.6 mm', 'uncertain'),
+    ('R20-05b', 'The right great saphenous vein measured 9.6 mm at the saphenofemoral junction on the prior study, except on '
+     'the left.', 'measurement_1_1', '9.6 mm', 'timing'),
+]
+CONTROLS_20 = [  # (id, notes, key, value) — must PRE-FILL
+    ('ctl-except-where', 'Reflux is absent except on the right, where the great saphenous vein measures 9.6 mm at the '
+     'saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+    ('ctl-heading-over-a-contrast', 'RIGHT LEG:\nAll segments were imaged, unlike the left.\nThe great saphenous vein measures '
+     '9.6 mm at the saphenofemoral junction.', 'measurement_1_1', '9.6 mm'),
+    ('ctl-not-dilated', 'The great saphenous vein is not dilated on the right and measures 5.1 mm at the saphenofemoral '
+     'junction.', 'measurement_1_1', '5.1 mm'),
+    ('ctl-item-with-a-value', 'RIGHT LEG:\nThe great saphenous vein measures 6.1 mm at the saphenofemoral junction\n(L) GSV SFJ '
+     '5.0 mm', 'measurement_1_1', '6.1 mm'),
+]
+
+
+class ReviewRound20(SimpleTestCase):
+    """Round 20: a focused refutation pass over round 19's repairs (three sealed read-only lenses; 18 findings, 17
+    confirmed by separate verifiers, each reproduced here before its repair). Round 19's clause-of-its-own exemption
+    released an exclusion whose clause was a parenthetical (`Except for the right leg, which was examined last week, …`);
+    its sentence-only hold missed a set-apart side a sentence earlier; `maybe` after a bracket, a quote or a colon, and
+    across a comma before the value, was released (f01107aa held it); a side bracket was an item's marker with any
+    number on its line; and a closed word list let `except for the painful right leg` through. On 86a1e52c every held
+    row but R20-04's older f01107aa shape, and both statements, were pre-filled."""
+
+    units_with = ReviewRound19.units_with
+
+    def test_every_careless_answer_the_pass_reproduced_is_held(self):
+        for name, notes, key, value in HELD_20:
+            with self.subTest(name):
+                answer = decide(notes, {key: (value, [self.units_with(notes, value)[0]['quote']], {})})[0][key]
+                self.assertNotEqual(answer['status'], 'supported')
+
+    def test_a_set_apart_leg_pre_selects_no_statement(self):
+        for name, notes, key, variant in STATEMENTS_20:
+            with self.subTest(name):
+                cited = [u['quote'] for u in narrative.units(notes, FIELDS, LABELS) if 'reflux' in u['quote'].lower()]
+                proposals = decide(notes, {}, [(key, variant, cited)])[1] or {}
+                self.assertFalse((proposals.get(key) or {}).get('variant'), proposals.get(key))
+
+    def test_a_set_apart_sentence_keeps_the_more_specific_reason(self):
+        for name, notes, key, value, reason in REASONS_20:
+            with self.subTest(name):
+                answer = decide(notes, {key: (value, [self.units_with(notes, value)[0]['quote']], {})})[0][key]
+                self.assertEqual((answer['status'], answer['held_candidate']['reason']), ('conflict', narrative.HELD[reason]))
+
+    def test_its_controls_still_pre_fill(self):
+        for name, notes, key, value in CONTROLS_20 + CONTROLS_19:
+            with self.subTest(name):
+                status = decide(notes, {key: (value, [self.units_with(notes, value)[0]['quote']], {})})[0][key]['status']
+                self.assertEqual(status, 'supported')
+
+    cold_cpu = ReviewRound19.cold_cpu
+
+    def test_the_set_apart_readers_stay_linear(self):
+        """Round 20's rules read, per value, the set-apart words of its sentence and of its paragraph before it: a bound
+        on the clauses of their own around one value, and one reading per sentence."""
+        head = 'Date of study: 09/25/2026\n'
+        notes = head + ('Excluding the right leg, which is normal, ' * 1100) + 'the great saphenous vein measures 9.6 mm.'
+        line = notes.split('\n')[1]
+        self.assertLess(self.cold_cpu(lambda: decide(notes, {'measurement_1_1': ('9.6 mm', [line], {})})), 3.0)
+        notes = head + 'Unilateral study excluding the right leg. ' * 400 + ''.join(
+            'The great saphenous vein measures 9.6 mm at the saphenofemoral junction on view %d. ' % n for n in range(300))
+        units = narrative.units(notes, FIELDS, LABELS)
+        cited = [u['quote'] for u in units if '9.6' in u['quote']][:40]
+        self.assertLess(self.cold_cpu(lambda: decide(notes, {'measurement_1_1': ('9.6 mm', cited, {})})), 5.0)

@@ -705,31 +705,100 @@ def _side_index(notes):
 
 @sized_cache
 def _set_apart_index(notes):
-    """The side words the text sets apart (`_side_set_apart`), as starts, in order: read once per text."""
+    """The side words the text sets apart (`_side_set_apart`), read once per text: their starts in order, and for each
+    the span of a clause of its own that follows it (`except the right great saphenous vein, which measures 9.6 mm`), or
+    None."""
     read = view(notes)
-    return tuple(m.start(1) for m in SIDE.finditer(read) if _side_set_apart(read, m.start(1), m.end(1)))
+    found = []
+    for m in SIDE.finditer(read):
+        apart = _side_set_apart(read, m.start(1), m.end(1))
+        if apart:
+            found.append((m.start(1), apart if isinstance(apart, tuple) else None, side_word(m.group(1))))
+    by_side = {}
+    for start, _, side in found:
+        by_side.setdefault(side, []).append(start)
+    return tuple(start for start, _, _ in found), tuple(own for _, own, _ in found), by_side
 
 
-def set_apart_within(notes, low, high):
+#: More set-apart side words than this in one window, each with a clause of its own around the value: held as set apart
+#: (a bound on the search, never a release).
+SET_APART_OWN_LIMIT = 8
+
+
+def set_apart_within(notes, low, high, at=None):
     """Whether `low`..`high` holds a side word the text sets apart (`except on the right`, `as opposed to the right side`,
     `(the right leg was normal)`): a value in that sentence is on neither leg for certain — its pre-fill is held and it is
-    another value's rival for either leg (round 18's W and E findings; round 19 moved it from placement to a hold)."""
-    starts = _set_apart_index(notes)
+    another value's rival for either leg (round 18's W and E findings; round 19 moved it from placement to a hold). Not
+    one whose own clause holds `at` (`except the right great saphenous vein, which measures 9.6 mm`: that value is the
+    right's); every other value in the sentence is held (round 20: `Except for the right leg, which was examined last
+    week, the great saphenous vein measures 9.6 mm` pre-filled the right) — before it, or after it in its own clause:
+    one in a later clause places nothing of it (`The right GSV measures 7.4 mm …, unlike the left, where it is 5.0 mm`)."""
+    starts, owns, _ = _set_apart_index(notes)
     index = bisect.bisect_left(starts, low)
-    return index < len(starts) and starts[index] < high
+    if at is not None:
+        cut = first_in(notes, 'clause', at, high)
+        high = cut[0] if cut else high
+    exempted = 0
+    while index < len(starts) and starts[index] < high:
+        own = owns[index]
+        if at is None or own is None or not own[0] <= at < own[1] or exempted >= SET_APART_OWN_LIMIT:
+            return True
+        exempted += 1
+        index += 1
+    return False
 
 
+def set_apart_governs(notes, at, low, high):
+    """Whether a side the text sets apart may be what places the value at `at`, in its sentence `low`..`high`: one in
+    that sentence (`set_apart_within`), or — where the sentence names no side of its own — one in its paragraph before it
+    whose side the paragraph's reading gives it (round 20: `Unilateral study excluding the right leg.` / `The great
+    saphenous vein measures 9.6 mm …`, `(The right leg was scanned in 2023.)` / `Great saphenous vein 9.6 mm …` pre-filled
+    the right; not `RIGHT LEG:` / `All segments were imaged, unlike the left.` / …, which the heading places). Only ever
+    holds."""
+    if set_apart_within(notes, low, high, at):
+        return True
+    by_side = _set_apart_index(notes)[2]
+    if not by_side:
+        return False                 # (a note that sets no side apart: nothing more is read — the cost shapes)
+    start = paragraph_start(notes, low)
+    apart = {side for side, starts in by_side.items() if bisect.bisect_left(starts, start) < bisect.bisect_left(starts, low)}
+    if not apart:
+        return False
+    origin = sentence_origin(notes, at, low) if at is not None else low
+    table, key = _sentence_tables(notes), ('apart_before', low, high, origin)
+    found = table.get(key)
+    if found is None:
+        if len(table) > 4096:
+            table.clear()
+        read = view(notes)
+        found = False
+        if not any(side != 'unclear' and not SIDE_NOT_EXAMINED.match(read, end) for _, end, side in sides_between(notes, low, high)):
+            primary, candidates = context_reading(notes, origin)
+            found = (primary in apart or (primary == 'both' and bool(apart & {'right', 'left'}))
+                     or (primary == 'ambiguous' and bool(candidates & apart)))
+            #   (read two ways, one of them the set-apart side's: `The left GSV measures 5.0 mm …` / `Unilateral study
+            #   excluding the right leg.` / `The GSV measures 9.6 mm …` — the 9.6 is a rival for either leg)
+        table[key] = found
+    return found
+
+
+#: The small words between an exclusion or a contrast and its side word (`except on the right`, `excluding the right leg`).
+_SET_APART_FILLER = r'(?:[ \t,]++(?i:on|in|for|of|at|to|the|a|an|her|his|their|this|that))*+'
+#: ... and, after an exclusion or a contrast (not after `not`), up to three other words, then the small ones again (round
+#: 20: `except for the painful right leg`, `except in the patient's right leg` placed the value on that leg).
+_SET_APART_WORDS = (_SET_APART_FILLER + r"(?:[ \t,]++[^\W\d_]++(?:['’][^\W\d_]*+)?+){0,3}+" + _SET_APART_FILLER)
 #: What excludes the side word right after it (`except on the right`, `excluding the right leg`, `rather than the left`).
-SIDE_EXCLUDED = re.compile(r'(?<![^\W\d_])(?i:except|excepting|excluding|apart[ \t]++from|aside[ \t]++from|other[ \t]++than|'
-                           r'not|save[ \t]++for|exception[ \t]++of)(?:[ \t,]++(?i:on|in|for|of|at|to|the|a|an|her|his|their|this|'
-                           r'that))*+[ \t,]*+$')
+SIDE_EXCLUDED = re.compile(r'(?<![^\W\d_])(?:(?i:except|excepting|excluding|apart[ \t]++from|aside[ \t]++from|other[ \t]++than|'
+                           r'save[ \t]++for|exception[ \t]++of)' + _SET_APART_WORDS + r'|(?i:not)' + _SET_APART_FILLER
+                           + r')[ \t,]*+$')
 #: A contrast before the side word: it sets the side apart unless a clause of its own follows it (`unlike the left, where
 #: it is 5.0 mm` — the left's value; `as opposed to the right side, measures 9.6 mm` — not the right's).
 SIDE_CONTRASTED = re.compile(r'(?<![^\W\d_])(?i:as[ \t]++opposed[ \t]++to|opposed[ \t]++to|contrary[ \t]++to|different[ \t]++from|'
-                             r'unlike|instead[ \t]++of|rather[ \t]++than)(?:[ \t,]++(?i:on|in|for|of|at|to|the|a|an|her|his|their|'
-                             r'this|that))*+[ \t,]*+$')
-CONTRAST_OWN_CLAUSE = re.compile(r'(?:[ \t]++[^\W\d_]++){0,5}?[ \t]*+,?+[ \t]*+(?i:where|which|whose|who|that|in' + SPACE
-                                 + r'++which)(?![^\W\d_])')
+                             r'unlike|instead[ \t]++of|rather[ \t]++than)' + _SET_APART_WORDS + r'[ \t,]*+$')
+#: A clause of the side's own right after it: only the limb's or the vein's own words before `which`/`where`/… (round 20:
+#: `except on the right at that level`, `except on the right we found that …` are no clause of the right's).
+CONTRAST_OWN_CLAUSE = re.compile(r'(?:[ \t]++(?i:' + SIDE_ANATOMY + r')(?![^\W\d_])){0,5}?[ \t]*+,?+[ \t]*+(?i:where|which|whose|'
+                                 r'who|that|in' + SPACE + r'++which)(?![^\W\d_])')
 #: A leg named only to say it was not examined (`…, and the right leg was not scanned`, `right leg not done`).
 SIDE_NOT_EXAMINED = re.compile(r'(?:[ \t]++(?i:leg|limb|side|lower' + SPACE + r'++extremity))?+(?:[ \t]++(?i:was|is|were|has|had|'
                                r'been))*+[ \t]++(?i:not|never)[ \t]++(?:(?i:been)[ \t]++)?+(?i:examined|imaged|scanned|evaluated|assessed|'
@@ -740,10 +809,16 @@ BRACKET_STATEMENT = re.compile(r'(?<![^\W\d_])(?i:is|are|was|were|has|have|had|d
 
 
 def _side_set_apart(read, start, end):
-    if SIDE_EXCLUDED.search(read, max(0, start - 48), start) and not CONTRAST_OWN_CLAUSE.match(read, end):
-        return True
-    if SIDE_CONTRASTED.search(read, max(0, start - 48), start) and not CONTRAST_OWN_CLAUSE.match(read, end):
-        return True
+    """True where the text sets the side word at `start`..`end` apart; (low, high), the clause of its own that follows it,
+    where only a value inside that clause is its (round 20); False otherwise."""
+    if SIDE_EXCLUDED.search(read, max(0, start - 64), start) or SIDE_CONTRASTED.search(read, max(0, start - 64), start):
+        own = CONTRAST_OWN_CLAUSE.match(read, end)
+        if own is None:
+            return True
+        close = CLAUSE_BREAK.search(read, own.end())
+        stop = SENTENCE_END.search(read, own.end())
+        high = min(close.start() if close else len(read), stop.start() if stop else len(read))
+        return (end, high) if high > own.end() else True
     opened = read.rfind('(', max(0, start - 80), start)
     if opened < 0 or read.rfind(')', opened, start) >= 0:
         return False
@@ -5849,31 +5924,40 @@ def measurement_context(field, value, own, notes):
     today's). The model's qualifiers read these first; this is what holds a model that missed them (round 17c's review:
     `possibly measures` / `6.1 mm` and `… on the` / `prior study from 2023` both pre-filled). Only ever holds."""
     today = timings(field) == {'current'}
+    apart, sliced = False, {}
     for at, _, _ in located(field, value, own):
         entry = next((e for e in own if e['start'] <= at < e['end']), None)
         if entry is None:
             continue
         quote, here = entry['quote'], at - entry['start']
         low, high = _clause_around(quote, here)
-        s_low, s_high = sentence_at(quote, here)
-        if field_side(field) is not None and set_apart_within(quote, s_low, s_high):
-            return 'side_ambiguous'  # (a sentence that sets a leg apart: `… 9.6 mm at the SFJ except on the right`,
-            #   `as opposed to the right side, the great saphenous vein measures 9.6 mm` — round 18's W, held since round 19)
         if (_first_within(_hedge_spans(quote), low, here) or hedged_after(field, value, quote, here)
-                or _value_hedge_after(field, value, quote, here)):
+                or _value_hedge_after(field, value, quote, here) or _value_hedge_before(field, value, quote, here)):
             return 'uncertain'      # (before it: `possibly measures 6.1 mm`; not the next finding's, `6.1 mm with possible reflux`)
         if today and _prior_study_of(quote, here, low, high):
             return 'timing'          # (an earlier study's phrase first: its date says no more — the focused pass)
         dated = dated_before_study(quote, here, low, high, notes, field_side(field)) if today else None
         if dated:
             return dated             # (`timing` before the study's own date; `dated` where that cannot be told)
-    return None
+        if not apart and field_side(field) is not None:
+            s_low, s_high = sentence_at(quote, here)
+            if id(entry) not in sliced:          # (once per unit, not per value: a unit of 4,900 values)
+                sliced[id(entry)] = notes[entry['start']:entry['end']] == quote
+            apart = (set_apart_governs(notes, at, entry['start'] + s_low, entry['start'] + s_high)
+                     if sliced[id(entry)] else set_apart_within(quote, s_low, s_high))
+            #   (a sentence that sets a leg apart: `… 9.6 mm at the SFJ except on the right`, `as opposed to the right side,
+            #   the great saphenous vein measures 9.6 mm` — round 18's W, held since round 19; or its paragraph, where the
+            #   sentence names no side — round 20. Read after the hedge, the earlier study and the date, whose reasons say
+            #   more: round 20, a dated value in such a sentence was shown only as either side's)
+    return 'side_ambiguous' if apart else None
 
 
 #: A bracket opening a line that marks an item, not a remark: `(a)`, `(2)`, `(iv)`, `(R)`, `(left)`.
 BRACKET_MARKER = re.compile(r'[ \t]*+\([ \t]*+(?i:[a-km-qs-z]|[ivx]{1,4}|[0-9]{1,2})[ \t]*+\)')
 #: A side in the bracket marks an item only when a value follows it on its line (`(L) GSV SFJ 5.0 mm, reflux 1.1 s`); a
-#: bare `(left).`, `(L).`, `(left) - repeat` below the value is a remark naming the other leg (round 19).
+#: bare `(left).`, `(L).`, `(left) - repeat` below the value is a remark naming the other leg (round 19), and so is one
+#: whose line has a number but no measured value (round 20: `(left) - repeat 09/25/2026`, `(L) - 2nd look`, `(left), 2
+#: views` were read as items and the value above pre-filled).
 SIDE_BRACKET_MARKER = re.compile(r'[ \t]*+\([ \t]*+(?i:rt|lt|r|l|right|left|bilateral|both|b/l)[ \t]*+\)')
 
 
@@ -5894,7 +5978,7 @@ def bracket_remark_below(own, notes):
         below = notes[below_start:below_end]
         side = SIDE_BRACKET_MARKER.match(below)
         if (below.lstrip(' \t').startswith('(') and not BRACKET_MARKER.match(below)
-                and not (side and DIGIT.search(below, side.end()))):
+                and not (side and first_in(notes, 'quantity', below_start + side.end(), below_end))):
             return {'quote': generation.shown_quote(notes, below_start, below_end, False), 'start': below_start,
                     'end': below_end, 'after': True, 'same': False}
     return None
@@ -5924,20 +6008,31 @@ def _prior_study_of(quote, here, low, high):
 HEDGE_AFTER_WORDS = 3
 
 
+#: The first letter or digit: what stands between a value and a hedge right after it may be only spaces and punctuation.
+LETTER_OR_DIGIT = re.compile(r'[^\W_]')
+
+
 def _value_hedge_after(field, value, quote, here):
-    """`maybe`/`perhaps` as the first word after the value, before any other value in the next two words (`6.1 mm maybe,
-    reflux 2.1 s`, `6.1 mm, perhaps.`): the value's, whatever finding follows (round 19 — round 18 read `maybe` only
-    before the value, and dropped `f01107aa`'s check beside it; `… 7.4 millimeters reflux maybe 2 seconds` stays the next
-    value's)."""
+    """`maybe`/`perhaps` as the first word after the value, whatever marks stand between (`6.1 mm maybe, reflux 2.1 s`,
+    `6.1 mm, perhaps.`, `6.1 mm (perhaps artifact)`, `6.1 mm … maybe`, `6.1 mm: maybe`), before any other value in the
+    next two words: the value's, whatever finding follows (round 19 — round 18 read `maybe` only before the value, and
+    dropped `f01107aa`'s check beside it; round 20: a bracket, a quote or a colon before it released it). `… 7.4
+    millimeters reflux maybe 2 seconds` stays the next value's."""
     end = here + written_length(field, value, quote, here)
-    first = nth_from(quote, 'word', end, 0)
-    hedge = VALUE_HEDGE.match(quote, first[0]) if first is not None else None
-    if hedge is None or hedge.end() > first[1]:
-        return False                 # (a word token keeps its trailing stop: `maybe,`)
-    if quote[end:first[0]].strip(' \t,;('):
+    first = LETTER_OR_DIGIT.search(quote, end)
+    hedge = VALUE_HEDGE.match(quote, first.start()) if first is not None else None
+    if hedge is None:
         return False                 # (a word first: `6.1 mm reflux maybe 2 seconds` is the reflux's)
-    following = nth_from(quote, 'word', first[1], 1)
-    return not first_in(quote, 'quantity', first[1], following[1] if following else len(quote))
+    following = nth_from(quote, 'word', hedge.end(), 1)
+    return not first_in(quote, 'quantity', hedge.end(), following[1] if following else len(quote))
+
+
+def _value_hedge_before(field, value, quote, here):
+    """`maybe`/`perhaps` within the two words before the value, across a comma or a `;` (`Right GSV SFJ, maybe, 6.1 mm`,
+    `Right GSV SFJ perhaps; 6.1 mm`): `f01107aa`'s check beside the value, restored beside the clause's own (round 20 —
+    the clause's hedge reading stops at its comma)."""
+    before = nth_before(quote, 'word', here, 2)
+    return VALUE_HEDGE.search(quote, before[0] if before else 0, here) is not None
 
 
 def hedged_after(field, value, quote, here):
@@ -6432,7 +6527,7 @@ def row_rivals(field, value, own, read):
             if unexamined:
                 primary, candidates = 'ambiguous', ()   # (its sentence names legs only as not examined — round 18, `…, and
                 #   the right leg was not scanned.`, `…, right leg not done.`: it places nothing, its paragraph's leg does)
-            if set_apart_within(notes, low, high):
+            if set_apart_governs(notes, start + at, low, high):
                 pass                 # (a sentence that sets a leg apart places its value on neither for certain: a rival
                 #   for either leg — round 19; round 18 read the side as `unclear` and dropped `Repeat (the right leg was
                 #   re-examined standing): great saphenous vein 9.6 mm …` as a rival)
@@ -6921,21 +7016,29 @@ def finding_context(field, own, notes, value=None, windows=None):
     date-of-birth or date-of-service label gives."""
     if indication(field) or previous_treatment(field) or (value is not None and not finding(field)):
         return None
-    windows = list(windows or ())
+    windows = [tuple(window) + (None,) * (5 - len(window)) for window in windows or ()]
     for at, (low, high), _ in (located(field, value, own, words=True) or () if value else ()):
         entry = next((e for e in own if e['start'] <= at < e['end']), None)
         if entry is not None:
-            windows.append((entry['quote'], max(0, low - entry['start']), min(len(entry['quote']), high - entry['start'])))
+            windows.append((entry['quote'], max(0, low - entry['start']), min(len(entry['quote']), high - entry['start']),
+                            entry['start'], at))
     if not windows:
-        windows = [(entry['quote'], 0, len(entry['quote'])) for entry in own]
-    study, read_windows = None, set()
-    for quote, low, high in windows:
+        windows = [(entry['quote'], 0, len(entry['quote']), entry['start'], None) for entry in own]
+    study, read_windows, apart, sliced = None, {}, False, {}
+    for quote, low, high, base, at in windows:
+        # (a sided finding the text may set apart, per located word: an exclusion's own clause places only what is in
+        # it — round 20; the window's other readings once per window, not per located word: round 19's cost lens, 211 s)
+        if not apart and field_side(field) is not None:
+            if type(base) is int and (id(quote), base) not in sliced:
+                sliced[(id(quote), base)] = notes[base:base + len(quote)] == quote
+            if type(base) is int and sliced[(id(quote), base)]:
+                apart = set_apart_governs(notes, at, base + low, base + high)
+            else:
+                apart = set_apart_within(quote, low, high)
         if (id(quote), low, high) in read_windows:
-            continue                 # (one window per sentence, not per located word: round 19's cost lens, 211 s)
-        read_windows.add((id(quote), low, high))
+            continue
+        read_windows[(id(quote), low, high)] = quote
         text = quote[low:high]
-        if field_side(field) is not None and set_apart_within(quote, low, high):
-            return 'side_ambiguous'  # (a sided finding in a sentence that sets a leg apart — round 19)
         if FINDING_ORDERED.search(text):
             return 'uncertain'
         if RELATIVE.search(text):
@@ -6954,7 +7057,7 @@ def finding_context(field, own, notes, value=None, windows=None):
                 study = _study_date(notes) if study is None else study
                 if _dated_before(date, study):
                     return 'dated'
-    return None
+    return 'side_ambiguous' if apart else None
 
 
 def statement_context(requirement, own, notes):
@@ -6970,11 +7073,11 @@ def statement_context(requirement, own, notes):
         quote = entry['quote']
         spans = _sentences(quote)[0]
         named = [(a, b) for a, b in spans if FINDING_WORD.search(quote, a, b)]
-        windows += [(quote, a, b) for a, b in (named or [(0, len(quote))])]
+        windows += [(quote, a, b, entry['start'], None) for a, b in (named or [(0, len(quote))])]
     found = finding_context(requirement, own, notes, None, windows)
     if found is not None:
         return found
-    for quote, low, high in windows:
+    for quote, low, high, _, _ in windows:
         spans, starts = _hedge_spans(quote)
         for index in range(bisect.bisect_left(starts, low), len(spans)):
             if spans[index][1] > high:
