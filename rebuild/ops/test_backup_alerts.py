@@ -668,6 +668,24 @@ class IncidentNotificationTests(unittest.TestCase):
         self.assertIsNone(shown['incident']['escalation_deferred_until'])
         self.sender.assert_called_once()
 
+    def test_status_reports_no_deferral_after_an_uncertain_notice(self):
+        """⚠️ F6, round 2: an uncertain notice is never followed, so the check defers nothing; status()
+        must not recompute a deferral the check never made. Removing its "only after an accepted
+        notice" guard passed the suite."""
+        self.health.return_value = 'backup_failed'
+        self.sender.side_effect = RuntimeError('provider-canary')
+        a.check(self.at)                                       # an uncertain initial notice
+        self.sender.side_effect = None
+        self.health.return_value = 'backup_stale'              # new, same severity: would be deferred
+        result, _ = a.check(self.at + timedelta(minutes=5))
+        self.assertEqual((result['condition'], result['incident']['escalation_deferred_until']),
+                         ('alert_delivery_unconfirmed', None))
+        shown, _ = a.status(self.at + timedelta(minutes=6))
+        self.assertEqual(shown['condition'], 'alert_delivery_unconfirmed')
+        self.assertIsNone(shown['incident']['escalation_deferred_until'],
+                          'status() reported a deferral after an uncertain notice, which is never followed')
+        self.sender.assert_called_once()
+
     def test_reminder_names_duration_and_current_condition_at_a_fixed_interval(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
