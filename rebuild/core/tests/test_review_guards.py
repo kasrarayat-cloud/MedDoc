@@ -196,12 +196,13 @@ def last_event(action, encounter):
     return event.details if event else {}
 
 
-def cleared(accepted_suggestion=0, left_blank=0, edited_not_accepted=0, reviewed_unedited=0, statements_reviewed=0,
-            statements_chosen_unreviewed=0, codes=0):
-    """The audit's counts of what a clearing discarded. Disjoint, as the names say: each answer is counted once, and each
-    statement decision once."""
+def cleared(accepted_suggestion=0, left_blank=0, edited_not_accepted=0, reviewed_unedited=0, unreviewed_unedited=0,
+            with_clinician_review=0, statements_reviewed=0, statements_chosen_unreviewed=0, codes=0):
+    """The audit's counts of what a clearing discarded. Disjoint, as the names say: each answer is counted once in its
+    state, and each statement decision once; `with_clinician_review` counts across the answer states (F3)."""
     return {'answers_accepted_suggestion': accepted_suggestion, 'answers_left_blank': left_blank,
             'answers_edited_not_accepted': edited_not_accepted, 'answers_reviewed_unedited': reviewed_unedited,
+            'answers_unreviewed_unedited': unreviewed_unedited, 'answers_with_clinician_review': with_clinician_review,
             'statements_reviewed': statements_reviewed, 'statements_chosen_unreviewed': statements_chosen_unreviewed,
             'codes_accepted': codes}
 
@@ -250,7 +251,7 @@ class ANotesSaveNeverClearsSilently(OrdinaryDraft, TestCase):
                          ({}, {}, 0))
         event = last_event('encounter.notes_saved', encounter)
         # R2-4: each answer is counted once — the accepted suggestion (also `edited` and reviewed) only as accepted.
-        self.assertEqual(event.get('cleared'), cleared(accepted_suggestion=1, left_blank=1, codes=1))
+        self.assertEqual(event.get('cleared'), cleared(accepted_suggestion=1, left_blank=1, with_clinician_review=2, codes=1))
 
     def test_a_reviewed_transcript_is_applied_even_when_it_leaves_the_notes_as_they_were(self):
         """The unchanged-notes no-op is for a notes save only: a reviewed transcript is always applied (and recorded), or
@@ -289,6 +290,21 @@ class TheClearedCountsTellAReviewFromNone(OrdinaryDraft, TestCase):
     def test_edits_nobody_reviewed_are_recorded_as_unreviewed(self):
         counts = self.cleared_after_edits(reviewed=False)
         self.assertEqual((counts.get('answers_edited_not_accepted'), counts.get('answers_with_clinician_review')), (2, 0))
+
+    def test_every_answer_is_counted_once_in_its_state_and_its_review_across_them(self):
+        """The states partition the answers (a malformed entry included: the save clears it too); the review count
+        spans them. Unsaved, so no code is counted."""
+        encounter = Encounter(template_review={}, answers={
+            'accepted': {'accepted_suggestion': True, 'status': 'edited', 'reviewed': True},
+            'blank': {'status': 'left_blank', 'reviewed': True}, 'edited': {'status': 'edited'},
+            'edited_reviewed': {'status': 'edited', 'reviewed': True}, 'reviewed': {'status': 'supported', 'reviewed': True},
+            'untouched': {'status': 'supported', 'reviewed': False}, 'missing': {'status': 'missing'}, 'malformed': 'legacy'})
+        counts = views.review_state_counts(encounter, codes=False)
+        self.assertEqual({state: counts[state] for state in views.ANSWER_STATES},
+                         {'answers_accepted_suggestion': 1, 'answers_left_blank': 1, 'answers_edited_not_accepted': 2,
+                          'answers_reviewed_unedited': 1, 'answers_unreviewed_unedited': 3})
+        self.assertEqual(sum(counts[state] for state in views.ANSWER_STATES), len(encounter.answers))
+        self.assertEqual(counts['answers_with_clinician_review'], 4)
 
     def test_a_draft_nobody_reviewed_or_edited_is_counted_when_it_is_cleared(self):
         encounter = self.drafted()
@@ -452,7 +468,7 @@ class ClearAnswersAndReviewToGenerateAgain(OrdinaryDraft, TestCase):
         self.assertEqual((getattr(event, 'actor_id', None), last_event('encounter.review_cleared', encounter).get('revision'),
                           last_event('encounter.review_cleared', encounter).get('cleared')),
                          (self.user.pk, encounter.revision,
-                          cleared(reviewed_unedited=2)))
+                          cleared(reviewed_unedited=2, with_clinician_review=2)))
         code.refresh_from_db()
         self.assertEqual(code.accepted_by_id, self.user.pk)                        # (the notes did not change)
         self.post(f'/encounters/{encounter.pk}/generate/', encounter)
@@ -939,7 +955,7 @@ class WordNotesSaveAndClear(OfflineWordForm):
         self.encounter.refresh_from_db()
         self.assertEqual((self.encounter.answers, self.encounter.template_review), ({}, {}))
         event = last_event('encounter.notes_saved', self.encounter)
-        self.assertEqual(event.get('cleared'), cleared(reviewed_unedited=4, statements_reviewed=3))
+        self.assertEqual(event.get('cleared'), cleared(reviewed_unedited=4, with_clinician_review=4, statements_reviewed=3))
 
     def test_mixed_review_states_are_each_counted_in_their_own_category(self):
         """R2-3 A2-A5: reviewed and unreviewed answers and statement choices, accepted and unaccepted codes."""
@@ -956,7 +972,8 @@ class WordNotesSaveAndClear(OfflineWordForm):
         self.client.post(f'/encounters/{self.encounter.pk}/notes/', {'revision': self.encounter.revision,
                                                                      'notes': self.encounter.notes + '\nSynthetic addendum.'})
         self.assertEqual(last_event('encounter.notes_saved', self.encounter).get('cleared'),
-                         cleared(reviewed_unedited=3, statements_reviewed=2, statements_chosen_unreviewed=1, codes=1))
+                         cleared(reviewed_unedited=3, unreviewed_unedited=1, with_clinician_review=3, statements_reviewed=2,
+                                 statements_chosen_unreviewed=1, codes=1))
 
     def test_clearing_counts_the_statement_decisions_it_clears(self):
         self.clinician_reviews()
@@ -966,7 +983,7 @@ class WordNotesSaveAndClear(OfflineWordForm):
         self.encounter.refresh_from_db()
         self.assertEqual((self.encounter.answers, self.encounter.template_review), ({}, {}))
         event = last_event('encounter.review_cleared', self.encounter)
-        self.assertEqual(event.get('cleared'), cleared(reviewed_unedited=4, statements_reviewed=3))
+        self.assertEqual(event.get('cleared'), cleared(reviewed_unedited=4, with_clinician_review=4, statements_reviewed=3))
 
 
 class AFinalizedRecordIsNotReReviewedByItsReader(OfflineWordForm):
