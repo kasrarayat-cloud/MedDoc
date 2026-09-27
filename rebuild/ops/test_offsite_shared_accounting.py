@@ -58,9 +58,12 @@ class SharedAccountingTests(TestCase):
     def test_whole_cycle_insufficient_budget_refuses_before_provider_or_factory(self):
         parent, _ = self.bundle()
         factory = Mock()
+        limits = dict(self.policy, daily_download_budget_bytes=1000)
+        budget = auto.Budget(self.state, limits, clock=lambda: self.at)
         with patch.object(auto, 'now', return_value=self.at), \
-                patch.object(auto, 'policy', return_value=dict(self.policy, daily_download_budget_bytes=1000)), \
-                patch.object(auto.offsite, 'configuration', return_value=self.config):
+                patch.object(auto, 'policy', return_value=limits), \
+                patch.object(auto.offsite, 'configuration', return_value=self.config), \
+                patch.object(auto, 'Budget', return_value=budget):
             result = auto.execute(state=self.state, key=self.key, backups=parent, transport_factory=factory)
         self.assertEqual(result['reason_code'], 'budget_exhausted')
         self.assertFalse(result['provider_calls_permitted'])
@@ -186,8 +189,10 @@ class SharedAccountingTests(TestCase):
     def test_transport_cleanup_failure_is_visible_and_attempt_survives(self):
         parent, _ = self.bundle()
         self.remote.close = Mock(side_effect=OSError('synthetic-secret-cleanup-detail'))
+        budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
         with patch.object(auto, 'now', return_value=self.at), patch.object(auto, 'policy', return_value=self.policy), \
-                patch.object(auto.offsite, 'configuration', return_value=self.config):
+                patch.object(auto.offsite, 'configuration', return_value=self.config), \
+                patch.object(auto, 'Budget', return_value=budget):
             result = auto.execute(state=self.state, key=self.key, backups=parent,
                                   transport_factory=lambda config, budget: self.remote)
         self.assertEqual(result['state'], 'failed')
@@ -198,8 +203,10 @@ class SharedAccountingTests(TestCase):
 
     def test_scope_capacity_observation_survives_network_free_noop(self):
         parent, _ = self.bundle()
+        budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
         with patch.object(auto, 'now', return_value=self.at), patch.object(auto, 'policy', return_value=self.policy), \
-                patch.object(auto.offsite, 'configuration', return_value=self.config):
+                patch.object(auto.offsite, 'configuration', return_value=self.config), \
+                patch.object(auto, 'Budget', return_value=budget):
             first = auto.execute(state=self.state, key=self.key, backups=parent,
                                  transport_factory=lambda config, budget: self.remote)
             factory = Mock()
