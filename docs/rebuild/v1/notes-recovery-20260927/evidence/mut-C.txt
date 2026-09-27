@@ -1,0 +1,38 @@
+batch /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/batchC.py labels ['core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it', 'core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_plain_values_after_it_still_leave_an_answer_adopted', 'core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_the_plain_value_grammar_fails_closed', 'core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule', 'core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold', 'core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker', 'core.tests.test_v3_ordinary_notes.OrdinaryNotesOnV3Forms', 'core.tests.test_v3_ordinary_notes.OneReadingPerUnit', 'core.tests.test_v3_ordinary_notes.OneGovernanceReader', 'core.tests.test_v3_ordinary_notes.ScopeInOrdinarySentences', 'core.tests.test_v3_ordinary_notes.QueuedContractAttribution', 'core.tests.test_v3_ordinary_notes.EnqueuedContractAttribution', 'core.tests.test_v3_ordinary_notes.CostBoundCoversTheRequest', 'core.tests.test_v3_ordinary_notes.NothingStrandsAHold', 'core.tests.test_v3_ordinary_notes.LiveCompleteSentencePath', 'core.tests.test_v3_ordinary_notes.LiveCompleteSentenceWorker', 'core.tests.test_v3_ordinary_notes.RoundTwoRefutation', 'core.tests.test_v3_ordinary_notes.RoundTwoThroughTheWorker', 'core.tests.test_v3_ordinary_notes.RoundTwoMutantPins', 'core.tests.test_v3_ordinary_notes.RoundThreeCost', 'core.tests.test_word_v3_workflow'] sha 07b5a6c489b3b888
+BASELINE OK 48s 108  | 
+  C1 mutation applied: True
+C1 a context label value passes as plain                               KILLED   restored=True 49s 108 failures=1, errors=1 | ERROR: test_table_rows_signature_and_initials_are_never_generated  ; FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Allergies: none.\nClinician signature: Dr Example.')
+  C2 mutation applied: True
+C2 every labelled value is plain (the round-2 exemption)               KILLED   restored=True 49s 108 failures=23 | FAIL: test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_checkbox  ; FAIL: test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_choice  ; FAIL: test_r3_2_a_reason_is_sentence_holds_the_checkbox_before_it 
+  C3 mutation applied: True
+C3 up to ten words                                                     KILLED   restored=True 50s 108 failures=2 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Smoker: yes. Plan: rest ice elevation compression.') ; FAIL: test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts 
+  C4 mutation applied: True
+C4 no answer words (only the grammar)                                  KILLED   restored=True 50s 108 failures=5 | FAIL: test_r3_1_plain_values_after_it_still_leave_an_answer_adopted  ; FAIL: test_r3_1_the_plain_value_grammar_fails_closed  ; FAIL: test_a_v3_form_is_sent_source_units_and_the_unit_schema_and_its_selections_are_adopted 
+  C5 mutation applied: True
+C5 denial words not read                                               KILLED   restored=True 48s 108 failures=1 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Consent obtained: yes. Plan: not obtained.')
+  C6 mutation applied: True
+C6 listed verbs not read                                               KILLED   restored=True 48s 108 failures=1 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Consent obtained: yes. Plan: consent was withheld.')
+  C7 mutation applied: True
+C7 scope words not read                                                SURVIVED restored=True 48s 108  | 
+  C8 mutation applied: True
+C8 self-corrections not read                                           KILLED   restored=True 51s 108 failures=1 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Smoker: yes. Allergies: actually penicillin.')
+  C9 mutation applied: True
+C9 unsettled words not read                                            KILLED   restored=True 48s 108 failures=1 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Consent obtained: yes. Plan: consent tomorrow.')
+  C10 mutation applied: True
+C10 pointer shape not read                                             KILLED   restored=True 49s 108 failures=1 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Smoker: yes. Findings: details overleaf.')
+  C11 mutation applied: True
+C11 any full stop allowed                                              KILLED   restored=True 50s 108 failures=2 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed  (notes='Consent obtained: yes. Plan: rest.Consent Friday.') ; FAIL: test_r3_1_the_plain_value_grammar_fails_closed 
+  C12 mutation applied: True
+C12 the closing stop is not removed                                    KILLED   restored=True 47s 108 failures=6 | FAIL: test_r3_1_plain_values_after_it_still_leave_an_answer_adopted  ; FAIL: test_r3_1_the_plain_value_grammar_fails_closed  ; FAIL: test_a_v3_form_is_sent_source_units_and_the_unit_schema_and_its_selections_are_adopted 
+  C13 mutation applied: True
+C13 rule (b) reads a Label-is sentence as labelled again               KILLED   restored=True 46s 108 failures=2, errors=1 | ERROR: test_r3_1_the_plain_value_grammar_fails_closed  ; FAIL: test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule  (notes='Her sister was seen in oncology last month. Diagnosis was breast cancer.') ; FAIL: t
+  C14 mutation applied: True
+C14 a plain Label-is value never passes rule (a)                       KILLED   restored=True 48s 108 failures=1 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed 
+  C15 mutation applied: True
+C15 a comma is a plain character                                       SURVIVED restored=True 48s 108  | 
+  C16 mutation applied: True
+C16 no length bound                                                    KILLED   restored=True 48s 108 failures=1 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed 
+  C17 mutation applied: True
+C17 no letter or digit required                                        KILLED   restored=True 47s 108 failures=1 | FAIL: test_r3_1_the_plain_value_grammar_fails_closed 
+final sha 07b5a6c489b3b888 equal True
+exit 0

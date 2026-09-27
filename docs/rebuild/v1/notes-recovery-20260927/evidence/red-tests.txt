@@ -1,0 +1,439 @@
+1d66c7982377763a859a2912acc91354ddc695f6
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F/opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FFFFFFFFFFF.FFFFFFFFFFFFFF
+======================================================================
+FAIL: test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_checkbox (core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_checkbox)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1015, in test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_checkbox
+    self.held_option('Diabetes: yes. Reason for visit: review; diabetes was excluded on repeat HbA1c.', 'Diabetes',
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1011, in held_option
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+AssertionError: Tuples differ: ('supported', 'checked') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'checked')
++ ('conflict', '') : Diabetes: yes. Reason for visit: review; diabetes was excluded on repeat HbA1c.
+
+======================================================================
+FAIL: test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_choice (core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_choice)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1019, in test_r3_1_a_split_off_reason_that_is_not_a_plain_value_holds_the_choice
+    self.held_option('Smoker: yes. Reason for visit: cough; he quit smoking ten years ago.', 'Smoker?', 'Smoker: yes.',
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1011, in held_option
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+AssertionError: Tuples differ: ('supported', 'Yes') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes')
++ ('conflict', '') : Smoker: yes. Reason for visit: cough; he quit smoking ten years ago.
+
+======================================================================
+FAIL: test_r3_2_a_reason_is_sentence_holds_the_checkbox_before_it (core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_2_a_reason_is_sentence_holds_the_checkbox_before_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1023, in test_r3_2_a_reason_is_sentence_holds_the_checkbox_before_it
+    self.held_option('Diabetes: yes.\nReason for visit is review, as diabetes was excluded on repeat testing.', 'Diabetes',
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1011, in held_option
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+AssertionError: Tuples differ: ('supported', 'checked') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'checked')
++ ('conflict', '') : Diabetes: yes.
+Reason for visit is review, as diabetes was excluded on repeat testing.
+
+======================================================================
+FAIL: test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock (core.tests.test_v3_ordinary_notes.RoundThreeThroughTheWorker.test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 1030, in test_r3_4_a_value_of_49900_stops_is_validated_in_linear_time_under_the_lock
+    self.assertLess(elapsed, 5.0)
+AssertionError: 89.11447699402925 not less than 5.0
+
+======================================================================
+FAIL: test_an_unpunctuated_run_on_unit_is_held_for_every_question (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_an_unpunctuated_run_on_unit_is_held_for_every_question) (label='Chief complaint')
+Pre-existing, listed by the previous repair: a single-line unpunctuated dictation was adopted whole as the answer
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 931, in test_an_unpunctuated_run_on_unit_is_held_for_every_question
+    held_with(self, notes, label, notes, notes)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'patient is a fifty year old [163 chars]None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
++ ('conflict', '', None)
+- ('supported',
+-  'patient is a fifty year old man who comes in with right knee pain for three '
+-  'weeks he has no allergies he smokes ten a day and the plan is physiotherapy '
+-  'twice weekly and review in six weeks',
+-  None) : patient is a fifty year old man who comes in with right knee pain for three weeks he has no allergies he smokes ten a day and the plan is physiotherapy twice weekly and review in six weeks
+
+======================================================================
+FAIL: test_an_unpunctuated_run_on_unit_is_held_for_every_question (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_an_unpunctuated_run_on_unit_is_held_for_every_question) (label='Allergies')
+Pre-existing, listed by the previous repair: a single-line unpunctuated dictation was adopted whole as the answer
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 931, in test_an_unpunctuated_run_on_unit_is_held_for_every_question
+    held_with(self, notes, label, notes, notes)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'patient is a fifty year old [163 chars]None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
++ ('conflict', '', None)
+- ('supported',
+-  'patient is a fifty year old man who comes in with right knee pain for three '
+-  'weeks he has no allergies he smokes ten a day and the plan is physiotherapy '
+-  'twice weekly and review in six weeks',
+-  None) : patient is a fifty year old man who comes in with right knee pain for three weeks he has no allergies he smokes ten a day and the plan is physiotherapy twice weekly and review in six weeks
+
+======================================================================
+FAIL: test_an_unpunctuated_run_on_unit_is_held_for_every_question (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_an_unpunctuated_run_on_unit_is_held_for_every_question) (label='Plan')
+Pre-existing, listed by the previous repair: a single-line unpunctuated dictation was adopted whole as the answer
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 931, in test_an_unpunctuated_run_on_unit_is_held_for_every_question
+    held_with(self, notes, label, notes, notes)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'patient is a fifty year old [163 chars]None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
++ ('conflict', '', None)
+- ('supported',
+-  'patient is a fifty year old man who comes in with right knee pain for three '
+-  'weeks he has no allergies he smokes ten a day and the plan is physiotherapy '
+-  'twice weekly and review in six weeks',
+-  None) : patient is a fifty year old man who comes in with right knee pain for three weeks he has no allergies he smokes ten a day and the plan is physiotherapy twice weekly and review in six weeks
+
+======================================================================
+FAIL: test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it) (notes='Consent obtained: yes. Plan: to be obtained tomorrow.')
+R3-1: F5 split a line wherever a form or context label begins, and the split-off tail was exempted as
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 875, in test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'checked', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'checked', None)
++ ('conflict', '', None) : Consent obtained: yes. Plan: to be obtained tomorrow.
+
+======================================================================
+FAIL: test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it) (notes='Consent obtained: yes. Clinician signature: consent form not yet signed.')
+R3-1: F5 split a line wherever a form or context label begins, and the split-off tail was exempted as
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 875, in test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'checked', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'checked', None)
++ ('conflict', '', None) : Consent obtained: yes. Clinician signature: consent form not yet signed.
+
+======================================================================
+FAIL: test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it) (notes='Smoker: yes. Plan: none, he quit ten years ago.')
+R3-1: F5 split a line wherever a form or context label begins, and the split-off tail was exempted as
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 875, in test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'Yes', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes', None)
++ ('conflict', '', None) : Smoker: yes. Plan: none, he quit ten years ago.
+
+======================================================================
+FAIL: test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it) (notes="Allergies: none. Plan: avoid penicillin after last week's anaphylaxis.")
+R3-1: F5 split a line wherever a form or context label begins, and the split-off tail was exempted as
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 875, in test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'none.', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'none.', None)
++ ('conflict', '', None) : Allergies: none. Plan: avoid penicillin after last week's anaphylaxis.
+
+======================================================================
+FAIL: test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it) (notes='Temperature: 37.2. Heart rate: 104, temperature rechecked at 38.9.')
+R3-1: F5 split a line wherever a form or context label begins, and the split-off tail was exempted as
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 875, in test_r3_1_a_later_labelled_value_that_is_not_plain_holds_what_comes_before_it
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', '37.2.', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', '37.2.', None)
++ ('conflict', '', None) : Temperature: 37.2. Heart rate: 104, temperature rechecked at 38.9.
+
+======================================================================
+FAIL: test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule) (notes='Consent obtained: yes.\nPlan is to proceed once consent is signed tomorrow.')
+R3-2: 'Plan is ...' read as a labelled value, so it neither changed what came before it nor was changed.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 900, in test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'checked', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'checked', None)
++ ('conflict', '', None) : Consent obtained: yes.
+Plan is to proceed once consent is signed tomorrow.
+
+======================================================================
+FAIL: test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule) (notes='Allergies: penicillin.\nPlan is amoxicillin 500 mg three times daily, as the penicillin allergy was disproven on testing last year.')
+R3-2: 'Plan is ...' read as a labelled value, so it neither changed what came before it nor was changed.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 900, in test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'penicillin.', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'penicillin.', None)
++ ('conflict', '', None) : Allergies: penicillin.
+Plan is amoxicillin 500 mg three times daily, as the penicillin allergy was disproven on testing last year.
+
+======================================================================
+FAIL: test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule) (notes='Smoker: yes.\nAllergies were reviewed today and she quit smoking in 2010.')
+R3-2: 'Plan is ...' read as a labelled value, so it neither changed what came before it nor was changed.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 900, in test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'Yes', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes', None)
++ ('conflict', '', None) : Smoker: yes.
+Allergies were reviewed today and she quit smoking in 2010.
+
+======================================================================
+FAIL: test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule) (notes='Her sister was seen in oncology last month. Diagnosis was breast cancer.')
+R3-2: 'Plan is ...' read as a labelled value, so it neither changed what came before it nor was changed.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 900, in test_r3_2_a_label_is_sentence_is_an_ordinary_sentence_for_the_paragraph_rule
+    held_with(self, notes, label, quote, candidate)
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'breast cancer.', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'breast cancer.', None)
++ ('conflict', '', None) : Her sister was seen in oncology last month. Diagnosis was breast cancer.
+
+======================================================================
+FAIL: test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold)
+R3-3: 'hepatitis C.' was read as an initial, so the sentence after it hid inside the unit before.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 904, in test_r3_3_a_single_letter_before_a_stop_ends_a_sentence_for_a_hold
+    held_with(self, 'Smoker: yes.\nPlan: screen for hepatitis C. She is not a smoker; that was her husband.', 'Smoker',
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 854, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'Yes', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes', None)
++ ('conflict', '', None) : Smoker: yes.
+Plan: screen for hepatitis C. She is not a smoker; that was her husband.
+
+======================================================================
+FAIL: test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer) (notes='Follow-up: see in clinic in twelve months.')
+R3-6: held although nothing in them points at other lines.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 921, in test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer
+    self.assertEqual((answer['status'], answer['text']), ('supported', text), notes)
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'see in clinic in twelve months.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'see in clinic in twelve months.') : Follow-up: see in clinic in twelve months.
+
+======================================================================
+FAIL: test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer) (notes='Plan: see physiotherapist twice weekly for six weeks.')
+R3-6: held although nothing in them points at other lines.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 921, in test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer
+    self.assertEqual((answer['status'], answer['text']), ('supported', text), notes)
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'see physiotherapist twice weekly for six weeks.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'see physiotherapist twice weekly for six weeks.') : Plan: see physiotherapist twice weekly for six weeks.
+
+======================================================================
+FAIL: test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer) (notes='Blood group: O-')
+R3-6: held although nothing in them points at other lines.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 921, in test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer
+    self.assertEqual((answer['status'], answer['text']), ('supported', text), notes)
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'O-')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'O-') : Blood group: O-
+
+======================================================================
+FAIL: test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer) (notes='Blood group: O−.')
+R3-6: held although nothing in them points at other lines.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 921, in test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer
+    self.assertEqual((answer['status'], answer['text']), ('supported', text), notes)
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'O−.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'O−.') : Blood group: O−.
+
+======================================================================
+FAIL: test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer) (notes='Urine dipstick: nitrites -')
+R3-6: held although nothing in them points at other lines.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 921, in test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer
+    self.assertEqual((answer['status'], answer['text']), ('supported', text), notes)
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'nitrites -')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'nitrites -') : Urine dipstick: nitrites -
+
+======================================================================
+FAIL: test_r3_4_a_run_of_stops_is_read_in_linear_time (core.tests.test_v3_ordinary_notes.RoundThreeCost.test_r3_4_a_run_of_stops_is_read_in_linear_time)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 941, in test_r3_4_a_run_of_stops_is_read_in_linear_time
+    self.assertLess(time.monotonic() - started, 0.05, count)
+AssertionError: 0.06946029904065654 not less than 0.05 : 2000
+
+======================================================================
+FAIL: test_r3_4_an_unlabelled_unit_of_20k_stops_selected_by_three_questions (core.tests.test_v3_ordinary_notes.RoundThreeCost.test_r3_4_an_unlabelled_unit_of_20k_stops_selected_by_three_questions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 948, in test_r3_4_an_unlabelled_unit_of_20k_stops_selected_by_three_questions
+    self.assertLess(time.monotonic() - started, 2.0)
+AssertionError: 20.536109399981797 not less than 2.0
+
+======================================================================
+FAIL: test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it (core.tests.test_v3_ordinary_notes.RoundThreeCost.test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 964, in test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it
+    self.assertLessEqual(len(calls), len(units), calls)
+AssertionError: 4 not less than or equal to 2 : ['Patient presents with knee pain.', 'Patient presents with knee pain.', 'She reports it is worse at night.', 'She reports it is worse at night.']
+
+======================================================================
+FAIL: test_r3_5_a_line_of_999_labelled_segments_is_split_once (core.tests.test_v3_ordinary_notes.RoundThreeCost.test_r3_5_a_line_of_999_labelled_segments_is_split_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 983, in test_r3_5_a_line_of_999_labelled_segments_is_split_once
+    self.assertLess(time.monotonic() - started, 2.0)
+AssertionError: 6.668790770985652 not less than 2.0
+
+----------------------------------------------------------------------
+Ran 14 tests in 120.587s
+
+FAILED (failures=26)
+Destroying test database for alias 'default'...
+Found 14 test(s).
+System check identified no issues (0 silenced).
+exit 1
+'Plan: screen for hepatitis C. She is not a smoker; that was her husband.' Plan supported 'screen for hepatitis C. She is not a smoker; that was her husband.'
+'Medications: vitamin K. Warfarin was stopped last month.' Medications supported 'vitamin K. Warfarin was stopped last month.'

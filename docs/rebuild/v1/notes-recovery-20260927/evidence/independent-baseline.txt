@@ -1,0 +1,3 @@
+SOURCE /tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/baseline-generation.py
+{"held": true, "label": "Lt knee", "notes": "The patient has right knee pain. He reports stiffness in the morning.", "provider_unit_ids": [1, 2], "status": "conflict", "text": ""}
+{"held": true, "label": "Allergies", "notes": "The patient takes aspirin daily. She also takes vitamin D.", "provider_unit_ids": [1, 2], "status": "conflict", "text": ""}

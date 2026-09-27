@@ -1,0 +1,300 @@
+{
+  "provenance": "Synthetic-only prior and current execution evidence; actual candidate stages are distinguished in REPORT.md. No provider requests. Original scratch remains preserved.",
+  "files": [
+    {
+      "file": "red-head.txt",
+      "sha256": "c9718b6c9891610248cfde9390ffdf017bfa2c93c41fc8e8bcf9cf16edfa4666",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/red-head.txt"
+    },
+    {
+      "file": "red-tests.txt",
+      "sha256": "7e893521219de8b7e6c06f0c55b1fab04293a82841a25224faaee54400bdb758",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/red-tests.txt"
+    },
+    {
+      "file": "cost-head.txt",
+      "sha256": "4858c7b168e7ff6c71149bea6bb14ba43f92898f4e11dc85427dce2b952d0f61",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/cost-head.txt"
+    },
+    {
+      "file": "cost-after-A.txt",
+      "sha256": "d2c7c452e33e0e2cfc1e6c23b9e279f7306b353618c84690ab4a7b1ee01581fe",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/cost-after-A.txt"
+    },
+    {
+      "file": "mut-A.txt",
+      "sha256": "fbcf4474c9039411b234c879cfd04a5b36446e9beebc412f814ad4407b64777a",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-A.txt"
+    },
+    {
+      "file": "mut-A2.txt",
+      "sha256": "75554c48264a89d65dcae0bf13f1a52eb5a29018da8ba3b88c4b349922eb33bb",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-A2.txt"
+    },
+    {
+      "file": "mut-B.txt",
+      "sha256": "441cce5545768f5f7d1e630efb981382f5e7ce404e91c51581fcd0fc2fbcc1b8",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-B.txt"
+    },
+    {
+      "file": "mut-C.txt",
+      "sha256": "e899454b0693288b3c1028772dae3b595b9aaeb0eb5514d7424a9c19acb12abf",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-C.txt"
+    },
+    {
+      "file": "mut-C2.txt",
+      "sha256": "2709c9acaf3e379fb8f41d9118eb3d2ea192cd32e2d4491ab62bf579ae86c9e9",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-C2.txt"
+    },
+    {
+      "file": "mut-D.txt",
+      "sha256": "c432a41e7a967af67d0cd6ed4bbc8239d90a705a17f8e0c680a1ade571921cc0",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-D.txt"
+    },
+    {
+      "file": "mut-E.txt",
+      "sha256": "7ad40d71ffbfc784eb8b65ddbfad3897f537f6bffa082ec318a2716f2a352442",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-E.txt"
+    },
+    {
+      "file": "mut-F.txt",
+      "sha256": "0bf52ac0d109d6ea4eda4e29dbf87a4f6d5a6cc91eb91ee7671ffc4bb6f73291",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-F.txt"
+    },
+    {
+      "file": "mut-FD-recovered.txt",
+      "sha256": "200741dea214dca73e73a12173e73cb76fc909cd1a636d28984b0fe5bd63ecc2",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mut-FD-recovered.txt"
+    },
+    {
+      "file": "final-check.txt",
+      "sha256": "c0f41e9d77fda2dc38b65183611472aa000dc0dc520211e6ca4ca14f52e1024d",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/final-check.txt"
+    },
+    {
+      "file": "final-core.txt",
+      "sha256": "e2add25ea05a27a60a552b7ef48fe7bc0f614e87c4c4961953f75c110cf6c874",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/final-core.txt"
+    },
+    {
+      "file": "final-identity.txt",
+      "sha256": "367486a1c69e019d1ed23665bd115e22369d85f0e2bd4b14ebdadef81fcdc756",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/final-identity.txt"
+    },
+    {
+      "file": "final-measure-test.txt",
+      "sha256": "a80a797dd351179e21cc898dcdf9ae3b0ab49f576ddd75932650f452ce2c0591",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/final-measure-test.txt"
+    },
+    {
+      "file": "final-measure-r1.txt",
+      "sha256": "1ae7f1a8dc86d1e226adf9cefc435a512df58a2d1ba9314ba558c0c2f6fe2098",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/final-measure-r1.txt"
+    },
+    {
+      "file": "final-residual.txt",
+      "sha256": "090f107d0094a12d71c11ef543147f61d90d373c91a55d64cf7652eb45c8eb79",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/final-residual.txt"
+    },
+    {
+      "file": "final-cost.txt",
+      "sha256": "28505dd4532951911114d32a8cdf4e6db4289720b34b1e29bd4a6a59c2a4e9d7",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/final-cost.txt"
+    },
+    {
+      "file": "recovered-red.txt",
+      "sha256": "76ebd4ed58bf9952851b92014de58bed7d5d6e84ab65bbe584f0d657c2291753",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovered-red.txt"
+    },
+    {
+      "file": "recovered-green-first.txt",
+      "sha256": "455492d2086d8c686379ab0fd480875e499cb206d3b97c67e2fcb51bb5d62e4d",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovered-green-first.txt"
+    },
+    {
+      "file": "recovered-targeted.txt",
+      "sha256": "0a90a172e4693fd7b802d0089ae02b0abde92f10a8a069c7644448922940b08b",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovered-targeted.txt"
+    },
+    {
+      "file": "recovered-worker.txt",
+      "sha256": "ab04fe658b7dd8324b2aea1e6d3722f893bc00f0c85eb5725355c651f63476f2",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovered-worker.txt"
+    },
+    {
+      "file": "recovered-final-focused.txt",
+      "sha256": "7b9ef0b911ef8cde5d62b2a81000780c5f2f6cd8fd258a0ba4150487b24ec40d",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovered-final-focused.txt"
+    },
+    {
+      "file": "recovery-limit-red.txt",
+      "sha256": "5f779da9147e823ba17c404edf7b2c2b13947e78c5d2eef6bdb75f2a146d0850",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovery-limit-red.txt"
+    },
+    {
+      "file": "recovered-mutation-results.txt",
+      "sha256": "0a69649c0a9b26854bb03aa0398f643bb7c644acd0c05212e45fe2378d6f6f52",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovered-mutation-results.txt"
+    },
+    {
+      "file": "repaired-identity.txt",
+      "sha256": "44e02b43411831da409b7cfbd6fd0a9a1c004904389e5770b04d4941c6e8ddf0",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/repaired-identity.txt"
+    },
+    {
+      "file": "repaired-measure-test.txt",
+      "sha256": "67819c54343263a9aac2c107ae260457cc2fc4b329efdcb3100dee4d79be9e10",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/repaired-measure-test.txt"
+    },
+    {
+      "file": "repaired-measure-r1.txt",
+      "sha256": "8db813b744f36d824d0c49730ea55b049b8bdf9c5ee7be53341b5f827f625876",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/repaired-measure-r1.txt"
+    },
+    {
+      "file": "repaired-residual.txt",
+      "sha256": "db623ae4385971084377012d0034e39792107900dadabb7fe3e1894b2a968270",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/repaired-residual.txt"
+    },
+    {
+      "file": "repaired-cost.txt",
+      "sha256": "b8e2fccd235375164afc4314704bec5f5b0e91b42db63331e7a7551e2ba2b68b",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/repaired-cost.txt"
+    },
+    {
+      "file": "r1-corpus.json",
+      "sha256": "a0ade80a8a2c1c6a14e20faed4e5c13c94208486b4ba5e522d5dffe6803dfbe7",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/r1-corpus.json"
+    },
+    {
+      "file": "corpus.py",
+      "sha256": "1fd4470636f8d67af251e1ef046d56284381732a7f195554eacc542ad0b53549",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/corpus.py"
+    },
+    {
+      "file": "measure.py",
+      "sha256": "6e29912654b297ffb4b12a38d19d29b2d97307bd9068e7bcaa22c75ab67d37fc",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/measure.py"
+    },
+    {
+      "file": "recovery-final-core.txt",
+      "sha256": "aa4c634f2b852f1c901cdad3516eba584152b4fb388367bbb25b9bacf060c809",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovery-final-core.txt"
+    },
+    {
+      "file": "recovery-final-documents.txt",
+      "sha256": "6ac50d4579bb1eb2ee7e8f171ff962eaf247de4709581db1f1cd6892afeac2ac",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovery-final-documents.txt"
+    },
+    {
+      "file": "paragraph-refute-red.txt",
+      "sha256": "c81274541f048dd22fb1fc0195ae8d10cb812d2f18c0022b7beaf36d2dbe9f76",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-red.txt"
+    },
+    {
+      "file": "paragraph-refute-final-focused.txt",
+      "sha256": "06f90ac7819d9082d8b8643adf0c81d9e366babef4c9279487393c7e341e27de",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-final-focused.txt"
+    },
+    {
+      "file": "paragraph-refute-mutations.txt",
+      "sha256": "36bcdeee35bf4bfce770e57ff24b74f96e0e4bf9c948742f6bf19dfeeaa17737",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-mutations.txt"
+    },
+    {
+      "file": "paragraph-refute-mutants.py",
+      "sha256": "fe90724316dc235893b1cddf7bfe5e65956103a0d0abaa7dcc1ab48c1fc64a76",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-mutants.py"
+    },
+    {
+      "file": "paragraph-refute-identity.txt",
+      "sha256": "0409f75607890e34835e6a36e3b2d09a31712748c66d492ae979da545c7ef26c",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-identity.txt"
+    },
+    {
+      "file": "paragraph-refute-measure-test.txt",
+      "sha256": "661bce1ab879ffe56f55af22cf9cb2d084b6fae933c32bc69713a56074986a64",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-measure-test.txt"
+    },
+    {
+      "file": "paragraph-refute-measure-r1.txt",
+      "sha256": "5167b86b326e7b9c40d190f88a52ca6a49ee27a8dc48cc4c9a083d60b84e914a",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-measure-r1.txt"
+    },
+    {
+      "file": "paragraph-refute-measure-all-unset-group.txt",
+      "sha256": "5dc9ab9a5361d26a5b5542008cddc100cf0bf60b26ee918655ef4c25a2fc9b37",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-measure-all-unset-group.txt"
+    },
+    {
+      "file": "paragraph-refute-measure-all-ignored-corpus-var.txt",
+      "sha256": "5dc9ab9a5361d26a5b5542008cddc100cf0bf60b26ee918655ef4c25a2fc9b37",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/paragraph-refute-measure-all-ignored-corpus-var.txt"
+    },
+    {
+      "file": "p10.py",
+      "sha256": "9eeabd2a58b0358120f0c0d77b2d20c964157f2404029beb4ee9501a22c8b5a6",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/p10.py"
+    },
+    {
+      "file": "harness.py",
+      "sha256": "f5e9c10deb1a71806ad24e1fd47a203efc004771359ec33d5e1dc65074a97534",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/harness.py"
+    },
+    {
+      "file": "mutate.py",
+      "sha256": "74092103c4ad8e0ca4c9ff6161d16d65df6ef73476dfcbfd9510f2f7f500aa91",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/mutate.py"
+    },
+    {
+      "file": "recovered-mutants.py",
+      "sha256": "ba286cb6332abcb175a5d9269f4d3de154034ea24c8835bb1d38d9609f5482de",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/recovered-mutants.py"
+    },
+    {
+      "file": "batchF-recovered.py",
+      "sha256": "2841a76860648773b5cde2ec464d7043ededc35b50c90634080e7774a8604ffe",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/notes-repair3/batchF-recovered.py"
+    },
+    {
+      "file": "independent-probe.py",
+      "sha256": "7f26dee139d6ed336997dc84e0f5195e2a8eb5444159eba3cf9bf210a4244dff",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/probe.py"
+    },
+    {
+      "file": "independent-dosing-probe.py",
+      "sha256": "f653ca0b28a2e028d60e80694951a5b437385ce51881de0ab299627b2210130b",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/dosing-probe.py"
+    },
+    {
+      "file": "independent-baseline.txt",
+      "sha256": "6d6a2ee0d57d56b6ce103f8fc980a14a59d8389ae7224871a9fd60ac9cd8bd88",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/baseline.txt"
+    },
+    {
+      "file": "independent-finished.txt",
+      "sha256": "03d3f64fdbdaec9018cc58f457dfc2c554def4ba3ff3af9cf16350bab3b00f78",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/finished.txt"
+    },
+    {
+      "file": "independent-dosing-baseline.txt",
+      "sha256": "d2a6fe9dd74ce89df88702633902b49e94084c9ae4af3288dc1525a2da8354ec",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/dosing-baseline.txt"
+    },
+    {
+      "file": "independent-dosing-finished.txt",
+      "sha256": "778ef655a03e13e500e07387efe3cf95a72c25db5b56b8de9014ddad3f0cdf93",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/dosing-finished.txt"
+    },
+    {
+      "file": "independent-repaired-destinations.txt",
+      "sha256": "4fb88525b860d8f397a6ae54fb2f94c2785d514c08d359a16b1a8ea95ccbd1db",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/repaired-destinations.txt"
+    },
+    {
+      "file": "independent-repaired-dosing.txt",
+      "sha256": "1ffc15f8db40ba1669e9a375930b22d7e51151c092c4addd570402937def90ae",
+      "source": "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/v1/blockers-repair5/astra-recovery/notes-refutation/repaired-dosing.txt"
+    }
+  ]
+}

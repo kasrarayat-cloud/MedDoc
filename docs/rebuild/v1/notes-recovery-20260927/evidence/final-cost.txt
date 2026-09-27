@@ -1,0 +1,7 @@
+INNER_SENTENCE_END 2000 stops            0.00 s False
+INNER_SENTENCE_END 4000 stops            0.00 s False
+INNER_SENTENCE_END 8000 stops            0.00 s False
+allergies 49,900 stops (worker fields)   0.37 s conflict
+unlabelled 20k stops x3 fields           0.04 s conflict
+units 999
+999 Q1: No. on one line                  0.05 s supported

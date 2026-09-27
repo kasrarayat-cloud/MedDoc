@@ -1,0 +1,3 @@
+SOURCE /opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/generation.py
+{"held": true, "label": "Lt knee", "notes": "The patient has right knee pain. He reports stiffness in the morning.", "provider_unit_ids": [1, 2], "status": "conflict", "text": ""}
+{"held": true, "label": "Allergies", "notes": "The patient takes aspirin daily. She also takes vitamin D.", "provider_unit_ids": [1, 2], "status": "conflict", "text": ""}

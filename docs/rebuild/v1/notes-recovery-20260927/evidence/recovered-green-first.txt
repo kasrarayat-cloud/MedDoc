@@ -1,0 +1,8 @@
+.......
+----------------------------------------------------------------------
+Ran 7 tests in 0.210s
+
+OK
+Found 7 test(s).
+System check identified no issues (0 silenced).
+exit 0

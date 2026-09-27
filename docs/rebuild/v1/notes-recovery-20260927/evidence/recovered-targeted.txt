@@ -1,0 +1,37 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.../opt/meddoc-pro/.worktrees/v1-notes/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+............................................................................................................F................
+======================================================================
+FAIL: test_a_held_candidate_shows_the_sentence_that_may_change_it (core.tests.test_v3_ordinary_notes.RoundTwoMutantPins.test_a_held_candidate_shows_the_sentence_that_may_change_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes/rebuild/core/tests/test_v3_ordinary_notes.py", line 839, in test_a_held_candidate_shows_the_sentence_that_may_change_it
+    self.assertEqual(kept['context'], [{'quote': 'Sorry, I mean amoxicillin.', 'start': 23, 'end': 49, 'after': True,
+AssertionError: Lists differ: [{'qu[84 chars]alse}, {'quote': 'Sorry, I mean amoxicillin.',[50 chars]lse}] != [{'qu[84 chars]alse}]
+
+First list contains 1 additional elements.
+First extra element 1:
+{'quote': 'Sorry, I mean amoxicillin.', 'start': 23, 'end': 49, 'after': True, 'same': False}
+
+  [{'after': True,
+    'end': 49,
+    'quote': 'Sorry, I mean amoxicillin.',
+    'same': False,
+-   'start': 23},
+-  {'after': True,
+-   'end': 49,
+-   'quote': 'Sorry, I mean amoxicillin.',
+-   'same': False,
+    'start': 23}]
+
+----------------------------------------------------------------------
+Ran 128 tests in 43.544s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 128 test(s).
+System check identified no issues (0 silenced).
+exit 1
