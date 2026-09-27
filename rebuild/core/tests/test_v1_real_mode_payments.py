@@ -9,10 +9,12 @@ No provider is called: Stripe Checkout is a mock and every webhook is signed loc
 """
 from decimal import Decimal
 from io import StringIO
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import DatabaseError, transaction
 from django.test import TestCase, override_settings
 
 from core.billing import reserve
@@ -129,15 +131,30 @@ class RealModePaymentCheckCommand(SyntheticFixture, TestCase):
     signed = stripe_live.LiveCheckoutAndSettlement.signed
     sandbox_top_up = RealModeNeverSpendsSandboxMoney.sandbox_top_up
 
+    @staticmethod
+    def contents():
+        """Every value the check could change, not only how many rows there are (round-3 F4: a check that rewrote
+        every row as live and kept the row counts passed a count comparison)."""
+        return {
+            'payments': list(Payment.objects.order_by('pk').values_list(
+                'pk', 'livemode', 'status', 'wallet_id', 'amount_cents', 'stripe_session', 'stripe_intent')),
+            'events': list(WebhookEvent.objects.order_by('pk').values_list(
+                'pk', 'livemode', 'status', 'kind', 'attempts', 'payload_hash', 'semantic_hash')),
+            'wallets': list(Wallet.objects.order_by('pk').values_list('pk', 'kind', 'balance', 'reserved')),
+            'ledger': list(LedgerEntry.objects.order_by('pk').values_list(
+                'pk', 'wallet_id', 'amount', 'kind', 'key', 'balance_after')),
+            'audit': list(AuditEvent.objects.order_by('pk').values_list('pk', 'action', 'target')),
+        }
+
     def run_check(self):
-        before = {model: model.objects.count() for model in (Payment, WebhookEvent, Wallet, LedgerEntry, AuditEvent)}
+        before = self.contents()
         out = StringIO()
         try:
             call_command('real_mode_payment_check', stdout=out)
             result = (0, out.getvalue())
         except CommandError as exc:
             result = (1, str(exc))
-        self.assertEqual({model: model.objects.count() for model in before}, before, 'the check wrote something')
+        self.assertEqual(self.contents(), before, 'the check changed a payment, event, wallet, ledger or audit row')
         return result
 
     def test_a_database_without_payments_may_run_real_mode(self):
@@ -177,3 +194,49 @@ class RealModePaymentCheckCommand(SyntheticFixture, TestCase):
         self.assertEqual(self.signed(event(True, paid_session(payment, True, 'pi_live_only'), 'evt_live_only')).status_code, 200)
         status, message = self.run_check()
         self.assertEqual(status, 0, message)
+
+    def test_a_write_inside_the_checks_transaction_is_refused(self):
+        """Round-3 F4 (mutant R1/R3): the command runs its reads in a READ ONLY transaction, so any write made inside it,
+        by mistake or by a later edit, is refused by the database rather than rolled back afterwards."""
+        payment, wallet = self.sandbox_top_up()
+        attempts = []
+
+        def problems_that_write():
+            for name, write in (('wallet', lambda: Wallet.objects.filter(pk=wallet.pk).update(balance=Decimal('999'))),
+                                ('payment', lambda: Payment.objects.filter(pk=payment.pk).update(status='expired')),
+                                ('audit', lambda: AuditEvent.objects.create(action='synthetic.write_probe'))):
+                try:
+                    with transaction.atomic():
+                        write()
+                    attempts.append((name, 'written'))
+                except DatabaseError as exc:
+                    attempts.append((name, 'refused: read-only' if 'read-only transaction' in str(exc) else f'other: {exc}'[:120]))
+            return []
+
+        with patch('core.management.commands.real_mode_payment_check.real_mode_payment_problems', problems_that_write):
+            status, message = self.run_check()
+        self.assertEqual(attempts, [('wallet', 'refused: read-only'), ('payment', 'refused: read-only'),
+                                    ('audit', 'refused: read-only')])
+        self.assertEqual(status, 0, message)
+        # The test's own transaction is writable again once the command has ended.
+        Wallet.objects.filter(pk=wallet.pk).update(reserved=Decimal('0'))
+
+    def test_legacy_rows_recorded_before_the_mode_was_stored_refuse_even_when_their_wallet_is_drained(self):
+        """Round-3 F4 (mutant C12): after 0020 the private-beta database's rows carry livemode NULL, and a paid wallet
+        whose sandbox money was all spent holds 0, so the wallet count cannot catch it: the row counts must."""
+        wallet = Wallet.objects.get(user=self.user, kind='paid')
+        Payment.objects.create(user=self.user, wallet=wallet, amount_cents=1000, stripe_session='cs_legacy_drained',
+                               stripe_intent='pi_legacy_drained', status='paid', livemode=None)
+        WebhookEvent.objects.create(event_id='evt_legacy_drained', kind='checkout.session.completed', payload_hash='0' * 64,
+                                    object_data={}, status='processed', livemode=None)
+        LedgerEntry.objects.create(wallet=wallet, amount=Decimal('10'), kind='payment', key='payment:pi_legacy_drained',
+                                   description='Explicit Stripe wallet top-up', balance_after=Decimal('10'))
+        LedgerEntry.objects.create(wallet=wallet, amount=Decimal('-10'), kind='usage', key='usage:legacy-drained',
+                                   description='Provider cost × 1.5', balance_after=Decimal('0'))
+        wallet.refresh_from_db()
+        self.assertEqual((wallet.balance, wallet.reserved), (0, 0))
+        status, message = self.run_check()
+        self.assertEqual(status, 1, message)
+        self.assertIn('1 payment row(s) not recorded as live', message)
+        self.assertIn('1 Stripe event row(s) not recorded as live', message)
+        self.assertNotIn('paid wallet(s)', message)
