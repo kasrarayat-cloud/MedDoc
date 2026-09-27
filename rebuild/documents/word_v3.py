@@ -67,10 +67,16 @@ class Package:
         self.infos = self.zip.infolist()
         self.names = [i.filename for i in self.infos]
         self.trees = {}
+        self._alive = {}
 
     def tree(self, part):
         if part not in self.trees:
-            self.trees[part] = etree.fromstring(self.zip.read(part), PARSER)
+            root = etree.fromstring(self.zip.read(part), PARSER)
+            self.trees[part] = root
+            # lxml element proxies are created on demand and freed when unreferenced, after which id() values are
+            # reused by other elements. Holding every original element keeps its proxy (and its id) unique and
+            # stable for the life of the package - the detector's claims and caches are keyed by id().
+            self._alive[part] = list(root.iter())
         return self.trees[part]
 
     def content_parts(self):
@@ -520,7 +526,33 @@ UNDERSCORES = re.compile(r"_{3,}(?:[ \t]*_{2,})*|_{2}(?:[ \t]+_{1,2}){1,}")   # 
 DIGIT_RUN = re.compile(r"\u25af+(?:\s*[/.:\-]\s*\u25af+)*")                     # digit-entry boxes (symbol font) as one blank
 SEGMENTED = re.compile(r"\|(?:[ _]*_[ _]*\|)+(?:\s*[/.:\-]?\s*\|(?:[ _]*_[ _]*\|)+)*")   # digit boxes |__|__| / |__|__|
 DOTS = re.compile(r"(?:\.{5,}|…{2,}|(?:\. ){4,}\.?)")    # a dotted leader: ....... or …… or . . . . .
-BRACKET = re.compile(r"\[(?=[^\]\n]{2,120}\])(?:insert|enter|add|type|your|name|date|address|specify|[A-Z<])[^\]\n]*\]", re.I)
+BRACKET_ANY = re.compile(r"\[([^\[\]\n]{2,120})\]")
+
+
+class _Bracket:
+    """[Placeholder] fill-ins: an instruction verb (insert/enter/specify...) or a short noun phrase. Bracketed
+    abbreviations ('[SDU]'), sentences and printed notes ('[This page intentionally left blank]') are text."""
+    VERB = re.compile(r"^\s*(?:insert|enter|add|type|specify|list|describe|provide|state|include)\b", re.I)
+
+    def finditer(self, text):
+        for m in BRACKET_ANY.finditer(text):
+            inner = m.group(1).strip()
+            words = inner.split()
+            if self.VERB.match(inner):
+                yield m
+                continue
+            if re.fullmatch(r"[A-Z0-9/&.\-]{1,6}s?", inner) or re.fullmatch(r"\d+(?:[.,]\d+)?%?", inner):
+                continue                        # an abbreviation or a number, printed
+            if len(words) > 5 or inner.endswith((".", "!", "?")) or re.search(r"\b(?:is|are|was|were|will|must|should|may|has|have)\b", inner, re.I):
+                continue                        # a sentence: printed text
+            yield m
+
+    def fullmatch(self, text):
+        m = BRACKET_ANY.fullmatch(text)
+        return m if m and any(True for _ in self.finditer(text)) else None
+
+
+BRACKET = _Bracket()
 ANGLE = re.compile(r"<(?![/!?])[^<>\n]{3,120}>")                  # <Protocol Number: Abbreviated Title> author placeholders
 TOKEN = re.compile(r"\{\{\s*([\w][\w .?:/()\-]{0,119}?)\s*\}\}")
 PLACEHOLDER_TEXT = re.compile(r"^(?:click (?:or tap )?here to enter (?:text|a date)\.?|choose an item\.?|click or tap to enter a date\.?|"
@@ -1747,3 +1779,588 @@ def inspect(data: bytes) -> dict:
         fail("The form has more answer areas than one mapping can hold (%d)." % MAX_FIELDS, "too_many_fields")
     fields = [area_to_field(i + 1, a) for i, a in enumerate(areas)]
     return {"contract": CONTRACT, "fields": fields, "notes": notes}
+
+
+# ─── fill ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+MARK_FONT = "Segoe UI Symbol"
+SIGNING_KINDS = {"signature", "initials"}
+
+
+def _el(tag, **attrs):
+    el = etree.Element(q(tag))
+    for k, v in attrs.items():
+        el.set(q(k) if ":" in k else k, v)
+    return el
+
+
+def _text_nodes(text):
+    """w:t / w:br / w:tab sequence for an answer (newlines -> breaks, tabs kept)."""
+    out = []
+    for n, line in enumerate(text.replace("\r\n", "\n").replace("\r", "\n").split("\n")):
+        if n:
+            out.append(_el("w:br"))
+        for k, token in enumerate(line.split("\t")):
+            if k:
+                out.append(_el("w:tab"))
+            if token:
+                t = _el("w:t")
+                t.set(XML_SPACE, "preserve")
+                t.text = token
+                out.append(t)
+    return out
+
+
+def _answer_rpr(source_rpr, *, plain=True):
+    """Run properties for answer text: the neighbour's font and size, black ink, no placeholder style; `plain`
+    also drops bold/italic/caps a printed label carries."""
+    rpr = etree.fromstring(etree.tostring(source_rpr)) if source_rpr is not None else _el("w:rPr")
+    for tag in ("w:rStyle", "w:vanish", "w:webHidden", "w:highlight", "w:shd"):
+        for x in rpr.findall(q(tag)):
+            rpr.remove(x)
+    if plain:
+        for tag in ("w:b", "w:bCs", "w:i", "w:iCs", "w:caps", "w:smallCaps"):
+            for x in rpr.findall(q(tag)):
+                rpr.remove(x)
+    for x in rpr.findall(q("w:color")):
+        rpr.remove(x)
+    color = _el("w:color")
+    color.set(q("w:val"), "000000")
+    _insert_rpr_child(rpr, color)
+    return rpr
+
+
+RPR_ORDER = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps", "strike", "dstrike", "outline", "shadow",
+             "emboss", "imprint", "noProof", "snapToGrid", "vanish", "webHidden", "color", "spacing", "w", "kern",
+             "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs",
+             "em", "lang", "eastAsianLayout", "specVanish", "oMath"]
+
+
+def _insert_rpr_child(rpr, child):
+    """Insert keeping the schema order of rPr children (Word rejects out-of-order properties)."""
+    name = etree.QName(child).localname
+    rank = RPR_ORDER.index(name) if name in RPR_ORDER else len(RPR_ORDER)
+    for i, existing in enumerate(rpr):
+        other = etree.QName(existing).localname if isinstance(existing.tag, str) else ""
+        if other in RPR_ORDER and RPR_ORDER.index(other) > rank:
+            rpr.insert(i, child)
+            return
+    rpr.append(child)
+
+
+def _new_run(rpr, text):
+    r = _el("w:r")
+    if rpr is not None:
+        r.append(rpr)
+    for node in _text_nodes(text):
+        r.append(node)
+    return r
+
+
+def _flowing(p):
+    """Exact line spacing clips taller answer text: make it a minimum. Keeps everything else."""
+    ppr = p.find(q("w:pPr"))
+    if ppr is None:
+        return
+    sp = ppr.find(q("w:spacing"))
+    if sp is not None and sp.get(q("w:lineRule")) == "exact":
+        sp.set(q("w:lineRule"), "atLeast")
+
+
+def _unclip_row(tc):
+    tr = tc.getparent()
+    if tr is None or tr.tag != q("w:tr"):
+        return
+    trpr = tr.find(q("w:trPr"))
+    h = trpr.find(q("w:trHeight")) if trpr is not None else None
+    if h is not None and h.get(q("w:hRule")) == "exact":
+        h.set(q("w:hRule"), "atLeast")
+
+
+def _split_run_before(run, node):
+    """Move `node` and everything after it in `run` into a new run (same properties) right after `run`."""
+    children = [c for c in run if c.tag != q("w:rPr")]
+    if not children or node is children[0]:
+        return
+    twin = etree.Element(run.tag, dict(run.attrib))
+    rpr = run.find(q("w:rPr"))
+    if rpr is not None:
+        twin.append(etree.fromstring(etree.tostring(rpr)))
+    moving = children[children.index(node):]
+    for c in moving:
+        twin.append(c)
+    run.addnext(twin)
+
+
+def _split_at(p, pos):
+    text, pieces = paragraph_text(p)
+    for pc in pieces:
+        if pc.run is None:
+            continue
+        if pc.kind == "t" and pc.node.tag == T and pc.start < pos < pc.end:
+            k = pos - pc.start
+            t = pc.node
+            tail = etree.fromstring(etree.tostring(t))
+            tail.text = (t.text or "")[k:]
+            t.text = (t.text or "")[:k]
+            t.set(XML_SPACE, "preserve")
+            tail.set(XML_SPACE, "preserve")
+            t.addnext(tail)
+            _split_run_before(pc.run, tail)
+            return
+        if pc.start == pos and pc.kind in ("t", "tab", "sym", "br"):
+            _split_run_before(pc.run, pc.node)
+            return
+
+
+def replace_range(p, start, end, answer, *, plain=True):
+    """Replace paragraph text [start, end) (positions of paragraph_text) with `answer`. Runs are split at the
+    boundaries so exactly the range is removed; the answer takes the properties of the first replaced run (or of
+    the run before an insertion point). Nothing outside the range is touched."""
+    text, pieces = paragraph_text(p)
+    if not (0 <= start <= end <= len(text)):
+        fail("A stored mapping position no longer matches the form.", "mapping_mismatch")
+    if any(pc.kind == "obj" and pc.start < end and pc.end > start for pc in pieces):
+        fail("A stored mapping position overlaps a form control.", "mapping_mismatch")
+    if start < end:
+        _split_at(p, end)
+    _split_at(p, start)
+    text2, pieces = paragraph_text(p)
+    if text2 != text:
+        fail("The form's text changed while splitting runs.", "internal")
+    inside = [pc for pc in pieces if start <= pc.start and pc.end <= end and pc.start < pc.end and pc.kind in ("t", "tab", "sym", "br")]
+    if start < end and sum(pc.end - pc.start for pc in inside) != end - start:
+        fail("A stored mapping range does not cover whole text.", "mapping_mismatch")
+    if inside:
+        src = inside[0].run.find(q("w:rPr"))
+        new = _new_run(_answer_rpr(src, plain=plain), answer)
+        inside[0].run.addprevious(new)
+        nodes = {id(pc.node) for pc in inside}
+        for run in dict.fromkeys(pc.run for pc in inside):
+            for child in list(run):
+                if id(child) in nodes:
+                    run.remove(child)
+            if all(c.tag == q("w:rPr") for c in run):
+                run.getparent().remove(run)
+    else:
+        before = [pc for pc in pieces if pc.end <= start and pc.run is not None]
+        if before:
+            anchor = before[-1].run
+            lead = "" if (not text[:start] or text[:start].endswith((" ", "\t", "\u00a0"))) else " "
+            new = _new_run(_answer_rpr(anchor.find(q("w:rPr")), plain=plain), lead + answer)
+            anchor.addnext(new)
+        else:
+            ppr = p.find(q("w:pPr"))
+            mark = ppr.find(q("w:rPr")) if ppr is not None else None
+            new = _new_run(_answer_rpr(_rpr_from_mark(mark), plain=plain), answer)
+            if ppr is not None:
+                ppr.addnext(new)
+            else:
+                p.insert(0, new)
+    _flowing(p)
+    return True
+
+
+def _rpr_from_mark(mark):
+    """The paragraph mark's run properties, usable on a run."""
+    if mark is None:
+        return None
+    rpr = etree.fromstring(etree.tostring(mark))
+    rpr.tag = q("w:rPr")
+    for tag in ("w:ins", "w:del", "w:moveFrom", "w:moveTo"):
+        for x in rpr.findall(q(tag)):
+            rpr.remove(x)
+    return rpr
+# ─── writers ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+def _set_run_mark(run, mark):
+    """Replace a run's visible content with a mark character in a font that has it."""
+    for child in list(run):
+        if child.tag != q("w:rPr"):
+            run.remove(child)
+    rpr = run.find(q("w:rPr"))
+    if rpr is None:
+        rpr = _el("w:rPr")
+        run.insert(0, rpr)
+    for x in rpr.findall(q("w:rFonts")):
+        rpr.remove(x)
+    fonts = _el("w:rFonts")
+    for a in ("ascii", "hAnsi", "cs", "eastAsia"):
+        fonts.set(q("w:" + a), MARK_FONT)
+    _insert_rpr_child(rpr, fonts)
+    t = _el("w:t")
+    t.text = mark
+    run.append(t)
+
+
+def tick_glyph(p, n):
+    """Tick the n-th glyph box (not a control) of paragraph p."""
+    text, pieces = paragraph_text(p)
+    count = -1
+    for pc in pieces:
+        if pc.kind == "obj":
+            continue
+        chunk = piece_text(pc)
+        for k, ch in enumerate(chunk):
+            if ch not in (BOX, CHECKED):
+                continue
+            count += 1
+            if count != n:
+                continue
+            if ch == CHECKED:
+                return False
+            original = (pc.node.text or "")[k] if pc.kind == "t" else ""
+            mark = "●" if original in ("○", "⃝") or (pc.kind == "t" and ord(original) in (0x81, 0xF081, 0xA1, 0xF0A1)) else "☒"
+            pos = pc.start + k
+            # isolate this one character into its own run, then mark it
+            if pc.kind == "sym":
+                run = pc.run
+                _split_run_before(run, pc.node)
+                sym_run = pc.node.getparent()
+                after = [c for c in sym_run if c.tag != q("w:rPr")]
+                if len(after) > 1:
+                    _split_run_before(sym_run, after[1])
+                _set_run_mark(sym_run, mark)
+                return True
+            _split_at(p, pos + 1)
+            _split_at(p, pos)
+            _, pieces2 = paragraph_text(p)
+            target = next(x for x in pieces2 if x.start == pos and x.kind == "t")
+            _set_run_mark(target.run, mark)
+            return True
+    fail("A stored checkbox position no longer matches the form.", "mapping_mismatch")
+
+
+def tick_sdt_checkbox(sdt):
+    pr = sdt.find(q("w:sdtPr"))
+    cb = pr.find(q("w14:checkbox")) if pr is not None else None
+    if cb is None:
+        fail("A stored checkbox is no longer a checkbox control.", "mapping_mismatch")
+    ch = cb.find(q("w14:checked"))
+    if ch is None:
+        ch = etree.SubElement(cb, q("w14:checked"))
+    ch.set(q("w14:val"), "1")
+    state = cb.find(q("w14:checkedState"))
+    code = (state.get(q("w14:val")) if state is not None else None) or "2612"
+    font = (state.get(q("w14:font")) if state is not None else None) or "MS Gothic"
+    content = sdt.find(q("w:sdtContent"))
+    ts = list(content.iter(T)) if content is not None else []
+    if ts:
+        ts[0].text = chr(int(code, 16))
+        run = ts[0].getparent()
+        rpr = run.find(q("w:rPr"))
+        if rpr is None:
+            rpr = _el("w:rPr")
+            run.insert(0, rpr)
+        for x in rpr.findall(q("w:rFonts")):
+            rpr.remove(x)
+        fonts = _el("w:rFonts")
+        for a in ("ascii", "hAnsi", "cs", "eastAsia"):
+            fonts.set(q("w:" + a), font)
+        _insert_rpr_child(rpr, fonts)
+        for extra in ts[1:]:
+            extra.text = ""
+    return True
+
+
+def tick_ff_checkbox(begin_run):
+    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
+    cb = data.find(q("w:checkBox")) if data is not None else None
+    if cb is None:
+        fail("A stored checkbox is no longer a legacy checkbox.", "mapping_mismatch")
+    for x in cb.findall(q("w:checked")):
+        cb.remove(x)
+    checked = _el("w:checked")
+    checked.set(q("w:val"), "1")
+    cb.append(checked)
+    return True
+
+
+def _field_result_runs(begin_run):
+    """Runs between a field's 'separate' and 'end' at the same nesting level (the visible result)."""
+    runs, depth, state = [], 0, "instr"
+    node = begin_run
+    while True:
+        node = node.getnext()
+        if node is None:
+            break
+        if node.tag != R:
+            continue
+        fc = node.find(FLDCHAR)
+        if fc is not None:
+            kind = fc.get(q("w:fldCharType"))
+            if kind == "begin":
+                depth += 1
+            elif kind == "end":
+                if depth == 0:
+                    return runs, node
+                depth -= 1
+            elif kind == "separate" and depth == 0:
+                state = "result"
+            continue
+        if state == "result" and depth == 0:
+            runs.append(node)
+    fail("A form field is not closed in its paragraph.", "unsupported_layout")
+
+
+def write_ff_text(begin_run, answer):
+    runs, end = _field_result_runs(begin_run)
+    src = runs[0].find(q("w:rPr")) if runs else begin_run.find(q("w:rPr"))
+    for r in runs:
+        r.getparent().remove(r)
+    if not any(n.find(FLDCHAR) is not None and n.find(FLDCHAR).get(q("w:fldCharType")) == "separate"
+               for n in _siblings_between(begin_run, end)):
+        sep = _el("w:r")
+        fc = _el("w:fldChar")
+        fc.set(q("w:fldCharType"), "separate")
+        sep.append(fc)
+        end.addprevious(sep)
+    end.addprevious(_new_run(_answer_rpr(src, plain=False), answer))
+    return True
+
+
+def _siblings_between(a, b):
+    out, node = [], a.getnext()
+    while node is not None and node is not b:
+        out.append(node)
+        node = node.getnext()
+    return out
+
+
+def write_ff_dropdown(begin_run, options, answer):
+    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
+    dd = data.find(q("w:ddList"))
+    entries = [x.get(q("w:val")) for x in dd.findall(q("w:listEntry"))]
+    if answer not in entries:
+        fail("The answer is not one of the dropdown's options.", "invalid_answer")
+    for x in dd.findall(q("w:result")):
+        dd.remove(x)
+    res = _el("w:result")
+    res.set(q("w:val"), str(entries.index(answer)))
+    dd.insert(0, res)
+    return True
+
+
+def write_sdt_text(sdt, answer):
+    pr = sdt.find(q("w:sdtPr"))
+    if pr is not None:
+        for x in pr.findall(q("w:showingPlcHdr")):
+            pr.remove(x)
+        lock = pr.find(q("w:lock"))
+        if lock is not None and (lock.get(q("w:val")) or "") in ("contentLocked", "sdtContentLocked"):
+            fail("A locked content control cannot take an answer.", "unsupported_layout")
+    content = sdt.find(q("w:sdtContent"))
+    if content is None:
+        content = etree.SubElement(sdt, q("w:sdtContent"))
+    first_run = next(content.iter(R), None)
+    src = first_run.find(q("w:rPr")) if first_run is not None else (pr.find(q("w:rPr")) if pr is not None else None)
+    paras = content.findall(q("w:p"))
+    rows_or_cells = content.findall(q("w:tr")) + content.findall(q("w:tc"))
+    if rows_or_cells:
+        fail("A content control around table rows cannot take a text answer.", "unsupported_layout")
+    if paras:                                  # block-level control: first paragraph takes the answer
+        p0 = paras[0]
+        for r in [c for c in p0 if c.tag in (R, q("w:hyperlink"), q("w:fldSimple"))]:
+            p0.remove(r)
+        p0.append(_new_run(_answer_rpr(src, plain=False), answer))
+        for extra in paras[1:]:
+            content.remove(extra)
+        _flowing(p0)
+    else:
+        for c in list(content):
+            content.remove(c)
+        content.append(_new_run(_answer_rpr(src, plain=False), answer))
+    return True
+
+
+def write_cell(tc, answer, replace=False):
+    paras = tc.findall(q("w:p"))
+    if not paras:
+        paras = [etree.SubElement(tc, q("w:p"))]
+    p0 = paras[0]
+    text, pieces = paragraph_text(p0)
+    if replace or text.strip():
+        for p in paras[1:]:
+            if not text_of(p).strip():
+                continue
+            fail("A stored answer cell holds more than one line of printed text.", "mapping_mismatch")
+        replace_range(p0, 0, len(text), answer) if text else replace_range(p0, 0, 0, answer)
+    else:
+        replace_range(p0, 0, 0, answer)
+    _unclip_row(tc)
+    return True
+
+
+def mark_option_text(p, option):
+    """Tick a printed option word ('YES<tab>NO', a lettered list item, a printed option cell): a ☒ goes right
+    before it."""
+    text, pieces = paragraph_text(p)
+    m = re.search(r"(?<![A-Za-z0-9])" + re.escape(option.strip()) + r"(?![A-Za-z0-9])", text)
+    if not m:
+        m = re.search(re.escape(clean_label(option)), text)
+    if not m:
+        fail("A stored option no longer matches the printed text.", "mapping_mismatch")
+    at = m.start()
+    if at < len(text) and not text[:at].strip():
+        at = len(text[:at])
+    replace_range(p, at, at, "☒ ", plain=False)
+    return True
+
+
+def _options_chosen(field, answer):
+    """The option labels an answer selects, validated against the field's options."""
+    options = field.get("options") or []
+    kind = field["kind"]
+    if kind == "checkbox":
+        if answer in (True, "true", "True", "checked", "yes", "Yes") or (options and answer == options[0]):
+            return [0]
+        if answer in (False, "false", "False", "unchecked", "no", "No", ""):
+            return []
+        fail("A checkbox answer must be checked or unchecked.", "invalid_answer")
+    chosen = answer if isinstance(answer, list) else [answer]
+    if kind == "choice" and len(chosen) > 1:
+        fail("Only one option can be chosen for this question.", "invalid_answer")
+    out = []
+    for value in chosen:
+        norm = [clean_label(o).lower() for o in options]
+        key = clean_label(str(value)).lower()
+        if key not in norm:
+            fail("The answer is not one of the printed options.", "invalid_answer")
+        out.append(norm.index(key))
+    return out
+
+
+def fill(data: bytes, fields: list, answers: dict) -> bytes:
+    """Write answers into the original package. Every field's anchor is checked against its fingerprint before
+    anything changes; signature and initials areas never take an automatic answer."""
+    package = open_package(data)
+    index = SlotIndex(package)
+    ops = []                                   # (paragraph_or_element, sort_position, callable)
+
+    def resolve(part, path, fp):
+        slot = index.by_id.get("%s#%s" % (part, path))
+        if slot is None or (fp is not None and fingerprint(slot.el) != fp):
+            fail("The stored mapping no longer matches this form. Review the mapping again.", "mapping_mismatch")
+        return slot
+
+    for field in fields:
+        loc = field.get("locator") or {}
+        if loc.get("contract") != CONTRACT:
+            fail("The mapping is not a contract v3 mapping.", "mapping_mismatch")
+        answer = answers.get(field["key"])
+        if answer is None or answer == "" or answer == []:
+            continue
+        if isinstance(answer, str) and len(answer) > MAX_ANSWER:
+            fail("An answer is longer than the form can take.", "invalid_answer")
+        if field["kind"] in SIGNING_KINDS:
+            fail("Signature and initials areas are signed by the clinician; they are never filled automatically.",
+                 "invalid_answer")
+        target = loc["target"]
+        anchors = [resolve(loc["part"], loc["slot"], loc["fingerprint"])]
+        for extra in loc.get("extra", []):
+            resolve(extra["part"], extra["slot"], extra["fingerprint"])
+        for copy in target.get("copies", []):
+            anchors.append(resolve(copy["part"], copy["slot"], copy["fingerprint"]))
+        kind = target["type"]
+        for anchor in anchors:
+            part = anchor.part
+            if kind == "span":
+                s0, e0 = target["start"], target["end"]
+                if target.get("shape") == "after_label":
+                    e0 = s0
+                ops.append((anchor.el, s0, lambda el=anchor.el, s0=s0, e0=e0, a=str(answer): replace_range(el, s0, e0, a), part))
+            elif kind in ("cell", "cell_replace"):
+                value = str(answer)
+                if field["kind"] == "choice" and target.get("write") == "option_text":
+                    value = field["options"][_options_chosen(field, answer)[0]]
+                ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"): write_cell(el, v, rep), part))
+            elif kind == "paragraph":
+                paras = [anchor] + [resolve(x["part"], x["slot"], x["fingerprint"]) for x in loc.get("extra", [])]
+                lines = str(answer).replace("\r\n", "\n").split("\n")
+                chunks = lines[:len(paras) - 1] + ["\n".join(lines[len(paras) - 1:])] if len(paras) > 1 else [str(answer)]
+                for para, chunk in zip(paras, chunks):
+                    if chunk:
+                        ops.append((para.el, 0, lambda el=para.el, c=chunk: replace_range(el, 0, 0, c), part))
+            elif kind in ("sdt_text", "sdt_choice"):
+                value = str(answer)
+                if kind == "sdt_choice" and anchor.info.get("type") == "dropDownList":
+                    value = field["options"][_options_chosen(field, answer)[0]]
+                ops.append((anchor.el, 0, lambda el=anchor.el, v=value: write_sdt_text(el, v), part))
+            elif kind == "ff_text":
+                ops.append((anchor.el, 0, lambda el=anchor.el, v=str(answer): write_ff_text(el, v), part))
+            elif kind == "ff_dropdown":
+                value = field["options"][_options_chosen(field, answer)[0]]
+                ops.append((anchor.el, 0, lambda el=anchor.el, v=value: write_ff_dropdown(el, field["options"], v), part))
+            elif kind == "checkboxes":
+                boxes = target["boxes"]
+                for i in _options_chosen(field, answer):
+                    box = boxes[i]
+                    slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
+                    if slot is None:
+                        fail("The stored mapping no longer matches this form. Review the mapping again.", "mapping_mismatch")
+                    if box["kind"] == "sdt":
+                        ops.append((slot.el, -1, lambda el=slot.el: tick_sdt_checkbox(el), box["part"]))
+                    elif box["kind"] == "ff":
+                        ops.append((slot.el, -1, lambda el=slot.el: tick_ff_checkbox(el), box["part"]))
+                    elif box["kind"] == "glyph":
+                        ops.append((slot.el, -1, lambda el=slot.el, n=box["glyph"]: tick_glyph(el, n), box["part"]))
+                    elif box["kind"] == "cell":
+                        def tick_cell(tc=slot.el):
+                            if BOX in text_of(tc):
+                                p = next(x for x in tc.iter(q("w:p")) if BOX in text_of(x, own=True))
+                                return tick_glyph(p, 0)
+                            return write_cell(tc, "X")
+                        ops.append((slot.el, -1, tick_cell, box["part"]))
+                    elif box["kind"] == "cell_text":
+                        p0 = slot.el.find(q("w:p"))
+                        ops.append((p0, 0, lambda el=p0, o=field["options"][i]: mark_option_text(el, o), box["part"]))
+            elif kind == "paragraph_options":
+                paths = target["paragraphs"]
+                for i in _options_chosen(field, answer):
+                    slot = index.by_id.get("%s#%s" % (anchor.part, paths[i]))
+                    ops.append((slot.el, 0, lambda el=slot.el: replace_range(el, 0, 0, "☒ ", plain=False), part))
+            elif kind == "text_options":
+                for i in _options_chosen(field, answer):
+                    ops.append((anchor.el, 0, lambda el=anchor.el, o=field["options"][i]: mark_option_text(el, o), part))
+            elif kind == "table_rows":
+                ops.append((anchor.el, 0, lambda f=field, a=answer: write_table_rows(index, f, a), part))
+            else:
+                fail("This answer area cannot be filled automatically.", "unsupported_layout")
+    # position edits inside one element run from the end backwards; ticks (position -1) last
+    ops.sort(key=lambda op: (id(op[0]), -op[1] if op[1] >= 0 else float("inf")))
+    changed = set()
+    for _, _, apply, part in ops:
+        apply()
+        changed.add(part)
+    return package.write({part: package.tree(part) for part in changed})
+
+
+def write_table_rows(index, field, answer):
+    """answer: a list of rows, each a list of cell texts in column order (as many as the mapped columns)."""
+    if not isinstance(answer, list) or not all(isinstance(r, list) for r in answer):
+        fail("A table answer must be a list of rows.", "invalid_answer")
+    target = field["locator"]["target"]
+    tbl = index.by_id.get("%s#%s" % (field["locator"]["part"], target["table"]))
+    if tbl is None:
+        fail("The stored mapping no longer matches this form.", "mapping_mismatch")
+    trs = tbl.el.findall(q("w:tr"))
+    rows = [trs[r] for r in target["rows"]]
+    if len(answer) > 200:
+        fail("Too many table rows.", "invalid_answer")
+    while len(rows) < len(answer):
+        clone = etree.fromstring(etree.tostring(rows[-1]))
+        for t in clone.iter(T):
+            t.text = ""
+        rows[-1].addnext(clone)
+        rows.append(clone)
+    for tr, values in zip(rows, answer):
+        cells = tr.findall(q("w:tc"))
+        col_of, col = {}, 0
+        for tc in cells:
+            col_of[col] = tc
+            gs = tc.find(q("w:tcPr") + "/" + q("w:gridSpan")) if tc.find(q("w:tcPr")) is not None else None
+            col += int(gs.get(q("w:val"), "1")) if gs is not None else 1
+        for c, value in zip(target["columns"], values):
+            if value and c in col_of:
+                write_cell(col_of[c], str(value))
+    return True
