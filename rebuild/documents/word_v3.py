@@ -2025,6 +2025,10 @@ def inspect(data: bytes) -> dict:
     if len(areas) > MAX_FIELDS:
         fail("The form has more answer areas than one mapping can hold (%d)." % MAX_FIELDS, "too_many_fields")
     fields = [area_to_field(i + 1, a) for i, a in enumerate(areas)]
+    for field in fields:
+        ticked = printed_ticked(detector.index, field)
+        if ticked:
+            field["printed_ticked"] = ticked
     return {"contract": CONTRACT, "fields": fields, "notes": notes}
 
 
@@ -2240,45 +2244,61 @@ def _set_run_mark(run, mark):
     run.append(t)
 
 
-def tick_glyph(p, n):
-    """Tick the n-th glyph box (not a control) of paragraph p."""
+def glyph_boxes(p):
+    """[(piece, k, char)] for every printed glyph box (not a control) of paragraph p, in order: the numbering
+    box_units gives glyph boxes, and the one every writer and reader of a glyph box uses."""
     text, pieces = paragraph_text(p)
-    count = -1
+    out = []
     for pc in pieces:
         if pc.kind == "obj":
             continue
-        chunk = piece_text(pc)
-        for k, ch in enumerate(chunk):
-            if ch not in (BOX, CHECKED):
-                continue
-            count += 1
-            if count != n:
-                continue
-            if ch == CHECKED:
-                return False
-            original = (pc.node.text or "")[k] if pc.kind == "t" else ""
-            mark = "●" if original in ("○", "⃝") or (pc.kind == "t" and ord(original) in (0x81, 0xF081, 0xA1, 0xF0A1)) else "☒"
-            pos = pc.start + k
-            # isolate this one character into its own run, then mark it
-            if pc.kind == "sym":
-                run = pc.run
-                _split_run_before(run, pc.node)
-                sym_run = pc.node.getparent()
-                after = [c for c in sym_run if c.tag != q("w:rPr")]
-                if len(after) > 1:
-                    _split_run_before(sym_run, after[1])
-                _set_run_mark(sym_run, mark)
-                return True
-            _split_at(p, pos + 1)
-            _split_at(p, pos)
-            _, pieces2 = paragraph_text(p)
-            target = next(x for x in pieces2 if x.start == pos and x.kind == "t")
-            _set_run_mark(target.run, mark)
-            return True
-    fail("A stored checkbox position no longer matches the form.", "mapping_mismatch")
+        for k, ch in enumerate(piece_text(pc)):
+            if ch in (BOX, CHECKED):
+                out.append((pc, k, ch))
+    return out
 
 
-def tick_sdt_checkbox(sdt):
+RADIO_CODES = (0x81, 0xF081, 0xA1, 0xF0A1)
+
+
+def set_glyph(p, n, ticked):
+    """Tick or untick the n-th glyph box of paragraph p. A radio circle becomes ◉ / ○ (both still read as a box, so
+    the numbering of the other boxes never moves); any other box becomes ☒ / ☐, in a font that has it."""
+    boxes = glyph_boxes(p)
+    if n >= len(boxes):
+        fail("A stored checkbox position no longer matches the form.", "mapping_mismatch")
+    pc, k, ch = boxes[n]
+    if (ch == CHECKED) == bool(ticked):
+        return False
+    original = (pc.node.text or "")[k] if pc.kind == "t" else ""
+    radio = original in ("○", "⃝", "◉") or (pc.kind == "t" and ord(original) in RADIO_CODES)
+    mark = ("◉" if radio else "☒") if ticked else ("○" if radio else "☐")
+    pos = pc.start + k
+    # isolate this one character into its own run, then mark it
+    if pc.kind == "sym":
+        run = pc.run
+        _split_run_before(run, pc.node)
+        sym_run = pc.node.getparent()
+        after = [c for c in sym_run if c.tag != q("w:rPr")]
+        if len(after) > 1:
+            _split_run_before(sym_run, after[1])
+        _set_run_mark(sym_run, mark)
+        return True
+    _split_at(p, pos + 1)
+    _split_at(p, pos)
+    _, pieces2 = paragraph_text(p)
+    target = next(x for x in pieces2 if x.start == pos and x.kind == "t")
+    _set_run_mark(target.run, mark)
+    return True
+
+
+def tick_glyph(p, n):
+    """Tick the n-th glyph box (not a control) of paragraph p."""
+    return set_glyph(p, n, True)
+
+
+def set_sdt_checkbox(sdt, ticked):
+    """A checkbox content control: its checked state and the glyph its state names (checkedState/uncheckedState)."""
     pr = sdt.find(q("w:sdtPr"))
     cb = pr.find(q("w14:checkbox")) if pr is not None else None
     if cb is None:
@@ -2286,9 +2306,9 @@ def tick_sdt_checkbox(sdt):
     ch = cb.find(q("w14:checked"))
     if ch is None:
         ch = etree.SubElement(cb, q("w14:checked"))
-    ch.set(q("w14:val"), "1")
-    state = cb.find(q("w14:checkedState"))
-    code = (state.get(q("w14:val")) if state is not None else None) or "2612"
+    ch.set(q("w14:val"), "1" if ticked else "0")
+    state = cb.find(q("w14:checkedState" if ticked else "w14:uncheckedState"))
+    code = (state.get(q("w14:val")) if state is not None else None) or ("2612" if ticked else "2610")
     font = (state.get(q("w14:font")) if state is not None else None) or "MS Gothic"
     content = sdt.find(q("w:sdtContent"))
     ts = list(content.iter(T)) if content is not None else []
@@ -2310,7 +2330,12 @@ def tick_sdt_checkbox(sdt):
     return True
 
 
-def tick_ff_checkbox(begin_run):
+def tick_sdt_checkbox(sdt):
+    return set_sdt_checkbox(sdt, True)
+
+
+def set_ff_checkbox(begin_run, ticked):
+    """A legacy checkbox: an explicit checked state, which overrides the field's default."""
     data = begin_run.find(FLDCHAR).find(q("w:ffData"))
     cb = data.find(q("w:checkBox")) if data is not None else None
     if cb is None:
@@ -2318,9 +2343,33 @@ def tick_ff_checkbox(begin_run):
     for x in cb.findall(q("w:checked")):
         cb.remove(x)
     checked = _el("w:checked")
-    checked.set(q("w:val"), "1")
+    checked.set(q("w:val"), "1" if ticked else "0")
     cb.append(checked)
     return True
+
+
+def tick_ff_checkbox(begin_run):
+    return set_ff_checkbox(begin_run, True)
+
+
+#: A hand-written or typed tick in a box cell.
+CELL_MARKS = ("X", "x", "✓", "✔", "√", "✗", "✘")
+
+
+def set_cell_box(tc, ticked):
+    """A box cell: its first printed glyph box when it has one; otherwise an X written in (or removed from) it."""
+    for p in tc.iter(q("w:p")):
+        if glyph_boxes(p):
+            return set_glyph(p, 0, ticked)
+    shown = text_of(tc).strip()
+    if ticked:
+        return False if shown in CELL_MARKS else write_cell(tc, "X")
+    if shown in CELL_MARKS:
+        for t in tc.iter(T):
+            if (t.text or "").strip() in CELL_MARKS:
+                t.text = ""
+        return True
+    return False
 
 
 def _field_result_runs(begin_run):
@@ -2583,26 +2632,25 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                 value, nth = printed[i], printed[:i].count(printed[i])
                 ops.append((anchor.el, 0, lambda el=anchor.el, v=value, k=nth: write_ff_dropdown(el, v, k), part))
             elif kind == "checkboxes":
+                # ⚠️ EVERY BOX OF THE GROUP IS SET TO THE ANSWER: the chosen ones ticked, every other one unticked
+                # (a box the blank form printed ticked included). An unanswered field never gets here: it stays as
+                # printed. A checkbox answered False is unticked.
                 boxes = target["boxes"]
-                for i in _options_chosen(field, answer):
-                    box = boxes[i]
+                chosen = _options_chosen(field, answer)
+                for i, box in enumerate(boxes):
+                    want = i in chosen
                     slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
                     if slot is None:
                         fail("The stored mapping no longer matches this form. Review the mapping again.", "mapping_mismatch")
                     if box["kind"] == "sdt":
-                        ops.append((slot.el, -1, lambda el=slot.el: tick_sdt_checkbox(el), box["part"]))
+                        ops.append((slot.el, -1, lambda el=slot.el, w=want: set_sdt_checkbox(el, w), box["part"]))
                     elif box["kind"] == "ff":
-                        ops.append((slot.el, -1, lambda el=slot.el: tick_ff_checkbox(el), box["part"]))
+                        ops.append((slot.el, -1, lambda el=slot.el, w=want: set_ff_checkbox(el, w), box["part"]))
                     elif box["kind"] == "glyph":
-                        ops.append((slot.el, -1, lambda el=slot.el, n=box["glyph"]: tick_glyph(el, n), box["part"]))
+                        ops.append((slot.el, -1, lambda el=slot.el, n=box["glyph"], w=want: set_glyph(el, n, w), box["part"]))
                     elif box["kind"] == "cell":
-                        def tick_cell(tc=slot.el):
-                            if BOX in text_of(tc):
-                                p = next(x for x in tc.iter(q("w:p")) if BOX in text_of(x, own=True))
-                                return tick_glyph(p, 0)
-                            return write_cell(tc, "X")
-                        ops.append((slot.el, -1, tick_cell, box["part"]))
-                    elif box["kind"] == "cell_text":
+                        ops.append((slot.el, -1, lambda tc=slot.el, w=want: set_cell_box(tc, w), box["part"]))
+                    elif box["kind"] == "cell_text" and want:
                         p0 = slot.el.find(q("w:p"))
                         printed = printed_options(field)
                         nth = sum(1 for j in range(i) if printed[j].strip() == printed[i].strip() and boxes[j]["slot"] == box["slot"])
@@ -2627,7 +2675,163 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
     for _, _, apply, part in ops:
         apply()
         changed.add(part)
-    return package.write({part: package.tree(part) for part in changed})
+    out = package.write({part: package.tree(part) for part in changed})
+    verify_options(out, fields, answers)
+    return out
+
+
+# ─── option state: the blank form's printed state, and the read-back after filling ────────────────────────────────
+
+DISPLAYED = ("sdt_choice", "ff_dropdown")
+
+
+def box_state(index, box):
+    """Whether one box is ticked, read from the package: True, False, or None when it cannot be read."""
+    slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
+    if slot is None:
+        return None
+    if box["kind"] == "sdt":
+        info = sdt_info(slot.el)
+        return info["checked"] if info["type"] == "checkbox" else None
+    if box["kind"] == "ff":
+        data = slot.el.find(FLDCHAR).find(q("w:ffData"))
+        info = ff_info(data) if data is not None else {}
+        return info.get("checked") if info.get("field") == "FORMCHECKBOX" else None
+    if box["kind"] == "glyph":
+        boxes = glyph_boxes(slot.el)
+        n = box.get("glyph", 0)
+        return boxes[n][2] == CHECKED if n < len(boxes) else None
+    if box["kind"] == "cell":
+        for p in slot.el.iter(q("w:p")):
+            boxes = glyph_boxes(p)
+            if boxes:
+                return boxes[0][2] == CHECKED
+        return text_of(slot.el).strip() in CELL_MARKS
+    return None
+
+
+def option_word_marked(p, word, occurrence):
+    """Whether a printed option word carries a ☒ right before it; None when the word is not printed there."""
+    text = paragraph_text(p)[0]
+    m = option_word_match(text, word, occurrence)
+    return None if m is None else text[:m.start()].rstrip().endswith(CHECKED)
+
+
+def displayed_option(index, field):
+    """The option position a dropdown (or an option-text cell) shows, or None: for a legacy dropdown the selected
+    entry at its printing; otherwise the first option whose printed words equal the shown text."""
+    loc = field["locator"]
+    target = loc["target"]
+    slot = index.by_id.get("%s#%s" % (loc["part"], loc["slot"]))
+    if slot is None:
+        return None
+    printed = printed_options(field)
+    if target["type"] == "ff_dropdown":
+        data = slot.el.find(FLDCHAR).find(q("w:ffData"))
+        dd = data.find(q("w:ddList")) if data is not None else None
+        if dd is None:
+            return None
+        entries = [x.get(q("w:val")) for x in dd.findall(q("w:listEntry"))]
+        res = dd.find(q("w:result"))
+        at = int(res.get(q("w:val")) or 0) if res is not None else 0
+        if not 0 <= at < len(entries):
+            return None
+        nth = entries[:at].count(entries[at])
+        hits = [i for i, word in enumerate(printed) if word == entries[at]]
+        return hits[nth] if nth < len(hits) else None
+    shown = displayed_words(slot, target)
+    return next((i for i, word in enumerate(printed) if str(word).strip() == shown), None) if shown else None
+
+
+def displayed_words(slot, target):
+    """The words a dropdown content control (placeholder excluded) or an option-text cell shows."""
+    if target["type"] == "sdt_choice":
+        if sdt_info(slot.el)["placeholder"]:
+            return ""
+        content = slot.el.find(q("w:sdtContent"))
+        return text_of(content).strip() if content is not None else ""
+    return text_of(slot.el).strip()
+
+
+def option_states(index, field):
+    """Per option of a choice, multi_choice or checkbox field: True when the form shows it chosen (ticked, marked or
+    displayed), False when not, None when it cannot be read. ONE reader for the blank form's printed state and for
+    the check of every export."""
+    target = field["locator"]["target"]
+    kind = target["type"]
+    printed = printed_options(field)
+    if kind == "checkboxes":
+        states = []
+        for i, box in enumerate(target["boxes"]):
+            if box["kind"] == "cell_text":
+                slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
+                p0 = slot.el.find(q("w:p")) if slot is not None else None
+                nth = sum(1 for j in range(i) if printed[j].strip() == printed[i].strip()
+                          and target["boxes"][j]["slot"] == box["slot"])
+                states.append(option_word_marked(p0, printed[i], nth) if p0 is not None and i < len(printed) else None)
+            else:
+                states.append(box_state(index, box))
+        return states
+    if kind == "paragraph_options":
+        part = field["locator"]["part"]
+        states = []
+        for path in target["paragraphs"]:
+            slot = index.by_id.get("%s#%s" % (part, path))
+            states.append(None if slot is None else paragraph_text(slot.el)[0].lstrip().startswith(CHECKED))
+        return states
+    if kind == "text_options":
+        loc = field["locator"]
+        slot = index.by_id.get("%s#%s" % (loc["part"], loc["slot"]))
+        if slot is None:
+            return [None] * len(printed)
+        return [option_word_marked(slot.el, word, sum(1 for j in range(i) if printed[j].strip() == word.strip()))
+                for i, word in enumerate(printed)]
+    if kind in DISPLAYED or target.get("write") == "option_text":
+        shown = displayed_option(index, field)
+        return [i == shown for i in range(len(printed))]
+    return []
+
+
+def printed_ticked(index, field):
+    """Positions the blank form itself shows chosen (a box printed ticked, a dropdown showing an option)."""
+    if field.get("kind") not in ("choice", "multi_choice", "checkbox"):
+        return []
+    try:
+        return [i for i, state in enumerate(option_states(index, field)) if state]
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+        return []                       # an annotation for the review page; never a reason to refuse the upload
+
+
+def verify_options(data, fields, answers):
+    """⚠️ READ BACK EVERY ANSWERED OPTION FIELD FROM THE WRITTEN PACKAGE: the ticked (or shown) options must be
+    exactly the chosen ones, or the export is refused. Belt and braces against any future disagreement between the
+    reviewed answer and what a writer did."""
+    index = SlotIndex(open_package(data))
+    for field in fields:
+        if field.get("kind") not in ("choice", "multi_choice", "checkbox"):
+            continue
+        answer = answers.get(field["key"])
+        if answer is None or answer == "" or answer == []:
+            continue
+        chosen = set(_options_chosen(field, answer))
+        target = field["locator"]["target"]
+        try:
+            if target["type"] == "ff_dropdown":
+                ok = displayed_option(index, field) in chosen
+            elif target["type"] in DISPLAYED or target.get("write") == "option_text":
+                # A control shows words, not a position: an option printed twice reads the same at both printings.
+                loc = field["locator"]
+                slot = index.by_id.get("%s#%s" % (loc["part"], loc["slot"]))
+                ok = slot is not None and len(chosen) == 1 and \
+                    displayed_words(slot, target) == str(printed_options(field)[min(chosen)]).strip()
+            else:
+                states = option_states(index, field)
+                ok = bool(states) and all(state is (i in chosen) for i, state in enumerate(states))
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            ok = False                  # what cannot be read back is not exported
+        if not ok:
+            fail("After filling, the options shown for \"%s\" differ from the reviewed answer, so no export was made. "
+                 "Report this form to QuillMD." % field.get("label", "")[:60], "fill_mismatch")
 
 
 def write_table_rows(index, field, answer):
@@ -2762,5 +2966,8 @@ def locate(data: bytes, targets: list) -> list:
         field = area_to_field(n, area)
         field["key"] = "m3_%s" % hashlib.sha256(("%s|%s|%s" % (slot.id, json_dumps(target), label)).encode()).hexdigest()[:12]
         field["origin"] = "manual"
+        ticked = printed_ticked(detector.index, field)
+        if ticked:
+            field["printed_ticked"] = ticked
         out.append(field)
     return out

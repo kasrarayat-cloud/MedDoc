@@ -369,5 +369,146 @@ class RepeatedOptions(unittest.TestCase):
         self.assertEqual(body.count("☒"), 2)
 
 
+
+def ticked_sdt_checkbox():
+    sdt = _sdt("checkbox")
+    sdt.find(qn("w:sdtPr")).find("{%s}checkbox" % W14).find("{%s}checked" % W14).set("{%s}val" % W14, "1")
+    sdt.find(qn("w:sdtContent")).find(qn("w:r")).find(qn("w:t")).text = "☒"
+    return sdt
+
+
+def prechecked_form(path):
+    """F3: a blank form printing some boxes ticked - a checkbox control, a glyph, a legacy checkbox, a choice, a
+    check-all-that-apply line, a radio pair, and a box grid with one box ticked."""
+    doc = Document()
+    doc.add_paragraph("Synthetic procedure checklist")
+    doc.add_paragraph("Consent obtained ")._p.append(ticked_sdt_checkbox())
+    doc.add_paragraph("History reviewed today.")
+    doc.add_paragraph("Hypertension ☒")
+    doc.add_paragraph("Medication list reviewed.")
+    doc.add_paragraph("Smoker?  ☐ Yes  ☒ No")
+    doc.add_paragraph("Symptoms (check all that apply): ☒ Pain ☐ Swelling ☒ Redness")
+    ff_field(doc.add_paragraph("Band applied "), "checkbox", checked=True, name="Band")
+    doc.add_paragraph("Medication list reviewed again.")
+    doc.add_paragraph("Laterality:  ○ Left  ◉ Right")
+    grid = doc.add_table(rows=3, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        grid.cell(0, c).text = h
+    grid.cell(1, 0).text = "Fever"
+    grid.cell(2, 0).text = "Cough"
+    for r, c, mark in ((1, 1, "☐"), (1, 2, "☒"), (2, 1, "☐"), (2, 2, "☐")):
+        grid.cell(r, c).text = mark
+    Path(path).write_bytes(docx_bytes(doc))
+
+
+def paragraphs(path, part="word/document.xml"):
+    with ZipFile(path) as z:
+        root = etree.fromstring(z.read(part))
+    return ["".join(t.text or "" for t in p.iter("{%s}t" % W)) for p in root.iter("{%s}p" % W)]
+
+
+def control_states(path):
+    with ZipFile(path) as z:
+        root = etree.fromstring(z.read("word/document.xml"))
+    sdt = [c.get("{%s}val" % W14) for c in root.iter("{%s}checked" % W14)]
+    ff = [c.get("{%s}val" % W) for c in root.iter("{%s}checked" % W)]
+    return sdt, ff
+
+
+class Unticking(unittest.TestCase):
+    """F3: filling sets every box of an answered field - chosen ticked, every other unticked; unanswered stays."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.form = self.dir / "prechecked.docx"
+        prechecked_form(self.form)
+        self.fields = inspect_template(self.form, engine="v3")["fields"]
+        self.by = fields_by_label(self.fields)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def fill(self, answers, name="out.docx"):
+        out = self.dir / name
+        fill_template(self.form, self.fields, {self.by[label]["key"]: value for label, value in answers.items()}, out)
+        return out
+
+    def test_the_blank_forms_printed_ticks_are_recorded(self):
+        printed = {label: f.get("printed_ticked") for label, f in self.by.items()}
+        self.assertEqual(printed["Consent obtained"], [0])
+        self.assertEqual(printed["Hypertension"], [0])
+        self.assertEqual(printed["Smoker?"], [1])
+        self.assertEqual(printed["Symptoms (check all that apply)"], [0, 2])
+        self.assertEqual(printed["Band applied"], [0])
+        self.assertEqual(printed["Laterality"], [1])
+        self.assertEqual(printed["Fever"], [1])
+        self.assertIsNone(printed["Cough"], "nothing printed ticked, nothing recorded")
+
+    def test_a_checkbox_answered_unticked_is_exported_unticked(self):
+        out = self.fill({"Consent obtained": False, "Hypertension": False, "Band applied": False})
+        text = paragraphs(out)
+        self.assertIn("Consent obtained ☐", text)
+        self.assertIn("Hypertension ☐", text)
+        self.assertEqual(control_states(out), (["0"], ["0"]))
+
+    def test_a_choice_ticks_the_chosen_and_unticks_the_others(self):
+        out = self.fill({"Smoker?": "Yes", "Symptoms (check all that apply)": ["Swelling"], "Laterality": "Left",
+                         "Fever": "Yes"})
+        text = paragraphs(out)
+        self.assertIn("Smoker?  ☒ Yes  ☐ No", text)
+        self.assertIn("Symptoms (check all that apply): ☐ Pain ☒ Swelling ☐ Redness", text)
+        self.assertIn("Laterality:  ◉ Left  ○ Right", text)
+        row = text[text.index("Fever"):text.index("Fever") + 3]
+        self.assertEqual(row, ["Fever", "☒", "☐"])
+
+    def test_an_unanswered_field_stays_as_printed(self):
+        out = self.fill({"Hypertension": True})
+        text = paragraphs(out)
+        self.assertIn("Smoker?  ☐ Yes  ☒ No", text)
+        self.assertIn("Symptoms (check all that apply): ☒ Pain ☐ Swelling ☒ Redness", text)
+        self.assertIn("Consent obtained ☒", text)
+        self.assertEqual(control_states(out), (["1"], []))
+
+    def test_a_written_cell_mark_is_removed_when_the_other_option_is_chosen(self):
+        from documents import word_v3
+        doc = Document()
+        grid = doc.add_table(rows=1, cols=3)
+        grid.cell(0, 0).text = "Fever"
+        grid.cell(0, 2).text = "X"
+        yes, no = grid.cell(0, 1)._tc, grid.cell(0, 2)._tc
+        self.assertEqual(word_v3.text_of(no).strip(), "X")
+        self.assertTrue(word_v3.set_cell_box(yes, True))
+        self.assertTrue(word_v3.set_cell_box(no, False))
+        self.assertEqual((word_v3.text_of(yes).strip(), word_v3.text_of(no).strip()), ("X", ""))
+        self.assertFalse(word_v3.set_cell_box(no, False), "an empty cell has nothing to untick")
+
+
+class ExportReadBack(unittest.TestCase):
+    """F3 belt and braces: an export whose ticked boxes are not exactly the chosen ones is refused."""
+
+    def test_a_writer_that_leaves_a_box_as_printed_refuses_the_export(self):
+        from unittest.mock import patch
+        from documents import word_v3
+        with tempfile.TemporaryDirectory() as tmp:
+            form = Path(tmp) / "prechecked.docx"
+            prechecked_form(form)
+            data = form.read_bytes()
+            fields = word_v3.inspect(data)["fields"]
+            smoker = fields_by_label(fields)["Smoker?"]
+            self.assertIn("☒ Yes", "".join(paragraphs_bytes(word_v3.fill(data, fields, {smoker["key"]: "Yes"}))))
+            real = word_v3.set_glyph
+            with patch.object(word_v3, "set_glyph", side_effect=lambda p, n, ticked: real(p, n, ticked) if ticked else False):
+                with self.assertRaises(word_v3.V3Failure) as refused:
+                    word_v3.fill(data, fields, {smoker["key"]: "Yes"})
+            self.assertEqual(refused.exception.code, "fill_mismatch")
+            self.assertIn('"Smoker?"', str(refused.exception))
+
+
+def paragraphs_bytes(data):
+    root = etree.fromstring(ZipFile(io.BytesIO(data)).read("word/document.xml"))
+    return ["".join(t.text or "" for t in p.iter("{%s}t" % W)) for p in root.iter("{%s}p" % W)]
+
+
 if __name__ == "__main__":
     unittest.main()

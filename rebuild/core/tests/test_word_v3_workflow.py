@@ -516,7 +516,7 @@ class V3Export(V3EncounterFixture, TestCase):
         download = self.client.get(f"/encounters/{self.encounter.pk}/export/")
         self.assertEqual(b"".join(download.streaming_content), exported)
         page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
-        self.assertIn("Box ticked.", page)
+        self.assertIn("Box exported ticked.", page)
         self.assertIn("Signed by hand on the printed form; never filled.", page)
 
     def test_signed_areas_need_no_review_but_every_other_field_does(self):
@@ -638,6 +638,76 @@ class V3Generation(V3EncounterFixture, TestCase):
         encounter = Encounter.objects.get(pk=self.encounter.pk)
         self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
         self.assertIn("Laterality: Left", part_text(private_path(encounter.export_path).read_bytes()))
+
+
+def prechecked_form_bytes():
+    from documents.test_word_v3 import ticked_sdt_checkbox
+    doc = Document()
+    doc.add_paragraph("Synthetic procedure checklist")
+    doc.add_paragraph("Indication: ____________")
+    doc.add_paragraph("Consent obtained ")._p.append(ticked_sdt_checkbox())
+    doc.add_paragraph("History reviewed today.")
+    doc.add_paragraph("Hypertension ☒")
+    doc.add_paragraph("Medication list reviewed.")
+    doc.add_paragraph("Smoker?  ☐ Yes  ☒ No")
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@override_settings(**V3)
+class V3PrintedTicks(V3Fixture, TestCase):
+    """F3 end to end: what the page says the export does is what the export does."""
+
+    def setUp(self):
+        super().setUp()
+        self.template, version = self.uploaded(data=prechecked_form_bytes(), name="Synthetic checklist")
+        self.version = self.confirm(self.template)
+        self.by = self.by_label(self.version)
+        self.assertEqual(self.new_encounter(self.version, notes="Indication: synthetic").status_code, 302)
+        self.encounter = Encounter.objects.get()
+
+    def save(self, values):
+        payload = {"revision": Encounter.objects.get(pk=self.encounter.pk).revision}
+        for f in self.version.fields:
+            if f["label"] in values:
+                payload["answer_" + f["key"]] = values[f["label"]]
+            payload["reviewed_" + f["key"]] = "on"
+        self.assertEqual(self.client.post(f"/encounters/{self.encounter.pk}/save/", payload).status_code, 302)
+
+    def finalized_export(self):
+        response = self.client.post(f"/encounters/{self.encounter.pk}/finalize/",
+                                    {"revision": Encounter.objects.get(pk=self.encounter.pk).revision, "reviewed": "on"}, follow=True)
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
+        return private_path(encounter.export_path).read_bytes()
+
+    def test_boxes_left_unticked_are_exported_unticked_and_an_unanswered_choice_stays_as_printed(self):
+        self.assertEqual(self.by["Smoker?"]["printed_ticked"], [1])
+        page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
+        self.assertIn("Ticked here, the box is exported ticked; left unticked, it is exported unticked, although the "
+                      "blank form prints it ticked.", page)
+        self.assertIn("With no option chosen, the form keeps what it prints: No ticked.", page)
+        self.save({"Indication": "synthetic"})
+        exported = self.finalized_export()
+        text = part_text(exported)
+        self.assertIn("Consent obtained ☐", text)
+        self.assertIn("Hypertension ☐", text)
+        self.assertIn("Smoker?  ☐ Yes  ☒ No", text, "an unanswered choice keeps what the form prints")
+        with ZipFile(io.BytesIO(exported)) as z:
+            root = etree.fromstring(z.read("word/document.xml"))
+        self.assertEqual([c.get("{http://schemas.microsoft.com/office/word/2010/wordml}val")
+                          for c in root.iter("{http://schemas.microsoft.com/office/word/2010/wordml}checked")], ["0"])
+        page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
+        self.assertEqual(page.count("Box exported unticked."), 2)
+        self.assertIn("No option chosen; the form keeps what it prints: No ticked.", page)
+
+    def test_a_chosen_option_unticks_the_printed_one(self):
+        self.save({"Indication": "synthetic", "Smoker?": "Yes", "Hypertension": "checked"})
+        text = part_text(self.finalized_export())
+        self.assertIn("Smoker?  ☒ Yes  ☐ No", text)
+        self.assertIn("Hypertension ☒", text)
+        self.assertIn("Consent obtained ☐", text)
 
 
 def repeated_option_form_bytes():

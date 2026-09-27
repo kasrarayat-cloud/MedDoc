@@ -154,22 +154,95 @@ def normalize(field, text):
 
 
 def fill_answers(fields, answers):
-    """Reviewed text forms -> the engine's fill answers. Every value is re-read by `normalize` first."""
+    """Reviewed text forms -> the engine's fill answers. Every value is re-read by `normalize` first.
+
+    ⚠️ A checkbox the clinician reviewed and left unticked is sent as False, so the export unticks it even when the
+    blank form printed it ticked (the engine sets every box of an answered field). An unanswered choice is not sent:
+    the form keeps what it prints, and the page says what that is."""
     out = {}
     for field in fields:
-        text = normalize(field, (answers.get(field['key']) or {}).get('text', ''))
+        record = answers.get(field['key']) or {}
+        text = normalize(field, record.get('text', ''))
+        kind = field.get('kind')
+        if kind == 'checkbox':
+            if text:
+                out[field['key']] = True
+            elif record.get('reviewed') is True or record.get('status') == 'left_blank':
+                out[field['key']] = False
+            continue
         if not text:
             continue
-        kind = field.get('kind')
         if kind == 'multi_choice':
             out[field['key']] = text.split('\n')
-        elif kind == 'checkbox':
-            out[field['key']] = True
         elif kind == 'table_rows':
             out[field['key']] = table_rows(field, text)
         else:
             out[field['key']] = text
     return out
+
+
+# ─── what the export does with an option field, in the words the pages show ───────────────────────────────────────
+#: ⚠️ THE PAGES STATE EXACTLY WHAT THE EXPORT DOES (refutation F3): an answered option field has every box set - the
+#: chosen ticked, every other unticked; a reviewed checkbox left unticked is exported unticked; an unanswered choice
+#: keeps what the blank form prints, and the blank form's printed ticks (`printed_ticked`) are named.
+
+def shows_words(field):
+    """A dropdown or an option-text cell: the chosen option is written, not ticked."""
+    target = (field.get('locator') or {}).get('target') or {}
+    return target.get('type') in ('sdt_choice', 'ff_dropdown') or target.get('write') == 'option_text'
+
+
+def printed_words(field):
+    """The options the blank form itself shows chosen, as printed."""
+    from documents.word_v3 import printed_options
+    printed = printed_options(field)
+    words = []
+    for i in field.get('printed_ticked') or []:
+        if isinstance(i, int) and 0 <= i < len(printed) and str(printed[i]) not in words:
+            words.append(str(printed[i]))
+    return words
+
+
+def as_printed(field):
+    verb = 'shown' if shows_words(field) else 'ticked'
+    words = printed_words(field)
+    if words:
+        return 'the form keeps what it prints: ' + ', '.join(words) + ' ' + verb
+    return 'the form keeps what it prints, with no option ' + verb
+
+
+def review_note(field):
+    """Under the input on the review page."""
+    kind = field.get('kind')
+    if kind == 'checkbox':
+        return ('Ticked here, the box is exported ticked; left unticked, it is exported unticked'
+                + (', although the blank form prints it ticked' if field.get('printed_ticked') else '') + '.')
+    if kind in ('choice', 'multi_choice'):
+        if shows_words(field):
+            first = 'The chosen option is written in its place on the form'
+        elif kind == 'choice':
+            first = 'The chosen option is ticked and every other printed option is left unticked'
+        else:
+            first = 'Each chosen option is ticked and every other printed option is left unticked'
+        return first + '. With no option chosen, ' + as_printed(field) + '.'
+    return ''
+
+
+def blank_note(field):
+    """What "Leave blank - reviewed" exports, when that is not an empty answer area."""
+    if field.get('kind') in ('choice', 'multi_choice') and field.get('printed_ticked'):
+        return 'the exported ' + as_printed(field)[len('the '):]
+    return ''
+
+
+def finalized_note(field, answer):
+    """What the finalized page states the export holds, when the answer text alone does not say it."""
+    kind = field.get('kind')
+    if kind == 'checkbox':
+        return 'Box exported ticked.' if (answer.get('text') or '').strip() else 'Box exported unticked.'
+    if kind in ('choice', 'multi_choice') and not (answer.get('text') or '').strip():
+        return 'No option chosen; ' + as_printed(field) + '.'
+    return ''
 
 
 def input_for(field):
