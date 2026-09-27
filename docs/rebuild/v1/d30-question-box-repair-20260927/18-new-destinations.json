@@ -1,0 +1,188 @@
+{
+  "scope": "Targeted changed-field identity checks, not a corpus rescore or document success.",
+  "count": 26,
+  "new_destinations": [
+    {
+      "expected_area": "A17",
+      "source_slot": "b/tbl[1]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > (opening question)",
+      "actual_context": "Part B > Social Supervisor\u2019s Report"
+    },
+    {
+      "expected_area": "A18",
+      "source_slot": "b/tbl[2]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Supervision",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Supervision"
+    },
+    {
+      "expected_area": "A19",
+      "source_slot": "b/tbl[3]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Supervision",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Supervision"
+    },
+    {
+      "expected_area": "A22",
+      "source_slot": "b/tbl[5]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Accommodation",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Accommodation"
+    },
+    {
+      "expected_area": "A24",
+      "source_slot": "b/tbl[7]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Relationships",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Relationships"
+    },
+    {
+      "expected_area": "A25",
+      "source_slot": "b/tbl[8]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Relationships",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Relationships"
+    },
+    {
+      "expected_area": "A27",
+      "source_slot": "b/tbl[10]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Behaviour and Risks",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Behaviour and Risks"
+    },
+    {
+      "expected_area": "A28",
+      "source_slot": "b/tbl[11]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Behaviour and Risks",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Behaviour and Risks"
+    },
+    {
+      "expected_area": "A29",
+      "source_slot": "b/tbl[12]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Behaviour and Risks",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Behaviour and Risks"
+    },
+    {
+      "expected_area": "A30",
+      "source_slot": "b/tbl[13]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Substance Misuse Risks",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Substance Misuse Risks"
+    },
+    {
+      "expected_area": "A31",
+      "source_slot": "b/tbl[14]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Substance Misuse Risks",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Substance Misuse Risks"
+    },
+    {
+      "expected_area": "A32",
+      "source_slot": "b/tbl[15]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Past and Potential Victims",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Past and Potential Victims"
+    },
+    {
+      "expected_area": "A33",
+      "source_slot": "b/tbl[16]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Past and Potential Victims",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Past and Potential Victims"
+    },
+    {
+      "expected_area": "A34",
+      "source_slot": "b/tbl[17]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Financial Risk",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Financial Risk"
+    },
+    {
+      "expected_area": "A36",
+      "source_slot": "b/tbl[19]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part B > Social Supervisor\u2019s Report > Further Comments",
+      "actual_context": "Part B > Social Supervisor\u2019s Report > Further Comments"
+    },
+    {
+      "expected_area": "A45",
+      "source_slot": "b/tbl[24]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Diagnosis",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Diagnosis"
+    },
+    {
+      "expected_area": "A46",
+      "source_slot": "b/tbl[25]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Diagnosis",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Diagnosis"
+    },
+    {
+      "expected_area": "A47",
+      "source_slot": "b/tbl[26]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Treatment",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Treatment"
+    },
+    {
+      "expected_area": "A48",
+      "source_slot": "b/tbl[27]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Treatment",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Treatment"
+    },
+    {
+      "expected_area": "A49",
+      "source_slot": "b/tbl[28]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Treatment",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Treatment"
+    },
+    {
+      "expected_area": "A50",
+      "source_slot": "b/tbl[29]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Treatment",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Treatment"
+    },
+    {
+      "expected_area": "A51",
+      "source_slot": "b/tbl[30]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Physical Health",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Physical Health"
+    },
+    {
+      "expected_area": "A52",
+      "source_slot": "b/tbl[31]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Risk Concerns",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Risk Concerns"
+    },
+    {
+      "expected_area": "A53",
+      "source_slot": "b/tbl[32]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Admissions to hospital",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Admissions to hospital"
+    },
+    {
+      "expected_area": "A54",
+      "source_slot": "b/tbl[33]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Supervision",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Supervision"
+    },
+    {
+      "expected_area": "A55",
+      "source_slot": "b/tbl[34]/tr[0]/tc[0]",
+      "full_question_equals_independent_expected": true,
+      "expected_context": "Part C > Clinical Supervisor\u2019s Report > Supervision",
+      "actual_context": "Part C > Clinical Supervisor\u2019s Report > Supervision"
+    }
+  ]
+}

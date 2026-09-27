@@ -1,0 +1,80 @@
+{
+  "source_sha256": "326a4baf7d3331add09f36f78e05d66a8fb75acd4e10bd1c2c952447835efbd1",
+  "rows": [
+    {
+      "name": "direct-donor-heading",
+      "input_sha256": "01b43a253175dd69ccdda834dd38de0ab1931e3cb98ecdaa820b96a9aa22983a",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "What medications are currently taken?",
+            "kind": "long_text",
+            "context": "Donor",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+            }
+          }
+        ],
+        "notes": []
+      }
+    },
+    {
+      "name": "inherited-donor-heading",
+      "input_sha256": "7723cbbe8825e71547994e09e33df7f55d283ee610d0812d1892a514cb5e61eb",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "What medications are currently taken?",
+            "kind": "long_text",
+            "context": "",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+            }
+          }
+        ],
+        "notes": []
+      }
+    },
+    {
+      "name": "two-paragraph-question",
+      "input_sha256": "be45cc73d4f5f66b96ddb498abee5f07f2c7b6882c1247e095d8c5dfada7c564",
+      "result": {
+        "contract": "v3",
+        "fields": [
+          {
+            "key": "v3_1",
+            "label": "Please provide their doses and frequencies.",
+            "kind": "long_text",
+            "context": "",
+            "locator": {
+              "contract": "v3",
+              "part": "word/document.xml",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              },
+              "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+            }
+          }
+        ],
+        "notes": []
+      }
+    }
+  ]
+}

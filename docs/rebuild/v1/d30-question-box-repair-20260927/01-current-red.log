@@ -1,0 +1,4 @@
+Current fields 42 A25 target count 0 notes []
+Traceback (most recent call last):
+  File "<stdin>", line 9, in <module>
+AssertionError: Known independent expected D30 A25 question and directly adjacent answer box are omitted
