@@ -598,7 +598,8 @@ class V3Generation(V3EncounterFixture, TestCase):
             answer = self.answer(answers, label)
             self.assertEqual((answer["status"], answer["text"]), ("conflict", ""), label)
             self.assertEqual(answer["held_candidate"]["text"], candidate, label)
-            self.assertEqual([e["quote"] for e in answer["held_candidate"]["evidence"]], [candidate], label)
+            # The complete-sentence contract cites the whole source statement (label included), bound by its offsets.
+            self.assertEqual([e["quote"] for e in answer["held_candidate"]["evidence"]], [label.rstrip("?") + ": " + candidate], label)
             self.assertIn("NOT used as an answer", answer["held_candidate"]["reason"])
         page = self.client.get(f"/encounters/{self.encounter.pk}/").content.decode()
         self.assertIn("Read from the notes &mdash; not offered as an answer.", page)
@@ -623,7 +624,9 @@ class V3Generation(V3EncounterFixture, TestCase):
     def test_an_offer_on_an_option_question_names_a_printed_option_or_is_held(self):
         answers = self.generate("Smoker: yes\nLaterality: left side\nPatient seen today.")
         smoker, laterality = self.answer(answers, "Smoker?"), self.answer(answers, "Laterality")
-        self.assertEqual((smoker["status"], smoker["text"], smoker.get("suggestion")), ("conflict", "", "Yes"))
+        # Ordinary notes (B-G1): an unrelated complete sentence ('Patient seen today.') no longer holds every answer.
+        # The explicit labelled statement names a printed option, so it is filled; a governed note would still hold it.
+        self.assertEqual((smoker["status"], smoker["text"]), ("supported", "Yes"))
         self.assertNotIn("suggestion", laterality, "a value that names no printed option is never one click away")
         self.assertEqual(laterality["held_candidate"]["text"], "left side")
 
