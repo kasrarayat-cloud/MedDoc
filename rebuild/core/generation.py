@@ -2143,9 +2143,14 @@ LOCAL_SUBJECT_QUALIFIERS = {'assessment': frozenset(('probable',)), 'examination
 def v3_field_subjects(units, named, parsed):
     eligible = {label for label, matches in named.items() if label in CLINICAL_SUBJECT_FIELDS
                 and len(matches) == 1 and matches[0].get('kind') in ('text', 'long_text')}
-    patterns = {label: re.compile(r'^(?P<prefix>(?:[^\W\d_]+\s+){0,3})(?P<head>' + re.escape(label)
+    # Recognize a candidate head broadly enough to mark unsupported ownership
+    # as unresolved. Only the explicit constructions below can grant ownership.
+    patterns = {label: re.compile(r'^(?P<prefix>[^:!?\r\n]{0,80}?)(?P<head>\b' + re.escape(label)
                                   + r')\s+(?P<predicate>\S.*)$', re.I) for label in eligible}
-    subjects, spans = {}, {}
+    prefixes = {'examination': {'', 'on', 'chest', 'no'},
+                'medications': {'', 'current', 'no', 'no current'}, 'assessment': {''}}
+    factual_predicate = re.compile(r'^(?:there\s+)?(?:is|are|was|were|revealed|reveals|showed|shows|demonstrated|demonstrates)\b', re.I)
+    subjects, spans, unresolved = {}, {}, set()
     for unit in units:
         own = parsed[unit['id']]
         subjects[unit['id']] = own[0] if own and len(named.get(own[0], ())) == 1 else None
@@ -2154,11 +2159,16 @@ def v3_field_subjects(units, named, parsed):
         for label, pattern in patterns.items():
             match = pattern.match(unit['quote'])
             if not match: continue
-            prefix = match.group('prefix')
-            predicate = re.sub(r'^there\s+', '', match.group('predicate'), count=1, flags=re.I)
-            if (not FINITE_STATEMENT_V3.match(predicate)
-                    or any(p.search(prefix) for p in (UNSETTLED, INHERITED_SCOPE, SELF_CORRECTION))
-                    or any(re.search(r'\b' + re.escape(other) + r'\b', prefix, re.I) for other in named)):
+            prefix = ' '.join(match.group('prefix').casefold().split())
+            predicate = match.group('predicate')
+            bare_predicate = re.sub(r'^there\s+', '', predicate, count=1, flags=re.I)
+            if not FINITE_STATEMENT_V3.match(bare_predicate): continue
+            local_words = LOCAL_SUBJECT_QUALIFIERS.get(label, ())
+            if (prefix not in prefixes[label] or not factual_predicate.match(predicate)
+                    or any(m.group().casefold() not in local_words for text in readings(unit['quote'])
+                           for m in UNSETTLED.finditer(text))
+                    or any(p.search(unit['quote']) for p in (INHERITED_SCOPE, SELF_CORRECTION))):
+                unresolved.add(unit['id'])
                 continue
             matches.append((label, unit['start'] + match.start('head'), unit['start'] + match.end('head')))
         if len(matches) == 1:
@@ -2172,7 +2182,61 @@ def v3_field_subjects(units, named, parsed):
     # The new source-subject route cannot choose one of several statements about
     # the same clinical field. Keep all of them visible for a clinician's decision.
     ambiguous = {label for label, ids in by_subject.items() if len(ids) > 1 and any(unit in spans for unit in ids)}
-    return subjects, spans, eligible, ambiguous
+    return subjects, spans, eligible, ambiguous, unresolved
+
+
+def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresolved, ends_read, shapes_read):
+    """Link literal references to another documented question. This is structural
+    coupling for review, not a semantic contradiction classifier."""
+    patterns = {}
+    for label in named:
+        variants = {label}
+        if label.endswith('ies'): variants.add(label[:-3] + 'y')
+        elif label.endswith('s') and not label.endswith(('ss', 'us', 'is')): variants.add(label[:-1])
+        elif label.endswith('y'): variants.add(label[:-1] + 'ies')
+        else: variants.add(label + 's')
+        patterns[label] = re.compile(LETTER_BEFORE + '(?:' + '|'.join(re.escape(v) for v in variants) + ')' + LETTER_AFTER, re.I)
+    values, references, sources = {}, {}, {}
+    for index, block in enumerate(blocks):
+        owner = block['owner']
+        if owner is None: continue
+        first, *rest = block['units']
+        own = parsed[first['id']]
+        value = '\n'.join([own[1] if own else first['quote'], *(u['quote'] for u in rest)])
+        values[index] = value
+        references[index] = {label for label, pattern in patterns.items() if label != owner
+                             and any(pattern.search(text) for text in readings(value))}
+        sources.setdefault(owner, []).append(index)
+    coupled, unchanged_references = {}, {}
+    for index, targets in references.items():
+        block = blocks[index]
+        for target in targets:
+            referents = sources.get(target, [])
+            # Only this whole unchanged reference can pass without coupling: one
+            # exact Plan clause, one complete safe source statement, and no other
+            # statement modifying/referencing the same question. No text is stripped.
+            exact_continue = (block['owner'] in PLAN_FIELDS and len(targets) == 1
+                and len(named[target]) == 1 and named[target][0].get('kind') in ('text', 'long_text')
+                and re.fullmatch(r'continue current ' + re.escape(target) + r'\.', values[index], re.I)
+                and len(referents) == 1 and target not in ambiguous
+                and all(other == index or target not in refs for other, refs in references.items()))
+            if exact_continue:
+                referent = blocks[referents[0]]
+                units = referent['units']
+                if len(units) == 1 and barriers[referents[0]] and units[0]['id'] not in unresolved:
+                    unit = units[0]; own = parsed[unit['id']]
+                    if unit['id'] not in ends_read: ends_read[unit['id']] = inner_sentence_end(unit['quote'])
+                    if unit['id'] not in shapes_read:
+                        shapes_read[unit['id']] = ends_read[unit['id']] or v3_shape_holds(unit['quote'], own[1] if own else unit['quote'])
+                    if not shapes_read[unit['id']]:
+                        unchanged_references[index] = {'label': target, 'units': {unit['id']}}
+                        continue
+            linked = {u['id'] for other in [index, *referents] for u in blocks[other]['units']}
+            coupled.setdefault(target, set()).update(linked)
+            # A missing referent is unresolved too; the referencing statement
+            # cannot become supported merely because there is no value to compare.
+            coupled.setdefault(block['owner'], set()).update(linked)
+    return coupled, unchanged_references
 
 
 def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None):
@@ -2191,7 +2255,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                and matches[0].get('kind') in ('text', 'long_text') and label in GENERAL_NARRATIVE_FIELDS}
     parsed = ({u['id']: value for u, value in zip(units, parsed_units)} if parsed_units is not None else
               {u['id']: tab_source_value(u['quote'], labels) for u in units})
-    subjects, subject_spans, clinical, ambiguous_subjects = v3_field_subjects(units, named, parsed)
+    subjects, subject_spans, clinical, ambiguous_subjects, unresolved_subjects = v3_field_subjects(units, named, parsed)
     colon = {u['id']: bool(labelled_value(u['quote'], labels)) for u in units}
     plain = {u['id']: bool(colon[u['id']] and parsed[u['id']] and len(named.get(parsed[u['id']][0], ())) == 1
                            and plain_value(parsed[u['id']][1])) for u in units}
@@ -2303,6 +2367,8 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             blocks.append({'units': block, 'owner': owner, 'position': position,
                            'group_start': index - position, 'group_count': len(group_blocks)})
             for unit in block: block_of[unit['id']] = index
+    coupled, unchanged_references = v3_related_source_blocks(blocks, named, parsed, barriers,
+        ambiguous_subjects, unresolved_subjects, ends_read, shapes_read)
     plain_values = [bool(parsed[u['id']] and parsed[u['id']][0] in named
                          and (plain_value(parsed[u['id']][1]) or (len(named[parsed[u['id']][0]]) == 1
                               and plain_printed_side_option(named[parsed[u['id']][0]][0], parsed[u['id']][1]))))
@@ -2312,7 +2378,8 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'ends_read': ends_read, 'shapes_read': shapes_read, 'blocks': blocks, 'block_of': block_of,
             'barriers': barriers, 'patients': patients, 'named': named,
             'subjects': subjects, 'subject_spans': subject_spans, 'clinical': clinical,
-            'ambiguous_subjects': ambiguous_subjects,
+            'ambiguous_subjects': ambiguous_subjects, 'unresolved_subjects': unresolved_subjects,
+            'coupled': coupled, 'unchanged_references': unchanged_references,
             'neighbours': paragraph_neighbours(notes, units, plain_values),
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
             'conditional_multisentence': conditional_multisentence, 'conditional_unsafe': conditional_unsafe,
@@ -2328,7 +2395,7 @@ def v3_scope_selection(reading, label, evidence):
     block. Other blocks remain relevant when they carry existing scope warnings.
     """
     label = question_key(label)
-    if label in reading['ambiguous_subjects']:
+    if label in reading['ambiguous_subjects'] or label in reading['coupled']:
         return {'before': set(), 'after': set(), 'complete': set()}
     spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
     chosen = {reading['spans'][span]['id'] for span in spans if span in reading['spans']}
@@ -2370,7 +2437,7 @@ def v3_preceding_warnings(reading, label, evidence):
                 if all((u['start'], u['end']) in spans for u in group):
                     complete.update(u['id'] for u in group)
     warnings = {unit['id']: unit for unit in reading['units']
-                if unit['id'] in reading['conditional_unsafe'] or (label in reading['ambiguous_subjects']
+                if unit['id'] in reading['conditional_unsafe'] or unit['id'] in reading['coupled'].get(label, ()) or (label in reading['ambiguous_subjects']
                     and reading['subjects'][unit['id']] == label)}
     starts = [unit['start'] for unit in reading['units']]
     for kind, start, end in reading['inherited_causes']:
@@ -2381,7 +2448,7 @@ def v3_preceding_warnings(reading, label, evidence):
         unit = reading['spans'].get(span)
         if not unit: continue
         subject = reading['subjects'][unit['id']]
-        if subject and subject != label:
+        if unit['id'] in reading['unresolved_subjects'] or (subject and subject != label):
             warnings[unit['id']] = unit
         before, changer = reading['neighbours'][unit['id']]
         if (before and not reading['colon'][unit['id']] and unit['id'] not in complete
@@ -2503,7 +2570,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if parsed and parsed[1]: explicit.setdefault(value,unit)
         evidence=[]; texts=[]; guarded=False; nearby={}
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
-        if v3 and choices and label in governance[11]['preceding']['ambiguous_subjects']:
+        if v3 and choices and (label in governance[11]['preceding']['ambiguous_subjects']
+                              or label in governance[11]['preceding']['coupled']):
             guarded = True
         scoped = v3_scope_selection(governance[11]['preceding'], label,
                     [choice if isinstance(choice,dict) else allowed[choice][0] for choice in choices if isinstance(choice,dict) or choice in allowed]) if v3 else {}
@@ -2536,6 +2604,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             if notes[unit['start']:unit['end']]!=quote: raise ValidationError('Evidence offset mismatch.')
             evidence.append({k:unit[k] for k in ('quote','start','end')})
             if unit['correction_value'] and corrected_quantity(unit,field) is None: guarded=True
+            if v3 and unit['id'] in governance[11]['preceding']['unresolved_subjects']: guarded=True
             # A verbless fragment ('Left knee.', 'Warfarin 5 mg daily.') is held: the verb-list rule of the tab contract
             # (round 2, F3: 'four or more words and a closing mark' adopted 'Warfarin 5 mg daily.' before 'Stopped last
             # month.' and the question 'Nausea, vomiting or abdominal pain?' as its own answer).

@@ -257,7 +257,7 @@ class ExactClinicalSubjects(SimpleTestCase):
             ('Chest examination revealed crackles at the right base.', 'Assessment: community-acquired pneumonia.'),
             ('Examination was not performed today.', 'Assessment: stable type 2 diabetes and hyperlipidemia.'),
         ):
-            head, allergy, plan = 'Patient presents for medication review.', 'Allergies: codeine.', 'Plan: continue current medications.'
+            head, allergy, plan = 'Patient presents for medication review.', 'Allergies: codeine.', 'Plan: rest.'
             notes = '\n'.join((head, allergy, examination, assessment, plan))
             picks = {'Chief complaint': [head], 'Allergies': [allergy], 'Examination': [examination],
                      'Assessment': [assessment], 'Plan': [plan]}
@@ -360,3 +360,71 @@ class RepeatedSourceSubjectRefutation(SimpleTestCase):
             old = {'status': 'supported', 'text': quotes[0], 'reviewed': True,
                    'evidence': [{'quote': quotes[0], 'start': 0, 'end': len(quotes[0])}]}
             self.assertEqual(g.governed_decisions(notes, fields, {'m': old}), ['Medications'])
+
+
+class RefutedOwnershipAndCoupling(SimpleTestCase):
+    fields = ExactClinicalSubjects.fields
+
+    def assert_stored_held(self, notes, label, quote, text):
+        start = notes.index(quote)
+        answer = {'text': text, 'status': 'supported', 'reviewed': True,
+                  'evidence': [{'quote': quote, 'start': start, 'end': start + len(quote)}]}
+        governance = g.governance_for(notes, self.fields)
+        shown = g.as_currently_governed(governance, notes, {**answer, 'label': label})
+        self.assertEqual((shown['status'], shown['text']), ('conflict', ''))
+        key = next(f['key'] for f in self.fields if f['label'] == label)
+        self.assertEqual(g.governed_decisions(notes, self.fields, {key: answer}), [label])
+
+    def test_unknown_ownership_and_planned_predicates_never_become_patient_answers(self):
+        for label, quote in (('Medications', 'Sibling medications are warfarin.'),
+                             ('Medications', 'Donor medications are warfarin.'),
+                             ('Medications', "Her sibling's medications are warfarin."),
+                             ('Examination', 'Planned examination will reveal a rash.'),
+                             ('Examination', 'Examination will reveal a rash.')):
+            for notes in (quote, 'Allergies: penicillin.\n' + quote + '\nPlan: rest.'):
+                with self.subTest(notes=notes):
+                    answer = run(notes, {label: [quote]}, fields=self.fields)[label]
+                    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+                    self.assertEqual(answer['held_candidate']['text'], quote)
+                    self.assert_stored_held(notes, label, quote, quote)
+
+    def test_assessment_and_allergy_answers_cannot_ignore_each_other(self):
+        for allergy, assessment in (('Allergies: penicillin.', 'Assessment: no penicillin allergy.'),
+                                    ('Allergies: none.', 'Assessment is a probable penicillin allergy.')):
+            for separator in ('\n', '\n\n'):
+                notes = allergy + separator + assessment
+                answers = run(notes, {'Allergies': [allergy], 'Assessment': [assessment]}, fields=self.fields)
+                for label, quote, value in (('Allergies', allergy, allergy[11:]),
+                                            ('Assessment', assessment, assessment.removeprefix('Assessment: ').removeprefix('Assessment is '))):
+                    with self.subTest(notes=notes, label=label):
+                        self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+                        self.assertEqual(answers[label]['held_candidate']['text'], value)
+                        self.assert_stored_held(notes, label, quote, value)
+
+    def test_changed_continuation_and_another_modifying_reference_require_review(self):
+        medication = 'Current medications are aspirin daily.'
+        for plan, extra in (
+            ('Plan: continue current medications, except aspirin.', ''),
+            ('Plan: continue current medications and add warfarin.', ''),
+            ('Plan: continue current medications.', '\nAssessment: probable medication error.'),
+        ):
+            notes = medication + '\n' + plan + extra
+            answers = run(notes, {'Medications': [medication], 'Plan': [plan]}, fields=self.fields)
+            for label, quote, value in (('Medications', medication, medication), ('Plan', plan, plan[6:])):
+                with self.subTest(notes=notes, label=label):
+                    self.assertEqual(answers[label]['status'], 'conflict')
+                    self.assert_stored_held(notes, label, quote, value)
+
+    def test_exact_continuation_does_not_choose_between_multiple_sources(self):
+        quotes = ['Current medications are aspirin daily.', 'Current medications are metformin twice daily.']
+        plan = 'Plan: continue current medications.'
+        notes = '\n'.join((*quotes, plan))
+        answers = run(notes, {'Medications': quotes, 'Plan': [plan]}, fields=self.fields)
+        self.assertEqual(answers['Plan']['status'], 'conflict')
+        self.assert_stored_held(notes, 'Plan', plan, plan[6:])
+
+    def test_exact_continuation_with_no_referenced_source_requires_review(self):
+        plan = 'Plan: continue current medications.'
+        answer = run(plan, {'Plan': [plan]}, fields=self.fields)['Plan']
+        self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+        self.assert_stored_held(plan, 'Plan', plan, plan[6:])
