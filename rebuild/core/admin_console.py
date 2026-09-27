@@ -293,23 +293,28 @@ def shape(value, recogniser=None):
 
 
 def live_generation_queue_row(live):
-    """How many LIVE-mode generation jobs are waiting or in flight: a count, nothing about any job.
+    """How many LIVE-mode generation jobs are waiting, in flight or awaiting reconciliation: counts, nothing about any job.
 
     A model, price or mode switch is only clean once these drain, and a switch out of live mode is the operator's stop —
     the worker refuses each queued live job before sending it (not processed, hold released). Without the count the drain
     the migration note asks for could not be seen from either screen.
+
+    ⚠️ DRAINED MEANS ALL THREE ARE 0, the note's definition. The row used to count only queued and running, so a live job
+    stranded in reconciliation — an uncertain provider outcome whose hold is kept until the owner reconciles it — read
+    '0 queued, 0 running (drained when both are 0)'. Measured with three such jobs. Waiting does not clear one.
     """
     from django.db import DatabaseError
     from .models import Job
     try:
         live_jobs = Job.objects.filter(kind='generation', config__mode='live')
-        queued, running = live_jobs.filter(state='queued').count(), live_jobs.filter(state='running').count()
+        queued, running, reconciliation = (live_jobs.filter(state='queued').count(), live_jobs.filter(state='running').count(),
+                                           live_jobs.filter(state='reconciliation').count())
     except DatabaseError:
         return {'name': 'live generation jobs', 'value': 'UNAVAILABLE — the job table could not be read', 'severity': 'error'}
-    value = f'{queued} queued, {running} running'
+    value = f'{queued} queued, {running} running, {reconciliation} in reconciliation'
     if live:
-        return {'name': 'live generation jobs', 'value': value + ' (drained when both are 0)', 'severity': ''}
-    return {'name': 'live generation jobs', 'severity': 'warning' if queued or running else '',
+        return {'name': 'live generation jobs', 'value': value + ' (drained when all three are 0)', 'severity': ''}
+    return {'name': 'live generation jobs', 'severity': 'warning' if queued or running or reconciliation else '',
             'value': value + ' — QUILLMD_AI_MODE is not live, so the worker refuses each queued one before sending it '
                              '(not processed, nothing charged, hold released)'}
 

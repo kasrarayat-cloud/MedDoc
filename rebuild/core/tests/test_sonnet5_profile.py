@@ -18,6 +18,7 @@ import re
 import tempfile
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import anthropic
@@ -29,7 +30,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from core import generation as g
 from core.jobs import NoProviderRequest, PLATFORM_FAILURE, enqueue, run_one
 from core.management.commands.audit_billing import audit_report
-from core.models import Encounter, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage
+from core.models import AuditEvent, Encounter, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage
 from core.billing import reserve
 from core.security import private_path
 from core.tests.test_security import SyntheticFixture
@@ -207,6 +208,61 @@ class PricingFingerprint(SimpleTestCase):
         self.assertEqual(g.request_profile('openai', 'claude-sonnet-4-6', 'disabled', 'medium', ''),
                          {'invalid': 'QUILLMD_AI_MODEL names a Claude model but QUILLMD_AI_PROVIDER is openai: Claude models '
                                      'are sent only with QUILLMD_AI_PROVIDER=anthropic.'})
+
+    def test_a_model_id_that_is_not_a_plain_id_is_invalid_for_every_provider(self):
+        """F-A (round 4). Under openai any id without `claude` was rated legacy — '', ' ' and a padded 'gpt-4.1-mini '
+        included. Measured: the console showed QUILLMD_AI_MODEL (unset) beside 'request profile: legacy' marked success,
+        enqueue held $0.0217, the SDK sent model '' and the 400 left the job in reconciliation with its hold kept. For EVERY
+        provider an id that is empty, padded, carries a control or other non-id character is INVALID, and is refused before
+        any hold or request — from configuration, a stored pre-profile config and a forged legacy snapshot alike."""
+        bad = ('', ' ', '   ', 'gpt-4.1-mini ', ' gpt-4.1-mini', '\tgpt-4.1-mini', 'gpt-4.1-mini\n', 'gpt-4.1-mini\r',
+               'gpt-4.1-mini\x00', 'gpt-4.1\x1bmini', 'gpt-4.1-mini\x7f', 'gpt-4.1-mini\x85', 'gpt-4.1-mini ',
+               ' gpt-4.1-mini', 'gpt-4.1-mini​', '﻿gpt-4.1-mini', 'gpt 4.1 mini', 'gpt-4.1-mini/', 'gpt-4.1-mini?',
+               '-gpt-4.1-mini', '.gpt-4.1-mini', ':gpt-4.1-mini', 'gpt-４.1-mini', 'gpt-4.1-mıni', 'g' * 129,
+               'claude-sonnet-4-6 ', '\nclaude-sonnet-5', 'claude-sonnet-4-6\x00')
+        for provider in g.PROVIDERS:
+            for model in bad:
+                with self.subTest(provider=provider, model=model):
+                    self.assertIn('invalid', g.request_profile(provider, model, 'disabled', 'medium', ''))
+                    with override_settings(**dict(SONNET_46, AI_PROVIDER=provider, AI_MODEL=model)), \
+                            patch.dict(os.environ, PRICE_ENV), patch('anthropic.Anthropic') as client, \
+                            patch('openai.OpenAI') as openai_client:
+                        quoted = g.configuration()
+                        old = {k: v for k, v in quoted.items() if k != 'request_profile'}
+                        for config in (None, quoted, old, {**old, 'request_profile': g.LEGACY_PROFILE}):
+                            with self.assertRaises(NoProviderRequest):
+                                g.maximum_cost(NOTES, FIELDS, config)
+                            with self.assertRaises(NoProviderRequest):
+                                g.generate(NOTES, FIELDS, config)
+                        client.assert_not_called()
+                        openai_client.assert_not_called()
+        # A stored config whose model is not a string at all is refused the same way.
+        with override_settings(**dict(SONNET_46, AI_PROVIDER='openai', AI_MODEL='gpt-4.1-mini')), \
+                patch.dict(os.environ, PRICE_ENV), patch('openai.OpenAI') as openai_client:
+            for model in (None, 0, ['gpt-4.1-mini']):
+                with self.subTest(stored_model=model), self.assertRaises(NoProviderRequest):
+                    g.generate(NOTES, FIELDS, {**g.configuration(), 'model': model})
+            openai_client.assert_not_called()
+        for provider in g.PROVIDERS:
+            self.assertEqual(g.request_profile(provider, 'gpt-4.1-mini ', 'disabled', 'medium', ''),
+                             {'invalid': 'QUILLMD_AI_MODEL must be a plain model id: set, with no surrounding spaces or '
+                                         'control characters, a letter or digit first, then only letters, digits and . _ : - '
+                                         '(at most 128 characters).'})
+        # Positive control: the openai ids QuillMD sends keep the pre-profile request, and are sent exactly as configured.
+        for model in ('gpt-4.1-mini', 'ft:gpt-4.1-mini:org:name:id', 'ft:gpt-4.1-mini-2025-04-14:acme_health::AbC123',
+                      'g' * 128):
+            with self.subTest(accepted=model):
+                self.assertEqual(g.request_profile('openai', model, 'x', 'y', ''), g.LEGACY_PROFILE)
+                with override_settings(**dict(SONNET_46, AI_PROVIDER='openai', AI_MODEL=model)), \
+                        patch.dict(os.environ, PRICE_ENV), patch('openai.OpenAI') as openai_client:
+                    openai_client.return_value.responses.parse.return_value = SimpleNamespace(
+                        id='resp_synthetic', _request_id='req_synthetic',
+                        usage=SimpleNamespace(input_tokens=100, output_tokens=10,
+                                              input_tokens_details=SimpleNamespace(cached_tokens=0)))
+                    g.generate(NOTES, FIELDS)
+                    self.assertEqual(openai_client.call_args.kwargs, {'timeout': 60, 'max_retries': 0})
+                    sent = openai_client.return_value.responses.parse.call_args.kwargs
+                    self.assertEqual((sent['model'], sent['max_output_tokens']), (model, 6000))
 
     def test_only_the_listed_claude_models_get_the_legacy_request_deny_by_default(self):
         """S5-R1. The version parser read `claude-<family>-<major>[-<minor>]`, so `claude-mythos-preview` — a real id outside
@@ -892,6 +948,7 @@ class ModeSwitch(OutcomeFixture, TestCase):
         job.refresh_from_db()
         self.assertEqual(job.state, 'failed')
         self.assertTrue(job.error.startswith('Not processed: QuillMD was switched out of live mode'), job.error)
+        self.assertEqual(AuditEvent.objects.get(action='job.failed', target=str(job.pk)).details['billing'], 'not_processed')
         self.assertFalse(Usage.objects.filter(job=job).exists())
         self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
         self.assertFalse(self.held(encounter))
@@ -910,6 +967,9 @@ class ModeSwitch(OutcomeFixture, TestCase):
         encounter.refresh_from_db()
         self.assertEqual(job.state, 'failed')
         self.assertTrue(job.error.startswith('Not processed: QuillMD was switched to live mode'), job.error)
+        # F-D (round 4): the job is BOTH a fixture job and one refused before any request; its audit row classifies it by
+        # the refusal, as its error does. Putting 'fixture' ahead of 'not_processed' in that chain survived every test.
+        self.assertEqual(AuditEvent.objects.get(action='job.failed', target=str(job.pk)).details['billing'], 'not_processed')
         self.assertEqual((encounter.answers, encounter.status), ({}, 'draft'))
         self.assertFalse(Usage.objects.filter(job=job).exists())
         self.assertFalse(self.held(encounter))
@@ -920,12 +980,14 @@ class ModeSwitch(OutcomeFixture, TestCase):
         with override_settings(**SONNET_46):
             job = enqueue(encounter, self.user)
             row = admin_console.language_model_rows()[-1]
-        self.assertEqual(row, {'name': 'live generation jobs', 'value': '1 queued, 0 running (drained when both are 0)',
+        self.assertEqual(row, {'name': 'live generation jobs',
+                               'value': '1 queued, 0 running, 0 in reconciliation (drained when all three are 0)',
                                'severity': ''})
         with override_settings(**self.FIXTURE):
             row = admin_console.language_model_rows()[-1]
         self.assertEqual(row['name'], 'live generation jobs')
-        self.assertTrue(row['value'].startswith('1 queued, 0 running — QUILLMD_AI_MODE is not live, so the worker refuses'))
+        self.assertTrue(row['value'].startswith('1 queued, 0 running, 0 in reconciliation — QUILLMD_AI_MODE is not live, '
+                                                'so the worker refuses'), row['value'])
         self.assertEqual(row['severity'], 'warning')
         self.assertNotIn(str(job.pk), repr(row))
         self.assertNotIn(str(encounter.pk), repr(row))
@@ -933,7 +995,69 @@ class ModeSwitch(OutcomeFixture, TestCase):
         with override_settings(**self.FIXTURE):
             enqueue(self.fresh_encounter(), self.user)
             Job.objects.filter(pk=job.pk).update(state='succeeded')
-            self.assertTrue(admin_console.language_model_rows()[-1]['value'].startswith('0 queued, 0 running'))
+            row = admin_console.language_model_rows()[-1]
+            self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation — '), row['value'])
+            self.assertEqual(row['severity'], '')
+
+    def test_outside_live_mode_running_live_jobs_alone_make_the_row_a_warning(self):
+        """F-E (round 4). A live job already sent when the deployment was switched to fixture is still in flight: the switch
+        is not clean until it ends, so the row warns. Narrowing the warning to queued jobs alone survived every test, because
+        no test had a running live job and nothing else."""
+        from core import admin_console
+        with override_settings(**SONNET_46):
+            job = enqueue(self.fresh_encounter(), self.user)
+        Job.objects.filter(pk=job.pk).update(state='running')
+        with override_settings(**self.FIXTURE):
+            row = admin_console.language_model_rows()[-1]
+        self.assertTrue(row['value'].startswith('0 queued, 1 running, 0 in reconciliation — QUILLMD_AI_MODE is not live'),
+                        row['value'])
+        self.assertEqual(row['severity'], 'warning')
+        # Positive control: once it has ended nothing live is left and the same row is plain.
+        Job.objects.filter(pk=job.pk).update(state='succeeded')
+        with override_settings(**self.FIXTURE):
+            row = admin_console.language_model_rows()[-1]
+        self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation — '), row['value'])
+        self.assertEqual(row['severity'], '')
+
+    def test_the_console_counts_running_and_reconciliation_jobs_and_drained_needs_all_three_at_0(self):
+        """F-B / F-F (round 4). The migration note defines drained as no generation queued, running OR in reconciliation,
+        but the row counted only queued and running, so a live job stranded in reconciliation (an uncertain provider outcome,
+        its hold kept) read '0 queued, 0 running (drained when both are 0)'. And replacing the running count with 0 survived
+        every test. The row counts all three, each from its own state, and only live generation jobs."""
+        from core import admin_console
+
+        def job(state, mode='live', kind='generation'):
+            encounter = self.fresh_encounter()
+            with override_settings(**dict(SONNET_46, AI_MODE=mode)):
+                config = g.configuration()
+            return Job.objects.create(encounter=encounter, user=self.user, kind=kind, state=state, config=config,
+                                      revision=encounter.revision, request_key=f'{kind}:{encounter.pk}:{state}:{mode}')
+
+        with override_settings(**SONNET_46):
+            job('running')
+            self.assertEqual(admin_console.language_model_rows()[-1],
+                             {'name': 'live generation jobs', 'severity': '',
+                              'value': '0 queued, 1 running, 0 in reconciliation (drained when all three are 0)'})
+            for state in ('reconciliation', 'reconciliation', 'reconciliation', 'running', 'queued'):
+                job(state)
+            # Not counted: a fixture job, a live transcription, and live generations that have ended.
+            job('reconciliation', mode='fixture')
+            job('running', mode='fixture')
+            job('reconciliation', kind='transcription')
+            for state in ('succeeded', 'failed', 'cancelled'):
+                job(state)
+            self.assertEqual(admin_console.language_model_rows()[-1]['value'],
+                             '1 queued, 2 running, 3 in reconciliation (drained when all three are 0)')
+            Job.objects.filter(kind='generation', config__mode='live', state__in=['queued', 'running']).update(state='failed')
+            # Nothing queued or running is NOT drained while a live job is still in reconciliation.
+            self.assertEqual(admin_console.language_model_rows()[-1]['value'],
+                             '0 queued, 0 running, 3 in reconciliation (drained when all three are 0)')
+        # Outside live mode a live job still in reconciliation is not drained either: the row warns.
+        with override_settings(**dict(SONNET_46, AI_MODE='fixture')):
+            row = admin_console.language_model_rows()[-1]
+        self.assertTrue(row['value'].startswith('0 queued, 0 running, 3 in reconciliation — QUILLMD_AI_MODE is not live'),
+                        row['value'])
+        self.assertEqual(row['severity'], 'warning')
 
 
 @override_settings(ADMIN_SITE=False, STORAGES=STORAGES)
@@ -961,3 +1085,39 @@ class ProviderModelPairing(OutcomeFixture, TestCase):
                 self.assertTrue(job.error.startswith('Not processed: '), job.error)
                 self.assertFalse(Usage.objects.filter(job=job).exists())
                 self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
+
+    def test_a_model_id_that_is_not_a_plain_id_is_refused_at_enqueue_by_the_worker_and_on_the_console(self):
+        """F-A (round 4), through the console, enqueue and the worker. Measured before the repair with provider openai and
+        QUILLMD_AI_MODEL set but empty: the console printed 'request profile: legacy' marked success, enqueue held $0.0217,
+        the SDK sent model '' and the 400 left the job in reconciliation with its hold kept. Now the console says INVALID,
+        enqueue refuses with no job and no hold, and a job stored with such a model (queued by the previous release) is not
+        sent: not processed, nothing charged, hold released."""
+        from core import admin_console
+        for provider, model in (('openai', ''), ('openai', ' '), ('openai', 'gpt-4.1-mini '), ('openai', 'gpt-4.1-mini\n'),
+                                ('openai', '\x1bgpt-4.1-mini'), ('anthropic', ''), ('anthropic', 'claude-sonnet-4-6\t')):
+            with self.subTest(provider=provider, model=model), \
+                    override_settings(**dict(SONNET_46, AI_PROVIDER=provider, AI_MODEL=model)), \
+                    patch('anthropic.Anthropic') as client, patch('openai.OpenAI') as openai_client:
+                profile = next(row for row in admin_console.language_model_rows() if row['name'] == 'request profile')
+                self.assertTrue(profile['value'].startswith('INVALID — every generation is refused'), profile['value'])
+                self.assertEqual(profile['severity'], 'error')
+                encounter = self.fresh_encounter()
+                with self.assertRaises(NoProviderRequest):
+                    enqueue(encounter, self.user)
+                self.assertFalse(Job.objects.filter(encounter=encounter).exists())
+                self.assertFalse(Reservation.objects.filter(job__encounter=encounter).exists())
+                quoted = g.configuration()
+                pre_profile = {k: v for k, v in quoted.items() if k != 'request_profile'}
+                for label, stored in (('pre-profile', pre_profile),
+                                      ('forged legacy', {**pre_profile, 'request_profile': dict(g.LEGACY_PROFILE)})):
+                    job = Job.objects.create(encounter=encounter, user=self.user, revision=encounter.revision,
+                                             request_key=f'generation:{encounter.pk}:plain:{label}', config=stored)
+                    reserve(job, Decimal('0.2'))
+                    self.assertTrue(run_one())
+                    job.refresh_from_db()
+                    self.assertEqual(job.state, 'failed', label)
+                    self.assertTrue(job.error.startswith('Not processed: '), job.error)
+                    self.assertFalse(Usage.objects.filter(job=job).exists())
+                    self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
+                client.assert_not_called()
+                openai_client.assert_not_called()

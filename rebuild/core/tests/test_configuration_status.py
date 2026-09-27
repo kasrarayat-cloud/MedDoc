@@ -258,3 +258,25 @@ class ConfigurationStatusNamesTheModel(TestCase):
             call_command('configuration_status', stdout=out)
         self.assertIn('pricing_version: UNAVAILABLE', out.getvalue())
         self.assertIn('Release gates:', out.getvalue())
+
+    def test_an_unreadable_job_table_is_reported_without_stopping_the_screen(self):
+        """F-C (round 4). The live-jobs row reads the job table; when that read raises DatabaseError the row says UNAVAILABLE
+        (error) and the command still prints every later section and returns normally — exit 0 when run as manage.py, since
+        an exception escaping call_command is what a non-zero exit would be. Removing the `except DatabaseError` survived
+        the whole suite because nothing made the query fail. Here the job query raises, in both modes and on both screens."""
+        from django.db import DatabaseError
+        from core import admin_console
+        from core.models import Job
+        unavailable = {'name': 'live generation jobs', 'value': 'UNAVAILABLE — the job table could not be read',
+                       'severity': 'error'}
+        for label, overrides in (('live', SONNET_46), ('fixture', dict(SONNET_46, AI_MODE='fixture'))):
+            with self.subTest(mode=label), \
+                    patch.object(Job.objects, 'filter', side_effect=DatabaseError('synthetic: the job table is unreadable')):
+                report, _ = self.report(**overrides)
+                self.assertIn('live generation jobs: UNAVAILABLE — the job table could not be read', report)
+                self.assertIn('Release gates:', report)
+                with override_settings(**overrides), patch.dict(os.environ, PRICE_ENV):
+                    self.assertEqual(admin_console.language_model_rows()[-1], unavailable)
+        # Positive control: with the table readable the same line is the count, so the patch above is what made it fail.
+        report, _ = self.report(**SONNET_46)
+        self.assertIn('live generation jobs: 0 queued, 0 running, 0 in reconciliation (drained when all three are 0)', report)
