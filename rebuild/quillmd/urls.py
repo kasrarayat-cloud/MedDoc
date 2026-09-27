@@ -28,6 +28,7 @@ urlpatterns += [
     path('console/usage.csv', a.admin_usage_export, name='admin_usage_export'),
     path('console/clinic-invitations/', a.admin_clinic_invitations, name='admin_clinic_invitations'),
     path('console/clinic-invitations/<uuid:pk>/revoke/', a.admin_clinic_invitation_revoke, name='admin_clinic_invitation_revoke'),
+    path('console/accounts/<uuid:pk>/mfa-reset/', a.admin_mfa_reset, name='admin_mfa_reset'),
 ]
 
 # Clinic-owner invitation acceptance (QUILLMD_REGISTRATION=invite). Public through the '/invite/' prefix, like

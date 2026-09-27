@@ -15,7 +15,7 @@ class AccessMiddleware:
             if not request.user.verified_at: return HttpResponseForbidden('Verify your email before accessing the application.')
             admin_surface=settings.ADMIN_SITE or path.startswith('/console/')
             if admin_surface and not request.user.is_staff: return HttpResponseNotFound()
-            if request.user.is_staff and path not in ('/mfa/','/logout/') and not request.user.is_verified(): return redirect('mfa_setup')
+            if (request.user.is_staff or settings.QUILLMD_MFA_REQUIRED_ALL) and path not in ('/mfa/','/logout/') and not request.user.is_verified(): return redirect('mfa_setup')
         response=self.get_response(request)
         # media-src blob: lets the doctor play back a browser recording before sending it; without it the
         # default-src fallback blocked the preview the page asks them to listen to (measured in Chromium).

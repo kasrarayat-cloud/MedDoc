@@ -20,6 +20,11 @@ class LoginForm(forms.Form):
     email=forms.EmailField(widget=forms.EmailInput(attrs={'autocomplete':'email'}))
     password=forms.CharField(widget=forms.PasswordInput(attrs={'autocomplete':'current-password'}))
     otp=forms.CharField(label='Authenticator code (administrators)',required=False,max_length=6,widget=forms.TextInput(attrs={'autocomplete':'one-time-code','inputmode':'numeric'}))
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        if settings.QUILLMD_MFA_REQUIRED_ALL:
+            self.fields['otp'].label='Authenticator code'
+            self.fields['otp'].help_text='Required once you have set up an authenticator. Leave it blank on your first sign-in and you will be asked to set one up.'
 class RegisterForm(SyntheticAttestation,UserCreationForm):
     synthetic_only=forms.BooleanField(label='I will use synthetic test data only.')
     class Meta: model=User; fields=['email','first_name','last_name']
@@ -130,3 +135,6 @@ class ClinicInvitationForm(forms.Form):
     organization_name=forms.CharField(max_length=140,label='Clinic (organization) name')
     department_name=forms.CharField(max_length=120,label='First department name',initial='Main practice')
     def clean_email(self): return self.cleaned_data['email'].lower().strip()
+class MfaResetForm(forms.Form):
+    reason=forms.CharField(min_length=12,max_length=240,label='How the account holder’s identity was checked',help_text='Kept with the audit entry; it is the only record of the check.')
+    confirm=forms.BooleanField(label='Remove every authenticator on this account and sign it out everywhere.')

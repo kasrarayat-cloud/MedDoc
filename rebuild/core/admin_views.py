@@ -21,8 +21,9 @@ from .admin_queries import page_for, searched
 from django.utils import timezone
 
 from django.conf import settings
+from django_otp.plugins.otp_totp.models import TOTPDevice
 
-from .forms import ClinicInvitationForm
+from .forms import ClinicInvitationForm, MfaResetForm
 from .models import (AuditEvent, ClinicInvitation, Department, Invitation, Membership, Organization, Usage,
                      User, Wallet)
 from .security import audit, rate_limit
@@ -58,6 +59,8 @@ def admin_account_page(request, pk):
     navigation = page_for(request, events, anchor='account-audit', size=25)
     context.update(audit_events=navigation['page'], event_navigation=navigation,
                    refunded=admin_console.refunded_cents([p.pk for p in context['payments']]))
+    if settings.QUILLMD_MFA_REQUIRED_ALL:
+        context['mfa_reset_form'] = MfaResetForm()
     audit(request.user, 'admin.account_read', account.pk)
     return render(request, 'admin_account.html', context)
 
@@ -299,6 +302,41 @@ def admin_clinic_invitation_revoke(request, pk):
         audit(request.user, 'admin.clinic_invitation_revoked', invitation.pk)
     messages.success(request, 'Clinic owner invitation revoked. The link no longer grants access.')
     return redirect(back_to(request, '/console/clinic-invitations/'))
+
+
+# --------------------------------------------------------------------------------------
+# Multi-factor reset (QUILLMD_MFA_REQUIRED_ALL)
+# --------------------------------------------------------------------------------------
+
+@require_POST
+@transaction.atomic
+def admin_mfa_reset(request, pk):
+    """Remove a clinical account's authenticators so its holder enrols again at the next sign-in.
+
+    Only while QUILLMD_MFA_REQUIRED_ALL is on: that setting is what makes a clinical account's authenticator
+    a sign-in requirement, and so what makes a lost phone a lock-out. Never for an administrator, matching every
+    other screen here that refuses to change another administrator. Every live session is invalidated in the
+    same transaction, so a session opened with the old device does not outlive it. The reason is recorded with
+    the audit entry because it is the only record of how the holder's identity was checked.
+    """
+    gate(request)
+    if not settings.QUILLMD_MFA_REQUIRED_ALL:
+        raise Http404
+    account = get_object_or_404(User.objects.select_for_update(), pk=pk)
+    if account.is_staff:
+        raise PermissionDenied('Administrator authenticators are not reset through this screen.')
+    form = MfaResetForm(request.POST)
+    if not form.is_valid():
+        raise ValidationError('Record how the account holder\'s identity was checked (at least 12 characters) '
+                              'and confirm the reset.')
+    removed, _ = TOTPDevice.objects.filter(user=account).delete()
+    account.session_version += 1
+    account.save(update_fields=['session_version'])
+    audit(request.user, 'admin.mfa_reset', account.pk, devices_removed=removed, sessions_invalidated=True,
+          reason=form.cleaned_data['reason'].replace('\x00', '').strip())
+    messages.success(request, f'{removed} authenticator(s) removed and every session signed out. '
+                              'The account holder sets up a new authenticator after their next password sign-in.')
+    return redirect(back_to(request, f'/console/accounts/{account.pk}/detail/'))
 
 
 # --------------------------------------------------------------------------------------

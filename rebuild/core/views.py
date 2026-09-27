@@ -132,13 +132,23 @@ def login_view(request):
             found=User.objects.filter(email__iexact=email).first()
             user=authenticate(request,username=found.username if found else email,password=form.cleaned_data['password'])
             device=None
-            if user and user.is_staff:
+            enrol=False
+            # Administrators always need a confirmed authenticator. With QUILLMD_MFA_REQUIRED_ALL every account
+            # that HAS one must present its code; an account without one signs in with its password only far
+            # enough to enrol: AccessMiddleware confines that session to /mfa/ until a code is verified.
+            if user and (user.is_staff or settings.QUILLMD_MFA_REQUIRED_ALL):
                 with transaction.atomic():
                     device=TOTPDevice.objects.select_for_update().filter(user=user,confirmed=True).first()
-                    if not device or not device.verify_token(form.cleaned_data['otp']): user=None
+                    if device:
+                        if not device.verify_token(form.cleaned_data['otp']): user=None
+                    elif user.is_staff: user=None
+                    else: enrol=True
             if user and user.verified_at and (not settings.ADMIN_SITE or user.is_staff):
                 auth_login(request,user)
                 if device: otp_login(request,device)
+                if enrol:
+                    audit(user,'auth.login',mfa_enrolment_required=True)
+                    return redirect('mfa_setup')
                 audit(user,'auth.login')
                 return redirect(next_url or ('admin_dashboard' if settings.ADMIN_SITE else 'dashboard'))
             audit(None,'auth.login_failed',details='No credentials recorded')
@@ -209,7 +219,16 @@ def mfa_setup(request):
             if device.verify_token(form.cleaned_data['code']):
                 device.confirmed=True;device.save(update_fields=['confirmed']);otp_login(request,device);audit(request.user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
         form.add_error('code','Invalid or already used code.')
-    return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device})
+    # QUILLMD_MFA_REQUIRED_ALL puts every clinician through this page, many on a phone that cannot scan its own
+    # screen: the same key is also shown as grouped text for manual entry. Default mode renders the page as before.
+    secret=manual_entry_key(device) if settings.QUILLMD_MFA_REQUIRED_ALL and not device.confirmed else ''
+    return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device,'secret':secret})
+
+def manual_entry_key(device):
+    """The device's base32 key — exactly the `secret` in its otpauth URI — in groups of four for typing."""
+    from base64 import b32encode
+    key=b32encode(device.bin_key).decode().rstrip('=')
+    return ' '.join(key[i:i+4] for i in range(0,len(key),4))
 
 def dashboard(request):
     return render(request,'dashboard.html',{'encounters':scoped(Encounter,request.user).select_related('patient','template_version__template').order_by('-created_at')[:30],'templates':scoped(Template,request.user).order_by('-created_at')[:30]})
