@@ -140,6 +140,10 @@ def _reviewed(answer, actor, revision):
             and type(answer.get('review_revision')) is int and answer['review_revision'] == revision)
 
 
+#: What the Word engine's cell replace reads as a break or an ampersand escape (lowercase only; `&M` is written as is).
+ENGINE_REWRITES = re.compile(r'&[plmb&]')
+
+
 def _field_decision(notes, field, answer, actor, labels, revision):
     require(isinstance(answer, dict), 'Invalid answer review record.')
     text = answer.get('text', '')
@@ -173,6 +177,13 @@ def _field_decision(notes, field, answer, actor, labels, revision):
         require(unit in ('mm', 'ms'), 'Unsupported measurement unit.')
         if not re.fullmatch(r'(?:0|[1-9][0-9]*)(?:\.[0-9]+)?\s+' + re.escape(unit), text):
             blockers.append('documented_numeric_value_and_unit_required')
+    # ⚠️ THE ENGINE WRITES A LOCATION ANSWER INTO ITS TABLE CELL THROUGH Aspose's `Range.Replace`, whose replacement
+    # reads `&p` `&l` `&m` as paragraph, line and page breaks, `&b` as a section break (dropped in a cell) and `&&` as
+    # `&` (WmAdapter.ApplyAnswers). Measured on the runtime built from these adapter sources: `thigh&mid calf`, reviewed
+    # complete, exported as `thigh`, a page break, `id calf`. A body paragraph's answer is appended as a run and written
+    # as is; choices and measurements never carry `&`. (Ported from feat/wm-narrative, round 18.)
+    if 'body_paragraph' not in (field.get('locator') or {}) and ENGINE_REWRITES.search(text):
+        blockers.append('text_the_form_rewrites_labelled')
     return {'key': field['key'], 'text': text, 'status': 'conflict' if blockers else
             'edited' if answer.get('status') == 'edited' else 'supported',
             'evidence': evidence, 'reviewed': _reviewed(answer, actor, revision), 'blockers': blockers}

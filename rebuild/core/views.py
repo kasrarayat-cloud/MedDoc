@@ -104,6 +104,7 @@ WM_BLOCKERS={
     'selected_answer_conflicts_with_fixed_assertion':'The selected reflux finding contradicts this fixed negative statement. Export is blocked.',
     'symptom_conflicts_with_asymptomatic':'This symptom conflicts with the selected asymptomatic finding.',
     'asymptomatic_conflicts_with_documented_symptom':'Asymptomatic conflicts with another selected symptom.',
+    'text_the_form_rewrites_labelled':'The form reads "&p", "&l", "&m", "&b" and "&&" in this table cell as formatting codes (a break, or a single "&"), so it would print differently from this answer, and on this form an answer must repeat its labelled line exactly. Change that line in the notes: write the letter after "&" as a capital (for example "thigh&Mid calf") or write "and". Then save the notes and generate again.',
 }
 
 #: ⚠️ `data_mode` WAS A HARDCODED LITERAL AND WAS BEING CITED AS PROOF OF THE GUARD.
@@ -447,7 +448,10 @@ def encounter_detail(request,pk):
         try:
             requirements=wm_resolve(e,request.user)
             resolved_ok=True
-            if can_finalize:
+            # ⚠️ A FINALIZED RECORD IS NOT RE-REVIEWED BY WHOEVER VIEWS IT: its receipt is the review. Evaluated as the
+            # reader's own, a second clinician was told the record's review was incomplete (the signer's identity is not
+            # theirs) and was shown the template's original wordings. (Ported from feat/wm-narrative.)
+            if can_finalize and e.status!='finalized':
                 assessment=wm_review.evaluate_review(e,request.user,decisions,resolved_requirements=requirements)
         except (ValidationError,DocumentError) as exc:
             review_error=error_message(exc)
@@ -504,16 +508,85 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
+
+def clinician_decided(e):
+    """Whether the saved draft carries a clinician's review state, which a generation would replace wholesale.
+    (An acceptance also marks its answer `edited`; it is named for itself so no change to statuses can open this.)"""
+    return (any(isinstance(a,dict) and (a.get('reviewed') or a.get('accepted_suggestion') or a.get('status') in ('edited','left_blank'))
+                for a in (e.answers or {}).values())
+            or bool((e.template_review or {}).get('decisions')))
+
+def same_text(posted,stored):
+    """Whether posted notes are the stored notes as a browser returns them untouched: it posts a textarea's line breaks as
+    CRLF, and the HTML parser drops the one line break that directly follows <textarea>. The page now emits one there (as
+    Django's Textarea widget does), so a stored leading break survives; a page rendered before that lost it, so exactly
+    one leading line break (LF, CRLF or CR) missing from the post is ignored."""
+    posted,stored=(text.replace('\r\n','\n').replace('\r','\n') for text in (posted,stored))
+    return posted==stored or (stored.startswith('\n') and posted==stored[1:])
+
+def notes_save_clears(e):
+    """Whether a changed notes save would clear something: the answer draft, statement decisions or accepted codes."""
+    return (bool(e.answers) or bool((e.template_review or {}).get('decisions'))
+            or CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).exists())
+
+def review_state_counts(e,codes=True):
+    """What clearing this draft discards, as counts only (never clinical text), for its audit row. The categories are
+    disjoint, as their names say: each answer is counted once, in the first that fits — an accepted suggestion (which is
+    also `edited` and may be reviewed), left blank, edited and not an accepted suggestion, or reviewed and unedited; each
+    statement decision once, reviewed or chosen and unreviewed; accepted codes only (refutation round 2, R2-4)."""
+    counts={'answers_accepted_suggestion':0,'answers_left_blank':0,'answers_edited_not_accepted':0,'answers_reviewed_unedited':0}
+    for a in (e.answers or {}).values():
+        if not isinstance(a,dict):continue
+        if a.get('accepted_suggestion'):counts['answers_accepted_suggestion']+=1
+        elif a.get('status')=='left_blank':counts['answers_left_blank']+=1
+        elif a.get('status')=='edited':counts['answers_edited_not_accepted']+=1
+        elif a.get('reviewed'):counts['answers_reviewed_unedited']+=1
+    decisions=[d for d in ((e.template_review or {}).get('decisions') or {}).values() if isinstance(d,dict)]
+    counts.update(statements_reviewed=sum(1 for d in decisions if d.get('reviewed')),
+                  statements_chosen_unreviewed=sum(1 for d in decisions if not d.get('reviewed')),
+                  codes_accepted=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count() if codes else 0)
+    return counts
+
+@require_POST
+@transaction.atomic
+def clear_review(request,pk):
+    """"Clear answers and review to generate again": a clinician's explicit, confirmed and audited reset of the answer
+    draft and its review. The notes, and the accepted codes that rest on them, are kept."""
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+    if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
+    membership(request.user,e.department,roles=['owner','clinician'])
+    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():
+        return document_refusal(request,e,'Wait until the pending job is resolved. Nothing was cleared.',409)
+    if request.POST.get('revision')!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it before clearing. Nothing was cleared.',409)
+    if request.POST.get('confirm_clear')!='on':
+        return document_refusal(request,e,'Tick the confirmation to clear the answers and review. Nothing was cleared.',400)
+    cleared=review_state_counts(e,codes=False)
+    e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e)
+    e.save(update_fields=['answers','revision','status','template_review'])
+    audit(request.user,'encounter.review_cleared',e.pk,department=e.department,revision=e.revision,cleared=cleared)
+    messages.success(request,'Answers and review cleared. The notes and accepted codes are kept. Generate a new draft when ready.')
+    return redirect('encounter_detail',pk=pk)
 
 @require_POST
 def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
+        # (a finalized record says so first: the advice below names an action it refuses — refutation R2)
+        if e.status=='finalized':raise ValidationError('Finalized documents are immutable.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
+        # ⚠️ ADOPTING A GENERATION REPLACES EVERY ANSWER AND THE WHOLE REVIEW (`jobs.py`). The page offers it only
+        # before any answer exists; a crafted POST at the current revision queued a billed job that erased reviewed,
+        # accepted, edited and left-blank answers and statement decisions. A save renumbers the revision, so a request
+        # raced past this check is refused by `enqueue`'s locked revision check. (Ported from feat/wm-narrative.)
+        if clinician_decided(e):
+            raise ValidationError("These answers include a clinician's review or decisions, and a new draft would replace them. "
+                                  'Nothing was sent or charged. To generate again, a clinician can use "Clear answers and '
+                                  'review to generate again" under the notes: it asks for confirmation and is recorded.')
         quoted=usage_quote(request,e)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):
@@ -713,8 +786,34 @@ def save_answers(request,pk):
             if variant not in {item['id'] for item in requirement['variants']}:
                 return document_refusal(request,e,'Choose an approved statement alternative. No changes were saved.',400)
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
+    previous_decisions=dict((e.template_review or {}).get('decisions') or {}) if is_wm else {}
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
-    if is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists():
+    clinician=is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
+    if is_wm and not clinician and previous_decisions:
+        # ⚠️ A NON-CLINICIAN'S SAVE DISCARDED THE CLINICIAN'S STATEMENT DECISIONS WITHOUT A WORD: the review is emptied
+        # above and only a clinician's save rebuilds one, so the chosen wordings and their sources vanished and the next
+        # page fell back to the mapping's defaults. They are kept — each unreviewed (a review is its reader's own), bound
+        # to this revision, as schema 0, which finalization never accepts. A wording the saver left as it was keeps the
+        # clinician's sources; one the saver changed is the saver's unreviewed choice. (Ported from feat/wm-narrative.)
+        kept={key for key,decision in decisions.items() if isinstance(previous_decisions.get(key),dict)
+              and previous_decisions[key].get('variant')==decision['variant']}
+        e.template_review={'schema':0,'decisions':{key:dict(previous_decisions[key] if key in kept else decision,reviewed=False)
+                                                   for key,decision in decisions.items()},
+                           'binding':wm_review.binding(e),'reviewer_id':str(request.user.pk)}
+        if any(decisions[key]['evidence']!=previous_decisions[key].get('evidence') for key in kept):
+            review_errors.append('A statement source you changed was not kept: a statement keeps the clinician\'s wording and '
+                                 'sources until a clinician reviews it. Ask a clinician to change the source.')
+        # (each named for what happened to it: a wording the saver replaced is never reported as kept — refutation R3)
+        named=lambda keys:'; '.join(row['label'] for row in e.template_version.review_requirements if row['key'] in keys)
+        replaced={key for key in decisions if isinstance(previous_decisions.get(key),dict) and key not in kept}
+        if replaced:
+            review_errors.append('Your save replaced the chosen statement wording for: '+named(replaced)+'. '
+                                 'A clinician must review the new wording.')
+        kept_reviewed={key for key in kept if previous_decisions[key].get('reviewed')}
+        if kept_reviewed:
+            review_errors.append('The statement choices a clinician reviewed were kept but are no longer reviewed: '
+                                 +named(kept_reviewed)+'. A clinician must review them again.')
+    if clinician:
         try:
             resolved=wm_resolve(e,request.user,decisions)
             for requirement in resolved:
@@ -739,10 +838,19 @@ def save_answers(request,pk):
             review_errors.append(error_message(exc))
     # A review is the reader's own, so saving without a tick removes a colleague's; record which.
     withdrawn_reviews=sorted(key for key,answer in answers.items() if (previous_answers.get(key) or {}).get('reviewed') and not answer.get('reviewed'))
+    stored=(e.template_review or {}).get('decisions') or {}
+    withdrawn_statement_reviews=sorted(key for key,decision in previous_decisions.items()
+                                       if isinstance(decision,dict) and decision.get('reviewed') and not (stored.get(key) or {}).get('reviewed'))
+    # Which statement's wording this save changed, as identifiers only (statement key, wording ids), never the text.
+    statement_wording_changes=[{'statement':key,'from':decision.get('variant'),'to':stored[key].get('variant')}
+                               for key,decision in sorted(previous_decisions.items())
+                               if isinstance(decision,dict) and isinstance(stored.get(key),dict)
+                               and decision.get('variant')!=stored[key].get('variant')]
     e.save(update_fields=['answers','revision','status','template_review'])
     audit(request.user,'encounter.answers_saved',e.pk,department=e.department,revision=e.revision,
           accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn),
-          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews)
+          left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews,
+          withdrawn_statement_reviews=withdrawn_statement_reviews,statement_wording_changes=statement_wording_changes)
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)
@@ -1359,16 +1467,25 @@ def encounter_notes(request,pk):
         notes=(e.notes+'\n\n'+corrected if e.notes else corrected) if request.POST['transcript_mode']=='append' else corrected
     else:notes=request.POST.get('notes','')
     if not notes.strip() or len(notes)>50000:return document_refusal(request,e,'Notes must contain 1–50,000 characters; nothing was truncated.',400)
+    # ⚠️ AN UNCHANGED SAVE CHANGES NOTHING. It used to clear every answer, review decision and accepted code — by any
+    # member, with only the revision audited. The stored notes stay byte-identical (a browser re-posts line breaks as
+    # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
+    if transcript_job is None and same_text(notes,e.notes):
+        messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
+    cleared=review_state_counts(e);clears=notes_save_clears(e)
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
     CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
     CodeSuggestion.objects.filter(encounter=e).delete()
     audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department)
-    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision)
+    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared)
     if transcript_job:
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
               corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
-    messages.success(request,'Notes saved. Generate and review a new answer draft.');return redirect('encounter_detail',pk=pk)
+    # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2)
+    messages.success(request,('Notes saved. The answer draft, its review decisions and accepted codes were cleared, and the '
+                              'clearing is recorded under your name. ' if clears else 'Notes saved. ')+'Generate and review a new answer draft.')
+    return redirect('encounter_detail',pk=pk)
 
 def review_transcript(job):
     """Read only the bounded, hash-bound retained result for a reviewed transcript."""

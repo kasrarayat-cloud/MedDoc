@@ -1,0 +1,785 @@
+"""Review guards ported from the draft branch feat/wm-narrative (4396c801): its flag-independent fixes only.
+
+Offline and synthetic. Ordinary forms generate in fixture mode. The qualified Word form's resolver is replaced by
+`synthetic_resolver`, which resolves the way the engine does for this fixture's statements (the chosen wording, and the
+signer: the finalizing clinician once finalized, else the viewer); no Word runtime and no provider is involved.
+"""
+from datetime import timedelta
+import hashlib
+import html
+import json
+from html.parser import HTMLParser
+from pathlib import Path
+import re
+import tempfile
+from unittest.mock import patch
+
+import threading
+
+from django.db import connection
+from django.test import Client, TestCase, TransactionTestCase, override_settings
+from django.utils import timezone
+
+from core import views, wm_review
+from core.jobs import run_one
+from core.security import private_path
+from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter, Job, Membership, TemplateVersion, User
+from core.wm_review import BACKEND, ORIGINAL_SHA256
+from .test_security import SyntheticFixture
+from . import test_workflow
+from .test_workflow import TEST_SETTINGS
+
+REFUSED = 'a new draft would replace them. Nothing was sent or charged.'
+CLEAR_ACTION = 'Clear answers and review to generate again'
+UNCHANGED = 'Notes unchanged — nothing was cleared.'
+
+
+class BrowserSaveForm(HTMLParser):
+    """What a browser posts for the save form AS RENDERED: every enabled control, unchanged (a `disabled` control is
+    never posted)."""
+    def __init__(self):
+        super().__init__(); self.values = {}; self.inside = False; self.text = None; self.select = None
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'form':
+            self.inside = (attrs.get('action') or '').endswith('/save/')
+        if not self.inside or 'disabled' in attrs or not attrs.get('name') and tag != 'option':
+            return
+        if tag == 'input':
+            if attrs.get('type') != 'checkbox' or 'checked' in attrs:
+                self.values[attrs['name']] = attrs.get('value', 'on' if attrs.get('type') == 'checkbox' else '')
+        elif tag == 'textarea':
+            self.text = attrs['name']; self.values[self.text] = ''
+        elif tag == 'select':
+            self.select = attrs['name']; self.values.setdefault(self.select, '')
+        elif tag == 'option' and self.select and 'selected' in attrs:
+            self.values[self.select] = attrs.get('value', '')
+
+    def handle_endtag(self, tag):
+        if tag == 'textarea': self.text = None
+        elif tag == 'select': self.select = None
+        elif tag == 'form': self.inside = False
+
+    def handle_data(self, data):
+        if self.text: self.values[self.text] += data
+
+    @classmethod
+    def of(cls, page):
+        form = cls(); form.feed(page.content.decode())
+        # (the HTML parser drops exactly one line feed right after a <textarea> start tag)
+        return {name: html.unescape(value[1:] if value.startswith('\n') else value) for name, value in form.values.items()}
+
+
+# ── ordinary forms ────────────────────────────────────────────────────────────────────────────────────────────────
+class OrdinaryDraft:
+    """DocumentWorkflow's fixture and helpers, without re-running its own tests (imported by module for the same reason:
+    a TestCase class in this module's namespace would be collected here again)."""
+    workflow = test_workflow.DocumentWorkflow
+    setUp, make_docx, upload = workflow.setUp, workflow.make_docx, workflow.upload
+    create_encounter, generate = workflow.create_encounter, workflow.generate
+    NOTES = 'Symptoms: No chest pain.\nExamination: Normal gait.'
+
+    def drafted(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.NOTES)
+        self.generate(encounter)
+        return encounter
+
+    def post(self, url, encounter, payload=None):
+        encounter.refresh_from_db()
+        response = self.client.post(url, {'revision': encounter.revision, **(payload or {})}, follow=True)
+        encounter.refresh_from_db()
+        return response
+
+    def reviewed_draft(self, **extra):
+        """A generated draft the clinician saved with every answer reviewed (plus `extra` posted fields)."""
+        encounter = self.drafted()
+        keys = sorted(encounter.answers)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter,
+                  {**{'answer_' + key: encounter.answers[key]['text'] for key in keys},
+                   **{'reviewed_' + key: 'on' for key in keys}, **extra})
+        self.assertTrue(all(answer['reviewed'] for answer in encounter.answers.values()))   # (the control)
+        return encounter, keys
+
+    def member(self, name, role):
+        user = User.objects.create_user(username=name, email=name + '@synthetic.invalid', verified_at=timezone.now())
+        Membership.objects.create(user=user, department=self.department, role=role)
+        return user
+
+    def transcript_awaiting_review(self, encounter, text='Synthetic words.'):
+        payload = json.dumps({'raw_transcript': text, 'transcript': text}).encode()
+        relative = 'receipts/synthetic-review-guards-transcript.json'
+        path = private_path(relative); path.parent.mkdir(parents=True, exist_ok=True, mode=0o700); path.write_bytes(payload)
+        return Job.objects.create(encounter=encounter, user=self.user, kind='transcription', state='succeeded',
+                                  revision=encounter.revision, request_key='synthetic-transcript-' + str(encounter.pk),
+                                  config={'transcript_review_required': True}, result_path=relative,
+                                  result_sha256=hashlib.sha256(payload).hexdigest())
+
+    def accepted_code(self, encounter):
+        today = timezone.localdate()
+        release = CodeSet.objects.create(system='ICD-10-CM', version='synthetic-review-guards', sha256='0' * 64,
+                                         effective_from=today - timedelta(days=1), effective_until=today + timedelta(days=1),
+                                         source_url='https://synthetic.invalid/codes')
+        code = Code.objects.create(release=release, code='R00.0', description='Synthetic fixture; no clinical use')
+        return CodeSuggestion.objects.create(encounter=encounter, terminology=code, explanation='Synthetic documented code',
+                                             evidence='No chest pain.', accepted_by=self.user, accepted_at=timezone.now())
+
+
+@override_settings(**TEST_SETTINGS)
+class GenerationRefusedOverReviewOnOrdinaryForms(OrdinaryDraft, TestCase):
+    """A generation replaces every answer and review decision (`jobs.py` adoption). The page offers it only before any
+    answer exists, but the server queued it for any POST carrying the current revision."""
+
+    def refused_after(self, *saves):
+        encounter = self.drafted()
+        keys = sorted(encounter.answers)
+        for decision in saves:
+            payload = {'answer_' + key: answer['text'] for key, answer in encounter.answers.items()}
+            self.post(f'/encounters/{encounter.pk}/save/', encounter, {**payload, **decision(keys)})
+        saved = encounter.answers
+        response = self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertFalse(run_one(), 'a second generation was queued and run over the saved decisions')
+        encounter.refresh_from_db()
+        self.assertEqual(Job.objects.filter(encounter=encounter, kind='generation').count(), 1)
+        self.assertEqual(encounter.answers, saved)
+        self.assertContains(response, REFUSED)
+        self.assertContains(response, CLEAR_ACTION)
+        self.assertNotContains(response, 'save the source notes again')
+        return saved
+
+    def test_generation_is_refused_over_reviewed_answers(self):
+        saved = self.refused_after(lambda keys: {'reviewed_' + key: 'on' for key in keys})
+        self.assertTrue(all(answer['reviewed'] for answer in saved.values()))           # (the control)
+
+    def test_generation_is_refused_over_an_edited_answer(self):
+        saved = self.refused_after(lambda keys: {'answer_' + keys[0]: 'No chest pain, typed by the clinician.'})
+        self.assertEqual(sorted(answer['status'] for answer in saved.values()), ['edited', 'supported'])
+        self.assertFalse(any(answer['reviewed'] for answer in saved.values()))           # (nothing ticked)
+
+    def test_generation_is_refused_over_a_left_blank_decision(self):
+        """Left blank, then carried forward by a later save without its review tick (as the page re-posts the box):
+        the decision stands with nothing reviewed and nothing edited."""
+        blank = lambda keys: {'blank_' + keys[0]: 'on', 'blank_shown_' + keys[0]: '1', 'answer_' + keys[0]: ''}
+        saved = self.refused_after(blank, blank)
+        self.assertEqual(sorted((answer['status'], answer['reviewed']) for answer in saved.values()),
+                         [('left_blank', False), ('supported', False)])               # (the control)
+
+    def test_a_finalized_record_is_refused_as_immutable_not_advised(self):
+        """R2: on a finalized record the refusal advised clearing the draft — an action the record refuses."""
+        encounter, _keys = self.reviewed_draft()
+        Encounter.objects.filter(pk=encounter.pk).update(status='finalized', finalized_by=self.user, finalized_at=timezone.now())
+        response = self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertEqual(Job.objects.filter(encounter=encounter, kind='generation').count(), 1)
+        self.assertContains(response, 'Finalized documents are immutable.')
+        self.assertNotContains(response, REFUSED)
+        self.assertNotContains(response, CLEAR_ACTION)
+
+    def test_a_draft_nobody_has_decided_is_not_refused(self):
+        """The refusal reads decisions, not the presence of answers: an untouched draft reaches the existing
+        same-revision reuse (nothing new is requested either way)."""
+        encounter = self.drafted()
+        response = self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertNotContains(response, REFUSED)
+        self.assertContains(response, 'No new request was made')
+
+
+def last_event(action, encounter):
+    """The details of the latest audit row of `action` for `encounter` ({} when there is none, so a missing row fails an
+    assertion rather than raising)."""
+    event = AuditEvent.objects.filter(action=action, target=str(encounter.pk)).order_by('-created_at').first()
+    return event.details if event else {}
+
+
+def cleared(accepted_suggestion=0, left_blank=0, edited_not_accepted=0, reviewed_unedited=0, statements_reviewed=0,
+            statements_chosen_unreviewed=0, codes=0):
+    """The audit's counts of what a clearing discarded. Disjoint, as the names say: each answer is counted once, and each
+    statement decision once."""
+    return {'answers_accepted_suggestion': accepted_suggestion, 'answers_left_blank': left_blank,
+            'answers_edited_not_accepted': edited_not_accepted, 'answers_reviewed_unedited': reviewed_unedited,
+            'statements_reviewed': statements_reviewed, 'statements_chosen_unreviewed': statements_chosen_unreviewed,
+            'codes_accepted': codes}
+
+
+def notes_help(page):
+    return re.search(r'<p class="helptext" id="notes-help">(.*?)</p>', page.content.decode(), re.S).group(1)
+
+
+@override_settings(**TEST_SETTINGS)
+class ANotesSaveNeverClearsSilently(OrdinaryDraft, TestCase):
+    """R1 (refutation of this branch): saving the notes UNCHANGED wiped every answer, review decision and accepted code,
+    by any member, with only the revision in its audit row — and the generation refusal told people to do exactly that."""
+
+    def test_an_unchanged_notes_save_clears_nothing(self):
+        encounter, _keys = self.reviewed_draft()
+        code = self.accepted_code(encounter)
+        before = (encounter.answers, encounter.revision, encounter.status)
+        audited = AuditEvent.objects.filter(action='encounter.notes_saved', target=str(encounter.pk)).count()
+        self.client.force_login(self.member('guards-notes-employee', 'employee'))
+        # (as a browser posts the textarea: its line breaks as CRLF)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes.replace('\n', '\r\n')})
+        self.assertEqual((encounter.answers, encounter.revision, encounter.status), before)
+        code.refresh_from_db()
+        self.assertEqual(code.accepted_by_id, self.user.pk)
+        self.assertContains(response, UNCHANGED)
+        self.assertEqual(AuditEvent.objects.filter(action='encounter.notes_saved', target=str(encounter.pk)).count(), audited)
+
+    def test_a_changed_notes_save_clears_as_before_and_records_what_it_cleared(self):
+        # Notes whose unlabelled line holds every answer for a decision, each with a one-click suggestion.
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, 'Fictional software test only.\nSymptoms: no chest pain\nExamination: normal gait')
+        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        first, second = sorted(encounter.answers)
+        self.assertTrue(encounter.answers[first].get('suggestion'))                  # (the control: an offer to accept)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter, {
+            'answer_' + first: '', 'accept_' + first: 'on', 'reviewed_' + first: 'on',
+            'answer_' + second: '', 'blank_' + second: 'on', 'blank_shown_' + second: '1', 'reviewed_' + second: 'on'})
+        self.assertEqual(sorted((a['status'], bool(a.get('accepted_suggestion'))) for a in encounter.answers.values()),
+                         [('edited', True), ('left_blank', False)])                     # (the control)
+        self.accepted_code(encounter)
+        self.assertIn('accepted codes', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic follow-up.'})
+        self.assertEqual((encounter.answers, encounter.template_review, CodeSuggestion.objects.filter(encounter=encounter).count()),
+                         ({}, {}, 0))
+        event = last_event('encounter.notes_saved', encounter)
+        # R2-4: each answer is counted once — the accepted suggestion (also `edited` and reviewed) only as accepted.
+        self.assertEqual(event.get('cleared'), cleared(accepted_suggestion=1, left_blank=1, codes=1))
+
+    def test_a_reviewed_transcript_is_applied_even_when_it_leaves_the_notes_as_they_were(self):
+        """The unchanged-notes no-op is for a notes save only: a reviewed transcript is always applied (and recorded), or
+        it would stay awaiting review with nothing to show why."""
+        encounter, _keys = self.reviewed_draft()
+        job = self.transcript_awaiting_review(encounter)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {
+            'transcript_job': str(job.pk), 'corrected_transcript': encounter.notes, 'transcript_mode': 'replace',
+            'transcript_reviewed': 'on'})
+        self.assertTrue(AuditEvent.objects.filter(action='transcription.applied', target=str(job.pk)).exists())
+        self.assertNotContains(response, UNCHANGED)
+
+
+def textarea(page, element_id):
+    """The raw content of a rendered <textarea> (before the HTML parser drops its first line feed)."""
+    return html.unescape(re.search(r'<textarea id="%s"[^>]*>(.*?)</textarea>' % re.escape(element_id),
+                                   page.content.decode(), re.S).group(1))
+
+
+def as_browser_posts(content):
+    """What a browser submits for that textarea untouched: the parser drops exactly one line feed right after the start
+    tag, and form submission normalizes every line break to CRLF."""
+    value = content[1:] if content.startswith('\n') else content
+    return value.replace('\r\n', '\n').replace('\r', '\n').replace('\n', '\r\n')
+
+
+@override_settings(**TEST_SETTINGS)
+class AnUntouchedNotesSaveRoundTrips(OrdinaryDraft, TestCase):
+    """Refutation round 2, R2-1: notes stored with a leading line break were shown without it (the HTML parser drops the
+    first line feed after <textarea>), posted without it, and an untouched "Save source notes" cleared the whole review."""
+    EDITED = OrdinaryDraft.NOTES + '\nPlan: synthetic follow-up.'          # (the doctor's edit: a change, so it is stored)
+
+    def reviewed_with_notes(self, notes):
+        encounter, _keys = self.reviewed_draft()
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': notes})   # (the doctor's own edit)
+        self.assertEqual(encounter.notes, notes)
+        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        keys = sorted(encounter.answers)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter, {**{'answer_' + k: encounter.answers[k]['text'] for k in keys},
+                                                                   **{'reviewed_' + k: 'on' for k in keys}})
+        self.assertTrue(encounter.answers and all(a['reviewed'] for a in encounter.answers.values()))   # (the control)
+        return encounter
+
+    def untouched_save(self, encounter, posted):
+        before = (encounter.answers, encounter.revision)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': posted})
+        self.assertEqual((encounter.answers, encounter.revision), before)
+        self.assertContains(response, UNCHANGED)
+
+    def test_notes_stored_with_a_leading_line_break_survive_an_untouched_save(self):
+        notes = '\r\n' + self.EDITED.replace('\n', '\r\n')
+        encounter = self.reviewed_with_notes(notes)
+        content = textarea(self.client.get(f'/encounters/{encounter.pk}/'), 'source-notes-edit')
+        self.assertEqual(content, '\n' + notes)                    # a line feed right after the start tag, as Django's widget
+        self.untouched_save(encounter, as_browser_posts(content))  # (the page as it now renders)
+
+    def test_a_page_rendered_before_the_fix_is_still_an_untouched_save(self):
+        """A tab opened before this release shows the notes without their leading break: exactly one is ignored."""
+        notes = '\n' + self.EDITED
+        encounter = self.reviewed_with_notes(notes)
+        self.untouched_save(encounter, as_browser_posts(notes))    # (the old page: no line feed was emitted, one dropped)
+
+    def test_only_one_leading_line_break_is_ignored(self):
+        notes = '\r\n\r\n' + self.EDITED.replace('\n', '\r\n')
+        encounter = self.reviewed_with_notes(notes)
+        self.untouched_save(encounter, notes[2:])                  # (one break dropped: the same notes)
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': notes[4:]})
+        self.assertEqual(encounter.answers, {})                    # (both dropped: the doctor removed a line — a change)
+
+    def test_lone_carriage_returns_are_line_breaks_too(self):
+        """R2-3 A6: notes stored with lone CRs come back from a browser as CRLF — the same notes."""
+        notes = self.EDITED.replace('\n', '\r')
+        encounter = self.reviewed_with_notes(notes)
+        content = textarea(self.client.get(f'/encounters/{encounter.pk}/'), 'source-notes-edit')
+        self.assertEqual(as_browser_posts(content), self.EDITED.replace('\n', '\r\n'))   # (the control: what is posted)
+        self.untouched_save(encounter, as_browser_posts(content))
+
+    def test_the_transcript_textarea_keeps_a_leading_line_break_too(self):
+        encounter, _keys = self.reviewed_draft()
+        self.transcript_awaiting_review(encounter, '\nSynthetic words.')
+        job = Job.objects.get(encounter=encounter, kind='transcription')
+        content = textarea(self.client.get(f'/encounters/{encounter.pk}/'), f'transcript-{job.pk}')
+        self.assertEqual(content, '\n\nSynthetic words.')
+
+
+def transcript_help(page, job):
+    return re.search(r'<p class="helptext" id="transcript-help-%s">(.*?)</p>' % job.pk, page.content.decode(), re.S).group(1)
+
+
+CLEARS = "including a clinician's"
+
+
+@override_settings(**TEST_SETTINGS)
+class TheNotesPageSaysWhatAChangedSaveClears(OrdinaryDraft, TestCase):
+    """Refutation round 2, R2-2 and its INFO: a changed notes save clears the answers, the review decisions and the
+    accepted codes, whoever saves it. The page said so only while answers existed, and not plainly."""
+
+    def test_accepted_codes_alone_are_warned_about_in_the_notes_and_transcript_help(self):
+        encounter, _keys = self.reviewed_draft()
+        self.accepted_code(encounter)
+        self.post(f'/encounters/{encounter.pk}/clear-review/', encounter, {'confirm_clear': 'on'})
+        self.assertEqual(encounter.answers, {})                                     # (the control: only the code is left)
+        job = self.transcript_awaiting_review(encounter)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertIn('accepted codes', notes_help(page))
+        self.assertIn('accepted codes', transcript_help(page, job))
+
+    def test_statement_decisions_alone_are_warned_about(self):
+        encounter, _keys = self.reviewed_draft()
+        Encounter.objects.filter(pk=encounter.pk).update(answers={}, template_review={'decisions': {'claim_1': {'variant': 'a'}}})
+        self.assertIn('review decision', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+
+    def test_nothing_to_clear_says_nothing_about_clearing(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.NOTES)
+        code = self.accepted_code(encounter)
+        CodeSuggestion.objects.filter(pk=code.pk).update(accepted_by=None, accepted_at=None)   # (a suggestion nobody accepted)
+        self.assertNotIn('clears', notes_help(self.client.get(f'/encounters/{encounter.pk}/')))
+
+    def test_the_person_saving_is_told_plainly_before_and_after(self):
+        """INFO: any member's changed save clears a clinician's review. Left as it is, and said plainly to whoever saves."""
+        encounter, _keys = self.reviewed_draft()
+        self.client.force_login(self.member('guards-notes-employee-2', 'employee'))
+        help_text = notes_help(self.client.get(f'/encounters/{encounter.pk}/'))
+        for words in ('Saving changed notes clears', CLEARS, 'accepted codes', 'recorded under your name',
+                      'Saving them unchanged clears nothing'):
+            self.assertIn(words, help_text)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
+        self.assertEqual(encounter.answers, {})
+        self.assertContains(response, 'The answer draft, its review decisions and accepted codes were cleared')
+        # (and a save that had nothing to clear does not claim it cleared anything)
+        response = self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: again.'})
+        self.assertNotContains(response, 'were cleared')
+
+
+@override_settings(**TEST_SETTINGS)
+class ClearAnswersAndReviewToGenerateAgain(OrdinaryDraft, TestCase):
+    """R1(c): the explicit way to generate again over a decided draft — POST only, owner or clinician, confirmed, refused
+    while a job is pending or once finalized, audited with the same counts, and a new revision."""
+
+    def clear(self, encounter, **payload):
+        encounter.refresh_from_db()
+        response = self.client.post(f'/encounters/{encounter.pk}/clear-review/', {'revision': encounter.revision, **payload})
+        encounter.refresh_from_db()
+        return response
+
+    def test_a_clinician_clears_with_confirmation_and_generates_again(self):
+        encounter, _keys = self.reviewed_draft()
+        code = self.accepted_code(encounter)
+        refused = self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertContains(refused, REFUSED)
+        self.assertContains(refused, CLEAR_ACTION)
+        self.assertContains(refused, 'data-clear-review')                         # (offered to this clinician)
+        before = (encounter.answers, encounter.revision)
+        self.assertEqual(self.clear(encounter).status_code, 400)                   # (no confirmation: nothing cleared)
+        self.assertEqual((encounter.answers, encounter.revision), before)
+        self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/clear-review/').status_code, 405)
+        response = self.clear(encounter, confirm_clear='on')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual((encounter.answers, encounter.template_review, encounter.status, encounter.revision),
+                         ({}, {}, 'draft', before[1] + 1))
+        event = AuditEvent.objects.filter(action='encounter.review_cleared', target=str(encounter.pk)).first()
+        self.assertEqual((getattr(event, 'actor_id', None), last_event('encounter.review_cleared', encounter).get('revision'),
+                          last_event('encounter.review_cleared', encounter).get('cleared')),
+                         (self.user.pk, encounter.revision,
+                          cleared(reviewed_unedited=2)))
+        code.refresh_from_db()
+        self.assertEqual(code.accepted_by_id, self.user.pk)                        # (the notes did not change)
+        self.post(f'/encounters/{encounter.pk}/generate/', encounter)
+        self.assertTrue(run_one())
+        encounter.refresh_from_db()
+        self.assertEqual(Job.objects.filter(encounter=encounter, kind='generation', state='succeeded').count(), 2)
+        self.assertFalse(any(answer['reviewed'] for answer in encounter.answers.values()))
+
+    def test_an_employee_cannot_clear_and_is_not_offered_it(self):
+        encounter, _keys = self.reviewed_draft()
+        before = (encounter.answers, encounter.revision)
+        self.client.force_login(self.member('guards-clear-employee', 'employee'))
+        self.assertNotContains(self.client.get(f'/encounters/{encounter.pk}/'), 'data-clear-review')
+        self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 403)
+        self.assertEqual((encounter.answers, encounter.revision), before)
+        self.assertFalse(AuditEvent.objects.filter(action='encounter.review_cleared').exists())
+
+    def test_clearing_is_refused_while_a_job_is_pending_on_a_stale_page_or_once_finalized(self):
+        encounter, _keys = self.reviewed_draft()
+        before = (encounter.answers, encounter.revision)
+        for state in ('queued', 'running', 'reconciliation'):                     # (R2-3 A7: every pending state)
+            job = Job.objects.create(encounter=encounter, user=self.user, kind='generation', revision=encounter.revision,
+                                     request_key='synthetic-pending-' + state + str(encounter.pk), state=state)
+            self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 409, state)
+            job.state = 'failed'; job.request_key = 'synthetic-ended-' + state + str(encounter.pk); job.save()
+        stale = self.client.post(f'/encounters/{encounter.pk}/clear-review/', {'revision': encounter.revision - 1, 'confirm_clear': 'on'})
+        self.assertEqual(stale.status_code, 409)
+        Encounter.objects.filter(pk=encounter.pk).update(status='finalized', finalized_by=self.user, finalized_at=timezone.now())
+        self.client.raise_request_exception = False      # (the database's own guard would answer 500; the page says why)
+        self.assertEqual(self.clear(encounter, confirm_clear='on').status_code, 409)
+        self.assertEqual((encounter.answers, encounter.revision), before)
+        self.assertFalse(AuditEvent.objects.filter(action='encounter.review_cleared').exists())
+
+
+@override_settings(**TEST_SETTINGS)
+class ClearingOutsideTheTestTransaction(OrdinaryDraft, TransactionTestCase):
+    """R2-3 A1 and A8, where each request commits on its own (no test-case transaction to hide behind)."""
+
+    def test_a_clear_runs_in_its_own_transaction(self):
+        """A8: clear_review locks the row, which needs a transaction of its own."""
+        encounter, _keys = self.reviewed_draft()
+        self.client.raise_request_exception = False
+        response = self.client.post(f'/encounters/{encounter.pk}/clear-review/',
+                                    {'revision': encounter.revision, 'confirm_clear': 'on'})
+        encounter.refresh_from_db()
+        self.assertEqual((response.status_code, encounter.answers), (302, {}))
+
+    def test_a_colleagues_save_waits_for_the_clear_and_is_then_refused_as_stale(self):
+        """A1: a colleague's save arriving while a clear is between its checks and its write waits on the row lock, then
+        meets the new revision and is refused — never saved and then silently wiped by the clear."""
+        encounter, keys = self.reviewed_draft()
+        colleague = self.member('guards-race-colleague', 'clinician')
+        revision = encounter.revision
+        outcome = {}
+
+        def colleague_save():
+            try:
+                client = Client(); client.force_login(colleague); client.raise_request_exception = False
+                payload = {'revision': revision, **{'answer_' + k: encounter.answers[k]['text'] for k in keys},
+                           **{'reviewed_' + k: 'on' for k in keys}}
+                outcome['status'] = client.post(f'/encounters/{encounter.pk}/save/', payload).status_code
+            finally:
+                connection.close()
+
+        thread = threading.Thread(target=colleague_save)
+        real = views.review_state_counts
+
+        def between_checks_and_write(e, codes=True):
+            if not codes:                                  # (the clear's own call: its checks passed, its write is next)
+                thread.start(); thread.join(timeout=3)
+                outcome['colleague_finished_first'] = not thread.is_alive()
+            return real(e, codes=codes)
+
+        self.client.raise_request_exception = False
+        with patch.object(views, 'review_state_counts', between_checks_and_write):
+            response = self.client.post(f'/encounters/{encounter.pk}/clear-review/', {'revision': revision, 'confirm_clear': 'on'})
+        if thread.ident is not None:                       # (started only once the clear reached its write)
+            thread.join(timeout=60)
+        encounter.refresh_from_db()
+        self.assertEqual((response.status_code, outcome.get('colleague_finished_first'), outcome.get('status')), (302, False, 409))
+        self.assertEqual((encounter.answers, encounter.revision), ({}, revision + 1))
+        self.assertFalse(AuditEvent.objects.filter(action='encounter.answers_saved', actor=colleague).exists())
+
+
+# ── the qualified Word form, offline ─────────────────────────────────────────────────────────────────────────────
+def statement(key, paragraph, label, text, variants, kind='assertion'):
+    return {'key': key, 'kind': kind, 'body_paragraph': paragraph, 'label': 'Prewritten statement: ' + label,
+            'text': text, 'text_sha256': hashlib.sha256(text.encode()).hexdigest(), 'control_keys': [],
+            'default_variant': variants[0][0],
+            'variants': [{'id': identifier, 'label': identifier, 'text_template': template,
+                          'required_control_keys': [], 'empty_control_keys': []} for identifier, template in variants]}
+
+
+FIELDS = [
+    {'key': 'sdt_-213273323', 'label': 'Right impression: reflux or absence', 'kind': 'choice',
+     'options': ['reflux positive.', 'is absent.'], 'locator': {'part': 'word/document.xml', 'sdt_id': '-213273323'}},
+    {'key': 'measurement_1_1', 'label': 'Right GSV at the SFJ: diameter (mm)', 'kind': 'measurement', 'options': [],
+     'locator': {'table': 0, 'row': 1, 'column': 1, 'unit': 'mm'}},
+    {'key': 'patient_name', 'label': 'Patient name', 'kind': 'text', 'options': [], 'locator': {'body_paragraph': 3}},
+    {'key': 'location_11', 'label': 'Right tributary row 11: anatomical location', 'kind': 'text', 'options': [],
+     'locator': {'table': 0, 'row': 11, 'column': 0, 'marker': '<<insert location>>'}},
+]
+NOT_ASSESSED = 'Right saphenous reflux was not assessed.'
+REQUIREMENTS = [
+    statement('claim_9', 9, 'Exam type', 'TYPE OF EXAM: Full Study', [('original', 'TYPE OF EXAM: Full Study')]),
+    statement('claim_32', 32, 'Right saphenous reflux finding', 'No saphenous reflux in right lower extremity.',
+              [('negative', 'No saphenous reflux in right lower extremity.'), ('not_assessed', NOT_ASSESSED)]),
+    statement('claim_46', 46, 'Signer identity', 'SYNTHETIC PREPRINTED SIGNER', [('trusted', '{signer_name}')], kind='identity'),
+]
+VALUES = {'sdt_-213273323': 'is absent.', 'measurement_1_1': '3.2 mm', 'patient_name': 'SYNTHETIC WM GUARD PATIENT',
+          'location_11': 'medial calf'}
+NOTES = '\n'.join([field['label'] + ': ' + VALUES[field['key']] for field in FIELDS] + [
+    'Prewritten statement: Exam type: TYPE OF EXAM: Full Study',
+    'Prewritten statement: Right saphenous reflux finding: ' + NOT_ASSESSED])
+
+
+def synthetic_resolver(encounter, actor, decisions=None):
+    """`views.wm_resolve` as the engine answers it for these statements (none has an answer token): the chosen wordings,
+    signed by the finalizing clinician once finalized and otherwise by the viewer (`trusted_context.signer_name`)."""
+    decisions = decisions if decisions is not None else encounter.template_review.get('decisions', {})
+    signer = encounter.finalized_by if encounter.status == 'finalized' else actor
+    name = ' '.join(signer.get_full_name().split()) or signer.email
+    rows = []
+    for original in encounter.template_version.review_requirements:
+        chosen = decisions.get(original['key'], {}).get('variant', original['default_variant'])
+        text = next(v for v in original['variants'] if v['id'] == chosen)['text_template'].replace('{signer_name}', name)
+        rows.append({**original, 'text': text, 'text_sha256': hashlib.sha256(text.encode()).hexdigest(),
+                     'original_text': original['text'], 'original_text_sha256': original['text_sha256'],
+                     'selected_variant': chosen, 'changed': text != original['text']})
+    return rows
+
+
+@override_settings(**TEST_SETTINGS)
+class OfflineWordForm(SyntheticFixture, TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory(); self.addCleanup(directory.cleanup)
+        override = override_settings(MEDIA_ROOT=Path(directory.name)); override.enable(); self.addCleanup(override.disable)
+        self.user, _, self.department, self.patient, self.template, self.encounter, _ = self.make_scope('wm-guards')
+        User.objects.filter(pk=self.user.pk).update(first_name='SYNTHETIC', last_name='Clinician A')
+        self.user.refresh_from_db()
+        self.template.sha256 = ORIGINAL_SHA256; self.template.save(update_fields=['sha256'])
+        self.version = TemplateVersion.objects.create(
+            template=self.template, number=2, fields=FIELDS, review_requirements=REQUIREMENTS, created_by=self.user,
+            document_backend={'backend': BACKEND, 'source_sha256': ORIGINAL_SHA256, 'mapping_digest': 'a' * 64})
+        answers = {}
+        for field in FIELDS:
+            line = field['label'] + ': ' + VALUES[field['key']]
+            start = NOTES.index(line)
+            answers[field['key']] = {'text': VALUES[field['key']], 'status': 'supported', 'reviewed': False,
+                                     'evidence': [{'quote': line, 'start': start, 'end': start + len(line)}]}
+        self.encounter.template_version = self.version; self.encounter.notes = NOTES; self.encounter.answers = answers
+        self.encounter.status = 'review'; self.encounter.template_review = {}
+        self.encounter.save()
+        resolver = patch('core.views.wm_resolve', side_effect=synthetic_resolver); resolver.start(); self.addCleanup(resolver.stop)
+        self.client.force_login(self.user)
+
+    def member(self, name, role, full_name=''):
+        user = User.objects.create_user(username=name, email=name + '@synthetic.invalid', verified_at=timezone.now(),
+                                        first_name='SYNTHETIC', last_name=full_name)
+        Membership.objects.create(user=user, department=self.department, role=role)
+        return user
+
+    def page(self):
+        response = self.client.get(f'/encounters/{self.encounter.pk}/')
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def save(self, change=(), ticks=False):
+        """The page as a browser posts it, with `change` applied (and, for a clinician, every review box ticked)."""
+        page = self.page()
+        payload = BrowserSaveForm.of(page)
+        if ticks:
+            payload.update({'reviewed_' + field['key']: 'on' for field in FIELDS})
+            payload.update({'claim_reviewed_' + row['key']: 'on' for row in REQUIREMENTS})
+        payload.update(dict(change))
+        response = self.client.post(f'/encounters/{self.encounter.pk}/save/', payload, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.encounter.refresh_from_db()
+        return response
+
+    STATEMENT_SOURCES = {'claim_source_claim_9': 'Prewritten statement: Exam type: TYPE OF EXAM: Full Study',
+                         'claim_source_claim_32': 'Prewritten statement: Right saphenous reflux finding: ' + NOT_ASSESSED}
+
+    def clinician_reviews(self):
+        """The clinician chooses "not assessed" for claim_32, saves to see the wording, then reviews everything."""
+        self.save({'claim_variant_claim_32': 'not_assessed', **self.STATEMENT_SOURCES})
+        self.save(ticks=True)
+        review = self.encounter.template_review
+        self.assertEqual((review['schema'], review['assessment']['complete']), (1, True), review.get('assessment'))
+        self.assertEqual({key: (d['variant'], d['reviewed']) for key, d in review['decisions'].items()},
+                         {'claim_9': ('original', True), 'claim_32': ('not_assessed', True), 'claim_46': ('trusted', True)})
+        return review
+
+
+class GenerationRefusedOverWordStatementDecisions(OfflineWordForm):
+    def test_statement_decisions_alone_refuse_generation(self):
+        """The draft branch's focused pass: statement decisions with no answer ticked — here a wording chosen and saved
+        without its tick — were replaced by a second, billed draft."""
+        self.save({'claim_variant_claim_32': 'not_assessed'})
+        self.assertFalse(any(answer.get('reviewed') for answer in self.encounter.answers.values()))   # (the control)
+        self.assertEqual(self.encounter.template_review['decisions']['claim_32']['variant'], 'not_assessed')
+        before = (self.encounter.answers, self.encounter.template_review)
+        response = self.client.post(f'/encounters/{self.encounter.pk}/generate/', {'revision': self.encounter.revision}, follow=True)
+        self.encounter.refresh_from_db()
+        self.assertEqual(Job.objects.filter(encounter=self.encounter).count(), 0)
+        self.assertEqual((self.encounter.answers, self.encounter.template_review), before)
+        self.assertContains(response, REFUSED)
+
+
+class EmployeeSaveKeepsStatementDecisions(OfflineWordForm):
+    """An employee's save rebuilt nothing of the clinician's statement review: `invalidate_review` emptied it, only a
+    clinician's save rebuilds one, so the chosen wordings, their sources and the reviews vanished without a word and the
+    next page fell back to the mapping's defaults."""
+
+    def test_an_employees_plain_save_keeps_the_decisions_unreviewed_bound_and_says_so(self):
+        reviewed = self.clinician_reviews()
+        employee = self.member('wm-guards-employee', 'employee')
+        self.client.force_login(employee)
+        response = self.save()
+        review = self.encounter.template_review
+        self.assertEqual(set(review.get('decisions') or {}), {'claim_9', 'claim_32', 'claim_46'})
+        for key, decision in reviewed['decisions'].items():
+            self.assertEqual(review['decisions'][key], {**decision, 'reviewed': False}, key)
+        self.assertEqual(review['schema'], 0)                              # (never accepted by finalization)
+        self.assertEqual(review['binding'], wm_review.binding(self.encounter))
+        self.assertEqual(last_event('encounter.answers_saved', self.encounter).get('withdrawn_statement_reviews'),
+                         ['claim_32', 'claim_46', 'claim_9'])
+        self.assertContains(response, 'were kept but are no longer reviewed')
+        self.assertNotContains(response, 'was not kept')                   # (nothing was changed under a wording)
+        # The clinician's page shows the kept wording, not the default, and asks for the review again.
+        self.client.force_login(self.user)
+        page = self.page()
+        self.assertEqual(BrowserSaveForm.of(page)['claim_variant_claim_32'], 'not_assessed')
+        self.assertIn(NOT_ASSESSED, {row['key']: row['text'] for row in page.context['wm_requirements']}['claim_32'])
+
+    def test_a_source_an_employee_changes_under_the_clinicians_wording_is_not_kept_and_the_saver_is_told(self):
+        reviewed = self.clinician_reviews()
+        self.client.force_login(self.member('wm-guards-employee-2', 'employee'))
+        response = self.save({'claim_source_claim_32': 'Prewritten statement: Exam type: TYPE OF EXAM: Full Study'})
+        self.assertEqual(self.encounter.template_review['decisions']['claim_32']['evidence'],
+                         reviewed['decisions']['claim_32']['evidence'])
+        self.assertContains(response, 'A statement source you changed was not kept')
+
+    def test_a_wording_the_employee_replaces_is_named_as_replaced_and_audited(self):
+        """R3: an employee replacing the wording a clinician reviewed was told the reviewed choices were "kept", and the
+        audit recorded only the withdrawn review — not that the wording changed."""
+        self.clinician_reviews()
+        self.client.force_login(self.member('wm-guards-employee-3', 'employee'))
+        response = self.save({'claim_variant_claim_32': 'negative'})
+        decision = self.encounter.template_review['decisions']['claim_32']
+        self.assertEqual((decision['variant'], decision['reviewed']), ('negative', False))
+        warnings = [str(message) for message in response.context['messages']]
+        self.assertIn('Review remains incomplete: Your save replaced the chosen statement wording for: Prewritten statement: '
+                      'Right saphenous reflux finding. A clinician must review the new wording.', warnings)
+        self.assertIn('Review remains incomplete: The statement choices a clinician reviewed were kept but are no longer '
+                      'reviewed: Prewritten statement: Exam type; Prewritten statement: Signer identity. A clinician must '
+                      'review them again.', warnings)
+        event = last_event('encounter.answers_saved', self.encounter)
+        self.assertEqual(event.get('statement_wording_changes'), [{'statement': 'claim_32', 'from': 'not_assessed', 'to': 'negative'}])
+        self.assertNotIn('reflux', json.dumps(event))                      # (identifiers only, never clinical text)
+
+
+    def test_a_clinicians_unreviewed_statement_choices_survive_an_employees_save(self):
+        """R4 (the refutation's P5): choices a clinician saved without ticking them are decisions too; and R5: nothing
+        reviewed was withdrawn, so the saver is not told so and the audit lists nothing."""
+        self.save({'claim_variant_claim_32': 'not_assessed', **self.STATEMENT_SOURCES})     # (the clinician, no ticks)
+        chosen = self.encounter.template_review['decisions']
+        self.assertEqual((chosen['claim_32']['variant'], any(d['reviewed'] for d in chosen.values())), ('not_assessed', False))
+        self.client.force_login(self.member('wm-guards-employee-4', 'employee'))
+        response = self.save()
+        self.assertEqual((self.encounter.template_review or {}).get('decisions'), chosen)
+        self.assertNotContains(response, 'no longer reviewed')
+        self.assertNotContains(response, 'replaced the chosen statement wording')
+        event = last_event('encounter.answers_saved', self.encounter)
+        self.assertEqual((event.get('withdrawn_statement_reviews'), event.get('statement_wording_changes')), ([], []))
+
+
+class WithdrawnStatementReviewsAreThoseTheSaveDidNotKeep(OfflineWordForm):
+    def test_a_clinicians_re_save_withdraws_only_the_review_it_unticks(self):
+        """R5: `withdrawn_statement_reviews` compares what was reviewed with what the save stored reviewed."""
+        self.clinician_reviews()
+        self.save()                                          # (the same clinician: the page re-posts the ticks as rendered)
+        self.assertTrue(all(d['reviewed'] for d in self.encounter.template_review['decisions'].values()))   # (the control)
+        self.assertEqual(last_event('encounter.answers_saved', self.encounter).get('withdrawn_statement_reviews'), [])
+        payload = BrowserSaveForm.of(self.page())
+        self.assertEqual(payload.pop('claim_reviewed_claim_32'), 'on')
+        self.client.post(f'/encounters/{self.encounter.pk}/save/', payload)
+        self.assertEqual(last_event('encounter.answers_saved', self.encounter).get('withdrawn_statement_reviews'), ['claim_32'])
+
+
+class WordNotesSaveAndClear(OfflineWordForm):
+    """R1 on the Word form: statement decisions are review state too."""
+
+    def test_an_unchanged_notes_save_keeps_the_statement_decisions_and_a_changed_one_counts_them(self):
+        reviewed = self.clinician_reviews()
+        self.client.force_login(self.member('wm-guards-notes-employee', 'employee'))
+        url = f'/encounters/{self.encounter.pk}/notes/'
+        response = self.client.post(url, {'revision': self.encounter.revision, 'notes': self.encounter.notes}, follow=True)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.template_review, reviewed)
+        self.assertContains(response, UNCHANGED)
+        self.client.post(url, {'revision': self.encounter.revision, 'notes': self.encounter.notes + '\nSynthetic addendum.'})
+        self.encounter.refresh_from_db()
+        self.assertEqual((self.encounter.answers, self.encounter.template_review), ({}, {}))
+        event = last_event('encounter.notes_saved', self.encounter)
+        self.assertEqual(event.get('cleared'), cleared(reviewed_unedited=4, statements_reviewed=3))
+
+    def test_mixed_review_states_are_each_counted_in_their_own_category(self):
+        """R2-3 A2-A5: reviewed and unreviewed answers and statement choices, accepted and unaccepted codes."""
+        self.clinician_reviews()
+        payload = BrowserSaveForm.of(self.page())                    # (the same clinician; the ticks re-posted as rendered)
+        self.assertEqual((payload.pop('claim_reviewed_claim_32'), payload.pop('reviewed_patient_name')), ('on', 'on'))
+        self.client.post(f'/encounters/{self.encounter.pk}/save/', payload)
+        self.encounter.refresh_from_db()
+        self.assertEqual(sum(bool(a.get('reviewed')) for a in self.encounter.answers.values()), 3)          # (the controls)
+        self.assertEqual(sum(bool(d['reviewed']) for d in self.encounter.template_review['decisions'].values()), 2)
+        code = OrdinaryDraft.accepted_code(self, self.encounter)
+        unaccepted = Code.objects.create(release=code.terminology.release, code='R00.1', description='Synthetic fixture')
+        CodeSuggestion.objects.create(encounter=self.encounter, terminology=unaccepted, explanation='Synthetic', evidence='x')
+        self.client.post(f'/encounters/{self.encounter.pk}/notes/', {'revision': self.encounter.revision,
+                                                                     'notes': self.encounter.notes + '\nSynthetic addendum.'})
+        self.assertEqual(last_event('encounter.notes_saved', self.encounter).get('cleared'),
+                         cleared(reviewed_unedited=3, statements_reviewed=2, statements_chosen_unreviewed=1, codes=1))
+
+    def test_clearing_counts_the_statement_decisions_it_clears(self):
+        self.clinician_reviews()
+        response = self.client.post(f'/encounters/{self.encounter.pk}/clear-review/',
+                                    {'revision': self.encounter.revision, 'confirm_clear': 'on'})
+        self.assertEqual(response.status_code, 302)
+        self.encounter.refresh_from_db()
+        self.assertEqual((self.encounter.answers, self.encounter.template_review), ({}, {}))
+        event = last_event('encounter.review_cleared', self.encounter)
+        self.assertEqual(event.get('cleared'), cleared(reviewed_unedited=4, statements_reviewed=3))
+
+
+class AFinalizedRecordIsNotReReviewedByItsReader(OfflineWordForm):
+    """A finalized record was re-evaluated as the reader's own review: for any clinician but the signer, the signer's
+    identity no longer resolved to the reader and the page said the Word review was incomplete, showing the template's
+    original wordings instead of the finalized ones."""
+
+    def finalized(self):
+        self.clinician_reviews()
+        self.encounter.status = 'finalized'; self.encounter.finalized_by = self.user
+        self.encounter.finalized_at = timezone.now(); self.encounter.export_path = 'exports/synthetic.docx'
+        self.encounter.export_sha256 = '0' * 64
+        self.encounter.save()
+
+    def test_a_second_clinician_sees_the_finalized_record_as_finalized(self):
+        self.finalized()
+        self.client.force_login(self.member('wm-guards-clinician-b', 'clinician', full_name='Clinician B'))
+        page = self.page()
+        self.assertEqual(page.context['wm_review_error'], '')
+        shown = {row['key']: row for row in page.context['wm_requirements']}
+        self.assertEqual(shown['claim_32']['text'], NOT_ASSESSED)          # the finalized wording
+        self.assertEqual(shown['claim_46']['text'], 'SYNTHETIC Clinician A')  # its signer, not the reader
+        self.assertEqual({row['key']: row['review_errors'] for row in shown.values()},
+                         {'claim_9': [], 'claim_32': [], 'claim_46': []})
+        self.assertEqual({row['key']: (row['status'], row['review_errors']) for row in page.context['answer_rows']},
+                         {field['key']: ('supported', []) for field in FIELDS})
+        self.assertNotContains(page, 'Word review is incomplete')
+
+    def test_a_record_not_yet_finalized_is_still_the_readers_own_review(self):
+        """The control: before finalization the reader's page is their own review, so another clinician's ticks are not
+        theirs."""
+        self.clinician_reviews()
+        self.client.force_login(self.member('wm-guards-clinician-c', 'clinician', full_name='Clinician C'))
+        page = self.page()
+        errors = {row['key']: row['review_errors'] for row in page.context['answer_rows']}
+        self.assertTrue(all(errors.values()), errors)
