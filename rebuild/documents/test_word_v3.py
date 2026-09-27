@@ -1060,6 +1060,60 @@ class CheckboxNeedsABox(unittest.TestCase):
             self.assertIn("Signed by synthetic patient", part_text(out))
 
 
+class SurvivingMutantPins(unittest.TestCase):
+    """Guards the round-2 mutation batch showed no test would miss: M01, M13 and M16."""
+
+    def test_a_repeat_suffix_never_takes_a_printed_options_words(self):
+        """M01: 'Left' printed again after a printed 'Left (2)' is 'Left (3)', or two options share one label and
+        neither can be chosen."""
+        from documents import word_v3
+        self.assertEqual(word_v3.unique_options(["Left", "Left (2)", "Left"]), ["Left", "Left (2)", "Left (3)"])
+        doc = Document()
+        doc.add_paragraph("Synthetic swelling check")
+        doc.add_paragraph("Swelling:  ☐ Left  ☐ Left (2)  ☐ Left")
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual(fields[0]["options"], ["Left", "Left (2)", "Left (3)"])
+        for answer, line in (("Left (3)", "Swelling:  ☐ Left  ☐ Left (2)  ☒ Left"),
+                             ("Left (2)", "Swelling:  ☐ Left  ☒ Left (2)  ☐ Left")):
+            self.assertIn(line, paragraphs_bytes(word_v3.fill(data, fields, {fields[0]["key"]: answer})), answer)
+
+    def test_a_manual_checkbox_records_its_printed_tick(self):
+        """M13: a box added by hand on a box the blank form prints ticked says so on the page."""
+        with tempfile.TemporaryDirectory() as tmp:
+            form = Path(tmp) / "prechecked.docx"
+            prechecked_form(form)
+            place = next(r for r in outline_template(form)["slots"] if r["kind"] == "p" and r["preview"] == "Hypertension ☒")
+            added = locate_fields(form, [{"slot": place["slot"], "kind": "checkbox", "label": "Hypertension", "glyph": 0}])
+            self.assertEqual(added["fields"][0].get("printed_ticked"), [0])
+
+    def test_a_dropdown_or_option_cell_showing_other_words_is_refused(self):
+        """M16: the read-back of a dropdown control and of an option-text cell compares the words shown."""
+        from unittest.mock import patch
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic joint log")
+        doc.add_paragraph("Laterality: ")._p.append(_sdt("dropdown", options=["Choose an item.", "Left", "Right"]))
+        site = doc.add_table(rows=2, cols=2)
+        site.cell(0, 0).text = "Joint"
+        site.cell(0, 1).text = "L. / R."
+        site.cell(1, 0).text = "Knee"
+        data = docx_bytes(doc)
+        by = fields_by_label(word_v3.inspect(data)["fields"])
+        fields = [by["Laterality"], by["Knee"]]
+        self.assertEqual((by["Knee"]["locator"]["target"].get("write"), by["Knee"]["options"]), ("option_text", ["L.", "R."]))
+        self.assertIn("Laterality: Left", paragraphs_bytes(word_v3.fill(data, fields, {by["Laterality"]["key"]: "Left",
+                                                                                          by["Knee"]["key"]: "L."})))
+        real_sdt, real_cell = word_v3.write_sdt_text, word_v3.write_cell
+        for name, wrong, answers in (
+                ("write_sdt_text", lambda sdt, answer: real_sdt(sdt, "Right"), {by["Laterality"]["key"]: "Left"}),
+                ("write_cell", lambda tc, answer, *a: real_cell(tc, "R.", *a), {by["Knee"]["key"]: "L."})):
+            with patch.object(word_v3, name, side_effect=wrong):
+                with self.assertRaises(word_v3.V3Failure) as refused:
+                    word_v3.fill(data, fields, answers)
+            self.assertEqual(refused.exception.code, "fill_mismatch", name)
+
+
 def fever_cell_bytes():
     """A cell 'Yes' printed box and a legacy checkbox 'No': the cell's text shows the printed box only."""
     doc = Document()
@@ -1152,6 +1206,26 @@ class MixedBoxNumbers(unittest.TestCase):
         self.assertEqual((places[line]["preview"], places[line]["boxes"]), ("☐ Yes ☐ No", 2))
         _, out = self.add_and_fill(path, line, 2, "No fever")
         self.assertEqual(control_states(self.dir / "No-fever-2.docx"), ([], ["1"]))
+
+    def test_a_cell_whose_preview_shows_boxes_nested_inside_it_refuses_a_number(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic severity")
+        outer = doc.add_table(rows=1, cols=2)
+        outer.cell(0, 0).paragraphs[0].text = "☐ Mild ☐ Severe"          # its own line, and a nested table's box
+        outer.cell(0, 0).add_table(rows=1, cols=1).cell(0, 0).text = "☐ Other"
+        control = checkbox_control()                                   # a control showing no box, and a nested box
+        control.find(qn("w:sdtContent")).find(qn("w:r")).find(qn("w:t")).text = "x"
+        outer.cell(0, 1).paragraphs[0]._p.append(control)
+        outer.cell(0, 1).add_table(rows=1, cols=1).cell(0, 0).text = "☐"
+        path, places = self.form(docx_bytes(doc), "nested.docx")
+        for tc, preview in (("word/document.xml#b/tbl[0]/tr[0]/tc[0]", "☐ Mild ☐ Severe☐ Other"),
+                            ("word/document.xml#b/tbl[0]/tr[0]/tc[1]", "x☐")):
+            self.assertEqual((places[tc]["preview"], places[tc]["boxes"], places[tc].get("unnumbered_boxes")),
+                             (preview, 0, True), tc)
+            with self.assertRaises(DocumentError) as refused:
+                self.add_and_fill(path, tc, 1, "Box one")
+            self.assertEqual(refused.exception.code, "invalid_mapping", tc)
+        self.assertEqual(places["word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"]["boxes"], 2)
 
 
 if __name__ == "__main__":

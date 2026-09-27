@@ -729,6 +729,8 @@ class V3PrintedTicks(V3Fixture, TestCase):
         self.assertIn("Ticked here, the box is exported ticked; left unticked, it is exported unticked, although the "
                       "blank form prints it ticked.", page)
         self.assertIn("With no option chosen, the form keeps what it prints: No ticked.", page)
+        # M26: "Leave blank - reviewed" on a choice the blank form prints ticked names what the export keeps
+        self.assertIn("decided no answer belongs here; the exported form keeps what it prints: No ticked. Leave", page)
         self.save({"Indication": "synthetic"})
         exported = self.finalized_export()
         text = part_text(exported)
