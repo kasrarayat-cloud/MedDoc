@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import unicodedata
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -44,7 +45,13 @@ class PrivateFileEmailBackend(FileEmailBackend):
 
 def application_origin():
     """Fixed configured origin: never use an untrusted request Host header."""
-    origin = settings.QUILLMD_APP_BASE_URL.rstrip("/")
+    configured = settings.QUILLMD_APP_BASE_URL
+    # Control characters and whitespace are refused as characters, wherever they sit and in every mode: urlsplit strips
+    # leading C0 controls and spaces, so '\x01https://app.quillmd.com' parses as the doctor host yet begins every link.
+    # Which hosts each mode accepts is decided below and is not changed by this.
+    if any(character.isspace() or unicodedata.category(character) == "Cc" for character in configured):
+        raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.")
+    origin = configured.rstrip("/")
     try:
         parsed = urlsplit(origin)
         parsed.port  # Reject malformed or out-of-range ports before generating a link.
@@ -55,7 +62,7 @@ def application_origin():
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname
             or parsed.username or parsed.password or parsed.query or parsed.fragment
             or "?" in origin or "#" in origin or parsed.port == 0
-            or parsed.path not in {"", "/"} or any(character.isspace() for character in origin)):
+            or parsed.path not in {"", "/"}):
         raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.")
     if settings.QUILLMD_EMAIL_MODE == "resend":
         if parsed.scheme != "https" or parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
