@@ -544,6 +544,53 @@ class IncidentNotificationTests(unittest.TestCase):
         self.assertEqual(self.sender.call_count, 4)
         self.assertIn('REMINDER', self.sent()[-1][0])
 
+    def test_a_notice_stamped_by_a_fast_clock_never_delays_the_next(self):
+        """⚠️ R5(a). A clock three days fast stamps the first notice and is then corrected. A recorded
+        time in the future is read as now: the reminder and the escalation spacing restart from the
+        correction instead of waiting out the error, and the incident's age is never negative."""
+        fast = self.at + timedelta(days=3)
+        self.health.return_value = 'backup_failed'
+        a.check(fast)
+        corrected = self.at + timedelta(minutes=5)
+        result, _ = a.check(corrected)
+        self.assertEqual(result['incident']['open_seconds'], 0)
+        self.assertEqual(result['incident']['next_reminder_at'], (corrected + timedelta(hours=24)).isoformat())
+        shown, _ = a.status(corrected + timedelta(minutes=1))
+        self.assertEqual(shown['incident']['open_seconds'], 60)
+        self.health.return_value = 'backup_stale'
+        a.check(corrected + timedelta(hours=1))
+        self.assertEqual(self.sender.call_count, 2, 'a same-severity change waited out a fast clock')
+        a.check(corrected + timedelta(hours=25))
+        self.assertEqual(self.sender.call_count, 3, 'the reminder waited out a fast clock')
+        self.assertIn('REMINDER', self.sent()[-1][0])
+
+    def test_a_fast_clock_does_not_stretch_the_interval_between_incidents(self):
+        self.health.return_value = 'backup_failed'
+        a.check(self.at + timedelta(days=3))                  # the fast clock
+        corrected = self.at + timedelta(minutes=5)
+        self.health.return_value = 'healthy'
+        a.check(corrected)                                    # the incident closes
+        self.health.return_value = 'backup_stale'
+        a.check(corrected + timedelta(hours=23, minutes=55))  # inside the interval: held
+        self.assertEqual(self.sender.call_count, 1)
+        a.check(corrected + timedelta(hours=24))
+        self.assertEqual(self.sender.call_count, 2, 'the next incident waited out a fast clock')
+
+    def test_status_reports_the_deferred_escalation_the_check_reported(self):
+        """⚠️ R5(b). The summary carries any deferred escalation, from status() as from check()."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        self.health.return_value = 'backup_stale'
+        result, _ = a.check(self.at + timedelta(minutes=5))
+        deferred = (self.at + timedelta(hours=1)).isoformat()
+        self.assertEqual(result['incident']['escalation_deferred_until'], deferred)
+        shown, _ = a.status(self.at + timedelta(minutes=6))
+        self.assertEqual(shown['incident']['escalation_deferred_until'], deferred,
+                         'check() reported a deferred escalation and status() did not')
+        result, _ = a.check(self.at + timedelta(hours=1))     # sent: nothing is deferred any more
+        self.assertIsNone(result['incident']['escalation_deferred_until'])
+        self.assertIsNone(a.status(self.at + timedelta(hours=1, minutes=1))[0]['incident']['escalation_deferred_until'])
+
     def test_reminder_names_duration_and_current_condition_at_a_fixed_interval(self):
         self.health.return_value = 'backup_failed'
         a.check(self.at)
