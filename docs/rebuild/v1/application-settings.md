@@ -264,3 +264,17 @@ the outbox.
 - The production proxy's `X-Forwarded-For` handling (see *Rate limits*).
 - Deepgram opt-out pricing: confirm with Deepgram (account terms or a billing check) whether
   `mip_opt_out=true` requests are priced differently, before real mode (see *Deepgram parameters*).
+
+
+## Required V1 feature configuration — 2026-09-27 continuation
+
+The production secret renderer now accepts `QUILLMD_WM_NARRATIVE`,
+`QUILLMD_MAPPING_ASSISTANCE` and `QUILLMD_MAPPING_ASSISTANCE_LIVE` only as explicit string `0` or `1`.
+They remain absent/off by default. A reviewed activation may set them only after their workflow,
+compatibility and exact-model qualification gates; allowing a setting does not authorize its activation.
+Previously the renderer refused all three names as unknown, so the required paths could not have been
+enabled on the prepared production target. Six focused renderer checks now pass.
+
+`QUILLMD_AI_REPLAY_DIR` remains a private fixture-only setting and is refused by the production renderer.
+`ANTHROPIC_BASE_URL` is also refused: the production environment cannot silently redirect native Anthropic
+requests to another endpoint. Actual served-worker model/endpoint/usage evidence is still required.

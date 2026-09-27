@@ -93,3 +93,16 @@ control, changed clinical meaning or lost content.
 No claim of universal Word support follows from this sample. Encrypted/corrupt files, executable
 macros, external relationships and image-only/scanned pages are handled as explicit, named refusals;
 embedded code is never executed and external relationships never fetched.
+
+
+## Additional metadata correction — Astra continuation, 2026-09-27
+
+The sealed qualification set also has **20 files but only 12 declared lineages** (eight pairs), across 6
+source groups. Development has 40 files / 30 lineages and historical holdout 20 files / 14 lineages. This is an
+audit of manifest metadata only: qualification document/ground-truth contents remain unopened.
+The original manifest and every historical result remain unchanged. File hashes alone do not establish
+independent authorship, so the reserved cohort is **not yet eligible evidence of 20 independent templates**.
+Any supplemental selection must be predeclared by lineage/source before outputs, retain the original
+manifest and attempts, and report its own denominator. Nothing here replaces a failed case or resets a result.
+A metadata-only development supplement proposal exists but does not resolve qualification independence.
+See `corpus-lineage-metadata-20260927.json`; no new compatibility score is claimed.

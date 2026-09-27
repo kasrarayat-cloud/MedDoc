@@ -320,6 +320,19 @@ class EnvironmentRendererTests(unittest.TestCase):
                          ["QUILLMD_DB_HOST='" + HOST + "'", "QUILLMD_DB_PASSWORD='synthetic'",
                           "QUILLMD_DEPLOYMENT_PROFILE='production'", "QUILLMD_SECRET_KEY='synthetic-Value_123'"])
 
+    def test_declared_v1_feature_flags_are_explicit_booleans_and_replay_stays_private(self):
+        flags = ('QUILLMD_WM_NARRATIVE', 'QUILLMD_MAPPING_ASSISTANCE', 'QUILLMD_MAPPING_ASSISTANCE_LIVE')
+        self.assertTrue(all(name not in renderer.parse(json.dumps(self.VALID)) for name in flags))
+        for name in flags:
+            for value in ('0', '1'):
+                self.assertEqual(renderer.parse(json.dumps({**self.VALID, name: value}))[name], value)
+            for value in ('true', 'yes', '2'):
+                with self.subTest(name=name, value=value), self.assertRaisesRegex(renderer.RenderError, 'feature_flag_value'):
+                    renderer.parse(json.dumps({**self.VALID, name: value}))
+        for name in ('QUILLMD_AI_REPLAY_DIR', 'ANTHROPIC_BASE_URL'):
+            with self.subTest(name=name), self.assertRaisesRegex(renderer.RenderError, 'secret_name'):
+                renderer.parse(json.dumps({**self.VALID, name: '/synthetic-untrusted'}))
+
     def test_unsafe_or_unknown_secrets_refuse(self):
         cases = [
             ('[]', 'secret_shape'), ('{}', 'secret_shape'), ('not json', 'secret_shape'),

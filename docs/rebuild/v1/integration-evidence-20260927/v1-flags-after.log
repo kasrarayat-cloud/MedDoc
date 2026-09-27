@@ -1,0 +1,11 @@
+test_declared_v1_feature_flags_are_explicit_booleans_and_replay_stays_private (ops.test_production_deploy.EnvironmentRendererTests.test_declared_v1_feature_flags_are_explicit_booleans_and_replay_stays_private) ... ok
+test_fetch_uses_the_profile_secret_and_region_only (ops.test_production_deploy.EnvironmentRendererTests.test_fetch_uses_the_profile_secret_and_region_only) ... ok
+test_main_refuses_unactivated_profile_and_non_root_and_never_prints_values (ops.test_production_deploy.EnvironmentRendererTests.test_main_refuses_unactivated_profile_and_non_root_and_never_prints_values) ... ok
+test_unsafe_or_unknown_secrets_refuse (ops.test_production_deploy.EnvironmentRendererTests.test_unsafe_or_unknown_secrets_refuse) ... ok
+test_valid_secret_renders_sorted_single_quoted_lines (ops.test_production_deploy.EnvironmentRendererTests.test_valid_secret_renders_sorted_single_quoted_lines) ... ok
+test_write_is_private_atomic_and_refuses_a_foreign_directory (ops.test_production_deploy.EnvironmentRendererTests.test_write_is_private_atomic_and_refuses_a_foreign_directory) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.013s
+
+OK

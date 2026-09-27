@@ -65,6 +65,8 @@ def parse(text, names=deployment_profile.ENVIRONMENT_NAMES):
         require(name in names, 'secret_name')
         require(isinstance(value, str) and 0 < len(value) <= MAX_VALUE_CHARACTERS
                 and not set(value) & FORBIDDEN_CHARACTERS and value == value.strip(), 'secret_value')
+        if name in deployment_profile.APPLICATION_FEATURE_FLAGS:
+            require(value in ('0', '1'), 'feature_flag_value')
     require(data.get('QUILLMD_DEPLOYMENT_PROFILE') == 'production', 'secret_profile')
     return data
 

@@ -86,6 +86,9 @@ FIXED = {
 
 # Environment names the production renderer may write. Anything else is refused, so a private-only
 # setting (preview gate credentials, preview auth) cannot be carried into production by copy.
+APPLICATION_FEATURE_FLAGS = frozenset({
+    'QUILLMD_WM_NARRATIVE', 'QUILLMD_MAPPING_ASSISTANCE', 'QUILLMD_MAPPING_ASSISTANCE_LIVE',
+})
 ENVIRONMENT_NAMES = frozenset({
     'QUILLMD_DEPLOYMENT_PROFILE', 'QUILLMD_DATA_MODE', 'QUILLMD_STRIPE_MODE', 'QUILLMD_REGISTRATION',
     'QUILLMD_MFA_REQUIRED_ALL',
@@ -102,7 +105,7 @@ ENVIRONMENT_NAMES = frozenset({
     'QUILLMD_WORD_RUNTIME', 'QUILLMD_WORD_MANIFEST', 'QUILLMD_WORD_MANIFEST_SHA256', 'QUILLMD_WORD_ENGINE',
     'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
     'QUILLMD_PAYER_ROLE_GRANTED', 'CPT_LICENSE_ID', 'CPT_LICENSE_EXPIRY',
-})
+}) | APPLICATION_FEATURE_FLAGS
 # The application settings (quillmd/application_profile.py, docs/rebuild/v1/application-settings.md) that a
 # production profile's fixed modes select. The launcher forces them; a rendered environment may carry them only
 # with exactly these values. The application reads these names and values and no others: a profile word such as
