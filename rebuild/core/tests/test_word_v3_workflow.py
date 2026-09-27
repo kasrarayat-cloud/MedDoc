@@ -23,6 +23,35 @@ W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 V3 = dict(TEST_SETTINGS, QUILLMD_WORD_ENGINE="v3")
 
 
+@override_settings(**V3)
+class V3RoundThreeIdentity(TestCase):
+    def test_unsided_notes_cannot_fill_a_sided_question_but_qualified_notes_can(self):
+        from core.generation import generate
+        from documents import word_v3
+        from documents.test_word_v3 import sided_grid_bytes, paragraphs_bytes
+        for heading, after in ((False, False), (False, True), (True, False)):
+            with self.subTest(heading=heading, after=after):
+                data = sided_grid_bytes(heading=heading, after=after)
+                fields = word_v3.inspect(data)["fields"]
+                field = next(f for f in fields if "Effusion" in f["label"])
+                wrong = generate("Effusion: Yes", fields)[0][field["key"]]
+                self.assertNotEqual(wrong["status"], "supported", wrong)
+                self.assertEqual(wrong["text"], "")
+                right = generate(field["label"] + ": Yes", fields)[0][field["key"]]
+                self.assertEqual((right["status"], right["text"]), ("supported", "Yes"))
+                lines = paragraphs_bytes(word_v3.fill(data, fields, {field["key"]: right["text"]}))
+                at = lines.index("Effusion")
+                self.assertEqual(lines[at + 1:at + 3], ["☒", "☐"])
+
+    def test_missing_box_validation_checks_controls_and_cell_references(self):
+        from core.v3_mapping import missing_boxes
+        for kind in ("glyph", "sdt", "ff", "cell", "cell_text", "unknown"):
+            with self.subTest(kind=kind):
+                field = {"label": "Symptom", "locator": {"target": {"boxes": [
+                    {"kind": kind, "part": "word/document.xml", "slot": "b/p[99]", "glyph": 0}]}}}
+                self.assertEqual(missing_boxes([field], []), ["Symptom"])
+
+
 def build_intake_form(path):
     """One synthetic blank form with every v3 kind: header text, table cells, a date line, printed Yes/No boxes, a
     dropdown, check-all-that-apply boxes, a checkbox control, a log table, a signature and initials line."""
@@ -1147,16 +1176,17 @@ class V3SideInQuestions(V3Fixture, TestCase):
         answer = self.generated(version, "(L) Effusion: Yes\n").answers[field["key"]]
         self.assertEqual((answer["status"], answer["text"]), ("supported", "Yes"))
 
-    def test_a_repeated_label_is_shown_with_its_context_on_the_review_page(self):
+    def test_side_columns_qualify_their_questions_on_the_review_page(self):
         template, _ = self.uploaded(data=two_sides_grid_bytes(), name="Synthetic sides")
         version = self.confirm(template)
         self.assertEqual([(f["label"], f["context"]) for f in version.fields],
-                         [("Effusion", "Effusion > Right knee"), ("Effusion", "Effusion > Left knee")])
+                         [("Right knee — Effusion", "Right knee > Effusion > Right knee"),
+                          ("Left knee — Effusion", "Left knee > Effusion > Left knee")])
         encounter = self.generated(version, "Synthetic knee notes")
         page = self.client.get(f"/encounters/{encounter.pk}/").content.decode()
-        self.assertIn("Effusion &gt; Right knee", page)
-        self.assertIn("Effusion &gt; Left knee", page)
-        self.assertLess(page.index("Effusion &gt; Right knee"), page.index("Effusion &gt; Left knee"))
+        self.assertIn("Right knee — Effusion", page)
+        self.assertIn("Left knee — Effusion", page)
+        self.assertLess(page.index("Right knee — Effusion"), page.index("Left knee — Effusion"))
 
 
 def repeated_option_form_bytes():

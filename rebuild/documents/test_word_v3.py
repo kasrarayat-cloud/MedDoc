@@ -1231,5 +1231,512 @@ class MixedBoxNumbers(unittest.TestCase):
         self.assertEqual(places["word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"]["boxes"], 2)
 
 
+def wrapper_control(inner, kind="richText"):
+    """An inline content control (a rich text or a group control) wrapping `inner`, as Word nests them."""
+    sdt = OxmlElement("w:sdt")
+    pr = OxmlElement("w:sdtPr")
+    pr.append(OxmlElement("w:" + kind))
+    sdt.append(pr)
+    content = OxmlElement("w:sdtContent")
+    content.append(inner)
+    sdt.append(content)
+    return sdt
+
+
+def own_controls_shown(data):
+    """[(glyph shown, flag)] for every checkbox content control of an export - the control itself, never a control that
+    only wraps one - in document order."""
+    root = etree.fromstring(ZipFile(io.BytesIO(data)).read("word/document.xml"))
+    out = []
+    for sdt in root.iter(qn("w:sdt")):
+        cb = sdt.find(qn("w:sdtPr") + "/{%s}checkbox" % W14)
+        if cb is None:
+            continue
+        flag = cb.find("{%s}checked" % W14)
+        out.append(("".join(t.text or "" for t in sdt.find(qn("w:sdtContent")).iter(qn("w:t"))),
+                    flag.get("{%s}val" % W14) if flag is not None else None))
+    return out
+
+
+def wrapped_grid_bytes(kind="richText"):
+    """The refuter's F1 grid: Chest pain's Yes cell holds a checkbox control printed ticked INSIDE another control."""
+    doc = Document()
+    doc.add_paragraph("Synthetic review of systems")
+    table = doc.add_table(rows=3, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        table.cell(0, c).text = h
+    table.cell(1, 0).text = "Chest pain"
+    table.cell(2, 0).text = "Dyspnea"
+    table.cell(1, 1).paragraphs[0]._p.append(wrapper_control(checkbox_control(checked=True), kind))
+    for r, c in ((1, 2), (2, 1), (2, 2)):
+        table.cell(r, c).paragraphs[0]._p.append(checkbox_control())
+    return docx_bytes(doc)
+
+
+def wrapped_checklist_bytes():
+    """The refuter's F1 check-all column: Warfarin's box, printed ticked, is a checkbox control inside a control."""
+    doc = Document()
+    doc.add_paragraph("Synthetic medication reconciliation")
+    table = doc.add_table(rows=4, cols=2)
+    table.cell(0, 0).text = "Medication"
+    table.cell(0, 1).text = "Continue (check all that apply)"
+    for r, name in ((1, "Warfarin"), (2, "Metformin"), (3, "Aspirin")):
+        table.cell(r, 0).text = name
+        box = checkbox_control(checked=(r == 1))
+        table.cell(r, 1).paragraphs[0]._p.append(wrapper_control(box) if r == 1 else box)
+    return docx_bytes(doc)
+
+
+def wrapped_line_bytes(legacy=False):
+    """The refuter's F1 line: 'Smoker? [wrapped ☒] Yes ☐ No' (or its Yes a legacy checkbox inside a control)."""
+    doc = Document()
+    doc.add_paragraph("Synthetic intake")
+    p = doc.add_paragraph("Smoker? ")
+    if legacy:
+        inner = Document().add_paragraph()
+        ff_field(inner, "checkbox", checked=True, name="SmokerYes")
+        wrapper = wrapper_control(inner._p[0])
+        for run in list(inner._p)[1:]:
+            wrapper.find(qn("w:sdtContent")).append(run)
+    else:
+        wrapper = wrapper_control(checkbox_control(checked=True))
+    p._p.append(wrapper)
+    p._p.append(text_run(" Yes ☐ No"))
+    return docx_bytes(doc)
+
+
+class NestedCheckboxControls(unittest.TestCase):
+    """Round 3 F1: a checkbox control nested inside another control is read and written as that control, end to end -
+    detection, the printed state, the writer and the read-back - or its place is refused; never invisible."""
+
+    def test_a_wrapped_control_in_a_grid_cell_is_read_and_written_as_that_control(self):
+        from documents import word_v3
+        for kind in ("richText", "group"):
+            data = wrapped_grid_bytes(kind)
+            fields = word_v3.inspect(data)["fields"]
+            chest = fields_by_label(fields)["Chest pain"]
+            self.assertEqual((chest["kind"], chest["options"], chest.get("printed_ticked"), chest.get("printed_unread")),
+                             ("choice", ["Yes", "No"], [0], None), kind)
+            self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {chest["key"]: "No"})),
+                             [("☐", "0"), ("☒", "1"), ("☐", "0"), ("☐", "0")], kind)
+            self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {}))[:2], [("☒", "1"), ("☐", "0")],
+                             "left blank it stays as printed - and the page was told it is printed ticked")
+
+    def test_a_wrapped_control_in_a_checklist_is_unticked_when_not_chosen(self):
+        from documents import word_v3
+        data = wrapped_checklist_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        field = next(f for f in fields if f["kind"] == "multi_choice")
+        self.assertEqual((field["options"], field.get("printed_ticked")), (["Warfarin", "Metformin", "Aspirin"], [0]))
+        self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {field["key"]: ["Metformin"]})),
+                         [("☐", "0"), ("☒", "1"), ("☐", "0")])
+
+    def test_a_wrapped_control_on_a_line_is_one_of_the_questions_options(self):
+        from documents import word_v3
+        data = wrapped_line_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual([(f["label"], f["kind"], f["options"], f.get("printed_ticked")) for f in fields],
+                         [("Smoker?", "choice", ["Yes", "No"], [0])])
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "No"})
+        self.assertEqual(own_controls_shown(out), [("☐", "0")])
+        self.assertEqual(glyphs_shown(out, "Smoker"), "Smoker? ☐ Yes ☒ No")
+        places = {row["slot"]: row for row in word_v3.outline(data)["slots"]}
+        self.assertEqual((places["word/document.xml#b/p[1]"]["preview"], places["word/document.xml#b/p[1]"]["boxes"]),
+                         ("Smoker? ☐ Yes ☐ No", 2))
+
+    def test_a_wrapped_legacy_checkbox_is_read_and_written_too(self):
+        from documents import word_v3
+        data = wrapped_line_bytes(legacy=True)
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual([(f["label"], f["options"], f.get("printed_ticked")) for f in fields],
+                         [("Smoker?", ["Yes", "No"], [0])])
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "No"})
+        root = etree.fromstring(ZipFile(io.BytesIO(out)).read("word/document.xml"))
+        self.assertEqual([c.get(qn("w:val")) for c in root.iter(qn("w:checked"))], ["0"])
+        self.assertIn("☒ No", glyphs_shown(out, "Smoker"))
+
+    def test_the_read_back_sees_a_control_the_writer_missed(self):
+        """Belt and braces: a reader that loses a nested control (the round-3 shape) can never pass an export."""
+        from unittest.mock import patch
+        from documents import word_v3
+        data = wrapped_grid_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        chest = fields_by_label(fields)["Chest pain"]
+        real = word_v3.box_pieces
+
+        def blind(p):                              # the round-3 reader: a control inside a control is not seen
+            return [(kind, node, n) for kind, node, n in real(p) if node is None or node.getparent().tag != qn("w:sdtContent")]
+        with patch.object(word_v3, "box_pieces", side_effect=blind):
+            with self.assertRaises(word_v3.V3Failure) as refused:
+                word_v3.fill(data, fields, {chest["key"]: "No"})
+        self.assertIn(refused.exception.code, ("fill_mismatch", "unsupported_layout"))
+
+    def test_a_control_that_cannot_be_read_in_place_refuses_its_line(self):
+        """A checkbox control inside a checkbox control: the line shows one box where the package holds two, so the
+        line is not read as a question, its boxes are not numbered, and no box on it is ever called unticked."""
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic intake")
+        p = doc.add_paragraph("Allergy? ")
+        outer = checkbox_control()
+        outer.find(qn("w:sdtContent")).append(checkbox_control(checked=True))
+        p._p.append(outer)
+        p._p.append(text_run(" Yes ☐ No"))
+        data = docx_bytes(doc)
+        info = word_v3.inspect(data)
+        self.assertEqual([f["label"] for f in info["fields"] if f["kind"] in ("choice", "checkbox")], [])
+        self.assertTrue(any("cannot read in place" in note for note in info["notes"]), info["notes"])
+        places = {row["slot"]: row for row in word_v3.outline(data)["slots"]}
+        self.assertEqual((places["word/document.xml#b/p[1]"]["boxes"], places["word/document.xml#b/p[1]"].get("unnumbered_boxes")),
+                         (0, True))
+        index = word_v3.SlotIndex(word_v3.open_package(data))
+        glyph = {"kind": "glyph", "part": "word/document.xml", "slot": "b/p[1]/glyphs", "glyph": 0}
+        self.assertIsNone(word_v3.box_state(index, glyph))
+        with self.assertRaises(word_v3.V3Failure) as refused:
+            word_v3.locate(data, [{"slot": "word/document.xml#b/p[1]", "kind": "checkbox", "label": "No", "glyph": 1}])
+        self.assertEqual(refused.exception.code, "invalid_mapping")
+
+
+def wrap_in_control(el):
+    """Wrap a table cell (w:tr/w:sdt/w:tc) or a whole row (w:tbl/w:sdt/w:tr) in a content control, in place."""
+    sdt = OxmlElement("w:sdt")
+    sdt.append(OxmlElement("w:sdtPr"))
+    content = OxmlElement("w:sdtContent")
+    sdt.append(content)
+    el.getparent().replace(el, sdt)
+    content.append(el)
+    return sdt
+
+
+def yes_no_grid(doc, rows=("Chest pain", "Dyspnea")):
+    table = doc.add_table(rows=len(rows) + 1, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        table.cell(0, c).text = h
+    for r, label in enumerate(rows, 1):
+        table.cell(r, 0).text = label
+        table.cell(r, 1).text = "☐"
+        table.cell(r, 2).text = "☐"
+    return table
+
+
+class WrappedCellsAndRows(unittest.TestCase):
+    """Round 3 P1: a content control wrapping a whole table cell (w:tr/w:sdt/w:tc) or a whole row (w:tbl/w:sdt/w:tr)
+    is looked through, so every cell keeps its column; the table_rows writer counts columns as the index does."""
+
+    def test_a_wrapped_yes_cell_keeps_every_later_cell_in_its_column(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = yes_no_grid(doc)
+        wrap_in_control(table.cell(1, 1)._tc)
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        chest = fields_by_label(fields)["Chest pain"]
+        self.assertEqual((chest["kind"], chest["options"]), ("choice", ["Yes", "No"]))
+        rows = paragraphs_bytes(word_v3.fill(data, fields, {chest["key"]: "No"}))
+        self.assertEqual(rows[rows.index("Chest pain"):rows.index("Chest pain") + 3], ["Chest pain", "☐", "☒"])
+        rows = paragraphs_bytes(word_v3.fill(data, fields, {chest["key"]: "Yes"}))
+        self.assertEqual(rows[rows.index("Chest pain"):rows.index("Chest pain") + 3], ["Chest pain", "☒", "☐"])
+        places = {row["slot"]: row for row in word_v3.outline(data)["slots"]}
+        self.assertIn("word/document.xml#b/tbl[0]/tr[1]/tc[1]", places, "the wrapped cell is a place of its own")
+        self.assertFalse([f for f in fields if f["locator"]["target"].get("type") == "sdt_text"],
+                         "the control around the cell is not an answer area")
+
+    def test_a_wrapped_answer_cell_takes_its_answer(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic intake")
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Allergies"
+        table.cell(1, 0).text = "Plan"
+        wrap_in_control(table.cell(0, 1)._tc)
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual([(f["label"], f["locator"]["target"]["type"]) for f in fields], [("Allergies", "cell"), ("Plan", "cell")])
+        out = word_v3.fill(data, fields, {fields[0]["key"]: "None documented", fields[1]["key"]: "Review"})
+        self.assertEqual(paragraphs_bytes(out)[1:], ["Allergies", "None documented", "Plan", "Review"])
+
+    def test_a_wrapped_row_is_read_in_its_place(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = yes_no_grid(doc, rows=("Chest pain", "Dyspnea", "Cough"))
+        wrap_in_control(table.rows[1]._tr)
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        by = fields_by_label(fields)
+        self.assertEqual({label: by[label]["options"] for label in ("Chest pain", "Dyspnea", "Cough")},
+                         {"Chest pain": ["Yes", "No"], "Dyspnea": ["Yes", "No"], "Cough": ["Yes", "No"]})
+        rows = paragraphs_bytes(word_v3.fill(data, fields, {by["Chest pain"]["key"]: "No", by["Cough"]["key"]: "Yes"}))
+        self.assertEqual(rows[rows.index("Chest pain"):], ["Chest pain", "☐", "☒", "Dyspnea", "☐", "☐", "Cough", "☒", "☐"])
+
+    def medication_log(self, wrapped):
+        doc = Document()
+        doc.add_paragraph("Synthetic medications")
+        table = doc.add_table(rows=3, cols=3)
+        for c, h in enumerate(["Medication", "Dose", "Route"]):
+            table.cell(0, c).text = h
+        for r in (1, 2):
+            tr = table.rows[r]._tr
+            before = OxmlElement("w:gridBefore")
+            before.set(qn("w:val"), "1")
+            tr.get_or_add_trPr().append(before)
+            tr.remove(tr.findall(qn("w:tc"))[0])
+        if wrapped:
+            wrap_in_control(table.rows[2]._tr)
+        return docx_bytes(doc)
+
+    def test_the_table_rows_writer_counts_columns_as_the_index_does(self):
+        """Found repairing P1: log rows that skip a grid column (w:gridBefore) - the writer put the dose under Route and
+        dropped the route."""
+        from documents import word_v3
+        for wrapped in (False, True):
+            data = self.medication_log(wrapped)
+            field = next(f for f in word_v3.inspect(data)["fields"] if f["kind"] == "table_rows")
+            self.assertEqual((field["options"], field["locator"]["target"]["rows"]), (["Dose", "Route"], [1, 2]), wrapped)
+            out = word_v3.fill(data, [field], {field["key"]: [["10 mg", "oral"], ["5 mg", "iv"], ["1 g", "topical"]]})
+            self.assertEqual(paragraphs_bytes(out)[4:], ["10 mg", "oral", "5 mg", "iv", "1 g", "topical"], wrapped)
+
+
+def block_wrapped_grid_bytes():
+    """The refuter's P2 input: a Yes/No grid of checkbox controls whose Chest pain Yes control sits in a paragraph
+    wrapped by a block-level content control inside its cell (w:tc/w:sdt/w:p)."""
+    doc = Document()
+    doc.add_paragraph("Synthetic review of systems")
+    table = doc.add_table(rows=3, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        table.cell(0, c).text = h
+    table.cell(1, 0).text = "Chest pain"
+    table.cell(2, 0).text = "Dyspnea"
+    for r in (1, 2):
+        for c in (1, 2):
+            table.cell(r, c).paragraphs[0]._p.append(checkbox_control())
+    wrap_in_control(table.cell(1, 1).paragraphs[0]._p)
+    return docx_bytes(doc)
+
+
+class LoneBoxInAnOptionRow(unittest.TestCase):
+    """Round 3 P2: a box in a paragraph wrapped by a block-level control is its cell's box, and a lone box is never
+    labelled with its row's question while that row holds another box the detector did not give it."""
+
+    def test_a_block_wrapped_yes_control_is_the_rows_yes(self):
+        from documents import word_v3
+        data = block_wrapped_grid_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        self.assertNotIn("Checkbox", [f["label"] for f in fields])
+        chest = fields_by_label(fields)["Chest pain"]
+        self.assertEqual((chest["kind"], chest["options"]), ("choice", ["Yes", "No"]))
+        self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {chest["key"]: "Yes"})),
+                         [("☒", "1"), ("☐", "0"), ("☐", "0"), ("☐", "0")])
+        self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {chest["key"]: "No"})),
+                         [("☐", "0"), ("☒", "1"), ("☐", "0"), ("☐", "0")])
+        places = {row["slot"]: row for row in word_v3.outline(data)["slots"]}
+        self.assertEqual(places["word/document.xml#b/tbl[0]/tr[1]/tc[1]"]["boxes"], 1)
+
+    def assert_no_lone_row_question(self, data, label):
+        from documents import word_v3
+        info = word_v3.inspect(data)
+        lone = [f for f in info["fields"] if f["kind"] == "checkbox" and f["label"] == label]
+        self.assertEqual(lone, [], "a lone box took the row's question although the row prints another box")
+        self.assertTrue(any("another box" in note for note in info["notes"]), info["notes"])
+
+    def test_a_lone_no_box_beside_a_yes_box_it_was_not_given_is_refused(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = doc.add_table(rows=2, cols=3)
+        for c, h in enumerate(["Symptom", "Yes", "No"]):
+            table.cell(0, c).text = h
+        table.cell(1, 0).text = "Chest pain"
+        table.cell(1, 1).text = "☐ Yes"
+        table.cell(1, 2).text = "☐"
+        self.assert_no_lone_row_question(docx_bytes(doc), "Chest pain")
+
+    def test_a_lone_no_box_beside_an_unreadable_yes_is_refused(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = doc.add_table(rows=2, cols=3)
+        for c, h in enumerate(["Symptom", "Yes", "No"]):
+            table.cell(0, c).text = h
+        table.cell(1, 0).text = "Chest pain"
+        outer = checkbox_control()
+        outer.find(qn("w:sdtContent")).append(checkbox_control(checked=True))
+        table.cell(1, 1).paragraphs[0]._p.append(outer)
+        table.cell(1, 2).text = "☐"
+        self.assert_no_lone_row_question(docx_bytes(doc), "Chest pain")
+
+    def test_a_row_with_one_box_per_question_keeps_both(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic history")
+        table = doc.add_table(rows=1, cols=4)
+        for c, text in enumerate(["Fever", "☐", "Consent obtained", "☐"]):
+            table.cell(0, c).text = text
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        self.assertEqual([(f["label"], f["kind"]) for f in fields], [("Fever", "checkbox"), ("Consent obtained", "checkbox")])
+
+
+def sided_grid_bytes(side="Left", *, heading=False, after=False):
+    doc = Document()
+    doc.add_paragraph("Synthetic joint examination")
+    if heading:
+        doc.add_paragraph(side + " knee:")
+        table = yes_no_grid(doc, ("Effusion",))
+    else:
+        table = doc.add_table(rows=2, cols=4)
+        headers = ["Finding", "Yes", "No", "Side"] if after else ["Side", "Finding", "Yes", "No"]
+        values = ["Effusion", "☐", "☐", side] if after else [side, "Effusion", "☐", "☐"]
+        for row, vals in enumerate((headers, values)):
+            for col, value in enumerate(vals):
+                table.cell(row, col).text = value
+    return docx_bytes(doc)
+
+
+class RoundThreeRemainingDefects(unittest.TestCase):
+    def test_a_row_side_governs_multiple_details_until_the_next_printed_side(self):
+        from documents import word_v3
+        doc = Document()
+        table = doc.add_table(rows=1, cols=6)
+        for column, text in enumerate(("Right lung", "Effusion: ____", "Consolidation: ____",
+                                       "Left lung", "Effusion: ____", "Consolidation: ____")):
+            table.cell(0, column).text = text
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        self.assertEqual([f["label"] for f in fields], ["Right lung — Effusion", "Right lung — Consolidation",
+                                                     "Left lung — Effusion", "Left lung — Consolidation"])
+
+    def test_paired_side_cells_govern_only_their_own_answer(self):
+        from documents import word_v3
+        for right, left in (("Right", "Left"), ("Right knee", "Left knee")):
+            doc = Document()
+            table = doc.add_table(rows=1, cols=4)
+            for column, text in enumerate((right, "Effusion: __________", left, "Effusion: __________")):
+                table.cell(0, column).text = text
+            data = docx_bytes(doc)
+            fields = word_v3.inspect(data)["fields"]
+            self.assertEqual([f["label"] for f in fields], [right + " — Effusion", left + " — Effusion"])
+            exported = Document(io.BytesIO(word_v3.fill(data, fields, {fields[0]["key"]: "Absent", fields[1]["key"]: "Present"})))
+            self.assertEqual([c.text for c in exported.tables[0].rows[0].cells],
+                             [right, "Effusion: Absent", left, "Effusion: Present"])
+
+    def test_a_separate_side_cell_qualifies_the_question_even_after_the_boxes(self):
+        from documents import word_v3
+        for side in ("L", "R", "Left", "Right", "Bilateral"):
+            for after in (False, True):
+                with self.subTest(side=side, after=after):
+                    data = sided_grid_bytes(side, after=after)
+                    field = next(f for f in word_v3.inspect(data)["fields"] if "Effusion" in f["label"])
+                    self.assertIn(side, field["label"])
+                    out = paragraphs_bytes(word_v3.fill(data, [field], {field["key"]: "Yes"}))
+                    at = out.index("Effusion")
+                    self.assertEqual(out[at + 1:at + 3], ["☒", "☐"])
+
+    def test_a_plain_side_heading_qualifies_its_questions(self):
+        from documents import word_v3
+        field = next(f for f in word_v3.inspect(sided_grid_bytes(heading=True))["fields"] if "Effusion" in f["label"])
+        self.assertIn("Left knee", field["label"])
+
+    def test_units_and_questionnaire_phrases_are_not_sides(self):
+        from documents.word_v3 import side_phrase
+        for text in ("per L", "l. other – specify", "l. I got the help I wanted", "The services were right for me"):
+            self.assertFalse(side_phrase(text), text)
+        for text in ("L", "R", "(L)", "Left knee", "Right side", "Costophrenical pathologies (right)"):
+            self.assertTrue(side_phrase(text), text)
+
+    def test_a_heading_in_another_table_cell_does_not_govern_the_next_row(self):
+        from documents import word_v3
+        doc = Document()
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).paragraphs[0].add_run("Right leg").bold = True
+        table.cell(0, 1).paragraphs[0].add_run("Left leg").bold = True
+        table.cell(1, 0).text = "Notes: __________"
+        table.cell(1, 1).text = "Notes: __________"
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        labels = [f["label"] for f in fields]
+        self.assertIn("Right leg — Notes", labels)
+        self.assertIn("Left leg — Notes", labels)
+        self.assertFalse(any("Left leg — Right leg" in label or "Right leg — Left leg" in label for label in labels))
+
+    def test_a_repeated_side_header_in_one_table_resets_the_side(self):
+        from documents import word_v3
+        doc = Document()
+        table = doc.add_table(rows=4, cols=2)
+        for row, side in ((0, "Right leg"), (2, "Left leg")):
+            table.cell(row, 0).text = side
+            table.cell(row, 1).text = "Measurement"
+            table.cell(row + 1, 0).text = "Vein diameter"
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        questions = [f for f in fields if "Vein diameter" in f["label"]]
+        self.assertEqual([f["label"] for f in questions],
+                         ["Right leg — Vein diameter — Measurement", "Left leg — Vein diameter — Measurement"])
+
+    def test_duplicate_context_uses_readable_line_text(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic symptoms")
+        doc.add_paragraph("Pain? ☐ Yes ☐ No")
+        doc.add_paragraph("Pain? ☐ Yes ☐ No")
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        self.assertEqual(len(fields), 2)
+        for field in fields:
+            self.assertIn("Pain?", field["context"])
+            self.assertNotRegex(field["context"], r"(?:b|hf)/|/glyphs|p\[|sdt\[")
+        self.assertNotEqual(fields[0]["context"], fields[1]["context"])
+
+    def test_text_fields_are_not_drawn_as_printed_boxes(self):
+        from documents import word_v3
+        for legacy in (False, True):
+            doc = Document()
+            p = doc.add_paragraph("Side: ")
+            if legacy:
+                ff_text_field(p, "Side")
+            else:
+                p._p.append(_sdt("rich", placeholder=" "))
+            p.add_run(" Left ☐ Right")
+            data = docx_bytes(doc)
+            place = next(r for r in word_v3.outline(data)["slots"] if r["kind"] == "p")
+            self.assertEqual(place["preview"], "Side: [text field] Left ☐ Right")
+            self.assertEqual(place["boxes"], 1)
+            field = word_v3.locate(data, [{"slot": place["slot"], "kind": "checkbox", "label": "Right", "box": 1}])[0]
+            self.assertIn("Left ☒ Right", "".join(paragraphs_bytes(word_v3.fill(data, [field], {field["key"]: True}))))
+
+    def test_an_unaddressable_checkbox_in_a_hyperlink_cannot_be_mapped_by_number(self):
+        from documents import word_v3
+        doc = Document()
+        p = doc.add_paragraph("Synthetic symptom: ")
+        link = OxmlElement("w:hyperlink")
+        link.set(qn("w:anchor"), "local")
+        link.append(checkbox_control())
+        p._p.append(link)
+        p.add_run(" Yes")
+        data = docx_bytes(doc)
+        with self.assertRaises(word_v3.V3Failure):
+            word_v3.locate(data, [{"slot": "word/document.xml#b/p[0]", "kind": "checkbox", "label": "Symptom", "box": 1}])
+
+    def test_private_use_symbol_codes_match_the_control_state(self):
+        from documents import word_v3
+        control = checkbox_control(checked=True)
+        state = control.find(qn("w:sdtPr") + "/{%s}checkbox/{%s}checkedState" % (W14, W14))
+        state.set("{%s}val" % W14, "F0FE")
+        content = control.find(qn("w:sdtContent"))
+        content.find(qn("w:r") + "/" + qn("w:t")).text = "\u00fe"
+        self.assertIs(word_v3.sdt_checkbox_state(control), True)
+
+    def test_a_control_printing_multiple_glyphs_is_unread(self):
+        from documents import word_v3
+        control = checkbox_control(checked=True)
+        control.find(qn("w:sdtContent") + "/" + qn("w:r") + "/" + qn("w:t")).text = "☒☐"
+        self.assertIsNone(word_v3.sdt_checkbox_state(control))
+
+    def test_a_wrapped_paragraphs_box_is_read_by_the_cell_writer(self):
+        from documents import word_v3
+        doc = Document()
+        cell = doc.add_table(rows=1, cols=1).cell(0, 0)
+        control = checkbox_control(checked=True)
+        cell.paragraphs[0]._p.append(control)
+        wrap_in_control(cell.paragraphs[0]._p)
+        self.assertEqual(word_v3.cell_boxes(cell._tc), [("sdt", control)])
+        word_v3.set_cell_box(cell._tc, False)
+        self.assertIs(word_v3.sdt_checkbox_state(control), False)
+
+
 if __name__ == "__main__":
     unittest.main()

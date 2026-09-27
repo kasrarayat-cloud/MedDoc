@@ -12,7 +12,8 @@ A v3 mapping field:
 
 Slot paths use the grammar of the neutral enumerator used for ground truth:
     b (body) | hf (header/footer root) / tbl[i] / tr[j] / tc[k] / p[n] / sdt[s] / txbx[t] / ff[f] / glyphs
-indices count same-kind children in document order.
+indices count same-kind children in document order - except that a table's rows and a row's cells are counted through
+the content controls and custom XML wrapping them (table_rows_of / row_cells_of), so a wrapped cell keeps its column.
 
 Detection is deterministic. Areas it is unsure about are reported as notes (never silently dropped, never
 guessed); a doctor's manual mapping is recorded separately as an assisted correction.
@@ -301,7 +302,8 @@ class Piece:
 def paragraph_pieces(p):
     """The paragraph's own visible content, in order, as positioned pieces. Text boxes and fallback copies are left
     out (separate slots); an inline content control or a legacy form field is ONE object piece whose text is BOX for
-    a checkbox and NUL otherwise (its content is its own answer area)."""
+    a checkbox and NUL otherwise (its content is its own answer area) - except a control wrapping a checkbox control,
+    whose content is read as part of the line so the checkbox inside is a box like any other."""
     pieces, pos = [], [0]
     stack = []                          # open complex fields: [kind, separated]
 
@@ -316,6 +318,12 @@ def paragraph_pieces(p):
                 continue
             if tag == SDT:
                 info = sdt_info(ch)
+                if info["type"] != "checkbox" and checkbox_nodes(ch.find(q("w:sdtContent"))):
+                    # ⚠️ A CONTROL WRAPPING A CHECKBOX CONTROL IS READ THROUGH: as one opaque object it hid the
+                    # checkbox inside it from every box reader, so a printed tick there was never read, never
+                    # unticked and never checked by the read-back (round 3 F1).
+                    walk(ch)
+                    continue
                 add("obj", 1, node=ch, obj="sdt_checkbox" if info["type"] == "checkbox" else "sdt")
                 continue
             if tag == R:
@@ -360,6 +368,34 @@ def paragraph_pieces(p):
     return pieces
 
 
+def checkbox_nodes(el, own=True) -> list:
+    """Every checkbox control inside `el`, found by walking the whole subtree (never through the box readers): the
+    w:sdt of a checkbox content control and the begin run of a legacy checkbox field, in document order. Fallback
+    copies are left out, and with `own` text boxes too (each is a place of its own)."""
+    out = []
+    if el is None:
+        return out
+
+    def walk(node):
+        for ch in node:
+            tag = ch.tag
+            if not isinstance(tag, str) or tag == FALLBACK or (own and tag == TXBX):
+                continue
+            if tag == SDT:
+                pr = ch.find(q("w:sdtPr"))
+                if pr is not None and pr.find(q("w14:checkbox")) is not None:
+                    out.append(ch)
+            elif tag == R:
+                fc = ch.find(FLDCHAR)
+                if fc is not None and fc.get(q("w:fldCharType")) == "begin":
+                    data = fc.find(q("w:ffData"))
+                    if data is not None and data.find(q("w:checkBox")) is not None:
+                        out.append(ch)
+            walk(ch)
+    walk(el)
+    return out
+
+
 def piece_text(pc: Piece) -> str:
     if pc.kind == "t":
         if pc.node.tag == NBH:
@@ -396,6 +432,72 @@ class Slot:
     @property
     def id(self):
         return "%s#%s" % (self.part, self.path)
+
+
+def _through(el, want) -> list:
+    """`want` children of `el` in document order, looking through the content controls and custom XML that wrap them."""
+    out = []
+    for ch in el:
+        if ch.tag == want:
+            out.append(ch)
+        elif ch.tag == SDT:
+            content = ch.find(q("w:sdtContent"))
+            if content is not None:
+                out += _through(content, want)
+        elif ch.tag == q("w:customXml"):
+            out += _through(ch, want)
+    return out
+
+
+def table_rows_of(tbl) -> list:
+    """⚠️ A TABLE'S ROWS, THROUGH ANY CONTROL WRAPPING A ROW (w:tbl/w:sdt/w:tr): direct rows only made a wrapped row
+    invisible (round 3 P1). The one reading of rows for the index and the table_rows writer."""
+    return _through(tbl, q("w:tr"))
+
+
+def row_cells_of(tr) -> list:
+    """⚠️ A ROW'S CELLS, THROUGH ANY CONTROL WRAPPING A CELL (w:tr/w:sdt/w:tc): direct cells only skipped a wrapped cell,
+    so every later cell took the column before its own and a Yes answer was ticked under No (round 3 P1)."""
+    return _through(tr, q("w:tc"))
+
+
+def grid_before(tr) -> int:
+    """The grid columns a row skips before its first cell (w:gridBefore)."""
+    trpr = tr.find(q("w:trPr"))
+    before = trpr.find(q("w:gridBefore")) if trpr is not None else None
+    try:
+        return int(before.get(q("w:val"), "0") or 0) if before is not None else 0
+    except ValueError:
+        return 0
+
+
+def cell_span(tc) -> int:
+    tcpr = tc.find(q("w:tcPr"))
+    gs = tcpr.find(q("w:gridSpan")) if tcpr is not None else None
+    try:
+        return int(gs.get(q("w:val"), "1") or 1) if gs is not None else 1
+    except ValueError:
+        return 1
+
+
+def row_of(tc):
+    """The w:tr holding a cell (through any control wrapping the cell)."""
+    return next(tc.iterancestors(q("w:tr")), None)
+
+
+def own_paragraph_slots(cell) -> list:
+    """A table cell slot's own paragraph slots in order: direct ones and those inside block-level content controls
+    wrapping them (never a nested table's or a text box's)."""
+    out = []
+
+    def walk(slot):
+        for c in slot.children:
+            if c.kind == "p":
+                out.append(c)
+            elif c.kind == "sdt":
+                walk(c)
+    walk(cell)
+    return out
 
 
 class SlotIndex:
@@ -447,18 +549,12 @@ class SlotIndex:
 
     def _table(self, part, el, path, parent):
         tslot = self._add(Slot(part, path, "tbl", el, parent))
-        for ri, tr in enumerate(el.findall(q("w:tr"))):
-            col = 0
-            trpr = tr.find(q("w:trPr"))
-            before = trpr.find(q("w:gridBefore")) if trpr is not None else None
-            if before is not None:
-                col = int(before.get(q("w:val"), "0") or 0)
-            for ci, tc in enumerate(tr.findall(q("w:tc"))):
+        for ri, tr in enumerate(table_rows_of(el)):
+            col = grid_before(tr)
+            for ci, tc in enumerate(row_cells_of(tr)):
                 tcpr = tc.find(q("w:tcPr"))
-                span, vmerge = 1, None
+                span, vmerge = cell_span(tc), None
                 if tcpr is not None:
-                    gs = tcpr.find(q("w:gridSpan"))
-                    span = int(gs.get(q("w:val"), "1") or 1) if gs is not None else 1
                     vm = tcpr.find(q("w:vMerge"))
                     vmerge = (vm.get(q("w:val")) or "continue") if vm is not None else None
                 cpath = "%s/tr[%d]/tc[%d]" % (path, ri, ci)
@@ -606,6 +702,14 @@ LABEL_END = re.compile(r"[:?]\s*$|[–—-]\s*$")
 OPTION_WORD = re.compile(r"^(?:y|n|yes|no|m|f|male|female|n/?a|nd|unk|unknown|not known|true|false|done|not done|normal|abnormal|"
                          r"present|absent|positive|negative|pos|neg|[0-9]{1,2}|[+\-]|none|mild|moderate|severe|left|right|l|r|"
                          r"bilateral|pass|fail|ok|agree|disagree|always|often|sometimes|rarely|never)\.?$", re.I)
+SIDE_WORD = re.compile(r"\b(?:left(?!\s+(?:blank|empty|unchanged)\b)|right(?!\s+for\b)|bilateral|lt|rt|bil)\b", re.I)
+
+
+def side_phrase(text):
+    """A printed side phrase; a unit 'per L' or a questionnaire list marker 'l.' is not a side."""
+    return bool(SIDE_WORD.search(text) or re.fullmatch(r"\(?[LR]\)?[.:]?", text.strip(), re.I) or
+                re.match(r"^(?:[LR][.)]?|\([LR]\))\s+(?:side|knee|leg|hip|arm|ankle|foot|hand|wrist|elbow|shoulder|eye|ear)\b",
+                         text, re.I))
 FIELDISH = re.compile(r"\b(?:date|time|name|signature|signed|initials?|comments?|notes?|number|no\.|#|dose|amount|result|"
                       r"value|score|site|code|address|phone|reason|description|details?|id)\b", re.I)
 YESNO = re.compile(r"^(?:y|n|yes|no|n/?a|nd|unk|unknown|not known|not applicable|n/a or nd|na or nd|not done|done)\.?$", re.I)
@@ -725,6 +829,10 @@ class Detector:
                 bold = runs and all(r.find(q("w:rPr")) is not None and r.find(q("w:rPr")).find(q("w:b")) is not None
                                     and (r.find(q("w:rPr")).find(q("w:b")).get(q("w:val")) or "1") not in ("0", "false") for r in runs)
                 result = bool(bold) and not LABEL_END.search(txt) and len(txt.split()) <= 12
+            # A plain printed side heading is still part of the question's identity.
+            # It need not use a Word heading style: e.g. 'Left knee:' over a grid.
+            if side_phrase(txt) and txt.endswith(":") and len(txt.split()) <= 6 and "\x00" not in self.ptext(p)[0]:
+                result = True
         self._is_heading[id(p)] = result
         return result
 
@@ -969,6 +1077,42 @@ class Detector:
     def cell_has_claim(self, tc) -> bool:
         return any(id(x) in self.claimed for x in tc.iter())
 
+    def region_hidden(self, region) -> bool:
+        """hidden_boxes, once per region (a paragraph or a table cell)."""
+        return region_hidden(self.index, region)
+
+    def owning_cell(self, pslot):
+        """The table cell whose OWN paragraph `pslot` is - directly, or inside block-level content controls wrapping it
+        (w:tc/w:sdt/w:p) - else None. A nested table's or a text box's paragraph is not its outer cell's own."""
+        s = pslot.parent
+        while s is not None and s.kind == "sdt":
+            s = s.parent
+        return s if s is not None and s.kind == "tc" else None
+
+    def own_paragraphs(self, cell) -> list:
+        """A cell's own paragraphs in order: direct ones and those inside block-level content controls wrapping them.
+        ⚠️ Direct children only made a box in a wrapped paragraph a stranger to its cell: detected alone as 'Checkbox'
+        while the row's No box took the row's question (round 3 P2)."""
+        return own_paragraph_slots(cell)
+
+    def unattributed_row_boxes(self, cells) -> bool:
+        """Whether the row of `cells` prints a box (or holds a checkbox control) in another cell answering the same row
+        label - between the label cells around them - than `cells`, the cells a group of boxes was read from."""
+        first = cells[0]
+        row = sorted((c for c in self.grid(first.parent).get(first.info["row"], []) if c.info["vmerge"] != "continue"),
+                     key=lambda c: c.info["col"])
+        if first not in row:
+            return False
+        at = row.index(first)
+        stretch = []
+        for side in (reversed(row[:at]), row[at + 1:]):
+            for c in side:
+                if self.is_label_cell(c):
+                    break
+                stretch.append(c)
+        return any(c not in cells and (BOX in self.cell_text(c) or CHECKED in self.cell_text(c) or checkbox_nodes(c.el, own=False))
+                   for c in stretch)
+
     # -- adding ----------------------------------------------------------------------------------------------------
     def add(self, area: Area):
         self._order += 1
@@ -1015,11 +1159,92 @@ class Detector:
         self.rule_initial_boxes()
         self.merge_header_copies()
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
+        self.qualify_sides()
         self.surface_duplicates()
         for a in self.areas:
             a.capacity = self.capacity_for(a)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
+
+    def qualify_sides(self):
+        """A side printed in another row cell or its heading belongs to the question used for source matching.
+        Checkbox/option cells are excluded: their 'Left'/'Right' words are possible answers, not a governing side.
+        Stored mappings are never rewritten; this qualifies only newly detected areas."""
+        area_cells = {}
+        cell_owners = {}
+        for number, area in enumerate(self.areas):
+            slots = [area.slot] + area.extra_slots
+            for box in area.target.get("boxes", []):
+                slot = self.index.by_id.get("%s#%s" % (box.get("part"), box.get("slot")))
+                if slot is not None:
+                    slots.append(slot)
+            cells = {cell.id for slot in slots if (cell := self.host_cell(slot)) is not None}
+            area_cells[number] = cells
+            for identity in cells:
+                cell_owners.setdefault(identity, set()).add(number)
+        for number, area in enumerate(self.areas):
+            if side_phrase(area.label):
+                continue
+            scope = []
+            cell = self.host_cell(area.slot)
+            if cell is not None:
+                row = sorted(self.grid(cell.parent).get(cell.info["row"], []), key=lambda c: c.info["col"])
+                positions = [i for i, c in enumerate(row) if c.id in area_cells[number]]
+                if positions:
+                    # A row can contain independent Right/Left sections. Use its
+                    # nearest preceding side, including for several detail answers
+                    # under that side. A trailing side cannot cross another answer.
+                    before = list(reversed(row[:min(positions)]))
+                    after = row[max(positions) + 1:]
+                    for candidates, preceding in ((before, True), (after, False)):
+                        for candidate in candidates:
+                            if cell_owners.get(candidate.id, set()) - {number}:
+                                if preceding:
+                                    continue
+                                break
+                            text = clean_label(self.cell_text(candidate))
+                            objects = self.cell_objects(candidate)
+                            if any(c in objects for c in (BOX, CHECKED, "\x00")) or \
+                                    checkbox_nodes(candidate.el, own=False) or is_blank_text(text):
+                                if preceding:
+                                    continue
+                                break
+                            if side_phrase(text) and text not in (clean_label(o) for o in area.options):
+                                scope.append(text)
+                                break
+                        if scope:
+                            break
+                if not scope:
+                    # Side sections can repeat within one table. The nearest label row owns
+                    # this section; the table's first column heading may name the opposite leg.
+                    for row in sorted((r for r in self.grid(cell.parent) if r < cell.info["row"]), reverse=True):
+                        if self.row_kind(cell.parent, row) != "label":
+                            continue
+                        header = clean_label(self.text_at(cell.parent, row, cell.info["col"]))
+                        phrases = [header] if side_phrase(header) else [clean_label(self.cell_text(c))
+                                   for c in self.grid(cell.parent)[row] if side_phrase(clean_label(self.cell_text(c)))]
+                        scope.extend(s for s in phrases if s not in (clean_label(o) for o in area.options))
+                        break
+            if not scope:
+                # A heading in another cell or a previous answer must not govern this field.
+                # Walk actual containers, considering only preceding sibling headings.
+                place = area.slot
+                while place is not None:
+                    siblings = place.parent.children if place.parent is not None else self.index.roots
+                    previous = [p for p in siblings if p.part == place.part and p.kind == "p" and p.seq < place.seq
+                                and id(p.el) not in self.claimed and self.is_heading(p.el)]
+                    if previous:
+                        head = clean_label(self.text(previous[-1].el))
+                        if side_phrase(head):
+                            scope.append(head)
+                        break
+                    place = place.parent
+            # Keep each complete source phrase; truncating it could remove its side.
+            scope = list(dict.fromkeys(s for s in scope if s and
+                                      not re.search(r"(?<!\w)" + re.escape(s) + r"(?!\w)", area.label, re.I)))
+            if scope:
+                area.label = " — ".join(scope + [area.label])
+                area.context = " > ".join(dict.fromkeys(s for s in scope + [area.context] if s))[:300]
 
     def label_before_object(self, slot, obj_el) -> str:
         """Text before an inline object in its paragraph (after any previous object); else row label / column header /
@@ -1125,13 +1350,19 @@ class Detector:
             txt = self.ptext(s.el)[0]
             if BOX not in txt and CHECKED not in txt:
                 continue
+            if self.region_hidden(box_region(s.el)):
+                # ⚠️ Its boxes cannot all be seen: no question is read from it (round 3 F1).
+                self.notes.append("A line holds a checkbox QuillMD cannot read in place, so it was left for manual "
+                                  "mapping: %s" % clean_label(txt)[:60])
+                self.claimed.add(id(s.el))
+                continue
             units = self.box_units(s)
             cell = self.host_cell(s)
-            if not leftovers and cell is not None and s.parent is cell and \
+            if not leftovers and cell is not None and self.owning_cell(s) is cell and \
                     not any(clean_label(u[1]) for u in units) and not clean_label(units[0][2]) and \
                     self.column_header(cell.parent, cell.info["col"], cell.info["row"]):
                 continue
-            if cell is not None and s.parent is cell and len(units) == 1 and self.pure_option_cell(cell, s, units[0]):
+            if cell is not None and self.owning_cell(s) is cell and len(units) == 1 and self.pure_option_cell(cell, s, units[0]):
                 opt = option_text(units[0][2]) if clean_label(units[0][2]) else option_text(units[0][1])
                 units = [[units[0][0], opt, ""]]
                 self._pure[id(s)] = cell
@@ -1158,11 +1389,11 @@ class Detector:
                     if ia is not None and ib is not None and 0 < ib - ia <= 2 and \
                             not any(self.text(x.el).strip() for x in sibs[ia + 1:ib]):
                         joined = True
-                elif cell is not None and self.host_cell(last_p) is not None and last_p.parent.parent is cell.parent \
+                elif cell is not None and self.owning_cell(last_p) is not None and self.owning_cell(last_p).parent is cell.parent \
                         and not current["question_from_cell"]:
-                    lc = self.host_cell(last_p)
-                    first_l = next((c for c in lc.children if c.kind == "p"), None)
-                    first_c = next((c for c in cell.children if c.kind == "p"), None)
+                    lc = self.owning_cell(last_p)
+                    first_l = next(iter(self.own_paragraphs(lc)), None)
+                    first_c = next(iter(self.own_paragraphs(cell)), None)
                     same_row = lc.info["row"] == cell.info["row"] or abs(lc.info["row"] - cell.info["row"]) == 1
                     if first_l is last_p and first_c is pslot and same_row and \
                             not self.row_label(cell.parent, cell.info["row"], cell.info["col"]):
@@ -1178,7 +1409,7 @@ class Detector:
 
     def pure_option_cell(self, cell, pslot, unit) -> bool:
         """A cell that holds one box and a short option word ('Yes ☐' / '☐ No') and nothing else."""
-        if len([c for c in cell.children if c.kind == "p" and self.text(c.el).strip()]) != 1:
+        if len([c for c in self.own_paragraphs(cell) if self.text(c.el).strip()]) != 1:
             return False
         before, after = clean_label(unit[2]), clean_label(unit[1])
         opt = before or after
@@ -1215,11 +1446,27 @@ class Detector:
             question = clean_label(units[0][2])
             host = pslot
             used_para = None
+            row_question = False
             if not question:
                 cell = self.host_cell(pslot)
-                if cell is not None and next((c for c in cell.children if c.kind == "p"), None) is pslot:
-                    question = self.row_label(cell.parent, cell.info["row"], cell.info["col"]) or \
-                        clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                if cell is not None and next(iter(self.own_paragraphs(cell)), None) is pslot:
+                    question = self.row_label(cell.parent, cell.info["row"], cell.info["col"])
+                    row_question = bool(question)
+                    question = question or clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                    cells = list(dict.fromkeys(c for c in (self.owning_cell(p) for p in g["paras"]) if c is not None))
+                    header = clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                    choices = {o.lower().rstrip(".") for o in options}
+                    independent_question = len(cells) == 1 and header and not is_option_word(header) and \
+                        (choices >= {"yes", "no"} or choices >= {"y", "n"})
+                    if row_question and not independent_question and (len(units) > 1 or not options[0]) and cells and self.unattributed_row_boxes(cells):
+                        # ⚠️ THE ROW PRINTS ANOTHER BOX THESE WERE NOT GIVEN: they are some of the row's options, never
+                        # its question - a lone No box labelled with the row's question was ticked by 'Chest pain: yes'
+                        # (round 3 P2). Refused, with a note, rather than guessed.
+                        self.notes.append("Boxes in the '%s' row were left for manual mapping: the row prints another box "
+                                          "beside them, so which of the row's options they are is not known." % question[:60])
+                        for p in g["paras"]:
+                            self.claimed.add(id(p.el))
+                        continue
                 if not question:
                     prev = self.previous_paragraph(pslot)
                     if prev is not None and BOX not in self.ptext(prev.el)[0]:
@@ -1361,6 +1608,8 @@ class Detector:
         if self.cell_has_claim(c.el):
             return False
         txt = self.cell_text(c)
+        if self.region_hidden(c.el):
+            return False                # a checkbox its reading does not show (round 3 F1)
         return is_blank_text(txt) and self.is_empty_cell(c) or txt in (BOX, CHECKED)
 
     def rule_tables(self):
@@ -1371,7 +1620,8 @@ class Detector:
             box_cols = {}
             for r in ordered:
                 for c in rows[r]:
-                    if c.info["vmerge"] != "continue" and not self.cell_has_claim(c.el) and self.cell_text(c) in (BOX, CHECKED):
+                    if c.info["vmerge"] != "continue" and not self.cell_has_claim(c.el) and self.cell_text(c) in (BOX, CHECKED) \
+                            and not self.region_hidden(c.el):
                         box_cols.setdefault(c.info["col"], []).append((r, c))
             # empty cells in a column whose answers are boxes are filler (a sub-heading row), not answers
             filler = set()
@@ -1922,7 +2172,7 @@ class Detector:
         cell = self.host_cell(slot)
         if cell is not None:
             width = self.cell_twips(cell.parent, cell)
-            tr = cell.el.getparent()
+            tr = row_of(cell.el)
             trpr = tr.find(q("w:trPr")) if tr is not None else None
             h = trpr.find(q("w:trHeight")) if trpr is not None else None
             exact = h is not None and h.get(q("w:hRule")) == "exact"
@@ -1947,7 +2197,15 @@ class Detector:
             if len(group) < 2:
                 continue
             for n, a in enumerate(group, 1):
-                where = "table row %d" % (a.slot.info["row"] + 1) if a.slot.kind == "tc" else a.slot.path
+                cell = self.host_cell(a.slot)
+                para = self.host_paragraph(a.slot)
+                if cell is not None:
+                    where = "table row %d: %s" % (cell.info["row"] + 1, self.cell_text(cell)[:100])
+                elif para is not None:
+                    preceding = [s for s in self.index.slots if s.part == para.part and s.kind == "p" and s.seq < para.seq]
+                    where = "line %d: %s" % (len(preceding) + 1, self.text(para.el)[:100])
+                else:
+                    where = "printed question %d: %s" % (n, a.label[:100])
                 a.context = ("%s · occurrence %d of %d (%s)" % (context, n, len(group), where)).strip(" ·")[:300]
                 a.note = "duplicate label: position shown"
 
@@ -2133,8 +2391,8 @@ def _flowing(p):
 
 
 def _unclip_row(tc):
-    tr = tc.getparent()
-    if tr is None or tr.tag != q("w:tr"):
+    tr = row_of(tc)
+    if tr is None:
         return
     trpr = tr.find(q("w:trPr"))
     h = trpr.find(q("w:trHeight")) if trpr is not None else None
@@ -2295,6 +2553,53 @@ def cell_boxes(tc):
     return [(kind, node) for p in tc.iter(q("w:p")) for kind, node, _ in box_pieces(p)]
 
 
+def box_region(el):
+    """Where a box is read and checked: the table cell holding it (through content controls, never out of a text box),
+    else its paragraph. `el` is a paragraph, a table cell or a checkbox control."""
+    if el.tag == q("w:tc"):
+        return el
+    host = el if el.tag == q("w:p") else next(el.iterancestors(q("w:p")), None)
+    if host is None:
+        return el
+    for anc in host.iterancestors():
+        if anc.tag == TXBX:
+            return host
+        if anc.tag == q("w:tc"):
+            return anc
+    return host
+
+
+def hidden_boxes(region) -> list:
+    """⚠️ THE CHECKBOX CONTROLS A REGION HOLDS THAT ITS BOX READING DOES NOT SHOW: every checkbox control found by
+    walking the region's whole subtree (checkbox_nodes) that box_pieces does not show. Not empty means the region's
+    boxes cannot be accounted for - it is refused where it would be read, written or numbered, and read back as
+    unread - so a ticked box nobody can see can never pass as the chosen one's neighbour (round 3 F1)."""
+    if region.tag == q("w:tc"):
+        nodes = checkbox_nodes(region, own=False)
+        seen_nodes = [node for p in region.iter(q("w:p")) for _, node, _ in box_pieces(p) if node is not None]
+    elif region.tag == q("w:p"):
+        nodes = checkbox_nodes(region)
+        seen_nodes = [node for _, node, _ in box_pieces(region) if node is not None]
+    else:
+        return checkbox_nodes(region)          # a control outside any paragraph: whatever it holds is not shown
+    seen = {id(node) for node in seen_nodes}   # (seen_nodes keeps every proxy alive while its id is compared)
+    return [node for node in nodes if id(node) not in seen]
+
+
+def region_hidden(index, el) -> bool:
+    """Whether the box region of `el` holds a checkbox its reading does not show (hidden_boxes), once per region for
+    one package read: the index keeps the answer, and every region is an element the package keeps alive."""
+    region = box_region(el)
+    cache = index.__dict__.setdefault("_hidden", {})
+    if id(region) not in cache:
+        cache[id(region)] = bool(hidden_boxes(region))
+    return cache[id(region)]
+
+
+HIDDEN_BOX = ("This place holds a checkbox QuillMD cannot read in place (for example a checkbox inside another checkbox), "
+              "so which box an answer means is not known and nothing there is filled.")
+
+
 RADIO_CODES = (0x81, 0xF081, 0xA1, 0xF0A1)
 
 
@@ -2400,6 +2705,8 @@ def set_cell_box(tc, ticked):
     ⚠️ A CONTROL IS NEVER WRITTEN OVER: an X over a checkbox control refused every answer, and an untick left a
     printed tick the reader could not see. A cell holding a control beside another box is refused: which box its
     answer means is not known."""
+    if hidden_boxes(tc):
+        fail(HIDDEN_BOX, "unsupported_layout")
     boxes = cell_boxes(tc)
     if any(kind != "glyph" for kind, _ in boxes):
         if len(boxes) != 1:
@@ -2490,7 +2797,7 @@ def write_ff_dropdown(begin_run, answer, occurrence=0):
 
 def wraps_structure(content) -> bool:
     """True when a content control's content holds other controls, fields, tables or drawings."""
-    for tag in ("w:sdt", "w:fldChar", "w:fldSimple", "w:tbl", "w:drawing", "w:pict", "w:object", "w:txbxContent"):
+    for tag in ("w:sdt", "w:fldChar", "w:fldSimple", "w:tbl", "w:tr", "w:tc", "w:drawing", "w:pict", "w:object", "w:txbxContent"):
         if content.find(".//" + q(tag)) is not None:
             return True
     return False
@@ -2691,6 +2998,8 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                     slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
                     if slot is None:
                         fail("The stored mapping no longer matches this form. Review the mapping again.", "mapping_mismatch")
+                    if box["kind"] in ("sdt", "ff", "glyph", "cell") and region_hidden(index, slot.el):
+                        fail(HIDDEN_BOX, "unsupported_layout")
                     if box["kind"] == "sdt":
                         ops.append((slot.el, -1, lambda el=slot.el, w=want: set_sdt_checkbox(el, w), box["part"]))
                     elif box["kind"] == "ff":
@@ -2792,6 +3101,8 @@ def box_state(index, box):
     slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
     if slot is None:
         return None
+    if box["kind"] in ("sdt", "ff", "glyph", "cell") and region_hidden(index, slot.el):
+        return None                     # a checkbox the region's reading does not show: nothing there is read
     if box["kind"] == "sdt":
         return sdt_checkbox_state(slot.el)
     if box["kind"] == "ff":
@@ -2969,7 +3280,7 @@ def write_table_rows(index, field, answer):
     tbl = index.by_id.get("%s#%s" % (field["locator"]["part"], target["table"]))
     if tbl is None:
         fail("The stored mapping no longer matches this form.", "mapping_mismatch")
-    trs = tbl.el.findall(q("w:tr"))
+    trs = table_rows_of(tbl.el)
     rows = [trs[r] for r in target["rows"]]
     if len(answer) > 200:
         fail("Too many table rows.", "invalid_answer")
@@ -2980,12 +3291,12 @@ def write_table_rows(index, field, answer):
         rows[-1].addnext(clone)
         rows.append(clone)
     for tr, values in zip(rows, answer):
-        cells = tr.findall(q("w:tc"))
-        col_of, col = {}, 0
-        for tc in cells:
+        # ⚠️ columns counted exactly as the index counts them (grid_before, row_cells_of, cell_span): counting from 0
+        # over direct cells wrote a dose under Route in a row that skips a grid column
+        col_of, col = {}, grid_before(tr)
+        for tc in row_cells_of(tr):
             col_of[col] = tc
-            gs = tc.find(q("w:tcPr") + "/" + q("w:gridSpan")) if tc.find(q("w:tcPr")) is not None else None
-            col += int(gs.get(q("w:val"), "1")) if gs is not None else 1
+            col += cell_span(tc)
         for c, value in zip(target["columns"], values):
             if value and c in col_of:
                 write_cell(col_of[c], str(value))
@@ -3032,10 +3343,13 @@ def place_box_refs(index, slot):
     numbered as shown. A cell's preview is its text, which does not show a legacy checkbox and does show boxes nested
     inside the cell: a cell is numbered only when its preview shows exactly its own paragraphs' boxes, each control
     once; otherwise None, and the cell refuses a box number (its line, or the checkbox itself, is the place)."""
+    boxy = slot.kind in ("p", "glyphs", "tc") or slot.info.get("type") == "checkbox" or slot.info.get("field") == "FORMCHECKBOX"
+    if boxy and region_hidden(index, slot.el):
+        return None                     # a checkbox its preview does not show: no number can name a box there
     if slot.kind in ("p", "glyphs"):
         return _paragraph_refs(index, slot if slot.kind == "p" else slot.parent)
     if slot.kind == "tc":
-        refs = [ref for c in slot.children if c.kind == "p" for ref in _paragraph_refs(index, c)]
+        refs = [ref for c in own_paragraph_slots(slot) for ref in _paragraph_refs(index, c)]
         for ref in refs:
             if ref is None or ref["kind"] == "ff":
                 return None
@@ -3098,10 +3412,10 @@ def outline(data: bytes) -> dict:
         refs = place_box_refs(detector.index, s)
         row = {"slot": s.id, "kind": s.kind, "part": "body" if s.part == "word/document.xml" else
                ("header" if "header" in s.part else "footer"),
-               "preview": re.sub(r"\s+", " ", preview.replace("\x00", "▢")).strip()[:120],
+               "preview": re.sub(r"\s+", " ", preview.replace("\x00", "[text field]")).strip()[:120],
                "context": detector.heading_before(s)[:120],
                "control": s.info.get("type") or s.info.get("field") or "", "boxes": len(refs or [])}
-        if refs and s.kind in ("p", "glyphs", "tc"):
+        if refs:
             row["box_keys"] = [box_key(ref) if ref is not None else None for ref in refs]
         if refs is None:
             row["unnumbered_boxes"] = True
@@ -3129,6 +3443,8 @@ def locate(data: bytes, targets: list) -> list:
             # ⚠️ THE CLINICIAN'S BOX, NOT THE FIRST ONE ('Smoker? ☐ Yes ☐ No' mapped as box 2 ticked Yes), counted among
             # EVERY box the preview shows - a checkbox control included - and written as whatever kind of box it is.
             refs = place_box_refs(detector.index, slot)
+            if refs is None:
+                fail(HIDDEN_BOX, "invalid_mapping")
             box = box_number(t, len(refs))
             if refs[box] is None:
                 fail("Box %d of that place is a checkbox control QuillMD cannot address there, so it cannot be filled."
@@ -3146,7 +3462,7 @@ def locate(data: bytes, targets: list) -> list:
         elif slot.kind == "tc":
             refs = place_box_refs(detector.index, slot) if kind == "checkbox" else []
             if refs is None:
-                fail(UNNUMBERED_CELL, "invalid_mapping")
+                fail(HIDDEN_BOX if region_hidden(detector.index, slot.el) else UNNUMBERED_CELL, "invalid_mapping")
             if refs:
                 target = {"type": "checkboxes", "boxes": [refs[box_number(t, len(refs))]]}
             else:
@@ -3162,6 +3478,8 @@ def locate(data: bytes, targets: list) -> list:
             content = slot.el.find(q("w:sdtContent"))
             if typ == "checkbox":
                 box_number(t, 1)
+                if place_box_refs(detector.index, slot) is None:
+                    fail(HIDDEN_BOX, "invalid_mapping")
                 target = {"type": "checkboxes", "boxes": [{"kind": "sdt", "part": slot.part, "slot": slot.path}]}
                 kind = "checkbox"
             elif content is not None and wraps_structure(content):
@@ -3177,6 +3495,8 @@ def locate(data: bytes, targets: list) -> list:
             field_kind = slot.info["field"]
             if field_kind == "FORMCHECKBOX":
                 box_number(t, 1)
+                if place_box_refs(detector.index, slot) is None:
+                    fail(HIDDEN_BOX, "invalid_mapping")
                 target, kind = {"type": "checkboxes", "boxes": [{"kind": "ff", "part": slot.part, "slot": slot.path}]}, "checkbox"
             elif field_kind == "FORMDROPDOWN":
                 target, kind, options = {"type": "ff_dropdown"}, "choice", [o for o in slot.info.get("options", []) if o]

@@ -1,0 +1,44 @@
+[
+  {
+    "input": [
+      "Right",
+      "Effusion: __________",
+      "Left",
+      "Effusion: __________"
+    ],
+    "fields": [
+      {
+        "label": "Right \u2014 Left \u2014 Effusion",
+        "context": "Right > Left > ",
+        "slot": "b/tbl[0]/tr[0]/tc[1]/p[0]"
+      },
+      {
+        "label": "Right \u2014 Left \u2014 Effusion",
+        "context": "Right > Left > Effusion",
+        "slot": "b/tbl[0]/tr[0]/tc[3]/p[0]"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "input": [
+      "Right knee",
+      "Effusion: __________",
+      "Left knee",
+      "Effusion: __________"
+    ],
+    "fields": [
+      {
+        "label": "Right knee \u2014 Left knee \u2014 Effusion",
+        "context": "Right knee > Left knee",
+        "slot": "b/tbl[0]/tr[0]/tc[1]/p[0]"
+      },
+      {
+        "label": "Right knee \u2014 Left knee \u2014 Effusion",
+        "context": "Right knee > Left knee > Right knee > Left knee",
+        "slot": "b/tbl[0]/tr[0]/tc[3]/p[0]"
+      }
+    ],
+    "notes": []
+  }
+]
