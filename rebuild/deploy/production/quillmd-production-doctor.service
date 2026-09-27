@@ -1,0 +1,61 @@
+# QuillMD PRODUCTION doctor surface (app.quillmd.com). Values are bound by rebuild/ops/production_profile.json and checked
+# against it by ops/test_production_deploy.py; the launcher re-proves the boundary in the same PID.
+# Installed by deploy/production/bootstrap-host.sh; never enabled or started by it.
+[Unit]
+Description=QuillMD production doctor surface (app.quillmd.com)
+After=network-online.target quillmd-production-environment.service
+Wants=network-online.target
+Requires=quillmd-production-environment.service
+RequiresMountsFor=/var/lib/quillmd-production
+
+[Service]
+Type=simple
+User=quillmd-production-app
+Group=quillmd-production-app
+SupplementaryGroups=
+CapabilityBoundingSet=
+AmbientCapabilities=
+WorkingDirectory=/opt/quillmd-production/rebuild
+Environment=QUILLMD_ADMIN_SITE=0
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=TMPDIR=/var/lib/quillmd-production/tmp
+EnvironmentFile=/run/quillmd-production/application.env
+ExecStart=/opt/quillmd-production/rebuild/.venv/bin/python /opt/quillmd-production/rebuild/ops/service_launcher.py --surface doctor --profile production
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=150
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+# No core dumps and no swap: a crash image or a swapped page would carry documents and credentials
+# out of the state volume. The root volume is KMS-encrypted too, but it is not where PHI belongs.
+LimitCORE=0
+MemorySwapMax=0
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# The instance metadata service would hand this identity the instance role (Secrets Manager read).
+IPAddressDeny=169.254.169.254/32 fd00:ec2::254/128
+MemoryMax=768M
+TasksMax=64
+SyslogIdentifier=quillmd-production-doctor
+
+InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock /run/quillmd-production /etc/quillmd-production/operator /etc/quillmd-production/ingress
+ReadWritePaths=/var/lib/quillmd-production/files /var/lib/quillmd-production/mail /var/lib/quillmd-production/proofs /var/lib/quillmd-production/tmp
+
+[Install]
+WantedBy=multi-user.target
