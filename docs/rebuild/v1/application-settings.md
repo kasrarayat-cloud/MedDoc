@@ -50,28 +50,67 @@ refund that could remove it — so the only safe path is a database with no sand
 - Every `Payment` records the Stripe mode its checkout was created in, and every `WebhookEvent` the
   `livemode` it was validated with (`livemode`, migration `0020`). Rows written before this change
   carry `NULL` and count as sandbox: live mode did not exist then.
-- **A recorded mode never changes.** `0020` adds a database trigger on both tables that refuses any
-  `UPDATE` changing `livemode` (like `0008`'s signed-evidence guard), so no statement can relabel
-  sandbox evidence as live or live evidence as sandbox. Reversing `0020` refuses while any row is
-  recorded as live: dropping the column would erase that evidence, and re-applying records every row
-  `NULL`, which real mode treats as sandbox money it never spends. A database with no live rows
-  still reverses.
+- **The evidence real mode reads cannot be relabelled by the runtime database role.** Real mode
+  decides from each `Payment`'s existence, wallet, status, `stripe_intent` and `livemode`, each
+  `WebhookEvent`'s `livemode`, and the `payment` ledger credits. Database triggers refuse, for every
+  role that has not first dropped or disabled them:
+  - deleting a `Payment` (`0020`), a `WebhookEvent` (`0008`) or a ledger row (`0003`, which also
+    refuses updating one);
+  - changing a `Payment`'s `wallet_id`, `amount_cents` or `livemode`, or its `stripe_intent` once
+    set, and any status change on a `Payment` that is `paid` (`0020`);
+  - changing a `WebhookEvent`'s `livemode` (`0020`);
+  - `TRUNCATE` of `core_payment`, `core_webhookevent` or `core_ledgerentry`, however reached
+    (`CASCADE` from another table included): statement-level `BEFORE TRUNCATE` triggers (`0020`),
+    because row-level `DELETE` triggers do not fire on `TRUNCATE`.
+
+  Every write the application makes to a `Payment` still works: creating → pending or uncertain;
+  any unpaid status → processing, failed, expired, or paid (with its `stripe_intent` in the same
+  write); `stripe_session`, `checkout_url` and `request_key` where the application sets them.
+- **What these triggers do not cover.** The database **owner** role (and any superuser) can drop or
+  disable them, and can then delete or truncate anything; they bind the runtime role, which owns no
+  table, cannot alter one, and is not granted `TRUNCATE`. They do not stop the runtime role adding
+  rows or changing other tables (a wallet's balance, for one): that is not relabelling sandbox
+  evidence, and the launcher's check below compares every paid wallet's balance with its ledger.
+- **Reversing `0020`** refuses while any row is recorded as live: dropping the column would erase
+  that evidence, and re-applying records every row `NULL`, which real mode treats as sandbox money
+  it never spends. A database with no live rows still reverses, even with a trigger already missing:
+  the reverse drops every trigger `IF EXISTS`, including `payment_livemode_immutable`, the name an
+  earlier version used. Two earlier versions of `0020` reached `release/v1` (one installed no
+  trigger, one only the two `livemode` triggers); a database that applied either never receives the
+  rest (`migrate` plans nothing), so it is reversed and re-applied, and the launcher's check refuses
+  it until then.
 - A paid wallet is **sandbox-funded** when any payment not recorded as live funded it: a paid
   non-live `Payment` on it, or a `payment` ledger credit with no live `Payment`. A checkout nobody
   paid (pending, expired, failed, uncertain) put no money in the wallet and does not count.
-- In real data mode that one rule (`core.billing.real_mode_refuses`) has three readers:
-  `reserve()` refuses the whole request, before any hold, when the payer's paid wallet is
-  sandbox-funded; **checkout** refuses, before any `Payment` row or Stripe call, to take live money
-  into such a wallet (it could never be spent), telling the payer to contact support; and the
-  **worker** refuses, before any provider request, a job whose hold was taken before the switch to
-  real mode and sits on such a wallet (not processed, nothing charged, the hold released, audited as
-  `usage.sandbox_hold_refused`). Synthetic mode is unchanged.
+- In real data mode **no money leaves a sandbox-funded wallet** (`core.billing.real_mode_refuses`):
+  - `reserve()` refuses the whole request, before any hold, when the payer's paid wallet is
+    sandbox-funded;
+  - **checkout** refuses, before any `Payment` row or Stripe call, to take live money into such a
+    wallet (it could never be spent), telling the payer to contact support;
+  - the **worker** refuses, before any provider request, a job that any wallet holding its funds or
+    its payer's paid wallet makes sandbox-funded — so a job whose hold was taken before the switch
+    is refused even when that hold is wholly promotional, exactly as `reserve()` would refuse its
+    payer (not processed, nothing charged, the hold released, audited as
+    `usage.sandbox_hold_refused`);
+  - **settlement** never debits such a wallet: if a debit would reach one it refuses before any
+    write, nothing is charged, the provider receipt is kept and the job is held for reconciliation
+    (audited as `job.reconciliation` with `error_class` `SandboxFundsRefused`); a sandbox hold the
+    charge does not reach is released unspent;
+  - a **reconciled charge** (`reconcile_usage`, and every later attempt to apply a pending one, on
+    release, settlement, top-up or absorption) never comes from such a wallet: it stays
+    `pending_funds`, and each attempt is audited as `usage.reconciliation_sandbox_refused`.
+
+  A Stripe refund of a live payment is still debited: it returns live money, it spends nothing.
+  Synthetic mode is unchanged.
 - **`manage.py real_mode_payment_check`** is read-only (it runs in a `READ ONLY` transaction and rolls
   back) and is stricter than the per-wallet rule: it exits 1 when the database holds any payment
   (paid or not) or Stripe event row not recorded as live,
   or any paid wallet whose balance live payments do not wholly explain (a non-live credit, or a
-  balance that differs from its ledger). It prints counts only. **The launcher must run it before
-  starting real mode.** A check inside every process start is not used instead: settings and
+  balance that differs from its ledger), or when any of the seven triggers above
+  (`core.billing.PAYMENT_EVIDENCE_GUARDS`) is missing, disabled, replica-only, conditional, of
+  another type or on another function — read from `pg_trigger`, since an amended migration never
+  re-runs where it was applied. It prints counts and trigger names only. **The launcher must run it
+  before starting real mode.** A check inside every process start is not used instead: settings and
   `AppConfig.ready()` also run for `migrate`, `makemigrations`, the test runner and `collectstatic`,
   often before the database exists or is migrated, and Django advises against queries there.
 

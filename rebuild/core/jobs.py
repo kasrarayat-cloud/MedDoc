@@ -382,7 +382,8 @@ def refuse(kind,detail,job=None):
     return NoProviderRequest(refusal_text(kind))
 
 
-#: A hold taken before the switch to real data mode that sits on sandbox money: refused before any provider request.
+#: A job whose held funds or payer's paid balance hold sandbox money in real data mode (billing.sandbox_hold): refused
+#: before any provider request.
 SANDBOX_HOLD_REFUSED='The paid balance for this request holds sandbox (test) payments, which real data mode never spends. Contact support.'
 
 
