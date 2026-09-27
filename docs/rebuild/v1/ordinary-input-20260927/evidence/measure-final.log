@@ -1,0 +1,17 @@
+t- 12 / 12
+r1- 22 / 77
+t-prose 3 / 3 [('Chief complaint', 'supported'), ('Allergies', 'supported'), ('Plan', 'supported')]
+t-lines 4 / 4 [('Chief complaint', 'supported'), ('Allergies', 'supported'), ('Plan', 'supported'), ('Smoker', 'supported')]
+t-worker 3 / 3 [('Referring physician', 'supported'), ('Reason for visit', 'supported'), ('Smoker?', 'supported')]
+t-r10 1 / 1 [('Smoker', 'supported')]
+t-social 1 / 1 [('Smoker', 'supported')]
+r1-note1 5 / 9 [('Chief complaint', 'conflict'), ('History of present illness', 'conflict'), ('Past medical history', 'conflict'), ('Medications', 'conflict'), ('Allergies', 'supported'), ('Smoker', 'supported'), ('Examination', 'supported'), ('Assessment', 'supported'), ('Plan', 'supported')]
+r1-note2 6 / 9 [('Chief complaint', 'conflict'), ('History of present illness', 'conflict'), ('Past medical history', 'conflict'), ('Medications', 'supported'), ('Allergies', 'supported'), ('Smoker', 'supported'), ('Examination', 'supported'), ('Assessment', 'supported'), ('Plan', 'supported')]
+r1-note3 0 / 9 [('Chief complaint', 'conflict'), ('History of present illness', 'conflict'), ('Past medical history', 'conflict'), ('Medications', 'conflict'), ('Allergies', 'conflict'), ('Smoker', 'conflict'), ('Examination', 'conflict'), ('Assessment', 'conflict'), ('Plan', 'conflict')]
+r1-note4 0 / 8 [('Chief complaint', 'conflict'), ('History of present illness', 'conflict'), ('Medications', 'conflict'), ('Allergies', 'conflict'), ('Smoker', 'conflict'), ('Examination', 'conflict'), ('Assessment', 'conflict'), ('Plan', 'conflict')]
+r1-note5 3 / 7 [('Chief complaint', 'conflict'), ('History of present illness', 'conflict'), ('Allergies', 'supported'), ('Smoker', 'supported'), ('Examination', 'conflict'), ('Assessment', 'conflict'), ('Plan', 'supported')]
+r1-note6 0 / 4 [('Chief complaint', 'conflict'), ('Examination', 'conflict'), ('Plan', 'conflict'), ('Consent obtained', 'conflict')]
+r1-note7 1 / 7 [('Chief complaint', 'conflict'), ('History of present illness', 'conflict'), ('Medications', 'conflict'), ('Allergies', 'supported'), ('Examination', 'conflict'), ('Assessment', 'conflict'), ('Plan', 'conflict')]
+r1-note8 0 / 8 [('Chief complaint', 'conflict'), ('History of present illness', 'conflict'), ('Medications', 'conflict'), ('Allergies', 'conflict'), ('Smoker', 'conflict'), ('Examination', 'conflict'), ('Assessment', 'conflict'), ('Plan', 'conflict')]
+r1-note9 7 / 7 [('Chief complaint', 'supported'), ('Medications', 'supported'), ('Allergies', 'supported'), ('Smoker', 'supported'), ('Examination', 'supported'), ('Assessment', 'supported'), ('Plan', 'supported')]
+r1-note10 0 / 9 [('Chief complaint', 'conflict'), ('History of present illness', 'conflict'), ('Past medical history', 'conflict'), ('Medications', 'conflict'), ('Allergies', 'conflict'), ('Smoker', 'conflict'), ('Examination', 'conflict'), ('Assessment', 'conflict'), ('Plan', 'conflict')]

@@ -1,0 +1,48 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..F..
+======================================================================
+FAIL: test_retained_note9_as_one_paragraph_completes_original_word_export (core.tests.test_v3_ordinary_input.CompleteInlineMedicationReview.test_retained_note9_as_one_paragraph_completes_original_word_export)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 70, in test_retained_note9_as_one_paragraph_completes_original_word_export
+    self.walk(notes, case['picks'], expected)
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_context.py", line 186, in walk
+    self.assertEqual({label: (answers[self.key(label)]['status'], answers[self.key(label)]['text']) for label in expected},
+AssertionError: {'Chi[219 chars]': ('conflict', ''), 'Examination': ('supporte[154 chars]s.')} != {'Chi[219 chars]': ('supported', 'No'), 'Examination': ('suppo[157 chars]s.')}
+  {'Allergies': ('supported', 'codeine.'),
+   'Assessment': ('supported', 'stable type 2 diabetes and hyperlipidemia.'),
+   'Chief complaint': ('supported', 'Patient presents for medication review.'),
+   'Examination': ('supported', 'not performed today.'),
+   'Medications': ('supported',
+                   'Current medications are atorvastatin 20 mg and metformin '
+                   '1000 mg.'),
+   'Plan': ('supported', 'continue current medications.'),
+-  'Smoker': ('conflict', '')}
++  'Smoker': ('supported', 'No')}
+
+======================================================================
+FAIL: test_actual_inline_option_uses_the_same_source_sentence_boundaries (core.tests.test_v3_ordinary_input.InlinePrintedOptions.test_actual_inline_option_uses_the_same_source_sentence_boundaries)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-input/rebuild/core/tests/test_v3_ordinary_input.py", line 22, in test_actual_inline_option_uses_the_same_source_sentence_boundaries
+    self.assertEqual((answer['status'], answer['text']), ('supported', 'No'))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'No')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'No')
+
+----------------------------------------------------------------------
+Ran 6 tests in 5.501s
+
+FAILED (failures=2)
+Preserving test database for alias 'default'...
+Found 6 test(s).
+System check identified no issues (0 silenced).

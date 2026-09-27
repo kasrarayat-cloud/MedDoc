@@ -1,0 +1,360 @@
+[
+  {
+    "name": "inline-smoker",
+    "notes": "Patient presents with right knee pain. Smoker: No.",
+    "units": [
+      {
+        "id": 1,
+        "quote": "Patient presents with right knee pain.",
+        "start": 0,
+        "end": 38,
+        "correction_value": null
+      },
+      {
+        "id": 2,
+        "quote": "Smoker: No.",
+        "start": 39,
+        "end": 50,
+        "correction_value": null
+      }
+    ],
+    "answers": {
+      "Smoker": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Smoker: No.",
+            "start": 39,
+            "end": 50
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "No.",
+          "evidence": [
+            {
+              "quote": "Smoker: No.",
+              "start": 39,
+              "end": 50
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    "blocks": [
+      {
+        "units": [
+          {
+            "id": 1,
+            "quote": "Patient presents with right knee pain.",
+            "start": 0,
+            "end": 38,
+            "correction_value": null
+          }
+        ],
+        "owner": null,
+        "position": 0,
+        "group_start": 0,
+        "group_count": 2
+      },
+      {
+        "units": [
+          {
+            "id": 2,
+            "quote": "Smoker: No.",
+            "start": 39,
+            "end": 50,
+            "correction_value": null
+          }
+        ],
+        "owner": "smoker",
+        "position": 1,
+        "group_start": 0,
+        "group_count": 2
+      }
+    ],
+    "barriers": {
+      "0": true,
+      "1": true
+    },
+    "patients": {
+      "1": true,
+      "2": false
+    }
+  },
+  {
+    "name": "tail-visit",
+    "notes": "Smoker: yes\nPatient seen today.",
+    "units": [
+      {
+        "id": 1,
+        "quote": "Smoker: yes",
+        "start": 0,
+        "end": 11,
+        "correction_value": null
+      },
+      {
+        "id": 2,
+        "quote": "Patient seen today.",
+        "start": 12,
+        "end": 31,
+        "correction_value": null
+      }
+    ],
+    "answers": {
+      "Smoker": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Smoker: yes",
+            "start": 0,
+            "end": 11
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "yes",
+          "evidence": [
+            {
+              "quote": "Smoker: yes",
+              "start": 0,
+              "end": 11
+            }
+          ],
+          "context": [
+            {
+              "quote": "Patient seen today.",
+              "start": 12,
+              "end": 31,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    "blocks": [
+      {
+        "units": [
+          {
+            "id": 1,
+            "quote": "Smoker: yes",
+            "start": 0,
+            "end": 11,
+            "correction_value": null
+          },
+          {
+            "id": 2,
+            "quote": "Patient seen today.",
+            "start": 12,
+            "end": 31,
+            "correction_value": null
+          }
+        ],
+        "owner": "smoker",
+        "position": 0,
+        "group_start": 0,
+        "group_count": 1
+      }
+    ],
+    "barriers": {
+      "0": false
+    },
+    "patients": {
+      "1": false,
+      "2": false
+    }
+  },
+  {
+    "name": "tail-social",
+    "notes": "Smoker: No.\nThe patient drinks socially.",
+    "units": [
+      {
+        "id": 1,
+        "quote": "Smoker: No.",
+        "start": 0,
+        "end": 11,
+        "correction_value": null
+      },
+      {
+        "id": 2,
+        "quote": "The patient drinks socially.",
+        "start": 12,
+        "end": 40,
+        "correction_value": null
+      }
+    ],
+    "answers": {
+      "Smoker": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Smoker: No.",
+            "start": 0,
+            "end": 11
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "No.",
+          "evidence": [
+            {
+              "quote": "Smoker: No.",
+              "start": 0,
+              "end": 11
+            }
+          ],
+          "context": [
+            {
+              "quote": "The patient drinks socially.",
+              "start": 12,
+              "end": 40,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      }
+    },
+    "blocks": [
+      {
+        "units": [
+          {
+            "id": 1,
+            "quote": "Smoker: No.",
+            "start": 0,
+            "end": 11,
+            "correction_value": null
+          },
+          {
+            "id": 2,
+            "quote": "The patient drinks socially.",
+            "start": 12,
+            "end": 40,
+            "correction_value": null
+          }
+        ],
+        "owner": "smoker",
+        "position": 0,
+        "group_start": 0,
+        "group_count": 1
+      }
+    ],
+    "barriers": {
+      "0": false
+    },
+    "patients": {
+      "1": false,
+      "2": false
+    }
+  },
+  {
+    "name": "inline-note9-layout-variant",
+    "notes": "Patient presents for medication review. Current medications are atorvastatin 20 mg and metformin 1000 mg. Allergies: codeine. Smoker: No. Examination was not performed today. Assessment: stable type 2 diabetes and hyperlipidemia. Plan: continue current medications.",
+    "answers": {
+      "Chief complaint": {
+        "text": "Patient presents for medication review.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Patient presents for medication review.",
+            "start": 0,
+            "end": 39
+          }
+        ],
+        "reviewed": false
+      },
+      "Medications": {
+        "text": "Current medications are atorvastatin 20 mg and metformin 1000 mg.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Current medications are atorvastatin 20 mg and metformin 1000 mg.",
+            "start": 40,
+            "end": 105
+          }
+        ],
+        "reviewed": false
+      },
+      "Allergies": {
+        "text": "codeine.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Allergies: codeine.",
+            "start": 106,
+            "end": 125
+          }
+        ],
+        "reviewed": false
+      },
+      "Smoker": {
+        "text": "",
+        "status": "conflict",
+        "evidence": [
+          {
+            "quote": "Smoker: No.",
+            "start": 126,
+            "end": 137
+          }
+        ],
+        "reviewed": false,
+        "held_candidate": {
+          "text": "No.",
+          "evidence": [
+            {
+              "quote": "Smoker: No.",
+              "start": 126,
+              "end": 137
+            }
+          ],
+          "context": [],
+          "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly one of them. Choose the option yourself if the notes support it, or choose \"Leave blank \u2014 reviewed\"."
+        }
+      },
+      "Examination": {
+        "text": "not performed today.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Examination was not performed today.",
+            "start": 138,
+            "end": 174
+          }
+        ],
+        "reviewed": false
+      },
+      "Assessment": {
+        "text": "stable type 2 diabetes and hyperlipidemia.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Assessment: stable type 2 diabetes and hyperlipidemia.",
+            "start": 175,
+            "end": 229
+          }
+        ],
+        "reviewed": false
+      },
+      "Plan": {
+        "text": "continue current medications.",
+        "status": "supported",
+        "evidence": [
+          {
+            "quote": "Plan: continue current medications.",
+            "start": 230,
+            "end": 265
+          }
+        ],
+        "reviewed": false
+      }
+    }
+  }
+]
