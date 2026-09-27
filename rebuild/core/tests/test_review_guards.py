@@ -749,18 +749,35 @@ class CodeWritersSerializeWithANotesSave(OrdinaryDraft, TransactionTestCase):
         self.assertIn('accepted code', save.get('messages', ''))
 
     def test_suggestions_are_never_drawn_from_notes_a_concurrent_save_replaced(self):
-        """`coding` wrote suggestions from the notes it had read, unlocked, before a save replaced them."""
+        """`coding` wrote suggestions from the notes it had read, unlocked, before a save replaced them. Since R4-2 it reads
+        them unlocked on purpose, so a save is not held up by the pass, and re-checks the page's revision under the lock
+        before writing: a save landing meanwhile is answered at once, and the suggestion is refused with nothing written."""
         encounter, _offer = self.offered(self.CODED, suggestion=False)
         revision, save = encounter.revision, {}
         thread = self.in_thread(self.employee, f'/encounters/{encounter.pk}/notes/', {'revision': revision, 'notes': self.CHANGED}, save)
-        # (the suggestion has read the notes, and its write is next)
+        # (the suggestion has read the notes and is working out what they support, holding no lock)
         with self.run_while(thread, (coding_module, 'applicable_releases'), 'save_ran', save):
             suggested = self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': revision})
         thread.join(timeout=60)
         encounter.refresh_from_db()
+        self.assertEqual((suggested.status_code, save.get('save_ran'), save.get('status')), (409, 'answered', 302))
+        self.assertIn('Nothing was suggested.', html.unescape(suggested.content.decode()))
+        self.assertEqual((encounter.notes, CodeSuggestion.objects.filter(encounter=encounter).count(),
+                          AuditEvent.objects.filter(action='coding.suggest').count()), (self.CHANGED, 0, 0))
+
+    def test_a_save_arriving_while_suggestions_are_written_waits_and_then_clears_them(self):
+        """The write half: under the lock, a save waits for the suggestions and their audit row, then clears them."""
+        encounter, _offer = self.offered(self.CODED, suggestion=False)
+        revision, save = encounter.revision, {}
+        thread = self.in_thread(self.employee, f'/encounters/{encounter.pk}/notes/', {'revision': revision, 'notes': self.CHANGED}, save)
+        # (the suggestions and their audit row are written, and the commit is next)
+        with self.run_while(thread, (coding_module, 'audit'), 'save_ran', save):
+            suggested = self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': revision})
+        thread.join(timeout=60)
+        encounter.refresh_from_db()
         self.assertEqual((suggested.status_code, save.get('save_ran'), save.get('status')), (302, 'waiting', 302))
-        self.assertEqual(encounter.notes, self.CHANGED)
-        self.assertEqual([s.evidence for s in CodeSuggestion.objects.filter(encounter=encounter) if s.evidence not in encounter.notes], [])
+        self.assertEqual(AuditEvent.objects.filter(action='coding.suggest').count(), 1)
+        self.assertEqual((encounter.notes, CodeSuggestion.objects.filter(encounter=encounter).count()), (self.CHANGED, 0))
 
 
 def page_form(page, action_suffix):
@@ -1238,12 +1255,19 @@ class SuggestingCodesDoesNotHoldTheDocument(OrdinaryDraft, TransactionTestCase):
         answered = time.monotonic()
         other.join(timeout=600)
         held = round(answered - measured.get('locked', started), 1)
+        self.said = shown_messages(self.client.get(response['Location'])) if response.status_code == 302 else ''
+        self.encounter = encounter
         return (response.status_code, CodeSuggestion.objects.filter(encounter=encounter).count(),
                 held, round(measured.get('other_waited', -1), 1), round(answered - started, 1))
 
     def within_bounds(self, separator):
         status, count, held, waited, took = self.suggested(separator)
-        self.assertEqual((status, count), (302, 12000))                            # (the control: every code suggested)
+        # A document holds at most 100 suggestions: the first 100 the notes document, and the other 11,900 said and audited.
+        details = last_event('coding.suggest', self.encounter)
+        self.assertEqual((status, count, details.get('count'), details.get('not_suggested_over_limit')), (302, 100, 100, 11900))
+        self.assertEqual(set(CodeSuggestion.objects.filter(encounter=self.encounter).values_list('terminology__code', flat=True)),
+                         set(MANY_CODES[:100]))
+        self.assertIn('11900 further documented codes were not suggested: a document holds at most 100 code suggestions.', self.said)
         self.assertTrue(held < self.LOCK_BOUND and waited < self.LOCK_BOUND and took < self.REQUEST_BOUND,
                         f'lock held {held} s, another request waited {waited} s, the request took {took} s')
 
@@ -1252,3 +1276,47 @@ class SuggestingCodesDoesNotHoldTheDocument(OrdinaryDraft, TransactionTestCase):
 
     def test_codes_on_one_line(self):
         self.within_bounds(' ')
+
+
+def searched_line_by_line(notes, wanted):
+    """What `core.coding` read before R4-2: for each code, the first line the per-code search matches, or None."""
+    return {code: next((line for line in notes.splitlines()
+                        if re.search(r'(?<![\w.])' + re.escape(code) + r'(?!\w)(?!\.[0-9A-Za-z])', line, re.I)), None)
+            for code in wanted}
+
+
+class TheLinearScanReadsAsThePerCodeSearchDid(TestCase):
+    """R4-2's one-pass scan (`evidence_lines`) against the per-code search it replaced, on generated notes built from the
+    pieces that decide a match: codes and their neighbours, dots, underscores, the four non-ASCII letters `re.I` folds to
+    ASCII ones, a non-ASCII digit, and every line break `splitlines` honours."""
+    PIECES = ['R00', 'R00.0', 'r00.0', 'M25.532', 'M25.5320', '99213', '0001F', '\u017f12', 'S12', 'K21.9', '\u212a21.9',
+              '\u0131a1', 'Ia1', '\u0130A1', '.', '..', '_', ' ', '\n', '\r\n', '\r', '\u2028', '\x1c', '\u00e9', '\u0663',
+              '\u00df', 'A', '1', '9', 'x', ',', '-', 'Z', '(', '\u0301']
+    CODES = ['R00', 'R00.0', 'M25.532', 'M25.5320', '99213', '0001F', 'S12', 'K21.9', 'IA1', 'A1Z', 'Z1A', 'X19', 'A11',
+             'A00.0000', 'R00.0X', 'S12.1']
+
+    def test_generated_notes_read_the_same(self):
+        import random
+        chance = random.Random(20260927)
+        compared = found = 0
+        for _trial in range(4000):
+            notes = ''.join(chance.choice(self.PIECES) for _ in range(chance.randint(0, 40)))
+            wanted = set(chance.sample(self.CODES, chance.randint(1, len(self.CODES))))
+            expected = {code: line for code, line in searched_line_by_line(notes, wanted).items() if line is not None}
+            scanned = {code: line for code, (_order, line) in coding_module.evidence_lines(notes, wanted).items()}
+            self.assertEqual(scanned, expected, repr(notes))
+            compared += 1; found += len(expected)
+        self.assertGreater(found, 1000)                                  # (the control: the corpus does hold codes)
+
+    def test_the_letters_re_folds_are_folded(self):
+        notes = 'Seen: \u017f12, \u212a21.9 and \u0131a1.\nNot: S12x K21.9.1'
+        expected = {'S12': 'Seen: \u017f12, \u212a21.9 and \u0131a1.', 'K21.9': 'Seen: \u017f12, \u212a21.9 and \u0131a1.',
+                    'IA1': 'Seen: \u017f12, \u212a21.9 and \u0131a1.'}
+        self.assertEqual(searched_line_by_line(notes, set(expected)), expected)          # (the control: the old reading)
+        self.assertEqual({code: line for code, (_order, line) in coding_module.evidence_lines(notes, set(expected)).items()},
+                         expected)
+
+    def test_the_order_is_the_order_the_notes_document_them(self):
+        notes = 'Seen for S12.\nThen R00.0 and M25.532, then S12 again.\nK21.9'
+        scanned = coding_module.evidence_lines(notes, {'K21.9', 'M25.532', 'R00.0', 'S12'})
+        self.assertEqual(sorted(scanned, key=lambda code: scanned[code][0]), ['S12', 'R00.0', 'M25.532', 'K21.9'])

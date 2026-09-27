@@ -1142,25 +1142,42 @@ def invite_accept(request,raw):
 #: The database guard covers the encounter row only, not its code suggestions, so both code writers check the status.
 FINALIZED_CODES='This document is finalized. Finalized documents are immutable.'
 
-@require_POST
-@transaction.atomic
-def coding(request,pk):
-    from .coding import suggest
-    # (under the encounter's row lock, at the page's revision, as `accept_code` below: a suggestion read unlocked was written
-    # from notes a concurrent save had already replaced — refutation round 3, F1)
-    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
-    membership(request.user,e.department)
+def coding_refusal(request,e,planned_notes=None):
+    """Why Suggest codes may not write to this encounter as the page posted it, as a refusal page; None when it may."""
     if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was suggested.',409)
-    if request.POST.get('revision')!=str(e.revision):
+    if request.POST.get('revision')!=str(e.revision) or (planned_notes is not None and e.notes!=planned_notes):
         return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing was suggested. Reopen it to see the current notes before suggesting codes.',409)
-    result=suggest(e,request.user)
+    return None
+
+@require_POST
+def coding(request,pk):
+    from .coding import plan,suggest
+    # ⚠️ THE SUGGESTIONS ARE WORKED OUT BEFORE THE LOCK, AND ONLY WRITTEN UNDER IT. Holding the encounter's row lock for the
+    # whole pass let any member stall the document — 12,000 codes in 48,000 characters held it 70.6 s, and a page view
+    # waited 77.2 s (refutation round 4, R4-2). The plan is read from the notes at the page's revision; the write then takes
+    # the lock, as `accept_code` below, and re-checks that revision and those notes, so a suggestion is still never drawn
+    # from notes a concurrent save replaced (refutation round 3, F1) — that save now waits for the write alone.
+    e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    membership(request.user,e.department)
+    refused=coding_refusal(request,e)
+    if refused:return refused
+    planned=plan(e)
+    with transaction.atomic():
+        e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+        membership(request.user,e.department)
+        refused=coding_refusal(request,e,planned_notes=planned.notes)
+        if refused:return refused
+        result=suggest(e,request.user,planned)
     served=e.service_date.strftime('%d %B %Y')
+    from .coding import MAX_SUGGESTIONS
+    over=(f' {result.omitted} further documented code{" was" if result.omitted==1 else "s were"} not suggested: a document holds '
+          f'at most {MAX_SUGGESTIONS} code suggestions.' if result.omitted else '')
     if result.covered:
-        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service. Diagnosis inference is not enabled. CPT requires a licensed current feed.')
+        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:
         # A licensed CPT release can answer for a date no diagnosis release covers. Saying "nothing
         # was recorded" here would deny suggestions sitting on the page underneath the message.
-        messages.warning(request,f'No ICD-10-CM release covers the {served} date of service, so no diagnosis code was validated. {result.count} new suggestions came from {", ".join(result.versions)}. Import the diagnosis release in effect for that date.')
+        messages.warning(request,f'No ICD-10-CM release covers the {served} date of service, so no diagnosis code was validated. {result.count} new suggestions came from {", ".join(result.versions)}.{over} Import the diagnosis release in effect for that date.')
     else:
         messages.warning(request,f'No terminology release covers the {served} date of service, so nothing was validated and no suggestion was recorded. Import the release in effect for that date.')
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
