@@ -1,0 +1,21 @@
+F
+======================================================================
+FAIL: test_retained_patient_sentence_after_physician_answer (core.tests.test_v3_ordinary_context.IndependentPrecedingContext.test_retained_patient_sentence_after_physician_answer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 26, in test_retained_patient_sentence_after_physician_answer
+    self.assertEqual({label: a['text'] for label, a in answers.items()},
+AssertionError: {'Ref[15 chars]n': '', 'Reason for visit': 'Patient presents [36 chars]Yes'} != {'Ref[15 chars]n': 'Dr Example', 'Reason for visit': 'Patient[46 chars]Yes'}
+  {'Reason for visit': 'Patient presents with right knee pain.',
+-  'Referring physician': '',
++  'Referring physician': 'Dr Example',
+?                          ++++++++++
+
+   'Smoker?': 'Yes'}
+
+----------------------------------------------------------------------
+Ran 1 test in 0.310s
+
+FAILED (failures=1)
+Found 1 test(s).
+System check identified no issues (0 silenced).

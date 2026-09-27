@@ -1,0 +1,22 @@
+F
+======================================================================
+FAIL: test_a_patient_presentation_cannot_gain_a_plan_destination (core.tests.test_v3_ordinary_context.IndependentPrecedingContext.test_a_patient_presentation_cannot_gain_a_plan_destination)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 64, in test_a_patient_presentation_cannot_gain_a_plan_destination
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''), label)
+AssertionError: Tuples differ: ('supported', 'Patient presents with right knee pain.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Patient presents with right knee pain.')
++ ('conflict', '') : Plan
+
+----------------------------------------------------------------------
+Ran 1 test in 0.208s
+
+FAILED (failures=1)
+Found 1 test(s).
+System check identified no issues (0 silenced).

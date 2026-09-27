@@ -1,0 +1,22 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.../opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...........................................................F...................................
+======================================================================
+FAIL: test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it (core.tests.test_v3_ordinary_notes.RoundThreeCost.test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it)
+Once per unit, shared by the paragraph rule and every question that selects the unit.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 1120, in test_r3_4_each_unit_is_read_for_sentence_ends_once_however_many_questions_select_it
+    self.assertLessEqual(len(shapes), len(units), shapes)
+AssertionError: 4 not less than or equal to 3 : ['Patient presents with knee pain.', 'Patient presents with knee pain.', 'She reports it is worse at night.', 'Allergies: penicillin.']
+
+----------------------------------------------------------------------
+Ran 98 tests in 17.303s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 98 test(s).
+System check identified no issues (0 silenced).

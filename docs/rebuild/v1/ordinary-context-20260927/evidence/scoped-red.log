@@ -1,0 +1,22 @@
+..F
+======================================================================
+FAIL: test_the_retained_complete_ordinary_note_has_three_exact_answers (core.tests.test_v3_ordinary_context.IndependentSourceBlocks.test_the_retained_complete_ordinary_note_has_three_exact_answers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 73, in test_the_retained_complete_ordinary_note_has_three_exact_answers
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', expected))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'Patient presents with right knee pain for three weeks.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'Patient presents with right knee pain for three weeks.')
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.193s
+
+FAILED (failures=1)
+Found 3 test(s).
+System check identified no issues (0 silenced).

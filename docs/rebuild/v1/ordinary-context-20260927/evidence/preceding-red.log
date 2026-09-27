@@ -1,0 +1,58 @@
+...FFF
+======================================================================
+FAIL: test_retained_explicit_plan_after_plain_answers (core.tests.test_v3_ordinary_context.IndependentPrecedingContext.test_retained_explicit_plan_after_plain_answers) (prefix='Patient presents with right knee pain for three weeks. Allergies: penicillin. ')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 30, in test_retained_explicit_plan_after_plain_answers
+    self.assert_shared_supported(prefix + quote, FIELDS, 'Plan', quote, quote[len('Plan is '):])
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 10, in assert_shared_supported
+    self.assertEqual((answer['status'], answer['text']), ('supported', expected))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'physiotherapy twice weekly and review in six weeks.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'physiotherapy twice weekly and review in six weeks.')
+
+======================================================================
+FAIL: test_retained_explicit_plan_after_plain_answers (core.tests.test_v3_ordinary_context.IndependentPrecedingContext.test_retained_explicit_plan_after_plain_answers) (prefix='Patient presents with right knee pain for three weeks.\nAllergies: penicillin.\nSmoker: No.\n')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 30, in test_retained_explicit_plan_after_plain_answers
+    self.assert_shared_supported(prefix + quote, FIELDS, 'Plan', quote, quote[len('Plan is '):])
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 10, in assert_shared_supported
+    self.assertEqual((answer['status'], answer['text']), ('supported', expected))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'physiotherapy twice weekly and review in six weeks.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'physiotherapy twice weekly and review in six weeks.')
+
+======================================================================
+FAIL: test_retained_patient_sentence_after_physician_answer (core.tests.test_v3_ordinary_context.IndependentPrecedingContext.test_retained_patient_sentence_after_physician_answer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 23, in test_retained_patient_sentence_after_physician_answer
+    self.assert_shared_supported(notes, fields, 'Reason for visit', quote, quote)
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 10, in assert_shared_supported
+    self.assertEqual((answer['status'], answer['text']), ('supported', expected))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'Patient presents with right knee pain.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'Patient presents with right knee pain.')
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.202s
+
+FAILED (failures=3)
+Found 5 test(s).
+System check identified no issues (0 silenced).
