@@ -708,7 +708,10 @@ class IncidentNotificationTests(unittest.TestCase):
                  ('status', {'format': 2}), ('status', {'incident_id': None}),
                  ('ledger', {'format': 2}), ('ledger', {'unexpected': 'private-canary'}),
                  ('ledger', {'announced_at': {'warning': None}}),
-                 ('ledger', {'announced_at': {'warning': 'private-canary', 'failure': None}})]
+                 ('ledger', {'announced_at': {'warning': 'private-canary', 'failure': None}}),
+                 # A malformed record of an incident that is already over: nothing merges it, so
+                 # only the ledger's own validation can refuse it.
+                 ('stale', {'incident_attempt_count': 'private-canary'})]
         for changes in ({'incident_conditions_announced': ['private-clinical-canary', 'backup_stale']},
                         {'incident_conditions_announced': ['backup_stale', 'backup_stale']},
                         {'incident_conditions_announced': ['healthy', 'backup_stale']},
@@ -724,9 +727,10 @@ class IncidentNotificationTests(unittest.TestCase):
         for where, changes in cases:
             with self.subTest(where=where, changes=changes):
                 (self.alerts / 'status.json').write_text(json.dumps(
-                    dict(status, **changes) if where == 'status' else status))
+                    dict(status, **changes) if where == 'status'
+                    else dict(status, incident_id=None, incident_attempt=None) if where == 'stale' else status))
                 (self.alerts / a.NOTICES_FILE).write_text(json.dumps(
-                    dict(ledger, incident=dict(ledger['incident'], **changes)) if where == 'record'
+                    dict(ledger, incident=dict(ledger['incident'], **changes)) if where in ('record', 'stale')
                     else dict(ledger, **changes) if where == 'ledger' else ledger))
                 result, code = a.check(self.at + timedelta(days=2))
                 self.assertEqual((code, result['condition']), (1, 'monitoring_state_unavailable'))
@@ -1136,8 +1140,10 @@ class IncidentLedgerTests(unittest.TestCase):
                    'provider_message_id': 'previous-release-id', 'provider_accepted': True,
                    'delivery_confirmed': False, 'inbox_receipt_confirmed': False}
         a.backup.write_private(self.alerts / f'incident-{held}-result.json', json.dumps(receipt).encode())
+        # Exactly the fields the previous release's check writes: its check time and its attempt.
         (self.alerts / 'status.json').write_text(json.dumps(dict(
-            status, incident_attempt=held, last_attempt_at=receipt['attempted_at'])))
+            status, incident_attempt=held, last_attempt_at=receipt['attempted_at'],
+            last_check_at=receipt['attempted_at'])))
         result, _ = a.check(self.at + timedelta(hours=25, minutes=5))
         state = self.state()
         self.assertEqual((state['incident_opened_at'], state['incident_attempt_count'], self.sender.call_count),
