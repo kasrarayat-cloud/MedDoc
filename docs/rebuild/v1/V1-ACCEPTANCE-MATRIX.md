@@ -151,3 +151,15 @@ upload/mapping/worker/review/correction/finalization/export test passed7.110s ac
 ordinary and long values. `manage.py check` reports no issues and migration drift check reports
 no changes. No live model or native Word claim follows. Text evidence and exact hashes are in
 `evidence/final-union-20260927/`.
+
+
+### Saved revision CI browser evidence
+
+PR#1288 CI36351792380 tests saved revision `b806ed85b4895304e6ef0c0b5aab8a8affbf9288`.
+Its completed private-browser job includes15 doctor/admin/accessibility checks,9 WM checks
+(including five fixture export scenarios and isolation/correction), and8 input/recording checks.
+All recorded expected outcomes passed; there were no provider requests. The recording evidence
+explicitly says `physical_microphone_verified:false`. Natural human dictation and native Word
+remain unverified. The application/document/operations job is still running at this entry;
+no whole-CI success is claimed. Downloaded three original JSON reports are preserved under
+root runtime `v1-astra-recovery-20260927/ci-b806-browser/`.

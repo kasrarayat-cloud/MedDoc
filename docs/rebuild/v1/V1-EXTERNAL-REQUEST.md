@@ -92,3 +92,19 @@ clinic-supplied originals and their reuse authority can also supply the missing 
 `corpus-development-inventory-adjudication-20260927.md`. This adds the proven dependency to the same
 consolidated request; it authorizes no acquisition campaign or denominator replacement. The original
 60-file manifest and every first-pass result remain unchanged.
+
+
+## Human dictation acceptance detail (same pending request)
+
+A short natural human recording and review session also remains necessary. The Sep20 prepared
+synthetic encounter and its original capped declaration are preserved; they are historical,
+revision-specific preparation and are not a reusable Sonnet5 authorization. Reconcile that
+encounter and any resulting jobs before sending anything. No owner recording or new provider
+operation is claimed here. The Sep27 CI browser proof uses genuine MediaRecorder with synthetic
+audio: it proves interface behavior, not microphone acoustics or human transcription quality.
+
+Within the still-unapproved $10 ordinary-notes line above, reserve **at most $0.30 for one short
+synthetic-content human Deepgram transcription**, leaving at most$9.70 for its Sonnet5/ordinary-note
+checks. This does not increase the $40 total or authorize retries. Exact account/rate and displayed
+hold must fit before sending; otherwise the case stays unrun. Preserve original audio, as-spoken
+review, raw transcript, corrections and final Word evidence. No real patient data is permitted.
