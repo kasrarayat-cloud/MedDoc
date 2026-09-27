@@ -568,6 +568,12 @@ def encounter_detail(request,pk):
         from .generation import as_currently_governed,governance_for
         governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
         rows=[as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
+    if is_v3:
+        # ⚠️ A QUESTION LABEL THE FORM REPEATS IS SHOWN WITH ITS CONTEXT (counted with generation's own normalizer):
+        # two questions reading "Effusion" are told apart only by where they sit on the form.
+        from .generation import question_key
+        label_counts={}
+        for f in e.template_version.fields:label_counts[question_key(f.get('label'))]=label_counts.get(question_key(f.get('label')),0)+1
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
@@ -599,6 +605,7 @@ def encounter_detail(request,pk):
             row['v3_note']=v3_mapping.review_note(row)
             row['blank_note']=v3_mapping.blank_note(row)
             row['v3_final']=v3_mapping.finalized_note(row,row)
+            row['v3_context']=(row.get('context') or '') if label_counts.get(question_key(row.get('label')),0)>1 else ''
     requirements=[];review_error='';assessment=None;resolved_ok=False;wm_conflicts=[]
     if is_wm:
         decisions=e.template_review.get('decisions',{})

@@ -279,11 +279,11 @@ class OptionReader(unittest.TestCase):
     def test_list_markers_are_digits_single_letters_and_roman_numerals_only(self):
         from documents.word_v3 import clean_label
         kept = ["Rt. knee effusion", "Lt. knee", "Bil. knees", "Dr. Example", "No. of lesions", "Mr. Synthetic",
-                "Hx. reviewed", "Pt. consent"]
+                "Hx. reviewed", "Pt. consent", "(c) Route"]     # R4: a single letter in parentheses is kept (fail closed)
         for text in kept:
             self.assertEqual(clean_label(text), text)
         stripped = {"1. Name": "Name", "12) Plan": "Plan", "a) Yes": "Yes", "B. No": "No", "(3) Dose": "Dose",
-                    "(c) Route": "Route", "iv. Findings": "Findings", "(xii) Impression": "Impression",
+                    "c) Route": "Route", "iv. Findings": "Findings", "(xii) Impression": "Impression",
                     "XXX. Item": "Item", "vii) Item": "Item"}
         for text, label in stripped.items():
             self.assertEqual(clean_label(text), label, text)
@@ -720,7 +720,8 @@ class OptionsKeepTheirPrintedText(unittest.TestCase):
 
     def test_question_labels_keep_the_marker_rule_and_options_do_not(self):
         from documents.word_v3 import clean_label, option_text
-        self.assertEqual(clean_label("(a) Pain"), "Pain")
+        self.assertEqual(clean_label("a) Pain"), "Pain")
+        self.assertEqual(option_text("a) Pain"), "a) Pain")
         self.assertEqual(option_text("(a) Pain"), "(a) Pain")
         self.assertEqual(option_text("  (L)\tknee  "), "(L) knee")
         self.assertEqual(option_text("Other: ______"), "Other", "the write-in blank is not the option")

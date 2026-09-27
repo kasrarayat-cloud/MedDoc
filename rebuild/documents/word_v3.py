@@ -629,8 +629,11 @@ class Area:
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
 #: ⚠️ Never a multi-letter word: 'Rt.', 'Lt.', 'Bil.', 'Dr.', 'No.' are text, and stripping them turned 'Rt. knee' and
 #: 'Lt. knee' into the same label - and, through the option reader, the left knee into the right one.
+#: ⚠️ AND NEVER A SIDE: 'L.' 'R.' 'L)' 'R)' (either case) and ANY single letter in parentheses - '(L)' '(R)' '(a)' '(i)'
+#: - are kept (fail closed): '(L) Effusion' and '(R) Effusion' both became 'Effusion', and a notes line
+#: 'Effusion: Yes' that names no side filled the left-only question.
 LIST_MARK = r"(?:\d{1,3}|[A-Za-z]|(?i:x{0,2}(?:i{1,3}|iv|vi{0,3}|ix)|x{1,3}))"
-LIST_MARKER = re.compile(r"^(?:" + LIST_MARK + r"[.)]|\(" + LIST_MARK + r"\))\s+")
+LIST_MARKER = re.compile(r"^(?:(?![LRlr][.)])" + LIST_MARK + r"[.)]|\((?![A-Za-z]\))" + LIST_MARK + r"\))\s+")
 
 
 def clean_label(text: str) -> str:

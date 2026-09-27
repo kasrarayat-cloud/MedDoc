@@ -1074,6 +1074,13 @@ class V3SideInQuestions(V3Fixture, TestCase):
         self.assertEqual((answer["status"], answer["text"]), ("missing", ""), "the notes name no side")
         self.assertEqual(field["label"], "(L) Effusion?")
 
+    def test_the_line_that_names_the_side_fills_it(self):
+        template, _ = self.uploaded(data=left_effusion_form_bytes(), name="Synthetic effusion")
+        version = self.confirm(template)
+        field = next(f for f in version.fields if f["kind"] == "choice")
+        answer = self.generated(version, "(L) Effusion: Yes\n").answers[field["key"]]
+        self.assertEqual((answer["status"], answer["text"]), ("supported", "Yes"))
+
     def test_a_repeated_label_is_shown_with_its_context_on_the_review_page(self):
         template, _ = self.uploaded(data=two_sides_grid_bytes(), name="Synthetic sides")
         version = self.confirm(template)
