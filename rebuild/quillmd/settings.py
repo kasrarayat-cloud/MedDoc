@@ -78,8 +78,9 @@ AI_MODEL=os.getenv('QUILLMD_AI_MODEL','gpt-4.1-mini')
 AI_INPUT_RATE=os.getenv('QUILLMD_AI_INPUT_RATE','')
 AI_OUTPUT_RATE=os.getenv('QUILLMD_AI_OUTPUT_RATE','')
 AI_CACHED_RATE=os.getenv('QUILLMD_AI_CACHED_RATE','')
-# Request profile (core.generation.request_profile). Read ONLY when QUILLMD_AI_MODEL is claude-sonnet-5: every other
-# model — claude-sonnet-4-6 included — keeps the pre-profile request byte for byte and ignores the first two.
+# Request profile (core.generation.request_profile). Read ONLY when QUILLMD_AI_MODEL is claude-sonnet-5: the listed
+# legacy Claude models (core.generation.LEGACY_CLAUDE_MODELS, claude-sonnet-4-6 included) keep the pre-profile request
+# byte for byte and ignore the first two; any other Claude model id is refused before any request.
 # Thinking 'disabled' | 'adaptive'; effort 'low' | 'medium' | 'high'. Unset inference geography sends no inference_geo.
 AI_THINKING=os.getenv('QUILLMD_AI_THINKING','disabled')
 AI_EFFORT=os.getenv('QUILLMD_AI_EFFORT','medium')

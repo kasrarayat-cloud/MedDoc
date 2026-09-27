@@ -74,8 +74,9 @@ ATTESTATION_GUIDANCE = (' Leave consent, attestation, signature and dictated/tra
 # (https://platform.claude.com/docs/en/models/sonnet-5/migration-guide, read 2026-09-27). A request that omits the
 # fields therefore changes meaning with the model string. So the profile states them EXPLICITLY for Sonnet 5, is
 # SNAPSHOTTED into Job.config at enqueue (a queued job never changes its request shape), and is hashed into
-# pricing_version (a different request is a different price). Every other model keeps the pre-profile request byte for
-# byte: `LEGACY_PROFILE` IS that request, and it hashes as ABSENT so every existing fingerprint — claude-sonnet-4-6 at
+# pricing_version (a different request is a different price). The listed Claude models up to 4.6 (`LEGACY_CLAUDE_MODELS`)
+# and every non-Claude model keep the pre-profile request byte for byte; any other Claude id is refused (`unprofiled`).
+# `LEGACY_PROFILE` IS that request, and it hashes as ABSENT so every existing fingerprint — claude-sonnet-4-6 at
 # 3/15/0.30 is configured-v1:fcc80267… — stays exactly what it was. Rollback is a model string, not a code change.
 SONNET_5='claude-sonnet-5'
 THINKING_MODES=('disabled','adaptive')
@@ -114,23 +115,33 @@ _CLAUDE_VERSION=re.compile(r'claude-[a-z]+-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?')
 
 def claude_generation(model):
     """(major, minor) of a Claude model id — claude-sonnet-4-6 → (4, 6), claude-sonnet-5 → (5, 0),
-    claude-opus-4-5-20251101 → (4, 5) — or None for anything else."""
+    claude-opus-4-5-20251101 → (4, 5) — or None for anything else. Read ONLY to price a receipt's metered geography
+    (`us_inference_priced`); whether a request may be SENT is decided by the explicit list below, never by parsing."""
     match=_CLAUDE_VERSION.fullmatch(model) if isinstance(model,str) else None
     return (int(match[1]),int(match[2] or 0)) if match else None
 
 
-def unprofiled(provider,model):
-    """An Anthropic model the pre-profile request is NOT safe for, so it may not run until it has its own profile.
+#: ⚠️ DENY BY DEFAULT. The ONLY Claude model ids the pre-profile (legacy) request may be sent to: each is at or below 4.6,
+#: and each is one the application already accepted — claude-sonnet-4-6 is the live and rollback model; the other three
+#: are the ids the tests already ran through the legacy request. An id is matched EXACTLY as the API would receive it.
+#: This replaced a version parser, which read `claude-<family>-<major>[-<minor>]` and so let any id outside that shape —
+#: claude-mythos-preview, measured — fall through to the legacy request (6000 tokens, 60 s, no thinking field) on a model
+#: whose tokenizer and thinking defaults it was never sized for. Adding a model here is a code change with its own test.
+LEGACY_CLAUDE_MODELS=frozenset(('claude-sonnet-4-6','claude-haiku-4-5','claude-sonnet-4-5-20250929','claude-opus-4-1'))
 
-    From Claude 4.7 the tokenizer yields ~30% more tokens (a 6000 max_tokens sized on 4.6 can truncate), and from Sonnet 5 /
-    Opus 5 an omitted `thinking` runs adaptive thinking — the legacy request would silently change meaning on any of them.
-    claude-sonnet-5 itself has a profile; a near-miss spelling of it (capitals, whitespace) is refused too, since the API
-    would never see the string this table keys on. Models up to 4.6, and every non-Claude model, keep the legacy request.
+
+def unprofiled(provider,model):
+    """An Anthropic Claude model id that has no request profile, so nothing may be sent to it until it has one.
+
+    Every id containing `claude` (case-insensitively, anywhere — so a misspelling, a capitalised or padded id, a dated
+    variant nobody listed, or a regional prefix all count) is refused unless it is claude-sonnet-5, which has its own
+    profile, or is on `LEGACY_CLAUDE_MODELS` exactly as spelled. A newer model the legacy request is unsafe for — a larger
+    tokenizer from 4.7, adaptive thinking by default from Sonnet 5 / Opus 5 — can therefore never receive it by being
+    named in a shape nobody anticipated. Non-Anthropic providers, and Anthropic ids that are not Claude ids (the
+    synthetic fixtures), keep the legacy request as before.
     """
-    if provider!='anthropic' or not isinstance(model,str) or model==SONNET_5: return False
-    folded=model.strip().casefold()
-    generation=claude_generation(folded)
-    return folded==SONNET_5 or (generation is not None and generation>(4,6))
+    if provider!='anthropic' or not isinstance(model,str) or model==SONNET_5 or model in LEGACY_CLAUDE_MODELS: return False
+    return 'claude' in model.casefold()
 
 
 def request_profile(provider,model,thinking,effort,inference_geo):
@@ -150,8 +161,9 @@ def request_profile(provider,model,thinking,effort,inference_geo):
                  'thinking':{'type':'disabled'} if thinking=='disabled' else {'type':'adaptive','display':'omitted'},
                  'effort':effort}
     elif unprofiled(provider,model):
-        return {'invalid':'QUILLMD_AI_MODEL has no request profile: QuillMD runs claude-sonnet-5 (spelled exactly so) '
-                          'and Claude models up to 4.6; a newer model needs its own profile first.'}
+        return {'invalid':'QUILLMD_AI_MODEL has no request profile: QuillMD sends requests only to claude-sonnet-5 and to '
+                          +', '.join(sorted(LEGACY_CLAUDE_MODELS))+', each spelled exactly so; '
+                          'any other Claude model needs its own profile first.'}
     else:
         profile=dict(LEGACY_PROFILE)
     if geo:

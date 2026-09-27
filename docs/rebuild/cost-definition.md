@@ -113,14 +113,17 @@ states `thinking` and `output_config.effort`:
 - `thinking` is `{type: disabled}`, or `{type: adaptive, display: omitted}`, set by `QUILLMD_AI_THINKING` (default `disabled`).
 - `effort` is `low`, `medium` or `high`, set by `QUILLMD_AI_EFFORT` (default `medium`).
 
-It never sends sampling parameters, `budget_tokens` or a prefill. Every other model,
-`claude-sonnet-4-6` included, keeps the pre-profile request byte for byte. The profile is
+It never sends sampling parameters, `budget_tokens` or a prefill. The Claude models listed
+in `LEGACY_CLAUDE_MODELS` (`claude-sonnet-4-6`, `claude-haiku-4-5`, `claude-sonnet-4-5-20250929`,
+`claude-opus-4-1`, each matched exactly as spelled) and every non-Claude model keep the
+pre-profile request byte for byte. The profile is
 snapshotted into `Job.config` with the rates and hashed into `pricing_version`, except the
 legacy profile, which hashes as absent. The rollback configuration therefore still
 fingerprints as `configured-v1:fcc80267…`, and no stored fingerprint changes meaning. An
 invalid choice refuses generation before any request, and the hold is released. So does
-any Claude model newer than 4.6 other than `claude-sonnet-5`, until it has its own
-profile: on those models the old call would change meaning.
+every other Claude model id, until it has its own profile. This is deny by default, not a
+version comparison: a parser of `claude-<family>-<n>` let `claude-mythos-preview` through to
+the old call, which on a newer model would change meaning.
 
 **Hold.** `maximum_cost` prices the exact `max_tokens` the profile sends:
 

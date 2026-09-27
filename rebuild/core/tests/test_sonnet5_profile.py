@@ -169,12 +169,46 @@ class PricingFingerprint(SimpleTestCase):
                         with self.assertRaises(NoProviderRequest):
                             g.maximum_cost(NOTES, FIELDS, config)
                     client.assert_not_called()
-        # Up to 4.6, and anything that is not an Anthropic Claude model, keeps the pre-profile request.
+        # The LISTED Claude models up to 4.6, and anything that is not an Anthropic Claude id, keep the pre-profile request.
         for provider, model in (('anthropic', 'claude-sonnet-4-6'), ('anthropic', 'claude-haiku-4-5'),
                                 ('anthropic', 'claude-sonnet-4-5-20250929'), ('anthropic', 'claude-opus-4-1'),
                                 ('anthropic', 'synthetic-model'), ('openai', 'gpt-4.1-mini'), ('openai', 'claude-opus-5')):
             with self.subTest(provider=provider, model=model):
                 self.assertEqual(g.request_profile(provider, model, 'x', 'y', ''), g.LEGACY_PROFILE)
+
+    def test_only_the_listed_claude_models_get_the_legacy_request_deny_by_default(self):
+        """S5-R1. The version parser read `claude-<family>-<major>[-<minor>]`, so `claude-mythos-preview` — a real id outside
+        that shape — parsed as nothing, counted as "not newer than 4.6", and was SENT the legacy request (6000 tokens,
+        60 s, no thinking field). Deny by default: only an exact listed id gets the legacy request; every other Claude id is
+        refused before any request — from the live configuration, a stored pre-profile config, and a forged legacy snapshot.
+        """
+        refused = ('claude-mythos-preview', 'claude-mythos', 'claude-sonet-4-6', 'claude-sonnet-4-6 ', 'Claude-Sonnet-4-6',
+                   'claude-sonnet-4-6-20260101', 'claude-opus-4-5-20251101', 'claude-3-7-sonnet-20250219',
+                   'us.anthropic.claude-sonnet-4-6', 'claude_sonnet_4_6', 'claude-haiku-4-5-preview', 'claude')
+        for model in refused:
+            with self.subTest(model=model):
+                self.assertIn('invalid', g.request_profile('anthropic', model, 'disabled', 'medium', ''))
+                with override_settings(**dict(SONNET_46, AI_MODEL=model)), patch.dict(os.environ, PRICE_ENV), \
+                        patch('anthropic.Anthropic') as client:
+                    client.return_value.messages.create.return_value = message(text(SELECTED))
+                    quoted = g.configuration()
+                    old = {k: v for k, v in quoted.items() if k != 'request_profile'}
+                    for config in (None, quoted, old, {**old, 'request_profile': g.LEGACY_PROFILE}):
+                        with self.assertRaises(NoProviderRequest):
+                            g.generate(NOTES, FIELDS, config)
+                        with self.assertRaises(NoProviderRequest):
+                            g.maximum_cost(NOTES, FIELDS, config)
+                    client.assert_not_called()
+        # Positive control: every listed id IS sent, and what it is sent is exactly the pre-profile request.
+        for model in sorted(g.LEGACY_CLAUDE_MODELS):
+            with self.subTest(model=model):
+                client_kwargs, sent, _ = captured(dict(SONNET_46, AI_MODEL=model))
+                self.assertEqual(client_kwargs, {'timeout': 60, 'max_retries': 0})
+                self.assertEqual((sent['model'], sent['max_tokens']), (model, 6000))
+                self.assertEqual(set(sent), {'model', 'max_tokens', 'system', 'messages', 'output_config'})
+        # The list itself is pinned: widening it is a deliberate code change that has to edit this line.
+        self.assertEqual(g.LEGACY_CLAUDE_MODELS, frozenset(('claude-sonnet-4-6', 'claude-haiku-4-5',
+                                                            'claude-sonnet-4-5-20250929', 'claude-opus-4-1')))
 
     def test_a_stored_profile_that_does_not_match_its_shapes_is_refused_before_any_request(self):
         with override_settings(**SONNET_5), patch.dict(os.environ, PRICE_ENV):
