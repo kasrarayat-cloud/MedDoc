@@ -1,0 +1,72 @@
+[
+  {
+    "file": "patient-topics-merge-union.json",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/patient-topics-merge-union.json",
+    "sha256": "1fab01eb128ae0bdf6a06c5b8afec394cde3d60558587783790379ce9fb9b0d9"
+  },
+  {
+    "file": "patient-topics-correction-union.txt",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/patient-topics-correction-union.txt",
+    "sha256": "ea68538bef4aefd74a8873f7ea24c48d78f278984d7e12fd6b93dbf885ceb52c"
+  },
+  {
+    "file": "patient-topics-union-retained.py",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/patient-topics-union-retained.py",
+    "sha256": "76cb93417069a0f82483c5dc46b146af534802b25611487cf508f736cc03098e"
+  },
+  {
+    "file": "patient-topics-union-retained.json",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/patient-topics-union-retained.json",
+    "sha256": "28bac03e50f3a8b7a6571f0be9f97da35fde744d60d67ba4d1c4e24f33aedb71"
+  },
+  {
+    "file": "patient-topics-union-retained.log",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/patient-topics-union-retained.log",
+    "sha256": "071cd62652bf8a5004e0e230f4e5ea800568d23358f06c28f97cbf80b0852ff7"
+  },
+  {
+    "file": "union-after.json",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/patient-topics-refutation/union-after.json",
+    "sha256": "0bda30bc65099366f9cdcf68f797b9cc32dab6b701c3783238e31216a8a90e8a"
+  },
+  {
+    "file": "union-scope-controls.json",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/patient-topics-refutation/union-scope-controls.json",
+    "sha256": "aaa8bd3e3daab36e99ab128789b052e85a112aad3d5da8b9c865c24ba6e279cb"
+  },
+  {
+    "file": "d30-scope-root.py",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/d30-scope-root.py",
+    "sha256": "218e6b046a0d18d102c563bb4beea1a42719c7b33af8a6238b9f8067f8875d56"
+  },
+  {
+    "file": "d30-scope-root-red.json",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/d30-scope-root-red.json",
+    "sha256": "bf1537b8525a4b094cd52bd70cccfe0a9ddb8b06850ee5f8dacb4d14e032a111"
+  },
+  {
+    "file": "d30-scope-root-after.json",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/d30-scope-root-after.json",
+    "sha256": "5a0706f44bcaf7d0670b5fb1713716f10305419010d98a33424a9a314e8d307d"
+  },
+  {
+    "file": "d30-engine-union.txt",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/d30-engine-union.txt",
+    "sha256": "850aeb412cd075e27684f4efe1ad3d456d325a4be351d07f7eae1cf53c35ae36"
+  },
+  {
+    "file": "d30-workflow-union.txt",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/d30-workflow-union.txt",
+    "sha256": "57f4a0125920e23359e7d3ad2517cc32f2abe3e4df25d000a6c189c1922714b7"
+  },
+  {
+    "file": "installed-refresh-2102.json",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/installed-refresh-2102.json",
+    "sha256": "8e1d71d74c1967709be19cc89b0e04515a70ad76180963ab8b0f919eb4688140"
+  },
+  {
+    "file": "pre-push-check-correction-2036.json",
+    "original": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/pre-push-check-correction-2036.json",
+    "sha256": "459d8d0f876fb306e240e26f885449c639700fda33b90478752b224ed9c67f08"
+  }
+]

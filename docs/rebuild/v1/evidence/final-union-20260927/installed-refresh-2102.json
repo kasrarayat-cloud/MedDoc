@@ -1,0 +1,64 @@
+{
+  "captured_at": "2026-09-27T21:02:39.443924+00:00",
+  "http": {
+    "doctor_local": {
+      "status": 200,
+      "health": {
+        "status": "ok",
+        "data_mode": "synthetic-only",
+        "surface": "doctor",
+        "release": "dedac1625032e32c7a149e6771be22e26c307eb1"
+      }
+    },
+    "admin_local": {
+      "status": 200,
+      "health": {
+        "status": "ok",
+        "data_mode": "synthetic-only",
+        "surface": "admin",
+        "release": "dedac1625032e32c7a149e6771be22e26c307eb1"
+      }
+    },
+    "doctor_public": {
+      "status": 503
+    },
+    "admin_public": {
+      "status": 503
+    },
+    "marketing": {
+      "status": 200
+    },
+    "retired": {
+      "status": 410
+    }
+  },
+  "services": {
+    "quillmd-fresh-doctor.service": [
+      "MainPID=1886971",
+      "WorkingDirectory=/opt/meddoc-pro/rebuild",
+      "User=quillmd-app",
+      "Group=quillmd-app",
+      "ActiveState=active",
+      "SubState=running",
+      "ActiveEnterTimestamp=Sat 2026-09-26 06:03:36 UTC"
+    ],
+    "quillmd-fresh-admin.service": [
+      "MainPID=1886969",
+      "WorkingDirectory=/opt/meddoc-pro/rebuild",
+      "User=quillmd-app",
+      "Group=quillmd-app",
+      "ActiveState=active",
+      "SubState=running",
+      "ActiveEnterTimestamp=Sat 2026-09-26 06:03:36 UTC"
+    ],
+    "quillmd-fresh-worker.service": [
+      "MainPID=1886997",
+      "WorkingDirectory=/opt/meddoc-pro/rebuild",
+      "User=quillmd-app",
+      "Group=quillmd-app",
+      "ActiveState=active",
+      "SubState=running",
+      "ActiveEnterTimestamp=Sat 2026-09-26 06:03:37 UTC"
+    ]
+  }
+}

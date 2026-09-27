@@ -1,0 +1,26 @@
+{
+  "base": "aa4e8c0d0c0f935bdc35012263e5881bbd703ace",
+  "root": "7e40537a24477c47783f1702d81544231b030bb6",
+  "author": "fec2a64e44af61290777e99445c85ea5a4cffc24",
+  "merged": "eb85b8a04ea2a078e644296103f3750d682c740c",
+  "root_changed": [
+    "governance_for",
+    "safety_readings",
+    "v3_field_subjects",
+    "v3_note_correction",
+    "v3_preceding_reading",
+    "v3_record_retraction"
+  ],
+  "author_changed": [
+    "v3_preceding_reading",
+    "v3_scope_selection"
+  ],
+  "overlap": [
+    "v3_preceding_reading"
+  ],
+  "root_disjoint_preserved": true,
+  "author_disjoint_preserved": true,
+  "generation_sha256": "a7bbe3d9efd0db5247dccebeba0cb97137786312b03f22994c394cdfb744a81b",
+  "overlap_exact_composition": true,
+  "instrument_correction": "First AST composition check failed because its expected transform omitted the nominal-Plan for-complement insertion; source retained it correctly. Corrected expected composition includes all three root edits."
+}

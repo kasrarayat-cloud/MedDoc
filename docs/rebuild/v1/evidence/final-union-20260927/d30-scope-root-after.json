@@ -1,0 +1,54 @@
+{
+  "engine_sha256": "d4d82856ca066c07b537f3c3d28f9a10b1b3bcbf441d516e6ba636699ea8bc77",
+  "cases": [
+    {
+      "name": "direct-donor-heading",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "What medications are currently taken?",
+          "kind": "long_text",
+          "context": "Donor",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+          }
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "inherited-donor-heading",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "What medications are currently taken?",
+          "kind": "long_text",
+          "context": "Donor",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]",
+            "target": {
+              "type": "cell"
+            },
+            "fingerprint": "9443f4990394d76a48d2de173ba2a6333ee509bdff255bf6e4a481051ca2c343"
+          }
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "two-paragraph-question",
+      "fields": [],
+      "warnings": [
+        "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The question spans multiple paragraphs; review the complete source block. Earlier text: Which medications are currently taken? Printed text: Please provide their doses and frequencies."
+      ]
+    }
+  ]
+}

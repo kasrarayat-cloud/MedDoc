@@ -127,3 +127,29 @@ at this checkpoint. Nothing here changes the installeddedac162 application or it
 state. The pending external request remains unapproved.
 
 Timestamp correction: the preceding local draft used estimated20:46/20:37 labels. The UTC clock readback was20:36:12; those labels are corrected to the captured checkpoint minute. Source identities and measured test durations are unchanged.
+
+
+## Continued repair integration (after the20:36 checkpoint)
+
+Finished-diff refutation found source corrections that the earlier green checks missed. Each was
+reproduced, repaired and retained: nominal Plan record retractions, Unicode withholding, physical
+procedure false rejections and action inflections. Final unchanged58 independent cases pass on
+the clinical union, as do155 affected tests. Patient-source containment adds three supported
+answers to original note4; retained ten-note usefulness is26/77, so B-G1 remains open.
+
+The D30 rule now detects26 previously missed answer boxes and preserves complete question/section
+context. Independent review exposed inherited-heading scope loss and a silently omitted first
+question paragraph; both are closed, with unresolved split questions visibly held. Six of the32
+empty boxes remain explicitly unresolved. The complete D30 document still fails automatic
+acceptance. Its exact unchanged final map supports reuse of the missing/ordinary/long workflow
+and LibreOffice renders; this is not native Word or corpus qualification.
+
+The production restore checker was repaired after a false green with nine invented trigger
+names. It now checks17 exact trigger definitions and10 migration-derived function bodies. Ten
+focused tests, a fresh PostgreSQL catalog check and38 independent probes pass. This new checker
+is prepared code; it does not replace the installed legacy drill or prove production recovery.
+
+Installed state was read again at21:02:39 UTC: both local clinical health endpoints returned
+`dedac1625032e32c7a149e6771be22e26c307eb1`, synthetic-only. Public clinical endpoints remain503.
+The original draft and all preceding failures are preserved; neither the installed model nor
+production admission changed. No paid generation, purchasing or new spending authority occurred.

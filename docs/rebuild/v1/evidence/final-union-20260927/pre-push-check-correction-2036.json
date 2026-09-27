@@ -1,0 +1,7 @@
+{
+  "invalid_initial_query": "0b0395a04a695c47e010d52ad6faf4a05d7b0000",
+  "actual_git_resolved_head": "0b0395a0922f81f5a38526802136197a4bb74b28",
+  "initial_zero": "invalid evidence: assistant supplied a non-resolved SHA; not an API propagation observation",
+  "correction": "Reran by-commit using git rev-parse HEAD and by-branch release/v1; both empty. No push occurred between queries. Live hook remains enforced.",
+  "remote_head_before_push": "11d075646b28dfd52df89cbfdbd9551d314ba358"
+}

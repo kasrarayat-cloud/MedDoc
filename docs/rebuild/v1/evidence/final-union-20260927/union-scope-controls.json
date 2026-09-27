@@ -1,0 +1,250 @@
+{
+  "generation_sha256": "a7bbe3d9efd0db5247dccebeba0cb97137786312b03f22994c394cdfb744a81b",
+  "cases": [
+    {
+      "name": "family_prefix",
+      "notes": "Family history:\nThis is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Examination",
+        "Assessment",
+        "Plan"
+      ]
+    },
+    {
+      "name": "unknown_subject",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. Her clinician takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Examination",
+        "Assessment",
+        "Plan"
+      ]
+    },
+    {
+      "name": "new_actor_after_plan",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. The nurse will follow up in six weeks.",
+      "selected": {
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ]
+      },
+      "answers": {
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Examination",
+        "Assessment"
+      ]
+    },
+    {
+      "name": "changed_pronoun",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. He will follow up in six weeks.",
+      "selected": {
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ]
+      },
+      "answers": {
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Examination",
+        "Assessment"
+      ]
+    },
+    {
+      "name": "incomplete_followup",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up.",
+      "selected": {
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ]
+      },
+      "answers": {
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Examination",
+        "Assessment"
+      ]
+    },
+    {
+      "name": "unicode_scope",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal for her \uff4d\uff4f\uff54\uff48\uff45\uff52. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Assessment",
+        "Plan"
+      ]
+    },
+    {
+      "name": "unknown_correction",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks. Disregard the earlier examination.",
+      "selected": {
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Examination",
+        "Assessment",
+        "Plan"
+      ]
+    },
+    {
+      "name": "medication_beneficiary",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen for her mother. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Examination",
+        "Assessment",
+        "Plan"
+      ]
+    }
+  ]
+}

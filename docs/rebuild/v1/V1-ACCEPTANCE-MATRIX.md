@@ -121,3 +121,33 @@ unintegrated status was true at its recorded source only. Root85 changed-union c
 source hashes are in `literal-subjects-20260927/evidence/final-independent/`. Retained original
 15-input results remain12/12 and23/77 with no selected status/text changes. Full candidate CI,
 useful ordinary-note acceptance and actual Sonnet5 verification remain open.
+
+
+### Final continued repair union
+
+Clinical merge `eb85b8a04ea2a078e644296103f3750d682c740c` has155 related tests passing in64.101s,
+plus the independent unchanged58-case replay (generation, stored page/finalization governance
+and exact evidence spans). Root8 patient-source cases and8 scope controls are unchanged from
+the reviewed containment. The fifteen retained notes now yield12/12 on the five-note subset and
+26/77 on ten r1 notes; three additional offers are Examination, Assessment and Plan for original
+note4. Its allergy declaration remains held. This is insufficient ordinary-note acceptance.
+
+D30 source `f170f5a7e10d557679d3fb6000948f7bd5df5e16` is locally integrated as
+`63df9b05b6bf98d6f1f5f72e2385390d0a28620d`. Root verified both independent findings before
+repair: inherited Donor scope loss and omitted first paragraph of a split question. The final
+engine preserves inherited scope and visibly refuses the whole split question. Independent
+8 retained artifact cases and12 local scope controls found no remaining counterexample in this
+class. The original D30 map/warning/contract digest is exactly equal to the earlier repaired
+candidate, allowing reuse of its missing/ordinary/long mocked workflow and rendered exports.
+D30 and D19 remain automatic document failures; native Word and live model results remain open.
+
+The new production restore contract has10 focused checks plus1 fresh PostgreSQL check and38
+independent catalog probes with expected results. It verifies17 exact trigger definitions and
+10 migration-derived function bodies, rather than a count. The installed legacy restore evidence
+retains its old instrument and is not upgraded retroactively.
+
+Root final Word combination on63df9b05:98 engine checks passed49.651s; the synthetic actual
+upload/mapping/worker/review/correction/finalization/export test passed7.110s across missing,
+ordinary and long values. `manage.py check` reports no issues and migration drift check reports
+no changes. No live model or native Word claim follows. Text evidence and exact hashes are in
+`evidence/final-union-20260927/`.
