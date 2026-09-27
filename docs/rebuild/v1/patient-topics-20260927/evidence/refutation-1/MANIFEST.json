@@ -1,0 +1,22 @@
+{
+  "source_commit": "35d391b31c55490e176f2cc3029bc6c31518fd52",
+  "files": {
+    "04-retained-contained.log": "071cd62652bf8a5004e0e230f4e5ea800568d23358f06c28f97cbf80b0852ff7",
+    "root-candidate.json": "9a1410e1a0f70e5bdecaaf65ed18e4497f2748c35176d6fdc9fe068060dd99a3",
+    "replay.py": "38f8f3e98fe8da8a34f22b3e71941cc875f74aaa96f86a9f782ae62304859105",
+    "01-exact-red.log": "c4a8a8811ff4af8e2a72b4c799eb3cb9b1096ddc5d7c0d774cebaf1dbb436ad9",
+    "02-final-focused.log": "b5cbbe3f18949ce8d0626964ecf79302debacf5cce9a58db5e76479c9e4dd57e",
+    "probe.py": "3aff33e427cc8045233abe42917b3c26bd444cc63de28895fc891c016d9668dc",
+    "04-retained-contained.json": "7ce1b703859d7f1251d6213441f8193de2d23183138b83b4123588e882219bee",
+    "author-verified-red.json": "9a1410e1a0f70e5bdecaaf65ed18e4497f2748c35176d6fdc9fe068060dd99a3",
+    "03-author-repaired.json": "42de292c1bbc5e0b661293c83b9505fbf9b2060c55216f6dbe65affc1160a310",
+    "workflow.json": "adb31b6e2598af4cde658c1abd13d8a2831bc442c33800d5e7b571213d32b4b7",
+    "root-actual-parent.json": "1e88862b989716bb0d4bb7a4d89fc13789cd1cb404d25f5b42d721fee0d9ac75",
+    "root-parent-literal.json": "c23ec0317cf727f94a3195225893480565f4399676d6ac94d32b833230ee46d3"
+  },
+  "runtime_only_synthetic_word": {
+    "rebuild/.runtime/patient-topics-20260927/refutation-1/artifacts/synthetic-final.docx": "cce1324a5224253447a6e2be3a15e2aaf6f4804c446891b84e64ed2050fdaad0",
+    "rebuild/.runtime/patient-topics-20260927/refutation-1/artifacts/synthetic-original.docx": "5377faec2066f789cdfd271fc333db02667ba36b9abcfe117805ed3671796c90"
+  },
+  "preserved_refuted_source": "058579292a10ccb7377d979a6feaff44953491c6"
+}

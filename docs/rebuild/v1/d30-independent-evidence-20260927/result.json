@@ -1,0 +1,210 @@
+{
+  "candidate_sha256": "326a4baf7d3331add09f36f78e05d66a8fb75acd4e10bd1c2c952447835efbd1",
+  "base_sha256": "190c470192e49005166e3d2b6b792772dd7284d616bdf2977854a19306de4e80",
+  "cases": [
+    {
+      "name": "direct-donor-heading",
+      "expected": "Context must retain Donor.",
+      "original_sha256": "01b43a253175dd69ccdda834dd38de0ab1931e3cb98ecdaa820b96a9aa22983a",
+      "engines": {
+        "base": {
+          "fields": [],
+          "notes": []
+        },
+        "candidate": {
+          "fields": [
+            {
+              "label": "What medications are currently taken?",
+              "context": "Donor",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "inherited-donor-heading",
+      "expected": "Equivalent inherited Heading 1 context must retain Donor or visibly refuse.",
+      "original_sha256": "7723cbbe8825e71547994e09e33df7f55d283ee610d0812d1892a514cb5e61eb",
+      "engines": {
+        "base": {
+          "fields": [],
+          "notes": []
+        },
+        "candidate": {
+          "fields": [
+            {
+              "label": "What medications are currently taken?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "two-paragraph-question",
+      "expected": "Cannot silently assign only the anaphoric second part; retain complete question context or warn.",
+      "original_sha256": "be45cc73d4f5f66b96ddb498abee5f07f2c7b6882c1247e095d8c5dfada7c564",
+      "engines": {
+        "base": {
+          "fields": [],
+          "notes": []
+        },
+        "candidate": {
+          "fields": [
+            {
+              "label": "Please provide their doses and frequencies.",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "plain-positive",
+      "expected": "One complete question maps to its adjacent box.",
+      "original_sha256": "beb5918a21a5c0ed277703d45ae8be449564d9e86828bf4cf563c014fe385783",
+      "engines": {
+        "base": {
+          "fields": [],
+          "notes": []
+        },
+        "candidate": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      },
+      "unchanged_parts": true,
+      "export_sha256": "8bd15b46a41a49fb9f842176c7699d1756192bc0966f5c1172c75919a7b65855"
+    },
+    {
+      "name": "cell-nil",
+      "expected": "Explicit cell nil overrides style and must refuse.",
+      "original_sha256": "53fc05e7309e84b7e10a2d749522e6850b36b222fa1f2b32126a52ff928219e1",
+      "engines": {
+        "base": {
+          "fields": [],
+          "notes": []
+        },
+        "candidate": {
+          "fields": [],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The border or unmerged one-cell structure is not explicit. Printed text: What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "ancestor-conditional-nil",
+      "expected": "Conditional nil exists in the style ancestry; automatic explicit-border proof must not ignore it.",
+      "original_sha256": "5e0ac6d2264ee30c7c56c6e26a007e0009cbd8222291e88cb8158c96850a4dee",
+      "engines": {
+        "base": {
+          "fields": [],
+          "notes": []
+        },
+        "candidate": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    },
+    {
+      "name": "inline-blank",
+      "expected": "Preserve the original name field and warn about the additional box.",
+      "original_sha256": "21256cfbdc4738d6f3aac7a01dea8d1a0f7cf46b011236e8ff4c655cda682f6a",
+      "engines": {
+        "base": {
+          "fields": [
+            {
+              "label": "Patient name",
+              "context": "",
+              "slot": "b/p[0]",
+              "target": {
+                "type": "span",
+                "start": 14,
+                "end": 24,
+                "shape": "blank"
+              }
+            }
+          ],
+          "notes": []
+        },
+        "candidate": {
+          "fields": [
+            {
+              "label": "Patient name",
+              "context": "",
+              "slot": "b/p[0]",
+              "target": {
+                "type": "span",
+                "start": 14,
+                "end": 24,
+                "shape": "blank"
+              }
+            }
+          ],
+          "notes": [
+            "Unassigned answer box at word/document.xml#b/tbl[0]/tr[0]/tc[0]. The printed question contains another answer area; review their separate destinations. Printed text: Patient name: __________. What symptoms changed?"
+          ]
+        }
+      }
+    },
+    {
+      "name": "page-break-spacer",
+      "expected": "A physical page-break paragraph is not a plain empty spacer; assess refusal.",
+      "original_sha256": "f370f99cdf1a405c1dac80b9fe552abc5425cfa57dce19d554046a4042450913",
+      "engines": {
+        "base": {
+          "fields": [],
+          "notes": []
+        },
+        "candidate": {
+          "fields": [
+            {
+              "label": "What symptoms changed?",
+              "context": "",
+              "slot": "b/tbl[0]/tr[0]/tc[0]",
+              "target": {
+                "type": "cell"
+              }
+            }
+          ],
+          "notes": []
+        }
+      }
+    }
+  ]
+}

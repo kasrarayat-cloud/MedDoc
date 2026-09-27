@@ -1,0 +1,323 @@
+{
+  "generation_sha256": "923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41",
+  "cases": [
+    {
+      "name": "original",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Chief complaint": [
+          "This is a 30-year-old female seen for headaches."
+        ],
+        "History of present illness": [
+          "The headaches started two months ago and are worse in the morning.",
+          "She denies visual changes, nausea, or weakness."
+        ],
+        "Medications": [
+          "She takes ibuprofen as needed."
+        ],
+        "Allergies": [
+          "No known drug allergies."
+        ],
+        "Smoker": [
+          "She is a nonsmoker."
+        ],
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "status": "conflict",
+          "text": ""
+        },
+        "History of present illness": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Medications": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Smoker": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Chief complaint",
+        "History of present illness",
+        "Medications",
+        "Allergies",
+        "Smoker",
+        "Examination",
+        "Assessment",
+        "Plan"
+      ]
+    },
+    {
+      "name": "female_he",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. He denies visual changes, nausea, or weakness. He takes ibuprofen as needed. No known drug allergies. He is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. He will follow up in six weeks.",
+      "selected": {
+        "Chief complaint": [
+          "This is a 30-year-old female seen for headaches."
+        ],
+        "History of present illness": [
+          "The headaches started two months ago and are worse in the morning.",
+          "He denies visual changes, nausea, or weakness."
+        ],
+        "Medications": [
+          "He takes ibuprofen as needed."
+        ],
+        "Allergies": [
+          "No known drug allergies."
+        ],
+        "Smoker": [
+          "He is a nonsmoker."
+        ],
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "He will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "status": "conflict",
+          "text": ""
+        },
+        "History of present illness": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Medications": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Smoker": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Chief complaint",
+        "History of present illness",
+        "Medications",
+        "Allergies",
+        "Smoker",
+        "Examination",
+        "Assessment",
+        "Plan"
+      ]
+    },
+    {
+      "name": "male_she",
+      "notes": "This is a 30-year-old male seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Chief complaint": [
+          "This is a 30-year-old male seen for headaches."
+        ],
+        "History of present illness": [
+          "The headaches started two months ago and are worse in the morning.",
+          "She denies visual changes, nausea, or weakness."
+        ],
+        "Medications": [
+          "She takes ibuprofen as needed."
+        ],
+        "Allergies": [
+          "No known drug allergies."
+        ],
+        "Smoker": [
+          "She is a nonsmoker."
+        ],
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "status": "conflict",
+          "text": ""
+        },
+        "History of present illness": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Medications": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Smoker": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Examination": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Assessment": {
+          "status": "conflict",
+          "text": ""
+        },
+        "Plan": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Chief complaint",
+        "History of present illness",
+        "Medications",
+        "Allergies",
+        "Smoker",
+        "Examination",
+        "Assessment",
+        "Plan"
+      ]
+    },
+    {
+      "name": "anaphylaxis",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is penicillin anaphylaxis. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Allergies": [
+          "No known drug allergies."
+        ]
+      },
+      "answers": {
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "name": "reaction",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is penicillin hypersensitivity. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Allergies": [
+          "No known drug allergies."
+        ]
+      },
+      "answers": {
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "name": "plan_negation",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is not to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Allergies": [
+          "No known drug allergies."
+        ]
+      },
+      "answers": {
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "name": "foreign_examination",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal for her mother. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Allergies": [
+          "No known drug allergies."
+        ]
+      },
+      "answers": {
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    },
+    {
+      "name": "third_party",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. Her friend takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "selected": {
+        "Allergies": [
+          "No known drug allergies."
+        ]
+      },
+      "answers": {
+        "Allergies": {
+          "status": "conflict",
+          "text": ""
+        }
+      },
+      "forced_refusals": [
+        "Allergies"
+      ]
+    }
+  ]
+}

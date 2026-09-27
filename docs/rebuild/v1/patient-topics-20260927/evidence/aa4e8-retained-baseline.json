@@ -1,0 +1,5786 @@
+{
+  "scope": "One unchanged fifteen-input deterministic replay; not provider or document compatibility qualification. All previous results retained.",
+  "source_sha256": "42c76b9a10f3b9de3c5ac81c84de6ffcd142886e7f2cfa65cff9a708a79524d9",
+  "generation_sha256": "923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41",
+  "cases": [
+    {
+      "name": "t-prose",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_5",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_6",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Patient presents with right knee pain for three weeks. Allergies: penicillin. Plan is physiotherapy twice weekly and review in six weeks.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "Patient presents with right knee pain for three weeks."
+        ],
+        "Allergies": [
+          "Allergies: penicillin."
+        ],
+        "Plan": [
+          "Plan is physiotherapy twice weekly and review in six weeks."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "Patient presents with right knee pain for three weeks.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Patient presents with right knee pain for three weeks.",
+              "start": 0,
+              "end": 54
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 55,
+              "end": 77
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "physiotherapy twice weekly and review in six weeks.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan is physiotherapy twice weekly and review in six weeks.",
+              "start": 78,
+              "end": 137
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 3,
+      "selected_total": 3
+    },
+    {
+      "name": "t-lines",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_5",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_6",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Patient presents with right knee pain for three weeks.\nAllergies: penicillin.\nSmoker: No.\nPlan is physiotherapy twice weekly and review in six weeks.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "Patient presents with right knee pain for three weeks."
+        ],
+        "Allergies": [
+          "Allergies: penicillin."
+        ],
+        "Smoker": [
+          "Smoker: No."
+        ],
+        "Plan": [
+          "Plan is physiotherapy twice weekly and review in six weeks."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "Patient presents with right knee pain for three weeks.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Patient presents with right knee pain for three weeks.",
+              "start": 0,
+              "end": 54
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 55,
+              "end": 77
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "physiotherapy twice weekly and review in six weeks.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan is physiotherapy twice weekly and review in six weeks.",
+              "start": 90,
+              "end": 149
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "No",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: No.",
+              "start": 78,
+              "end": 89
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 4,
+      "selected_total": 4
+    },
+    {
+      "name": "t-worker",
+      "fields": [
+        {
+          "key": "v3_r",
+          "label": "Referring physician",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_v",
+          "label": "Reason for visit",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_s",
+          "label": "Smoker?",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        }
+      ],
+      "notes": "Referring physician: Dr Example\nPatient presents with right knee pain.\nSmoker: yes",
+      "unchanged_picks": {
+        "Referring physician": [
+          "Referring physician: Dr Example"
+        ],
+        "Reason for visit": [
+          "Patient presents with right knee pain."
+        ],
+        "Smoker?": [
+          "Smoker: yes"
+        ]
+      },
+      "answers": {
+        "Referring physician": {
+          "text": "Dr Example",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Referring physician: Dr Example",
+              "start": 0,
+              "end": 31
+            }
+          ],
+          "reviewed": false
+        },
+        "Reason for visit": {
+          "text": "Patient presents with right knee pain.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Patient presents with right knee pain.",
+              "start": 32,
+              "end": 70
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker?": {
+          "text": "Yes",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: yes",
+              "start": 71,
+              "end": 82
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "selected_supported": 3,
+      "selected_total": 3
+    },
+    {
+      "name": "t-r10",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_5",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_6",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Smoker: yes\nPatient seen today.",
+      "unchanged_picks": {
+        "Smoker": [
+          "Smoker: yes"
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "Yes",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: yes",
+              "start": 0,
+              "end": 11
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 1,
+      "selected_total": 1
+    },
+    {
+      "name": "t-social",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_5",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_6",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Smoker: No.\nThe patient drinks socially.",
+      "unchanged_picks": {
+        "Smoker": [
+          "Smoker: No."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "No",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: No.",
+              "start": 0,
+              "end": 11
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 1,
+      "selected_total": 1
+    },
+    {
+      "name": "r1-note1",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an MRI of the right knee and physiotherapy referral.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "45-year-old man presents with right knee pain for three weeks after a fall."
+        ],
+        "History of present illness": [
+          "45-year-old man presents with right knee pain for three weeks after a fall."
+        ],
+        "Past medical history": [
+          "He has hypertension and takes lisinopril 10 mg daily."
+        ],
+        "Medications": [
+          "He has hypertension and takes lisinopril 10 mg daily."
+        ],
+        "Allergies": [
+          "Allergies: penicillin."
+        ],
+        "Smoker": [
+          "Smoker: No."
+        ],
+        "Examination": [
+          "On examination there is a small effusion and medial joint line tenderness."
+        ],
+        "Assessment": [
+          "Assessment is a probable medial meniscus tear."
+        ],
+        "Plan": [
+          "Plan is an MRI of the right knee and physiotherapy referral."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+              "start": 0,
+              "end": 75
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+            "evidence": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+              "start": 0,
+              "end": 75
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+            "evidence": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+              "start": 76,
+              "end": 129
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "He has hypertension and takes lisinopril 10 mg daily.",
+            "evidence": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129
+              }
+            ],
+            "context": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "On examination there is a small effusion and medial joint line tenderness.",
+                "start": 165,
+                "end": 239,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+              "start": 76,
+              "end": 129
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "He has hypertension and takes lisinopril 10 mg daily.",
+            "evidence": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129
+              }
+            ],
+            "context": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "On examination there is a small effusion and medial joint line tenderness.",
+                "start": 165,
+                "end": 239,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 130,
+              "end": 152
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "No",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: No.",
+              "start": 153,
+              "end": 164
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "On examination there is a small effusion and medial joint line tenderness.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "On examination there is a small effusion and medial joint line tenderness.",
+              "start": 165,
+              "end": 239
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "a probable medial meniscus tear.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment is a probable medial meniscus tear.",
+              "start": 240,
+              "end": 286
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "an MRI of the right knee and physiotherapy referral.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan is an MRI of the right knee and physiotherapy referral.",
+              "start": 287,
+              "end": 347
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 5,
+      "selected_total": 9
+    },
+    {
+      "name": "r1-note2",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Patient presents with a cough for five days.\nShe reports low-grade fevers and green sputum.\nShe has asthma.\nMedications: salbutamol inhaler as needed.\nAllergies: none known.\nSmoker: no.\nChest examination revealed crackles at the right base.\nAssessment: community-acquired pneumonia.\nPlan: amoxicillin 500 mg three times daily for five days.\nReturn if symptoms worsen.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "Patient presents with a cough for five days."
+        ],
+        "History of present illness": [
+          "Patient presents with a cough for five days.",
+          "She reports low-grade fevers and green sputum."
+        ],
+        "Past medical history": [
+          "She has asthma."
+        ],
+        "Medications": [
+          "Medications: salbutamol inhaler as needed."
+        ],
+        "Allergies": [
+          "Allergies: none known."
+        ],
+        "Smoker": [
+          "Smoker: no."
+        ],
+        "Examination": [
+          "Chest examination revealed crackles at the right base."
+        ],
+        "Assessment": [
+          "Assessment: community-acquired pneumonia."
+        ],
+        "Plan": [
+          "Plan: amoxicillin 500 mg three times daily for five days.",
+          "Return if symptoms worsen."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Patient presents with a cough for five days.",
+              "start": 0,
+              "end": 44
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Patient presents with a cough for five days.",
+            "evidence": [
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44
+              }
+            ],
+            "context": [
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Patient presents with a cough for five days.",
+              "start": 0,
+              "end": 44
+            },
+            {
+              "quote": "She reports low-grade fevers and green sputum.",
+              "start": 45,
+              "end": 91
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Patient presents with a cough for five days.\nShe reports low-grade fevers and green sputum.",
+            "evidence": [
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44
+              },
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91
+              }
+            ],
+            "context": [
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She has asthma.",
+                "start": 92,
+                "end": 107,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She has asthma.",
+              "start": 92,
+              "end": 107
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She has asthma.",
+            "evidence": [
+              {
+                "quote": "She has asthma.",
+                "start": 92,
+                "end": 107
+              }
+            ],
+            "context": [
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Medications: salbutamol inhaler as needed.",
+                "start": 108,
+                "end": 150,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Medications": {
+          "text": "salbutamol inhaler as needed.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Medications: salbutamol inhaler as needed.",
+              "start": 108,
+              "end": 150
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "none known.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: none known.",
+              "start": 151,
+              "end": 173
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "No",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: no.",
+              "start": 174,
+              "end": 185
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "Chest examination revealed crackles at the right base.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Chest examination revealed crackles at the right base.",
+              "start": 186,
+              "end": 240
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "community-acquired pneumonia.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: community-acquired pneumonia.",
+              "start": 241,
+              "end": 282
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "amoxicillin 500 mg three times daily for five days.\nReturn if symptoms worsen.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: amoxicillin 500 mg three times daily for five days.",
+              "start": 283,
+              "end": 340
+            },
+            {
+              "quote": "Return if symptoms worsen.",
+              "start": 341,
+              "end": 367
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 6,
+      "selected_total": 9
+    },
+    {
+      "name": "r1-note3",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "History of present illness": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "Past medical history": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "Medications": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "Allergies": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "Smoker": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "Examination": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "Assessment": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "Plan": [
+          "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Smoker": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+              "start": 0,
+              "end": 284
+            }
+          ],
+          "held_candidate": {
+            "text": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+            "evidence": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284
+              }
+            ],
+            "context": [
+              {
+                "quote": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+                "start": 0,
+                "end": 284,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 0,
+      "selected_total": 9
+    },
+    {
+      "name": "r1-note4",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "This is a 30-year-old female seen for headaches."
+        ],
+        "History of present illness": [
+          "The headaches started two months ago and are worse in the morning.",
+          "She denies visual changes, nausea, or weakness."
+        ],
+        "Medications": [
+          "She takes ibuprofen as needed."
+        ],
+        "Allergies": [
+          "No known drug allergies."
+        ],
+        "Smoker": [
+          "She is a nonsmoker."
+        ],
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "This is a 30-year-old female seen for headaches.",
+            "evidence": [
+              {
+                "quote": "This is a 30-year-old female seen for headaches.",
+                "start": 0,
+                "end": 48
+              }
+            ],
+            "context": [
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115
+            },
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+            "evidence": [
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115
+              },
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163
+              }
+            ],
+            "context": [
+              {
+                "quote": "This is a 30-year-old female seen for headaches.",
+                "start": 0,
+                "end": 48,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163,
+                "after": true,
+                "same": true
+              },
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She takes ibuprofen as needed.",
+              "start": 164,
+              "end": 194
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She takes ibuprofen as needed.",
+            "evidence": [
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194
+              }
+            ],
+            "context": [
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "No known drug allergies.",
+              "start": 195,
+              "end": 219
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "No known drug allergies.",
+            "evidence": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219
+              }
+            ],
+            "context": [
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She is a nonsmoker.",
+                "start": 220,
+                "end": 239,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Smoker": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She is a nonsmoker.",
+              "start": 220,
+              "end": 239
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She is a nonsmoker.",
+            "evidence": [
+              {
+                "quote": "She is a nonsmoker.",
+                "start": 220,
+                "end": 239
+              }
+            ],
+            "context": [
+              {
+                "quote": "No known drug allergies.",
+                "start": 195,
+                "end": 219,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 240,
+                "end": 275,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Neurological examination is normal.",
+              "start": 240,
+              "end": 275
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Neurological examination is normal.",
+            "evidence": [
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 240,
+                "end": 275
+              }
+            ],
+            "context": [
+              {
+                "quote": "She is a nonsmoker.",
+                "start": 220,
+                "end": 239,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Plan is to start amitriptyline 10 mg at night.",
+                "start": 313,
+                "end": 359,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment is tension-type headache.",
+              "start": 276,
+              "end": 312
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "tension-type headache.",
+            "evidence": [
+              {
+                "quote": "Assessment is tension-type headache.",
+                "start": 276,
+                "end": 312
+              }
+            ],
+            "context": [
+              {
+                "quote": "Neurological examination is normal.",
+                "start": 240,
+                "end": 275,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Plan is to start amitriptyline 10 mg at night.",
+                "start": 313,
+                "end": 359,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan is to start amitriptyline 10 mg at night.",
+              "start": 313,
+              "end": 359
+            },
+            {
+              "quote": "She will follow up in six weeks.",
+              "start": 360,
+              "end": 392
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+            "evidence": [
+              {
+                "quote": "Plan is to start amitriptyline 10 mg at night.",
+                "start": 313,
+                "end": 359
+              },
+              {
+                "quote": "She will follow up in six weeks.",
+                "start": 360,
+                "end": 392
+              }
+            ],
+            "context": [
+              {
+                "quote": "Assessment is tension-type headache.",
+                "start": 276,
+                "end": 312,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 0,
+      "selected_total": 8
+    },
+    {
+      "name": "r1-note5",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.\nObjective: Lumbar paraspinal tenderness, straight leg raise negative.\nAssessment: mechanical low back pain.\nPlan: naproxen 500 mg twice daily with food and physiotherapy.\nAllergies: sulfa.\nSmoker: Yes.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "Subjective: Patient reports lower back pain for two weeks after lifting boxes."
+        ],
+        "History of present illness": [
+          "Subjective: Patient reports lower back pain for two weeks after lifting boxes."
+        ],
+        "Examination": [
+          "Objective: Lumbar paraspinal tenderness, straight leg raise negative."
+        ],
+        "Assessment": [
+          "Assessment: mechanical low back pain."
+        ],
+        "Plan": [
+          "Plan: naproxen 500 mg twice daily with food and physiotherapy."
+        ],
+        "Allergies": [
+          "Allergies: sulfa."
+        ],
+        "Smoker": [
+          "Smoker: Yes."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.",
+              "start": 0,
+              "end": 78
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.",
+            "evidence": [
+              {
+                "quote": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.",
+                "start": 0,
+                "end": 78
+              }
+            ],
+            "context": [
+              {
+                "quote": "Objective: Lumbar paraspinal tenderness, straight leg raise negative.",
+                "start": 79,
+                "end": 148,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.",
+              "start": 0,
+              "end": 78
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.",
+            "evidence": [
+              {
+                "quote": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.",
+                "start": 0,
+                "end": 78
+              }
+            ],
+            "context": [
+              {
+                "quote": "Objective: Lumbar paraspinal tenderness, straight leg raise negative.",
+                "start": 79,
+                "end": 148,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Medications": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "sulfa.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: sulfa.",
+              "start": 250,
+              "end": 267
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "Yes",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: Yes.",
+              "start": 268,
+              "end": 280
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Objective: Lumbar paraspinal tenderness, straight leg raise negative.",
+              "start": 79,
+              "end": 148
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Objective: Lumbar paraspinal tenderness, straight leg raise negative.",
+            "evidence": [
+              {
+                "quote": "Objective: Lumbar paraspinal tenderness, straight leg raise negative.",
+                "start": 79,
+                "end": 148
+              }
+            ],
+            "context": [
+              {
+                "quote": "Subjective: Patient reports lower back pain for two weeks after lifting boxes.",
+                "start": 0,
+                "end": 78,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Assessment: mechanical low back pain.",
+                "start": 149,
+                "end": 186,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "mechanical low back pain.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: mechanical low back pain.",
+              "start": 149,
+              "end": 186
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "naproxen 500 mg twice daily with food and physiotherapy.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: naproxen 500 mg twice daily with food and physiotherapy.",
+              "start": 187,
+              "end": 249
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 4,
+      "selected_total": 7
+    },
+    {
+      "name": "r1-note6",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "The patient was seen for removal of a skin lesion on the left forearm. The risks and benefits were discussed. Consent obtained: yes. The lesion was excised under local anesthesia and closed with sutures. She tolerated the procedure well. Plan is suture removal in ten days.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "The patient was seen for removal of a skin lesion on the left forearm."
+        ],
+        "Consent obtained": [
+          "Consent obtained: yes."
+        ],
+        "Examination": [
+          "The lesion was excised under local anesthesia and closed with sutures."
+        ],
+        "Plan": [
+          "She tolerated the procedure well.",
+          "Plan is suture removal in ten days."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient was seen for removal of a skin lesion on the left forearm.",
+              "start": 0,
+              "end": 70
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "The patient was seen for removal of a skin lesion on the left forearm.",
+            "evidence": [
+              {
+                "quote": "The patient was seen for removal of a skin lesion on the left forearm.",
+                "start": 0,
+                "end": 70
+              }
+            ],
+            "context": [
+              {
+                "quote": "The risks and benefits were discussed.",
+                "start": 71,
+                "end": 109,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Medications": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The lesion was excised under local anesthesia and closed with sutures.",
+              "start": 133,
+              "end": 203
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "The lesion was excised under local anesthesia and closed with sutures.",
+            "evidence": [
+              {
+                "quote": "The lesion was excised under local anesthesia and closed with sutures.",
+                "start": 133,
+                "end": 203
+              }
+            ],
+            "context": [
+              {
+                "quote": "Consent obtained: yes.",
+                "start": 110,
+                "end": 132,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She tolerated the procedure well.",
+                "start": 204,
+                "end": 237,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "She tolerated the procedure well.",
+              "start": 204,
+              "end": 237
+            },
+            {
+              "quote": "Plan is suture removal in ten days.",
+              "start": 238,
+              "end": 273
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "She tolerated the procedure well.\nsuture removal in ten days.",
+            "evidence": [
+              {
+                "quote": "She tolerated the procedure well.",
+                "start": 204,
+                "end": 237
+              },
+              {
+                "quote": "Plan is suture removal in ten days.",
+                "start": 238,
+                "end": 273
+              }
+            ],
+            "context": [
+              {
+                "quote": "The lesion was excised under local anesthesia and closed with sutures.",
+                "start": 133,
+                "end": 203,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Plan is suture removal in ten days.",
+                "start": 238,
+                "end": 273,
+                "after": true,
+                "same": true
+              },
+              {
+                "quote": "She tolerated the procedure well.",
+                "start": 204,
+                "end": 237,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Consent obtained: yes.",
+              "start": 110,
+              "end": 132
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "yes.",
+            "evidence": [
+              {
+                "quote": "Consent obtained: yes.",
+                "start": 110,
+                "end": 132
+              }
+            ],
+            "context": [
+              {
+                "quote": "The risks and benefits were discussed.",
+                "start": 71,
+                "end": 109,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "The lesion was excised under local anesthesia and closed with sutures.",
+                "start": 133,
+                "end": 203,
+                "after": true,
+                "same": true
+              },
+              {
+                "quote": "The patient was seen for removal of a skin lesion on the left forearm.",
+                "start": 0,
+                "end": 70,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She tolerated the procedure well.",
+                "start": 204,
+                "end": 237,
+                "after": true,
+                "same": true
+              },
+              {
+                "quote": "Plan is suture removal in ten days.",
+                "start": 238,
+                "end": 273,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 0,
+      "selected_total": 4
+    },
+    {
+      "name": "r1-note7",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Mother brings in her 4-year-old son with ear pain since yesterday. He has had a runny nose for a week. He takes no regular medications. Allergies: amoxicillin (rash). Examination showed a bulging red left tympanic membrane. Assessment is acute otitis media on the left. Plan is azithromycin for five days and ibuprofen for pain.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "Mother brings in her 4-year-old son with ear pain since yesterday."
+        ],
+        "History of present illness": [
+          "Mother brings in her 4-year-old son with ear pain since yesterday.",
+          "He has had a runny nose for a week."
+        ],
+        "Medications": [
+          "He takes no regular medications."
+        ],
+        "Allergies": [
+          "Allergies: amoxicillin (rash)."
+        ],
+        "Examination": [
+          "Examination showed a bulging red left tympanic membrane."
+        ],
+        "Assessment": [
+          "Assessment is acute otitis media on the left."
+        ],
+        "Plan": [
+          "Plan is azithromycin for five days and ibuprofen for pain."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Mother brings in her 4-year-old son with ear pain since yesterday.",
+              "start": 0,
+              "end": 66
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Mother brings in her 4-year-old son with ear pain since yesterday.",
+            "evidence": [
+              {
+                "quote": "Mother brings in her 4-year-old son with ear pain since yesterday.",
+                "start": 0,
+                "end": 66
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has had a runny nose for a week.",
+                "start": 67,
+                "end": 102,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Mother brings in her 4-year-old son with ear pain since yesterday.",
+              "start": 0,
+              "end": 66
+            },
+            {
+              "quote": "He has had a runny nose for a week.",
+              "start": 67,
+              "end": 102
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Mother brings in her 4-year-old son with ear pain since yesterday.\nHe has had a runny nose for a week.",
+            "evidence": [
+              {
+                "quote": "Mother brings in her 4-year-old son with ear pain since yesterday.",
+                "start": 0,
+                "end": 66
+              },
+              {
+                "quote": "He has had a runny nose for a week.",
+                "start": 67,
+                "end": 102
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has had a runny nose for a week.",
+                "start": 67,
+                "end": 102,
+                "after": true,
+                "same": true
+              },
+              {
+                "quote": "Mother brings in her 4-year-old son with ear pain since yesterday.",
+                "start": 0,
+                "end": 66,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "He takes no regular medications.",
+                "start": 103,
+                "end": 135,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "He takes no regular medications.",
+              "start": 103,
+              "end": 135
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "He takes no regular medications.",
+            "evidence": [
+              {
+                "quote": "He takes no regular medications.",
+                "start": 103,
+                "end": 135
+              }
+            ],
+            "context": [
+              {
+                "quote": "Mother brings in her 4-year-old son with ear pain since yesterday.",
+                "start": 0,
+                "end": 66,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "He has had a runny nose for a week.",
+                "start": 67,
+                "end": 102,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "He takes no regular medications.",
+                "start": 103,
+                "end": 135,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Allergies: amoxicillin (rash).",
+                "start": 136,
+                "end": 166,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "amoxicillin (rash).",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: amoxicillin (rash).",
+              "start": 136,
+              "end": 166
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Examination showed a bulging red left tympanic membrane.",
+              "start": 167,
+              "end": 223
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Examination showed a bulging red left tympanic membrane.",
+            "evidence": [
+              {
+                "quote": "Examination showed a bulging red left tympanic membrane.",
+                "start": 167,
+                "end": 223
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: amoxicillin (rash).",
+                "start": 136,
+                "end": 166,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment is acute otitis media on the left.",
+              "start": 224,
+              "end": 269
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "acute otitis media on the left.",
+            "evidence": [
+              {
+                "quote": "Assessment is acute otitis media on the left.",
+                "start": 224,
+                "end": 269
+              }
+            ],
+            "context": [
+              {
+                "quote": "Examination showed a bulging red left tympanic membrane.",
+                "start": 167,
+                "end": 223,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan is azithromycin for five days and ibuprofen for pain.",
+              "start": 270,
+              "end": 328
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "azithromycin for five days and ibuprofen for pain.",
+            "evidence": [
+              {
+                "quote": "Plan is azithromycin for five days and ibuprofen for pain.",
+                "start": 270,
+                "end": 328
+              }
+            ],
+            "context": [
+              {
+                "quote": "Assessment is acute otitis media on the left.",
+                "start": 224,
+                "end": 269,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 1,
+      "selected_total": 7
+    },
+    {
+      "name": "r1-note8",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Follow-up for hypertension. Blood pressure today was 142/88. He continues amlodipine 5 mg daily. Allergies: none. Smoker: no. Heart and lung examination was normal. Assessment is hypertension not at goal. Plan is to increase amlodipine to 10 mg daily and recheck in four weeks.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "Follow-up for hypertension."
+        ],
+        "History of present illness": [
+          "Blood pressure today was 142/88."
+        ],
+        "Medications": [
+          "He continues amlodipine 5 mg daily."
+        ],
+        "Allergies": [
+          "Allergies: none."
+        ],
+        "Smoker": [
+          "Smoker: no."
+        ],
+        "Examination": [
+          "Heart and lung examination was normal."
+        ],
+        "Assessment": [
+          "Assessment is hypertension not at goal."
+        ],
+        "Plan": [
+          "Plan is to increase amlodipine to 10 mg daily and recheck in four weeks."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Follow-up for hypertension.",
+              "start": 0,
+              "end": 27
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Follow-up for hypertension.",
+            "evidence": [
+              {
+                "quote": "Follow-up for hypertension.",
+                "start": 0,
+                "end": 27
+              }
+            ],
+            "context": [
+              {
+                "quote": "Blood pressure today was 142/88.",
+                "start": 28,
+                "end": 60,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Blood pressure today was 142/88.",
+              "start": 28,
+              "end": 60
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Blood pressure today was 142/88.",
+            "evidence": [
+              {
+                "quote": "Blood pressure today was 142/88.",
+                "start": 28,
+                "end": 60
+              }
+            ],
+            "context": [
+              {
+                "quote": "Follow-up for hypertension.",
+                "start": 0,
+                "end": 27,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "He continues amlodipine 5 mg daily.",
+                "start": 61,
+                "end": 96,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "He continues amlodipine 5 mg daily.",
+              "start": 61,
+              "end": 96
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "He continues amlodipine 5 mg daily.",
+            "evidence": [
+              {
+                "quote": "He continues amlodipine 5 mg daily.",
+                "start": 61,
+                "end": 96
+              }
+            ],
+            "context": [
+              {
+                "quote": "Blood pressure today was 142/88.",
+                "start": 28,
+                "end": 60,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 126,
+                "end": 164,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Allergies: none.",
+              "start": 97,
+              "end": 113
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "none.",
+            "evidence": [
+              {
+                "quote": "Allergies: none.",
+                "start": 97,
+                "end": 113
+              }
+            ],
+            "context": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 126,
+                "end": 164,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Smoker": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Smoker: no.",
+              "start": 114,
+              "end": 125
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "no.",
+            "evidence": [
+              {
+                "quote": "Smoker: no.",
+                "start": 114,
+                "end": 125
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: none.",
+                "start": 97,
+                "end": 113,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 126,
+                "end": 164,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Heart and lung examination was normal.",
+              "start": 126,
+              "end": 164
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Heart and lung examination was normal.",
+            "evidence": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 126,
+                "end": 164
+              }
+            ],
+            "context": [
+              {
+                "quote": "Smoker: no.",
+                "start": 114,
+                "end": 125,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Assessment is hypertension not at goal.",
+                "start": 165,
+                "end": 204,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment is hypertension not at goal.",
+              "start": 165,
+              "end": 204
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "hypertension not at goal.",
+            "evidence": [
+              {
+                "quote": "Assessment is hypertension not at goal.",
+                "start": 165,
+                "end": 204
+              }
+            ],
+            "context": [
+              {
+                "quote": "Heart and lung examination was normal.",
+                "start": 126,
+                "end": 164,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Plan is to increase amlodipine to 10 mg daily and recheck in four weeks.",
+                "start": 205,
+                "end": 277,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan is to increase amlodipine to 10 mg daily and recheck in four weeks.",
+              "start": 205,
+              "end": 277
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "to increase amlodipine to 10 mg daily and recheck in four weeks.",
+            "evidence": [
+              {
+                "quote": "Plan is to increase amlodipine to 10 mg daily and recheck in four weeks.",
+                "start": 205,
+                "end": 277
+              }
+            ],
+            "context": [
+              {
+                "quote": "Assessment is hypertension not at goal.",
+                "start": 165,
+                "end": 204,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 0,
+      "selected_total": 8
+    },
+    {
+      "name": "r1-note9",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Patient presents for medication review.\nCurrent medications are atorvastatin 20 mg and metformin 1000 mg.\nAllergies: codeine.\nSmoker: No.\nExamination was not performed today.\nAssessment: stable type 2 diabetes and hyperlipidemia.\nPlan: continue current medications.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "Patient presents for medication review."
+        ],
+        "Medications": [
+          "Current medications are atorvastatin 20 mg and metformin 1000 mg."
+        ],
+        "Allergies": [
+          "Allergies: codeine."
+        ],
+        "Smoker": [
+          "Smoker: No."
+        ],
+        "Examination": [
+          "Examination was not performed today."
+        ],
+        "Assessment": [
+          "Assessment: stable type 2 diabetes and hyperlipidemia."
+        ],
+        "Plan": [
+          "Plan: continue current medications."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "Patient presents for medication review.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Patient presents for medication review.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Medications": {
+          "text": "Current medications are atorvastatin 20 mg and metformin 1000 mg.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Current medications are atorvastatin 20 mg and metformin 1000 mg.",
+              "start": 40,
+              "end": 105
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "codeine.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: codeine.",
+              "start": 106,
+              "end": 125
+            }
+          ],
+          "reviewed": false
+        },
+        "Smoker": {
+          "text": "No",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Smoker: No.",
+              "start": 126,
+              "end": 137
+            }
+          ],
+          "reviewed": false
+        },
+        "Examination": {
+          "text": "not performed today.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Examination was not performed today.",
+              "start": 138,
+              "end": 174
+            }
+          ],
+          "reviewed": false
+        },
+        "Assessment": {
+          "text": "stable type 2 diabetes and hyperlipidemia.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: stable type 2 diabetes and hyperlipidemia.",
+              "start": 175,
+              "end": 229
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "continue current medications.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 230,
+              "end": 265
+            }
+          ],
+          "reviewed": false
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 7,
+      "selected_total": 7
+    },
+    {
+      "name": "r1-note10",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "notes": "Patient presents with chest tightness on exertion for one month. His father had a heart attack at 55. He has high cholesterol. He takes rosuvastatin. Allergies: none known. Smoker: Yes. Examination is normal. Assessment is possible stable angina. Plan is an exercise stress test and aspirin 81 mg daily.",
+      "unchanged_picks": {
+        "Chief complaint": [
+          "Patient presents with chest tightness on exertion for one month."
+        ],
+        "History of present illness": [
+          "Patient presents with chest tightness on exertion for one month."
+        ],
+        "Past medical history": [
+          "He has high cholesterol."
+        ],
+        "Medications": [
+          "He takes rosuvastatin."
+        ],
+        "Allergies": [
+          "Allergies: none known."
+        ],
+        "Smoker": [
+          "Smoker: Yes."
+        ],
+        "Examination": [
+          "Examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is possible stable angina."
+        ],
+        "Plan": [
+          "Plan is an exercise stress test and aspirin 81 mg daily."
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Patient presents with chest tightness on exertion for one month.",
+              "start": 0,
+              "end": 64
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Patient presents with chest tightness on exertion for one month.",
+            "evidence": [
+              {
+                "quote": "Patient presents with chest tightness on exertion for one month.",
+                "start": 0,
+                "end": 64
+              }
+            ],
+            "context": [
+              {
+                "quote": "His father had a heart attack at 55.",
+                "start": 65,
+                "end": 101,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "History of present illness": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Patient presents with chest tightness on exertion for one month.",
+              "start": 0,
+              "end": 64
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Patient presents with chest tightness on exertion for one month.",
+            "evidence": [
+              {
+                "quote": "Patient presents with chest tightness on exertion for one month.",
+                "start": 0,
+                "end": 64
+              }
+            ],
+            "context": [
+              {
+                "quote": "His father had a heart attack at 55.",
+                "start": 65,
+                "end": 101,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Past medical history": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "He has high cholesterol.",
+              "start": 102,
+              "end": 126
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "He has high cholesterol.",
+            "evidence": [
+              {
+                "quote": "He has high cholesterol.",
+                "start": 102,
+                "end": 126
+              }
+            ],
+            "context": [
+              {
+                "quote": "His father had a heart attack at 55.",
+                "start": 65,
+                "end": 101,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "He takes rosuvastatin.",
+                "start": 127,
+                "end": 149,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "He takes rosuvastatin.",
+              "start": 127,
+              "end": 149
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "He takes rosuvastatin.",
+            "evidence": [
+              {
+                "quote": "He takes rosuvastatin.",
+                "start": 127,
+                "end": 149
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has high cholesterol.",
+                "start": 102,
+                "end": 126,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Assessment is possible stable angina.",
+                "start": 209,
+                "end": 246,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Allergies": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Allergies: none known.",
+              "start": 150,
+              "end": 172
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "none known.",
+            "evidence": [
+              {
+                "quote": "Allergies: none known.",
+                "start": 150,
+                "end": 172
+              }
+            ],
+            "context": [
+              {
+                "quote": "Assessment is possible stable angina.",
+                "start": 209,
+                "end": 246,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Smoker": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Smoker: Yes.",
+              "start": 173,
+              "end": 185
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Yes.",
+            "evidence": [
+              {
+                "quote": "Smoker: Yes.",
+                "start": 173,
+                "end": 185
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: none known.",
+                "start": 150,
+                "end": 172,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Assessment is possible stable angina.",
+                "start": 209,
+                "end": 246,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Examination": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Examination is normal.",
+              "start": 186,
+              "end": 208
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "normal.",
+            "evidence": [
+              {
+                "quote": "Examination is normal.",
+                "start": 186,
+                "end": 208
+              }
+            ],
+            "context": [
+              {
+                "quote": "Smoker: Yes.",
+                "start": 173,
+                "end": 185,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Assessment is possible stable angina.",
+                "start": 209,
+                "end": 246,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment is possible stable angina.",
+              "start": 209,
+              "end": 246
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "possible stable angina.",
+            "evidence": [
+              {
+                "quote": "Assessment is possible stable angina.",
+                "start": 209,
+                "end": 246
+              }
+            ],
+            "context": [
+              {
+                "quote": "Examination is normal.",
+                "start": 186,
+                "end": 208,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan is an exercise stress test and aspirin 81 mg daily.",
+              "start": 247,
+              "end": 303
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "an exercise stress test and aspirin 81 mg daily.",
+            "evidence": [
+              {
+                "quote": "Plan is an exercise stress test and aspirin 81 mg daily.",
+                "start": 247,
+                "end": 303
+              }
+            ],
+            "context": [
+              {
+                "quote": "Assessment is possible stable angina.",
+                "start": 209,
+                "end": 246,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Consent obtained": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false
+        },
+        "Clinician signature": {
+          "text": "",
+          "status": "missing",
+          "evidence": [],
+          "reviewed": false,
+          "reason": "Signed by hand on the printed form; never filled."
+        }
+      },
+      "selected_supported": 0,
+      "selected_total": 9
+    }
+  ],
+  "status_text_changes": []
+}

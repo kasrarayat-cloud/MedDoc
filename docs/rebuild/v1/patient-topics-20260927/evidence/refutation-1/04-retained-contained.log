@@ -1,0 +1,40 @@
+t- 12 12
+r1- 26 77
+[
+  {
+    "case": "r1-note4",
+    "field": "Examination",
+    "before": {
+      "status": "conflict",
+      "text": ""
+    },
+    "after": {
+      "status": "supported",
+      "text": "Neurological examination is normal."
+    }
+  },
+  {
+    "case": "r1-note4",
+    "field": "Assessment",
+    "before": {
+      "status": "conflict",
+      "text": ""
+    },
+    "after": {
+      "status": "supported",
+      "text": "tension-type headache."
+    }
+  },
+  {
+    "case": "r1-note4",
+    "field": "Plan",
+    "before": {
+      "status": "conflict",
+      "text": ""
+    },
+    "after": {
+      "status": "supported",
+      "text": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks."
+    }
+  }
+]

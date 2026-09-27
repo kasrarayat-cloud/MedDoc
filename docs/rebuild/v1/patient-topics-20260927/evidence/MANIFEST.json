@@ -1,0 +1,31 @@
+{
+  "source_commit": "058579292a10ccb7377d979a6feaff44953491c6",
+  "files": {
+    "05-focused.log": "b2c5daa71b1d0f4f0c9f6115a4ed9b419aa72490b3ea8997432ab9e31b683e94",
+    "11-final.log": "c2d8a903578c6cc042420fdd782edd056df062ea2b16c06cf6ea2a38d6a68d5c",
+    "10-nested-denial-red.log": "1e3d8e5e71c7a7523688d73cce4d5dee529c6cbf1b0e202f90c6151e576a0ab6",
+    "03-workflow.log": "33180ea048611f756605bdaf55e9d56455064f5f901189c888a467450b671dae",
+    "06-affected.log": "622b4d6aef9823e5e80baf20f429095465f5a1ace13373fce934ab5972cb4767",
+    "08-nka-base-red.log": "e97afa04efd235e310663ed6db790170db3c492b10acd47673f30a4aef0c18a7",
+    "aa4e8-retained-baseline.json": "a13a34a8fe6adf650577347579264e99044e43fdcf2437006c8043f09819e339",
+    "module-before-nested-denial-fix.py": "b4f27f09ec5ebc5932549aeb2d9a2573268eaff452cdbfbdc7cae915f4a389c2",
+    "04-save-diagnostic.log": "8b651c9a5b5511356327ab82b9cb85d5238af2d803a96d92520c4595d1f03bd7",
+    "base-generation.py": "923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41",
+    "reproduce_nka_base.py": "4fcaa9a7432e0b6b7fecd97c28556a95e08b75c5c248a61568c818c1661b0e71",
+    "02-first.log": "c6161369ce6a8bda5d5a18d3ffd6021d974daac1d10d36120a1a1734e287b05f",
+    "workflow.json": "e6598066e5fb64d0ef6f7121e9914c4b0964107fc8caaefe69bdc63efd6550ea",
+    "replay_retained_final.py": "0d0c58b0db177f8e485991684cb84c62b0393e7021ae23521e3178afc8844527",
+    "07-retained-after.log": "32f09a9725530e74e97c7d8aff31989e882bdf4bfa563db9cff51b7b86afe1c5",
+    "replay_retained.py": "e6412ff19d7b57cf39154a9e218e43077c92f650354f4a6419186170fa585eba",
+    "09-final-affected-fixes.log": "505b78f5a456de0f6346f8946fa43101b99635269e55d3f85a9bf82a01a95d0e",
+    "12-retained-final.log": "32f09a9725530e74e97c7d8aff31989e882bdf4bfa563db9cff51b7b86afe1c5",
+    "12-retained-final.json": "1aab74a44027f937b6d1458ddaabf63400f31c4c079e499939f805cad9574bda",
+    "01-red.log": "772db0b3900a064111d3937488680cf33af3c8ed493d8272eb750415e305164a",
+    "07-retained-after.json": "0b1b9c9ec9e1c055112e03f12fb1effc5e6e454e050cae979d21175e9177dbd5"
+  },
+  "runtime_only_synthetic_word": {
+    "rebuild/.runtime/patient-topics-20260927/artifacts-final/synthetic-final.docx": "5da84989362344812deb31bba81e013f2f0ba21ed07e9d19d54519f8044e12b0",
+    "rebuild/.runtime/patient-topics-20260927/artifacts-final/synthetic-original.docx": "2e3c2e022f10eb68a4721d5dad7c7e82957eee46b25be2e470ebf56494cd582b"
+  },
+  "reconstructed_snapshot": "module-before-nested-denial-fix.py is the inverse denial-veto patch; hash matches captured b4f27f09ec5ebc5932549aeb2d9a2573268eaff452cdbfbdc7cae915f4a389c2"
+}

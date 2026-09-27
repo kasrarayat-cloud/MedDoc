@@ -330,17 +330,26 @@ class ScopeInOrdinarySentences(SimpleTestCase):
                                 ('Social history', 'She has smoked ten cigarettes a day for years.')):
             answer = run(sentence, {label: [sentence]}, fields=self.fields)[label]
             self.assertEqual((answer['status'], answer['text']), ('supported', sentence), sentence)
-        # No verb from the list: held with the candidate, never adopted, however many words and whatever it closes with.
+        # Other fragments still require a listed verb. The separately reviewed
+        # exact complete NKA declaration is pinned below, not a general exemption.
         for label, fragment in (('Chief complaint', 'He fell from a ladder yesterday and hurt his left wrist.'),
                                 ('Allergies', 'She developed a rash after amoxicillin.'),
                                 ('Social history', 'She smokes ten cigarettes a day.'),
                                 ('Chief complaint', 'Mother brings in her son with ear pain.'),
-                                ('Allergies', 'No known drug allergies.'), ('Allergies', 'NKDA.'),
+                                ('Allergies', 'NKDA.'),
                                 ('Chief complaint', 'Right knee.'), ('Chief complaint', 'Follow-up for hypertension.'),
                                 ('Chief complaint', 'Knee pain after a fall')):
             answer = run(fragment, {label: [fragment]}, fields=self.fields)[label]
             self.assertEqual((answer['status'], answer['text']), ('conflict', ''), fragment)
             self.assertEqual(answer['held_candidate']['text'], fragment, fragment)
+
+    def test_exact_complete_negative_allergy_declaration_uses_its_reviewed_exception(self):
+        quote = 'No known drug allergies.'
+        answer = run(quote, {'Allergies': [quote]}, fields=self.fields)['Allergies']
+        self.assertEqual((answer['status'], answer['text']), ('supported', quote))
+        for incomplete in ('No known drug allergies', 'No known drug allergies?', 'No known allergies.'):
+            answer = run(incomplete, {'Allergies': [incomplete]}, fields=self.fields)['Allergies']
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
 
 
 def live_config(**extra):
