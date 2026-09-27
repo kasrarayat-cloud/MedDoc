@@ -538,3 +538,126 @@ class LiveCompleteSentenceWorker(V3EncounterFixture, TestCase):
         self.assertEqual(answers[self.key('Reason for visit')]['text'], 'Patient presents with right knee pain.')
         self.assertEqual((answers[self.key('Smoker?')]['status'], answers[self.key('Smoker?')]['text']), ('supported', 'Yes'))
         self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state', flat=True)), ['settled'])
+
+
+# Round-2 refutation of 2ecf3f75: the refuter's own inputs, the provider simulated by unit selection exactly as `run`
+# does. Each input adopted a clinically wrong or ungoverned statement as `supported` (or, F4/F5, could never fill).
+# Where the finding quoted '…' the missing line is reconstructed as the finding's sibling input ('Fever and night
+# sweats.'); 'I mean no.' completes 'I mean no…'.
+REFUTED = FIELDS + [field('v3_7', 'Findings', 'long_text'), field('v3_8', 'Medications', 'long_text'),
+                    field('v3_9', 'Past medical history', 'long_text'), field('v3_10', 'Review of systems', 'long_text')]
+
+
+class RoundTwoRefutation(SimpleTestCase):
+    """A hold keeps the candidate and its own source for the clinician; nothing below may be adopted as `supported`."""
+
+    def held(self, notes, label, quote, candidate, fields=REFUTED):
+        answer = run(notes, {label: [quote]}, fields=fields)[label]
+        self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
+        kept = answer.get('held_candidate') or {}
+        self.assertEqual(kept.get('text'), candidate, notes)
+        self.assertEqual([entry['quote'] for entry in kept.get('evidence', [])], [quote], notes)
+        return answer
+
+    def test_f1_a_denial_pointer_conditional_or_attribution_holds_what_it_governs(self):
+        for notes, label, quote in (
+                ('Findings: none of the following were seen.\nPolyp in the sigmoid colon.\nMass in the rectum.',
+                 'Findings', 'Polyp in the sigmoid colon.'),
+                ('The patient denies all of the following symptoms today.\nChest pain on exertion.\nFever and night sweats.',
+                 'Chief complaint', 'Chest pain on exertion.'),
+                ('Review of systems is negative for the following items today.\nChest pain on exertion.\n'
+                 'Fever and night sweats.', 'Chief complaint', 'Chest pain on exertion.'),
+                ('Fever, chills and night sweats. All of these were denied.', 'Chief complaint', 'Fever, chills and night sweats.'),
+                ('If the wound looks infected at review, start cephalexin. Cephalexin 500 mg four times daily for seven days.',
+                 'Plan', 'Cephalexin 500 mg four times daily for seven days.'),
+                ('Family history is significant for her father. He had a myocardial infarction at age 50 and has diabetes.',
+                 'Past medical history', 'He had a myocardial infarction at age 50 and has diabetes.')):
+            with self.subTest(notes=notes):
+                self.held(notes, label, quote, quote)
+
+    def test_f2_a_correction_after_a_labelled_value_or_sentence_holds_it(self):
+        for notes, label, quote, candidate in (
+                ('Allergies: penicillin.\nSorry, I mean amoxicillin.', 'Allergies', 'Allergies: penicillin.', 'penicillin.'),
+                ('Consent obtained: yes.\nTo be obtained tomorrow.', 'Consent obtained', 'Consent obtained: yes.', 'yes.'),
+                ('Consent obtained: yes.\nPatient withdrew consent before the procedure.', 'Consent obtained',
+                 'Consent obtained: yes.', 'yes.'),
+                ('Seen today. Allergies: penicillin. Sorry, I mean amoxicillin.', 'Allergies', 'Allergies: penicillin.',
+                 'penicillin.'),
+                ('Allergies are penicillin. Sorry, I mean amoxicillin.', 'Allergies', 'Allergies are penicillin.', 'penicillin.'),
+                ('Plan is to start lisinopril 10 mg daily. Sorry, I mean amlodipine 5 mg daily.', 'Plan',
+                 'Plan is to start lisinopril 10 mg daily.', 'to start lisinopril 10 mg daily.'),
+                ('Medications: warfarin 5 mg daily.\nActually, warfarin was stopped last month.', 'Medications',
+                 'Medications: warfarin 5 mg daily.', 'warfarin 5 mg daily.'),
+                ('Smoker: yes.\nI mean no.', 'Smoker', 'Smoker: yes.', 'yes.')):
+            with self.subTest(notes=notes):
+                self.held(notes, label, quote, candidate)
+
+    def test_f3_a_fragment_whose_predicate_is_the_next_sentence_is_held(self):
+        for notes, label, quote in (
+                ('Warfarin 5 mg daily. Stopped last month.', 'Medications', 'Warfarin 5 mg daily.'),
+                ('Mass in the right breast. Ruled out on ultrasound.', 'Findings', 'Mass in the right breast.'),
+                ('Chest pain on exertion and palpitations. All denied.', 'Chief complaint',
+                 'Chest pain on exertion and palpitations.'),
+                ('Polyp in the sigmoid colon. Not seen on this examination.', 'Findings', 'Polyp in the sigmoid colon.'),
+                ('History of type 2 diabetes. In her sister, not the patient.', 'Past medical history',
+                 'History of type 2 diabetes.'),
+                ('Nausea, vomiting or abdominal pain? None.', 'Review of systems', 'Nausea, vomiting or abdominal pain?')):
+            with self.subTest(notes=notes):
+                self.held(notes, label, quote, quote)
+
+    def test_f4_an_option_printed_with_a_closing_full_stop_is_named_by_its_value(self):
+        form = [field('v3_r', 'Right impression', 'choice', ['reflux positive.', 'is absent.']),
+                field('v3_s', 'Smoker', 'choice', ['Yes.', 'No.'])]
+        for notes, label, option in (('Right impression: reflux positive.', 'Right impression', 'reflux positive.'),
+                                     ('Smoker: No.', 'Smoker', 'No.'), ('Smoker: No', 'Smoker', 'No.')):
+            with self.subTest(notes=notes):
+                answer = run(notes, {label: [notes]}, fields=form)[label]
+                self.assertEqual((answer['status'], answer['text']), ('supported', option), notes)
+
+    def test_f5_each_form_label_on_one_line_is_its_own_unit(self):
+        vitals = [field('v3_b', 'BP'), field('v3_h', 'HR'), field('v3_t', 'Temp')]
+        notes = 'BP: 124/78. HR: 88. Temp: 36.9.'
+        self.assertEqual([u['quote'] for u in g.source_units(notes, vitals)[0]], ['BP: 124/78.', 'HR: 88.', 'Temp: 36.9.'])
+        out = run(notes, {'BP': ['BP: 124/78.'], 'HR': ['HR: 88.'], 'Temp': ['Temp: 36.9.']}, fields=vitals)
+        self.assertEqual({label: (a['status'], a['text']) for label, a in out.items()},
+                         {'BP': ('supported', '124/78.'), 'HR': ('supported', '88.'), 'Temp': ('supported', '36.9.')})
+        notes = 'Allergies: none. Smoker: No.'
+        self.assertEqual([u['quote'] for u in g.source_units(notes, g.v3_generation_fields(FIELDS)[0],
+                                                               context_labels=['Clinician signature'])[0]],
+                         ['Allergies: none.', 'Smoker: No.'])
+        out = run(notes, {'Allergies': ['Allergies: none.'], 'Smoker': ['Smoker: No.']})
+        self.assertEqual((out['Allergies']['status'], out['Allergies']['text']), ('supported', 'none.'))
+        self.assertEqual((out['Smoker']['status'], out['Smoker']['text']), ('supported', 'No'))
+
+    def test_f7_a_value_or_sentence_that_only_points_elsewhere_is_held(self):
+        for line in ('Findings: to follow.', 'Findings: as follows —', 'Findings: **as follows**',
+                     'Findings: see next line.', 'Findings: see beneath.'):
+            for notes in (line, line + '\nEffusion is present.\nNo fracture is seen.'):
+                with self.subTest(notes=notes):
+                    self.held(notes, 'Findings', line, line.split(': ', 1)[1])
+        for notes in ('The findings are as follows.', 'The findings are as follows.\nEffusion is present.'):
+            with self.subTest(notes=notes):
+                self.held(notes, 'Findings', 'The findings are as follows.', 'The findings are as follows.')
+
+
+@override_settings(**LIVE)
+class RoundTwoThroughTheWorker(V3EncounterFixture, TestCase):
+    """F1 through enqueue and the worker, live mode, the Anthropic client patched: the stored answer is held."""
+
+    def test_a_denied_symptom_is_never_stored_as_the_reason_for_visit(self):
+        from core.jobs import enqueue, run_one
+        notes = 'The patient denies all of the following symptoms today.\nChest pain on exertion.\nFever and night sweats.'
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/notes/",
+                                          {"revision": encounter.revision, "notes": notes}).status_code, 302)
+        picks = {'Reason for visit': ['Chest pain on exertion.']}
+        with patch('anthropic.Anthropic') as client:
+            client.return_value.messages.create.side_effect = (
+                lambda **kwargs: unit_response(json.loads(kwargs['messages'][0]['content']), picks))
+            job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+            self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+        answer = Encounter.objects.get(pk=self.encounter.pk).answers[self.key('Reason for visit')]
+        self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+        self.assertEqual(answer['held_candidate']['text'], 'Chest pain on exertion.')
