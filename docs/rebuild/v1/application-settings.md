@@ -50,11 +50,25 @@ refund that could remove it — so the only safe path is a database with no sand
 - Every `Payment` records the Stripe mode its checkout was created in, and every `WebhookEvent` the
   `livemode` it was validated with (`livemode`, migration `0020`). Rows written before this change
   carry `NULL` and count as sandbox: live mode did not exist then.
-- In real data mode `reserve()` refuses the whole request, before any hold, when the payer's paid
-  wallet was funded by any payment not recorded as live (a non-live `Payment` row on it, or a
-  `payment` ledger credit with no live `Payment`). Synthetic mode is unchanged.
+- **A recorded mode never changes.** `0020` adds a database trigger on both tables that refuses any
+  `UPDATE` changing `livemode` (like `0008`'s signed-evidence guard), so no statement can relabel
+  sandbox evidence as live or live evidence as sandbox. Reversing `0020` refuses while any row is
+  recorded as live: dropping the column would erase that evidence, and re-applying records every row
+  `NULL`, which real mode treats as sandbox money it never spends. A database with no live rows
+  still reverses.
+- A paid wallet is **sandbox-funded** when any payment not recorded as live funded it: a paid
+  non-live `Payment` on it, or a `payment` ledger credit with no live `Payment`. A checkout nobody
+  paid (pending, expired, failed, uncertain) put no money in the wallet and does not count.
+- In real data mode that one rule (`core.billing.real_mode_refuses`) has three readers:
+  `reserve()` refuses the whole request, before any hold, when the payer's paid wallet is
+  sandbox-funded; **checkout** refuses, before any `Payment` row or Stripe call, to take live money
+  into such a wallet (it could never be spent), telling the payer to contact support; and the
+  **worker** refuses, before any provider request, a job whose hold was taken before the switch to
+  real mode and sits on such a wallet (not processed, nothing charged, the hold released, audited as
+  `usage.sandbox_hold_refused`). Synthetic mode is unchanged.
 - **`manage.py real_mode_payment_check`** is read-only (it runs in a `READ ONLY` transaction and rolls
-  back) and exits 1 when the database holds any payment or Stripe event row not recorded as live,
+  back) and is stricter than the per-wallet rule: it exits 1 when the database holds any payment
+  (paid or not) or Stripe event row not recorded as live,
   or any paid wallet whose balance live payments do not wholly explain (a non-live credit, or a
   balance that differs from its ledger). It prints counts only. **The launcher must run it before
   starting real mode.** A check inside every process start is not used instead: settings and
