@@ -100,7 +100,7 @@ served model, and perform reviewed cutover before admitting invited real-patient
 defensible until the external work is scheduled and the engineering gates pass.
 
 
-## 20:46 UTC engineering checkpoint
+## 20:36 UTC engineering checkpoint
 
 Reviewed clinical source is locally integrated throughaa4e8c0d (generation
 923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41). The literal allergy and
@@ -125,3 +125,5 @@ Remote release/v1 was confirmed at11d075646b28dfd52df89cbfdbd9551d314ba358 befor
 local documentation and literal-subject integration. No V1 PR or final candidate CI exists
 at this checkpoint. Nothing here changes the installeddedac162 application or its admission
 state. The pending external request remains unapproved.
+
+Timestamp correction: the preceding local draft used estimated20:46/20:37 labels. The UTC clock readback was20:36:12; those labels are corrected to the captured checkpoint minute. Source identities and measured test durations are unchanged.

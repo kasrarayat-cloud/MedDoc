@@ -116,7 +116,7 @@ standalone preparation a retained-case fix, compatibility qualification, native
 Word acceptance or a deployed change.
 
 
-## Reviewed release union — 2026-09-27T20:37Z
+## Reviewed release union — 2026-09-27T20:36Z
 
 Integrated locally as `aa4e8c0d0c0f935bdc35012263e5881bbd703ace`, generation SHA256
 `923439aed9bde6eba34a26bf551b2d583a247a6bec7ba00e8679b2632d6c6f41`. The one overlapping
