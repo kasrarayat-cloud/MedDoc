@@ -1130,8 +1130,10 @@ class V3LiveAdoption(TestCase):
 
         client = MagicMock()
         client.messages.create.side_effect = create
-        config = {**generation.configuration(), "mode": "live", "provider": "anthropic", "model": "synthetic-model",
-                  "input_rate": "0.000003", "output_rate": "0.000015", "cached_rate": "0.0000003"}
+        # A profiled model: an unprofiled one is refused before any request is built (deny by default, Sonnet 5 stream).
+        config = {**generation.configuration(), "mode": "live", "provider": "anthropic", "model": "claude-sonnet-4-6",
+                  "input_rate": "0.000003", "output_rate": "0.000015", "cached_rate": "0.0000003",
+                  "request_profile": generation.request_profile("anthropic", "claude-sonnet-4-6", "disabled", "medium", "")}
         with patch("anthropic.Anthropic", return_value=client):
             with self.assertRaises(RuntimeError):
                 generation.generate("Smoker: yes", fields, config, context_labels=context_labels)
