@@ -1,0 +1,663 @@
+{
+  "disk_sha256": "6f1a5354a29a3b50cc112be4bdd0436d5cc77896a6d6c6e6b75d81bd2350737a",
+  "override": null,
+  "cases": [
+    {
+      "notes": "Assessment: infection.\nPlan: \uff4e\uff4f active bacterial infection.",
+      "plain_value": false,
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: \uff4e\uff4f active bacterial infection.",
+                "start": 23,
+                "end": 59,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "\uff4e\uff4f active bacterial infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: \uff4e\uff4f active bacterial infection.",
+              "start": 23,
+              "end": 59
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "Assessment: infection.",
+            "start": 0,
+            "end": 22
+          }
+        ],
+        "label": "Assessment",
+        "held_candidate": {
+          "text": "infection.",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "context": [
+            {
+              "quote": "Plan: \uff4e\uff4f active bacterial infection.",
+              "start": 23,
+              "end": 59,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "forced_refusals": [
+        "Assessment"
+      ]
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff4e\u200b\uff4f infection.",
+      "plain_value": false,
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: \uff4e\u200b\uff4f infection.",
+                "start": 23,
+                "end": 43,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "\uff4e\u200b\uff4f infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: \uff4e\u200b\uff4f infection.",
+              "start": 23,
+              "end": 43
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "Assessment: infection.",
+            "start": 0,
+            "end": 22
+          }
+        ],
+        "label": "Assessment",
+        "held_candidate": {
+          "text": "infection.",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "context": [
+            {
+              "quote": "Plan: \uff4e\u200b\uff4f infection.",
+              "start": 23,
+              "end": 43,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "forced_refusals": [
+        "Assessment"
+      ]
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: amoxicillin \uff49\uff46 symptoms develop.",
+      "plain_value": false,
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: amoxicillin \uff49\uff46 symptoms develop.",
+                "start": 23,
+                "end": 61,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "amoxicillin \uff49\uff46 symptoms develop.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: amoxicillin \uff49\uff46 symptoms develop.",
+              "start": 23,
+              "end": 61
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "Assessment: infection.",
+            "start": 0,
+            "end": 22
+          }
+        ],
+        "label": "Assessment",
+        "held_candidate": {
+          "text": "infection.",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "context": [
+            {
+              "quote": "Plan: amoxicillin \uff49\uff46 symptoms develop.",
+              "start": 23,
+              "end": 61,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "forced_refusals": [
+        "Assessment"
+      ]
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff41\uff43\uff54\uff55\uff41\uff4c\uff4c\uff59 no infection.",
+      "plain_value": false,
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: \uff41\uff43\uff54\uff55\uff41\uff4c\uff4c\uff59 no infection.",
+                "start": 23,
+                "end": 51,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "\uff41\uff43\uff54\uff55\uff41\uff4c\uff4c\uff59 no infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: \uff41\uff43\uff54\uff55\uff41\uff4c\uff4c\uff59 no infection.",
+              "start": 23,
+              "end": 51
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "Assessment: infection.",
+            "start": 0,
+            "end": 22
+          }
+        ],
+        "label": "Assessment",
+        "held_candidate": {
+          "text": "infection.",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "context": [
+            {
+              "quote": "Plan: \uff41\uff43\uff54\uff55\uff41\uff4c\uff4c\uff59 no infection.",
+              "start": 23,
+              "end": 51,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "forced_refusals": [
+        "Assessment"
+      ]
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff53\uff45\uff45 above.",
+      "plain_value": false,
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.\nPlan: \uff53\uff45\uff45 above.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: \uff53\uff45\uff45 above.",
+                "start": 23,
+                "end": 39,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.\nPlan: \uff53\uff45\uff45 above.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: \uff53\uff45\uff45 above.",
+              "start": 23,
+              "end": 39
+            }
+          ],
+          "held_candidate": {
+            "text": "\uff53\uff45\uff45 above.",
+            "evidence": [
+              {
+                "quote": "Plan: \uff53\uff45\uff45 above.",
+                "start": 23,
+                "end": 39
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: \uff53\uff45\uff45 above.",
+                "start": 23,
+                "end": 39,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "Assessment: infection.",
+            "start": 0,
+            "end": 22
+          }
+        ],
+        "label": "Assessment",
+        "held_candidate": {
+          "text": "infection.",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "context": [
+            {
+              "quote": "Plan: \uff53\uff45\uff45 above.",
+              "start": 23,
+              "end": 39,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "forced_refusals": [
+        "Assessment"
+      ]
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff46\uff4f\uff52 mother.",
+      "plain_value": false,
+      "answers": {
+        "Assessment": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "infection.",
+            "evidence": [
+              {
+                "quote": "Assessment: infection.",
+                "start": 0,
+                "end": 22
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: \uff46\uff4f\uff52 mother.",
+                "start": 23,
+                "end": 40,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "\uff46\uff4f\uff52 mother.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: \uff46\uff4f\uff52 mother.",
+              "start": 23,
+              "end": 40
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_page": {
+        "status": "conflict",
+        "text": "",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "Assessment: infection.",
+            "start": 0,
+            "end": 22
+          }
+        ],
+        "label": "Assessment",
+        "held_candidate": {
+          "text": "infection.",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "context": [
+            {
+              "quote": "Plan: \uff46\uff4f\uff52 mother.",
+              "start": 23,
+              "end": 40,
+              "after": true,
+              "same": false
+            }
+          ],
+          "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\".",
+          "prefilled": true
+        }
+      },
+      "forced_refusals": [
+        "Assessment"
+      ]
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: naproxen 500 mg twice daily with food and physiotherapy.",
+      "plain_value": false,
+      "answers": {
+        "Assessment": {
+          "text": "infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "naproxen 500 mg twice daily with food and physiotherapy.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: naproxen 500 mg twice daily with food and physiotherapy.",
+              "start": 23,
+              "end": 85
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_page": {
+        "status": "supported",
+        "text": "infection.",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "Assessment: infection.",
+            "start": 0,
+            "end": 22
+          }
+        ],
+        "label": "Assessment"
+      },
+      "forced_refusals": []
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: parac\u00e9tamol 500 mg twice daily.",
+      "plain_value": false,
+      "answers": {
+        "Assessment": {
+          "text": "infection.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Assessment: infection.",
+              "start": 0,
+              "end": 22
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "parac\u00e9tamol 500 mg twice daily.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: parac\u00e9tamol 500 mg twice daily.",
+              "start": 23,
+              "end": 60
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_page": {
+        "status": "supported",
+        "text": "infection.",
+        "reviewed": true,
+        "evidence": [
+          {
+            "quote": "Assessment: infection.",
+            "start": 0,
+            "end": 22
+          }
+        ],
+        "label": "Assessment"
+      },
+      "forced_refusals": []
+    }
+  ],
+  "option_values": {
+    "No.": "No",
+    "\uff2e\uff4f.": null,
+    "\uff39\uff45\uff53.": null
+  },
+  "recognized_labels": {
+    "Plan": [
+      "plan"
+    ],
+    "\uff30\uff4c\uff41\uff4e": [
+      "\uff50\uff4c\uff41\uff4e"
+    ]
+  }
+}

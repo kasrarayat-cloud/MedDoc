@@ -1,0 +1,55 @@
+{
+  "cases": [
+    {
+      "notes": "Assessment: infection.\nPlan: \uff4e\uff4f active bacterial infection.",
+      "evidence_exact_and_unchanged": true,
+      "supported_text_unchanged": true,
+      "plain_value_did_not_gain": true
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff4e\u200b\uff4f infection.",
+      "evidence_exact_and_unchanged": true,
+      "supported_text_unchanged": true,
+      "plain_value_did_not_gain": true
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: amoxicillin \uff49\uff46 symptoms develop.",
+      "evidence_exact_and_unchanged": true,
+      "supported_text_unchanged": true,
+      "plain_value_did_not_gain": true
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff41\uff43\uff54\uff55\uff41\uff4c\uff4c\uff59 no infection.",
+      "evidence_exact_and_unchanged": true,
+      "supported_text_unchanged": true,
+      "plain_value_did_not_gain": true
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff53\uff45\uff45 above.",
+      "evidence_exact_and_unchanged": true,
+      "supported_text_unchanged": true,
+      "plain_value_did_not_gain": true
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: \uff46\uff4f\uff52 mother.",
+      "evidence_exact_and_unchanged": true,
+      "supported_text_unchanged": true,
+      "plain_value_did_not_gain": true
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: naproxen 500 mg twice daily with food and physiotherapy.",
+      "evidence_exact_and_unchanged": true,
+      "supported_text_unchanged": true,
+      "plain_value_did_not_gain": true
+    },
+    {
+      "notes": "Assessment: infection.\nPlan: parac\u00e9tamol 500 mg twice daily.",
+      "evidence_exact_and_unchanged": true,
+      "supported_text_unchanged": true,
+      "plain_value_did_not_gain": true
+    }
+  ],
+  "option_values_unchanged": true,
+  "labels_unchanged": true,
+  "retained18_and3_unchanged": true
+}
