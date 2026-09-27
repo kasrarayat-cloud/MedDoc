@@ -13,7 +13,7 @@ import os
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from core.billing import stripe_test_key_configured
+from core.billing import stripe_key_configured
 
 
 def shape(value, recogniser=None):
@@ -46,7 +46,7 @@ class Command(BaseCommand):
             ('DEEPGRAM_API_KEY', os.getenv('DEEPGRAM_API_KEY'), None),
             ('ANTHROPIC_API_KEY', os.getenv('ANTHROPIC_API_KEY'), None),
             ('RESEND_API_KEY', settings.RESEND_API_KEY, None),
-            ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_test_key_configured),
+            ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_key_configured),
             ('STRIPE_WEBHOOK_SECRET', settings.STRIPE_WEBHOOK_SECRET, None),
         ]
         self.stdout.write('Configuration (no value is read back):')
@@ -73,6 +73,10 @@ class Command(BaseCommand):
         self.stdout.write('Release gates:')
         self.stdout.write(f'  SYNTHETIC_ONLY: {settings.SYNTHETIC_ONLY}')
         self.stdout.write(f'  STRIPE_LIVE_ENABLED: {settings.STRIPE_LIVE_ENABLED}')
+        self.stdout.write(f'  QUILLMD_DATA_MODE: {settings.QUILLMD_DATA_MODE}')
+        self.stdout.write(f'  QUILLMD_REGISTRATION: {settings.QUILLMD_REGISTRATION}')
+        self.stdout.write(f'  QUILLMD_STRIPE_MODE: {settings.QUILLMD_STRIPE_MODE}')
+        self.stdout.write(f'  QUILLMD_MFA_REQUIRED_ALL: {settings.QUILLMD_MFA_REQUIRED_ALL}')
         self.stdout.write(f'  database: {settings.DATABASES["default"]["NAME"]}')
 
     def language_model(self):

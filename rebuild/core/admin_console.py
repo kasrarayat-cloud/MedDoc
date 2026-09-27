@@ -167,7 +167,10 @@ def business_overview(window):
             {'label': 'Refunded out', 'amount': refunded_out,
              'definition': "Sum of 'refund' ledger entries, as a positive number. Only refunds that reached the ledger."},
             {'label': 'Promotional credit granted', 'amount': granted,
-             'definition': "Sum of 'welcome' ledger entries: $10 per verified account. A liability, not a cost."},
+             # A historical sum: each entry keeps the amount it was granted at. No per-account figure from
+             # today's QUILLMD_WELCOME_CREDIT, which would contradict the entries it sums once changed.
+             'definition': "Sum of the recorded 'welcome' ledger entries, each at the amount granted when it was recorded "
+                           "(a later change to QUILLMD_WELCOME_CREDIT does not restate them). A liability, not a cost."},
         ],
         'difference': {
             'label': 'Charged (all balances) less provider cost',
@@ -382,7 +385,7 @@ def configuration_rows():
     import os
     import shutil
     from django.conf import settings
-    from .billing import stripe_test_key_configured
+    from .billing import stripe_key_configured
 
     settings_rows = [
         ('QUILLMD_AI_MODE', settings.AI_MODE),
@@ -397,7 +400,7 @@ def configuration_rows():
         ('DEEPGRAM_API_KEY', os.getenv('DEEPGRAM_API_KEY'), None),
         ('ANTHROPIC_API_KEY', os.getenv('ANTHROPIC_API_KEY'), None),
         ('RESEND_API_KEY', settings.RESEND_API_KEY, None),
-        ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_test_key_configured),
+        ('STRIPE_SECRET_KEY', settings.STRIPE_SECRET_KEY, stripe_key_configured),
         ('STRIPE_WEBHOOK_SECRET', settings.STRIPE_WEBHOOK_SECRET, None),
     ]
     probe, remuxer = shutil.which('ffprobe'), shutil.which('ffmpeg')
@@ -418,6 +421,11 @@ def configuration_rows():
         'gates': [
             {'name': 'SYNTHETIC_ONLY', 'value': str(settings.SYNTHETIC_ONLY)},
             {'name': 'STRIPE_LIVE_ENABLED', 'value': str(settings.STRIPE_LIVE_ENABLED)},
+            {'name': 'QUILLMD_DATA_MODE', 'value': settings.QUILLMD_DATA_MODE},
+            {'name': 'QUILLMD_REGISTRATION', 'value': settings.QUILLMD_REGISTRATION},
+            {'name': 'QUILLMD_STRIPE_MODE', 'value': settings.QUILLMD_STRIPE_MODE},
+            {'name': 'QUILLMD_MFA_REQUIRED_ALL', 'value': str(settings.QUILLMD_MFA_REQUIRED_ALL)},
+            {'name': 'QUILLMD_TRUST_PROXY (effective on this surface)', 'value': str(settings.QUILLMD_TRUST_PROXY)},
             {'name': 'ADMIN_SITE', 'value': str(settings.ADMIN_SITE)},
             {'name': 'Database', 'value': settings.DATABASES['default']['NAME']},
             {'name': 'Release', 'value': settings.RELEASE_SHA},

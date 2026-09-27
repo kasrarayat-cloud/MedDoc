@@ -130,4 +130,8 @@ class EvidenceKindMigration(PolicyFixture,TransactionTestCase):
             self.assertEqual(ledger_before,list(LedgerEntry.objects.order_by('pk').values_list('pk','amount','kind','key','balance_after')))
             self.assertFalse(Usage.objects.get(pk=usage.pk).reconciliation.invoice_reconciled)
         finally:
-            MigrationExecutor(connection).migrate(after_target)
+            # Back to the WHOLE schema, not just 0017: stopping at 0017 left every later migration's tables and
+            # columns missing for the TransactionTestCases that run after this one (Payment.livemode, 0020, made
+            # it visible in test_worker_financial_reliability).
+            executor=MigrationExecutor(connection)
+            executor.migrate(executor.loader.graph.leaf_nodes())

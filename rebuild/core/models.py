@@ -75,6 +75,30 @@ class Invitation(Entity):
     expires_at=models.DateTimeField()
     accepted_at=models.DateTimeField(null=True)
     invited_by=models.ForeignKey(User,on_delete=models.PROTECT)
+class ClinicInvitation(Entity):
+    """A platform administrator's invitation for the owner of a NEW clinic (QUILLMD_REGISTRATION=invite).
+
+    Department invitations need an existing department and an owner or manager to issue them; with
+    self-service registration closed, nothing could create the first one. Accepting this invitation creates
+    the organization, its first department and the owner membership, exactly as email verification does
+    for a self-registered account. Same token discipline as `Invitation`: 7 days, stored as a sha256,
+    single use. Revoking sets `revoked_at` and ends `expires_at` now.
+    """
+    email=models.EmailField()
+    organization_name=models.CharField(max_length=140)
+    department_name=models.CharField(max_length=120)
+    token_hash=models.CharField(max_length=64,unique=True)
+    expires_at=models.DateTimeField()
+    accepted_at=models.DateTimeField(null=True)
+    revoked_at=models.DateTimeField(null=True)
+    invited_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='clinic_invitations_issued')
+    accepted_by=models.ForeignKey(User,null=True,on_delete=models.PROTECT,related_name='+')
+    organization=models.ForeignKey(Organization,null=True,on_delete=models.PROTECT,related_name='+')
+    def status(self,now=None):
+        now=now or timezone.now()
+        if self.accepted_at: return 'accepted'
+        if self.revoked_at: return 'revoked'
+        return 'expired' if self.expires_at<=now else 'pending'
 class Verification(Entity):
     user=models.ForeignKey(User,on_delete=models.CASCADE)
     token_hash=models.CharField(max_length=64,unique=True)
@@ -232,6 +256,9 @@ class Payment(Entity):
     status=models.CharField(max_length=20,default='pending')
     request_key=models.CharField(max_length=64,unique=True,null=True)
     checkout_url=models.URLField(max_length=1000,blank=True)
+    # The Stripe mode the checkout was created in. NULL: recorded before the mode was stored, when only sandbox
+    # payments existed. Real data mode never spends money from a wallet any non-live payment funded.
+    livemode=models.BooleanField(null=True)
 class WebhookEvent(Entity):
     event_id=models.CharField(max_length=180,unique=True)
     kind=models.CharField(max_length=80)
@@ -243,6 +270,8 @@ class WebhookEvent(Entity):
     attempts=models.PositiveIntegerField(default=0)
     error=models.CharField(max_length=160,blank=True)
     processed_at=models.DateTimeField(null=True)
+    # The event's livemode as validated when recorded. NULL: recorded before it was stored (sandbox only then).
+    livemode=models.BooleanField(null=True)
 class Refund(Entity):
     payment=models.ForeignKey(Payment,on_delete=models.PROTECT)
     stripe_refund=models.CharField(max_length=200,unique=True)

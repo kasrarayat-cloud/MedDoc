@@ -3,7 +3,7 @@
 {% block title %}Organizations{% endblock %}
 {% block breadcrumb %}Organizations{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">Structure and permissions</div><h1>Who belongs where, and who pays.</h1><p>The organization tree with every membership, the payer setting that decides which balance is billed, and outstanding invitations.</p></div><div class="actions"><a class="button secondary" href="{% url 'admin_dashboard' %}#permissions">Back to administration</a></div></div>
+<div class="page-heading"><div><div class="eyebrow">Structure and permissions</div><h1>Who belongs where, and who pays.</h1><p>The organization tree with every membership, the payer setting that decides which balance is billed, and outstanding invitations.</p></div><div class="actions">{% if clinic_invitations_enabled %}<a class="button" href="{% url 'admin_clinic_invitations' %}">Invite clinic owner</a>{% endif %}<a class="button secondary" href="{% url 'admin_dashboard' %}#permissions">Back to administration</a></div></div>
 
 <div class="notice"><p><strong>Effective access is not the membership flag.</strong> The server requires an active membership <em>and</em> an enabled, verified account (<code>core.security.membership</code>). A membership can read &ldquo;active&rdquo; for somebody who cannot sign in at all.</p></div>
 

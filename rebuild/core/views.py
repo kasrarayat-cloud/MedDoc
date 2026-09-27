@@ -24,8 +24,8 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 from .models import *
 from . import field_location
 from .forms import *
-from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
-from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
+from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit,client_address
+from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,stripe_key_configured,reconcile_usage,release
 from .context import integration_status
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
 from .billing import available_balance
@@ -111,7 +111,13 @@ WM_BLOCKERS={
 #: SYNTHETIC_ONLY flipped to False — every check that read /health/ as evidence of
 #: synthetic-only operation was reading a label that could not disagree with itself.
 #: It is now derived from the setting the seed and verification commands actually enforce.
-def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-only' if settings.SYNTHETIC_ONLY else 'live','surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
+#: 'real' only when the declared data mode is real (settings refused to start otherwise). The guard
+#: switched off WITHOUT the declared real profile — reachable only by overriding settings — still
+#: reports 'live', so the positive control above keeps a value that cannot pass for either mode.
+def health_data_mode():
+    if settings.SYNTHETIC_ONLY:return 'synthetic-only'
+    return 'real' if getattr(settings,'QUILLMD_DATA_MODE','synthetic')=='real' else 'live'
+def health(request): return JsonResponse({'status':'ok','data_mode':health_data_mode(),'surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
 
 @require_http_methods(['GET','POST'])
 def login_view(request):
@@ -120,19 +126,29 @@ def login_view(request):
     if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(next_url,allowed_hosts=set()):next_url=''
     if request.method=='POST' and form.is_valid():
         email=form.cleaned_data['email'].lower()
-        if not rate_limit('login-ip:'+request.META.get('REMOTE_ADDR',''),limit=40) or not rate_limit('login-email:'+email):
+        if not rate_limit('login-ip:'+client_address(request),limit=40) or not rate_limit('login-email:'+email):
             form.add_error(None,'Too many sign-in attempts. Try again later.')
         else:
             found=User.objects.filter(email__iexact=email).first()
             user=authenticate(request,username=found.username if found else email,password=form.cleaned_data['password'])
             device=None
-            if user and user.is_staff:
+            enrol=False
+            # Administrators always need a confirmed authenticator. With QUILLMD_MFA_REQUIRED_ALL every account
+            # that HAS one must present its code; an account without one signs in with its password only far
+            # enough to enrol: AccessMiddleware confines that session to /mfa/ until a code is verified.
+            if user and (user.is_staff or settings.QUILLMD_MFA_REQUIRED_ALL):
                 with transaction.atomic():
                     device=TOTPDevice.objects.select_for_update().filter(user=user,confirmed=True).first()
-                    if not device or not device.verify_token(form.cleaned_data['otp']): user=None
+                    if device:
+                        if not device.verify_token(form.cleaned_data['otp']): user=None
+                    elif user.is_staff: user=None
+                    else: enrol=True
             if user and user.verified_at and (not settings.ADMIN_SITE or user.is_staff):
                 auth_login(request,user)
                 if device: otp_login(request,device)
+                if enrol:
+                    audit(user,'auth.login',mfa_enrolment_required=True)
+                    return redirect('mfa_setup')
                 audit(user,'auth.login')
                 return redirect(next_url or ('admin_dashboard' if settings.ADMIN_SITE else 'dashboard'))
             audit(None,'auth.login_failed',details='No credentials recorded')
@@ -149,10 +165,12 @@ def verification_mail(user,raw,verification):
 
 @require_http_methods(['GET','POST'])
 def register(request):
-    if settings.ADMIN_SITE: raise Http404
+    # QUILLMD_REGISTRATION=invite closes self-service sign-up entirely: accounts arrive only through a
+    # department invitation or an administrator's clinic-owner invitation.
+    if settings.ADMIN_SITE or settings.QUILLMD_REGISTRATION!='open': raise Http404
     form=RegisterForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
-        if not rate_limit('register:'+request.META.get('REMOTE_ADDR',''),limit=5):return HttpResponse('Try again later.',status=429)
+        if not rate_limit('register:'+client_address(request),limit=5):return HttpResponse('Try again later.',status=429)
         with transaction.atomic():
             user=form.save(commit=False);user.username=form.cleaned_data['email'];user.save()
             raw=token();verification=Verification.objects.create(user=user,token_hash=digest(raw),expires_at=timezone.now()+timedelta(hours=24))
@@ -160,25 +178,34 @@ def register(request):
         delivery=verification_mail(user,raw,verification)
         if delivery.status=='outbox':messages.success(request,'Verification created in the private development outbox. Email delivery is not live yet.')
         elif delivery.status=='accepted':messages.success(request,'Verification submitted to the email provider. Check your inbox; inbox delivery is not yet confirmed.')
-        else:messages.warning(request,'Account created, but verification email delivery could not be confirmed. Ask your administrator to recover the verification link or retry delivery. No welcome credit has been granted yet.')
+        else:messages.warning(request,'Account created, but verification email delivery could not be confirmed. Ask your administrator to recover the verification link or retry delivery.'+(' No welcome credit has been granted yet.' if welcome_credit_label() else ''))
         return redirect('login')
     return render(request,'register.html',{'form':form})
 
 @require_http_methods(['GET','POST'])
 def verify(request,raw):
     v=get_object_or_404(Verification,token_hash=digest(raw),expires_at__gt=timezone.now(),used_at__isnull=True)
-    if request.method=='GET':return render(request,'confirm.html',{'title':'Verify your test account','description':'Confirm ownership of this email to activate your personal $10 welcome credit.'})
+    if request.method=='GET':
+        label=welcome_credit_label() if settings.QUILLMD_REGISTRATION=='open' else ''
+        return render(request,'confirm.html',{'title':'Verify your test account' if settings.SYNTHETIC_ONLY else 'Verify your account','description':f'Confirm ownership of this email to activate your personal {label} welcome credit.' if label else 'Confirm ownership of this email to activate your account.'})
     with transaction.atomic():
         user=User.objects.select_for_update().get(pk=v.user_id)
         v=Verification.objects.select_for_update().get(pk=v.pk)
         if v.used_at or v.expires_at<=timezone.now() or user.verified_at or not user.is_active: raise Http404
         user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
         v.used_at=timezone.now();v.save(update_fields=['used_at'])
+        if settings.QUILLMD_REGISTRATION!='open':
+            # Invite-only: a verification link can only belong to an account registered before sign-up closed.
+            # It proves the mailbox and nothing more. A personal organization is self-service onboarding, which
+            # this mode closed; the account joins a clinic by invitation, and receives the credit when it does.
+            audit(user,'account.verified',user.pk,workspace_created=False)
+            messages.success(request,'Email verified. Sign in to accept the invitation your clinic sends you.');return redirect('login')
         org=Organization.objects.create(name=f'{user.first_name or "Personal"} workspace')
         dept=Department.objects.create(organization=org,name='Personal practice')
         Membership.objects.create(user=user,department=dept,role='owner')
         welcome_credit(user);audit(user,'account.verified',user.pk)
-    messages.success(request,'Email verified. Your $10 personal welcome credit is available.');return redirect('login')
+    label=welcome_credit_label()
+    messages.success(request,f'Email verified. Your {label} personal welcome credit is available.' if label else 'Email verified.');return redirect('login')
 
 @require_http_methods(['GET','POST'])
 def mfa_setup(request):
@@ -192,7 +219,16 @@ def mfa_setup(request):
             if device.verify_token(form.cleaned_data['code']):
                 device.confirmed=True;device.save(update_fields=['confirmed']);otp_login(request,device);audit(request.user,'auth.mfa_verified');return redirect('admin_dashboard' if settings.ADMIN_SITE else 'dashboard')
         form.add_error('code','Invalid or already used code.')
-    return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device})
+    # QUILLMD_MFA_REQUIRED_ALL puts every clinician through this page, many on a phone that cannot scan its own
+    # screen: the same key is also shown as grouped text for manual entry. Default mode renders the page as before.
+    secret=manual_entry_key(device) if settings.QUILLMD_MFA_REQUIRED_ALL and not device.confirmed else ''
+    return render(request,'mfa_setup.html',{'form':form,'provisioning_uri':device.config_url if not device.confirmed else '', 'device':device,'secret':secret})
+
+def manual_entry_key(device):
+    """The device's base32 key — exactly the `secret` in its otpauth URI — in groups of four for typing."""
+    from base64 import b32encode
+    key=b32encode(device.bin_key).decode().rstrip('=')
+    return ' '.join(key[i:i+4] for i in range(0,len(key),4))
 
 def dashboard(request):
     return render(request,'dashboard.html',{'encounters':scoped(Encounter,request.user).select_related('patient','template_version__template').order_by('-created_at')[:30],'templates':scoped(Template,request.user).order_by('-created_at')[:30]})
@@ -992,7 +1028,7 @@ def invite_accept(request,raw):
                     Membership.objects.get_or_create(user=user,department=invite.department,defaults={'role':invite.role})
                     welcome_credit(user);invite.accepted_at=timezone.now();invite.save(update_fields=['accepted_at'])
                     audit(user,'department.invitation_accepted',invite.pk,department=invite.department)
-                messages.success(request,'Invitation accepted; your personal welcome credit is available.');return redirect('login')
+                messages.success(request,'Invitation accepted; your personal welcome credit is available.' if welcome_credit_label() else 'Invitation accepted.');return redirect('login')
     return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
 
 @require_POST
@@ -1043,13 +1079,31 @@ def usage_rows(usage):
     absorbed={entry['job_id']:entry['total'] for entry in LedgerEntry.objects.filter(kind='absorbed',job_id__in=[item.job_id for item in usage]).values('job_id').annotate(total=models.Sum('amount'))}
     return [{'usage':item,'reconciliation':item.reconciliation,'absorbed':absorbed.get(item.job_id)} for item in usage]
 
+#: Test mode keeps the sandbox return address it has always used (reached through the SSH tunnel).
+SANDBOX_RETURN_ORIGIN='http://localhost:9130'
+
+def checkout_return_origin():
+    """Where Stripe Checkout returns the payer. Live mode: QUILLMD_APP_BASE_URL, and only a public HTTPS
+    origin — never localhost, never the request's Host header. None refuses the checkout."""
+    if settings.QUILLMD_STRIPE_MODE!='live':return SANDBOX_RETURN_ORIGIN
+    from quillmd.application_profile import public_https_origin_problem
+    origin=(settings.QUILLMD_APP_BASE_URL or '').rstrip('/')
+    return None if public_https_origin_problem(origin,settings.ALLOWED_HOSTS) else origin
+
 @require_POST
 def checkout(request):
     import stripe
     from .billing import checkout_form
+    from .stripe_validation import sandbox_payments_refused
+    # Real data mode checks out only in live mode: no Payment row and no provider call otherwise.
+    if sandbox_payments_refused():messages.error(request,'Payments are not available. No charge was made.');return redirect('billing')
     form=checkout_form(request.user,request.POST)
     if not form.is_valid():messages.error(request,'Confirm a one-time amount between $5 and $500.');return redirect('billing')
-    if not stripe_test_key_configured(settings.STRIPE_SECRET_KEY):messages.error(request,'A Stripe test or restricted test key is required. No charge was made.');return redirect('billing')
+    live=settings.QUILLMD_STRIPE_MODE=='live'
+    # A key of the other mode is refused here, before authorization and before any provider call.
+    if not stripe_key_configured(settings.STRIPE_SECRET_KEY):messages.error(request,'A Stripe live or restricted live key is required. No charge was made.' if live else 'A Stripe test or restricted test key is required. No charge was made.');return redirect('billing')
+    return_origin=checkout_return_origin()
+    if return_origin is None:messages.error(request,'Checkout needs the public HTTPS application address configured. No charge was made.');return redirect('billing')
     try:
         authorization=signing.loads(request.POST.get('checkout_token',''),salt='checkout-authorization',max_age=900)
         if authorization.get('user')!=str(request.user.pk) or not isinstance(authorization.get('nonce'),str):raise signing.BadSignature()
@@ -1065,13 +1119,13 @@ def checkout(request):
             organization_id=payer.split(':',1)[1]
             if not Membership.objects.select_for_update().filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
             wallet,_=Wallet.objects.get_or_create(organization_id=organization_id,kind='paid')
-        p,created=Payment.objects.get_or_create(request_key=request_key,defaults={'user':request.user,'wallet':wallet,'amount_cents':amount_cents,'status':'creating'})
+        p,created=Payment.objects.get_or_create(request_key=request_key,defaults={'user':request.user,'wallet':wallet,'amount_cents':amount_cents,'status':'creating','livemode':live})
         if p.user_id!=request.user.pk or p.amount_cents!=amount_cents or p.wallet_id!=wallet.pk:raise ValidationError('A repeated checkout must use the original authorized balance and amount.')
         if not created:
             if p.checkout_url and p.status in ['pending','processing']:return redirect(p.checkout_url)
             messages.info(request,'This checkout was already submitted. Its payment status remains visible in billing.');return redirect('billing')
     try:
-        session=stripe.checkout.Session.create(api_key=settings.STRIPE_SECRET_KEY,mode='payment',line_items=[{'price_data':{'currency':'usd','unit_amount':p.amount_cents,'product_data':{'name':'QuillMD one-time wallet credit (test)'}},'quantity':1}],metadata={'payment_id':str(p.pk)},success_url='http://localhost:9130/billing/?payment=processing',cancel_url='http://localhost:9130/billing/',idempotency_key=f'checkout:{p.pk}')
+        session=stripe.checkout.Session.create(api_key=settings.STRIPE_SECRET_KEY,mode='payment',line_items=[{'price_data':{'currency':'usd','unit_amount':p.amount_cents,'product_data':{'name':'QuillMD one-time wallet credit' if live else 'QuillMD one-time wallet credit (test)'}},'quantity':1}],metadata={'payment_id':str(p.pk)},success_url=f'{return_origin}/billing/?payment=processing',cancel_url=f'{return_origin}/billing/',idempotency_key=f'checkout:{p.pk}')
         with transaction.atomic():
             p=Payment.objects.select_for_update().get(pk=p.pk)
             if p.stripe_session and p.stripe_session!=session.id:raise ValidationError('Checkout session requires reconciliation.')

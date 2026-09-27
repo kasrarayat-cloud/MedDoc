@@ -50,8 +50,11 @@ def application_origin():
         parsed.port  # Reject malformed or out-of-range ports before generating a link.
     except ValueError:
         raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.") from None
+    # '?' and '#' are refused as characters: an EMPTY query or fragment parses as '' yet puts every link's path
+    # after the '?' or '#'. Port 0 is unreachable. The same refusals the real/live startup check makes.
     if (parsed.scheme not in {"http", "https"} or not parsed.hostname
             or parsed.username or parsed.password or parsed.query or parsed.fragment
+            or "?" in origin or "#" in origin or parsed.port == 0
             or parsed.path not in {"", "/"} or any(character.isspace() for character in origin)):
         raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.")
     if settings.QUILLMD_EMAIL_MODE == "resend":
@@ -93,7 +96,7 @@ def private_access_instructions(recipient, purpose):
     validate_resend_recipient(recipient)
     username = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME
     password = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD
-    if purpose not in {"invitation", "recovery"} or not username:
+    if purpose not in {"invitation", "recovery", "owner_invitation"} or not username:
         return ""
     origin = application_origin()
     return (f"\n\nPrivate synthetic preview: first sign in on the private preview access page at {origin}."

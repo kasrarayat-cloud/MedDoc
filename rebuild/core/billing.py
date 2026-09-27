@@ -8,13 +8,33 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from .models import User, Wallet, LedgerEntry, Reservation, Usage, Membership, Organization, Payment, Refund, WebhookEvent, CostReconciliation, PlatformCost
 from .security import audit, membership
-from .stripe_validation import validate_event_environment
+from .stripe_validation import live_payments, real_data_mode, validate_event_environment
+from quillmd.application_profile import dollars, stripe_key_matches
 ZERO=Decimal('0')
 MULTIPLIER=Decimal('1.5')
 
 def stripe_test_key_configured(key):
     """Recognize sandbox server keys; this does not validate provider access."""
     return isinstance(key,str) and re.fullmatch(r'(?:sk|rk)_test_[A-Za-z0-9_]+',key) is not None
+
+def stripe_key_configured(key):
+    """A server key of the configured QUILLMD_STRIPE_MODE: test keys in test mode, live keys in live mode.
+
+    A key of the other mode is never recognised, so a live key cannot reach Checkout in test mode and a
+    sandbox key cannot in live mode. Test mode is exactly `stripe_test_key_configured`.
+    """
+    from django.conf import settings
+    mode=getattr(settings,'QUILLMD_STRIPE_MODE','test')
+    return stripe_test_key_configured(key) if mode=='test' else stripe_key_matches(key,mode)
+
+def welcome_credit_amount():
+    from django.conf import settings
+    return Decimal(getattr(settings,'QUILLMD_WELCOME_CREDIT',Decimal('10')))
+
+def welcome_credit_label():
+    """'$10' at the default; '' when QUILLMD_WELCOME_CREDIT=0, so no screen promises a grant that is not made."""
+    amount=welcome_credit_amount()
+    return dollars(amount) if amount>0 else ''
 
 def checkout_form(user,data=None):
     from .forms import CheckoutForm
@@ -45,10 +65,46 @@ def welcome_credit(user):
     wallet=Wallet.objects.select_for_update().get(pk=wallet.pk)
     key=f'welcome:{user.pk}'
     if LedgerEntry.objects.filter(key=key).exists(): return wallet
-    wallet.balance+=Decimal('10'); wallet.save(update_fields=['balance'])
-    LedgerEntry.objects.create(wallet=wallet,amount=10,kind='welcome',key=key,description='One $10 personal welcome credit after verification',balance_after=wallet.balance)
+    # QUILLMD_WELCOME_CREDIT (default 10). Zero grants nothing and writes no entry. Entries already
+    # written keep the amount they record; changing the setting never revisits them.
+    amount=welcome_credit_amount()
+    if amount<=0: return wallet
+    wallet.balance+=amount; wallet.save(update_fields=['balance'])
+    LedgerEntry.objects.create(wallet=wallet,amount=amount,kind='welcome',key=key,description=f'One {dollars(amount)} personal welcome credit after verification',balance_after=wallet.balance)
     audit(user,'credit.welcome',wallet.pk)
     return wallet
+
+def sandbox_funded(wallet):
+    """Whether any money this wallet ever received came from a payment not recorded as live.
+
+    A payment is live only when its checkout was created in live mode (Payment.livemode is True). Rows recorded before
+    the mode was stored are sandbox: live mode did not exist then. Both the wallet's Payment rows (paid or not) and
+    its 'payment' ledger credits are read, so a credit whose Payment row is not live, or is missing, counts.
+    """
+    if Payment.objects.filter(wallet=wallet).exclude(livemode=True).exists(): return True
+    live=[f'payment:{intent}' for intent in Payment.objects.filter(wallet=wallet,livemode=True,stripe_intent__isnull=False).values_list('stripe_intent',flat=True)]
+    return LedgerEntry.objects.filter(wallet=wallet,kind='payment').exclude(key__in=live).exists()
+
+
+def real_mode_payment_problems():
+    """Why this database may not run in real data mode, as lines of counts; empty when it may. Read-only.
+
+    Real mode runs on a database that has never held sandbox payments: no payment or Stripe event row that is not
+    recorded as live, and no paid wallet holding money that live payments do not wholly explain (every 'payment'
+    credit live, and the balance equal to its ledger).
+    """
+    problems=[]
+    payments=Payment.objects.exclude(livemode=True).count()
+    if payments: problems.append(f'{payments} payment row(s) not recorded as live (sandbox, or recorded before the mode was stored)')
+    events=WebhookEvent.objects.exclude(livemode=True).count()
+    if events: problems.append(f'{events} Stripe event row(s) not recorded as live')
+    unexplained=0
+    for wallet in Wallet.objects.filter(kind='paid').exclude(balance=0,reserved=0).order_by('pk'):
+        ledger=LedgerEntry.objects.filter(wallet=wallet).aggregate(total=Sum('amount'))['total'] or ZERO
+        if sandbox_funded(wallet) or ledger!=wallet.balance: unexplained+=1
+    if unexplained: problems.append(f'{unexplained} paid wallet(s) holding money that live payments do not wholly explain')
+    return problems
+
 
 def payer_wallets(user,department):
     """The personal promotional wallet and the paid wallet that pays for this user's requests in this department."""
@@ -77,6 +133,11 @@ def reserve(job,maximum_cost=None,*,charge_limit=None):
     job.payer=f'organization:{department.organization_id}' if department.organization_pays else f'user:{job.user_id}'
     job.save(update_fields=['payer'])
     locked={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[promo.pk,payer.pk]).order_by('pk')}
+    # Real data mode never spends sandbox-funded money: the whole request is refused, before any hold, rather than
+    # quietly skipping a balance the payer can see.
+    if real_data_mode() and sandbox_funded(locked[payer.pk]):
+        raise ValidationError('This paid balance holds sandbox (test) payments, which never fund requests in real data mode. '
+                              'No provider request was made.')
     available=sum((w.balance-w.reserved for w in locked.values()),ZERO)
     if available<maximum_charge:
         # The requester sees what the request needs, never the payer's balance: an organization's paid funds are shown to owners only.
@@ -406,14 +467,16 @@ def record_stripe_event(event,payload_hash):
     if not isinstance(data,dict): raise ValidationError('Malformed payment event data.')
     raw=data.get('object',{})
     if not isinstance(raw,dict): raise ValidationError('Malformed payment event object.')
-    if raw.get('livemode') is True: raise ValidationError('Live payment objects are not accepted.')
+    if live_payments():
+        if raw.get('livemode') is False: raise ValidationError('Test payment objects are not accepted in live mode.')
+    elif raw.get('livemode') is True: raise ValidationError('Live payment objects are not accepted.')
     keys=('id','payment_intent','amount','status','currency','payment_status','amount_total','mode')
     obj={k:raw[k] for k in keys if k in raw}
     if 'metadata' in raw:
         if not isinstance(raw['metadata'],dict): raise ValidationError('Malformed payment metadata.')
         obj['metadata']={'payment_id':raw['metadata'].get('payment_id')}
     semantic=hashlib.sha256(json.dumps({'kind':kind,'object':obj},sort_keys=True,separators=(',',':')).encode()).hexdigest()
-    row,_=WebhookEvent.objects.get_or_create(event_id=event_id,defaults={'kind':kind,'payload_hash':payload_hash,'semantic_hash':semantic,'object_data':obj,'status':'received'})
+    row,_=WebhookEvent.objects.get_or_create(event_id=event_id,defaults={'kind':kind,'payload_hash':payload_hash,'semantic_hash':semantic,'object_data':obj,'status':'received','livemode':event['livemode']})
     if row.semantic_hash and row.semantic_hash!=semantic: raise ValidationError('Repeated Stripe event has different billing contents.')
     if row.kind!=kind: raise ValidationError('Repeated Stripe event changed type.')
     return row

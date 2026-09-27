@@ -6,7 +6,7 @@
     <a class="brand" href="{% url 'login' %}"><span class="brand-mark" aria-hidden="true">Q</span>QuillMD</a>
     <h1>A workspace for the way you document.</h1>
     <p>Upload a form, add your notes, and review supported answers before you export.</p>
-    <div class="auth-principle"><strong>$10 personal welcome credit</strong><p>Every newly verified user receives one welcome credit, including invited employees. Paid balances and promotional credit stay separate.</p></div>
+    {% if welcome_credit_label %}<div class="auth-principle"><strong>{{ welcome_credit_label }} personal welcome credit</strong><p>Every newly verified user receives one welcome credit, including invited employees. Paid balances and promotional credit stay separate.</p></div>{% endif %}
   </aside>
   <main class="auth-main" id="main"><div class="auth-form">
     <div class="eyebrow">Individual account</div><h2>{% if invitation %}Join {{ invitation.department.name }}{% else %}Create your account{% endif %}</h2>
@@ -16,7 +16,7 @@
     <div class="notice">This email already has an account. Sign in to accept the invitation. If your account is not verified yet, request a verification link first, then reopen this invitation.</div>
     <p><a href="{% url 'login' %}?next={{ request.path|urlencode }}">Sign in and return to this invitation</a></p><p><a href="{% url 'verification_resend' %}">Request account verification</a></p>
     {% else %}<form method="post" data-submit-once>{% csrf_token %}{% if invitation and user.is_authenticated %}<p>Accept this invitation as {{ user.email }}.</p>{% else %}{{ form.as_p }}{% endif %}<button type="submit">{% if invitation %}Accept invitation{% else %}Create account{% endif %}</button></form>{% endif %}
-    <div class="auth-footer"><p>Already registered? <a href="{% url 'login' %}">Sign in</a></p><p class="small">Private testing environment. Use synthetic patient information.</p></div>
+    <div class="auth-footer"><p>Already registered? <a href="{% url 'login' %}">Sign in</a></p>{% if synthetic_only %}<p class="small">Private testing environment. Use synthetic patient information.</p>{% endif %}</div>
   </div></main>
 </div>
 {% endblock %}
