@@ -487,6 +487,23 @@ class OperatorValueBlocks(SimpleTestCase):
             with self.subTest(line=line):
                 self.assertNotIn('#', line)
 
+    def test_the_env_example_rollback_names_every_key_the_rollback_block_resets(self):
+        """The note's rollback block resets five keys, QUILLMD_AI_INFERENCE_GEO among them; .env.example's rollback
+        sentence said 'the four lines above', so following it left US-only inference set — not the rollback request."""
+        lines = self.EXAMPLE.read_text().splitlines()
+        start = next(i for i, line in enumerate(lines) if line.startswith('# Rollback'))
+        sentence = []
+        for line in lines[start:]:
+            if not line.startswith('#'):
+                break
+            sentence.append(line)
+        rollback = next(values for values in map(self.systemd_values, self.blocks())
+                        if values.get('QUILLMD_AI_MODEL') == 'claude-sonnet-4-6')
+        self.assertEqual(len(rollback), 5)
+        for name in rollback:
+            with self.subTest(key=name):
+                self.assertIn(name, ' '.join(sentence))
+
     def block(self, has):
         as_settings = lambda values: {name[len('QUILLMD_'):]: value for name, value in values.items()}
         return next(as_settings(values) for values in map(self.systemd_values, self.blocks()) if has(values))
