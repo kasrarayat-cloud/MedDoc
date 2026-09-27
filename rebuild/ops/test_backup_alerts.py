@@ -958,6 +958,30 @@ class PreviousReleaseCompatibilityTests(unittest.TestCase):
         self.assertEqual(result['incident']['conditions_announced'], ['backup_timeout'])
         self.assertEqual(self.sender.call_count, 2, 'adopting the previous release\'s notice sends nothing')
 
+    def test_an_unsent_notice_the_previous_release_stepped_over_never_holds_the_next(self):
+        """R2 through a rollback: this release dies between the ledger and status.json on a lifted
+        failure notice, the previous release then checks once (it rewrites status.json and never
+        opens the ledger), and this release returns. The ledger still stamps a failure that no
+        request recorded in status.json backs: it must not hold the real failure."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at)                                                  # warning notice at t0
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=1))
+        self.health.return_value = 'backup_failed'
+        crash, _ = IncidentLedgerTests.crash_on_second_write(self)
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=2))
+        with patch.object(self.old, 'DIRECTORY', self.alerts):
+            result, _ = self.old.check(self.at + timedelta(hours=2, minutes=5))
+        self.assertEqual(result['alert']['outcome'], 'cooldown_suppressed', 'the previous release holds by its own rule')
+        self.old_sender.assert_not_called()
+        stamped = json.loads((self.alerts / a.NOTICES_FILE).read_text())['announced_at']['failure']
+        self.assertEqual(stamped, (self.at + timedelta(hours=2)).isoformat(), 'the unbacked stamp is still there')
+        result, code = a.check(self.at + timedelta(hours=2, minutes=10))
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_failed', 2),
+                         "an unsent failure stamped only in the ledger held the real one")
+        self.assertIn('(highest: warning)', self.sender.call_args.args[2])
+
 
 class CrossIncidentSeverityTests(unittest.TestCase):
     """A MORE SEVERE incident opening inside the between-incidents cooldown is not held by it."""
@@ -1164,6 +1188,56 @@ class IncidentLedgerTests(unittest.TestCase):
         self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_stale', 2))
         self.assertNotEqual(self.state()['incident_attempt'], phantom)
         self.assertEqual(self.state()['incident_conditions_announced'], ['backup_failed', 'backup_stale'])
+
+    def test_crash_between_the_two_writes_of_a_lifted_first_notice_sends_it_at_the_next_check(self):
+        """⚠️ R2, the exact sequence. The ledger is written first and records the failure as announced;
+        the process dies before status.json records the attempt, so no request ever began. That
+        unsent 'failure' must not hold the real one for the rest of the day."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'           # warning notice at t0
+        a.check(self.at)
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=1))                                       # the incident closes
+        self.health.return_value = 'backup_failed'                                  # qualifies for the lift
+        crash, calls = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=2))
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'])
+        status = json.loads((self.alerts / 'status.json').read_text())
+        self.assertEqual((status['incident_id'], status['last_attempt_at']), (None, self.at.isoformat()),
+                         'status.json never recorded the attempt')
+        self.assertEqual(self.ledger()['announced_at']['failure'], (self.at + timedelta(hours=2)).isoformat())
+        phantom = self.ledger()['incident']['incident_attempt']
+        self.assertFalse(list(self.alerts.glob(f'incident-{phantom}-*')), 'no request began for it')
+        result, code = a.check(self.at + timedelta(hours=2, minutes=5))
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_failed', 2),
+                         "the ledger's unsent failure held the real one")
+        self.assertTrue(result['alert']['provider_accepted'])
+        self.assertIn('(highest: warning)', self.sender.call_args.args[2])
+        self.assertEqual(a.check(self.at + timedelta(hours=2, minutes=10))[1], 1)
+        self.assertEqual(self.sender.call_count, 2, 'and it is sent once')
+
+    def test_crash_between_the_two_writes_when_a_held_incident_rises_sends_it_at_the_next_check(self):
+        """R2's held variant: the incident is already open and held at a warning, then rises."""
+        self.recovery.return_value['condition'] = 'offsite_capacity_low'
+        a.check(self.at)
+        self.recovery.return_value['condition'] = 'healthy'
+        a.check(self.at + timedelta(hours=1))
+        self.recovery.return_value['condition'] = 'offsite_next_run_budget_low'     # another warning: held
+        result, _ = a.check(self.at + timedelta(hours=2))
+        self.assertEqual(result['alert']['outcome'], 'cooldown_suppressed')
+        held = self.state()['incident_id']
+        self.health.return_value = 'backup_failed'                                   # the held incident rises
+        crash, calls = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=3))
+        status = json.loads((self.alerts / 'status.json').read_text())
+        self.assertEqual((status['incident_id'], status['incident_attempt']), (held, None))
+        self.assertEqual(self.ledger()['incident']['incident_attempt'], held)
+        self.assertFalse(list(self.alerts.glob(f'incident-{held}-*')), 'no request began for it')
+        result, code = a.check(self.at + timedelta(hours=3, minutes=5))
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_failed', 2),
+                         "the ledger's unsent failure held the real one")
+        self.assertEqual(self.state()['incident_id'], held)
 
     def test_crash_between_the_two_writes_of_a_later_notice_fails_closed_without_email(self):
         self.health.return_value = 'backup_failed'
