@@ -777,6 +777,7 @@ def encounter_detail(request,pk):
             # What the export does with this answer, in the page's words (the export sets every box of an answered
             # option field, unticks a reviewed checkbox left unticked, and keeps an unanswered choice as printed).
             row['v3_note']=v3_mapping.review_note(row)
+            row['question_parts']=v3_mapping.question_parts(row)
             row['blank_note']=v3_mapping.blank_note(row)
             row['v3_final']=v3_mapping.finalized_note(row,row)
             row['v3_context']=(row.get('review_reason') if row.get('write_protected') else

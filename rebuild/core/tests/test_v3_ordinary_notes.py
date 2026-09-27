@@ -865,7 +865,11 @@ class RoundTwoMutantPins(SimpleTestCase):
         self.assertEqual(kept['context'], [{'quote': 'Her father has heart disease.', 'start': 0, 'end': 29, 'after': False,
                                             'same': True}])
         kept = run('Right knee.', {'Chief complaint': ['Right knee.']})['Chief complaint']['held_candidate']
-        self.assertEqual((kept['context'], kept['reason']), ([], g.V3_HELD_REASON))
+        # Generation and stored-draft review now use the same completeness reader;
+        # the incomplete source itself stays visible, with the fragment explanation.
+        self.assertEqual(kept['context'], [{'quote': 'Right knee.', 'start': 0, 'end': 11,
+            'after': False, 'same': True, 'syntax_incomplete': True}])
+        self.assertEqual(kept['reason'], g.V3_HELD_REASON)
 
 
 # Round-3 refutation of 1d66c798: the refuter's own inputs, the provider simulated by unit selection exactly as `run`

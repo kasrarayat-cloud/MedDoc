@@ -1,0 +1,601 @@
+{
+  "cold_seconds": 1.1254593869671226,
+  "warm_64_seconds": 0.07985940901562572,
+  "max_rss_kib": 163300,
+  "cold_ids": [
+    1
+  ],
+  "warm_count": 64,
+  "retained34V_syntax_only_not_clinical_outcomes": [
+    {
+      "case": "r1-note1",
+      "field": "Chief complaint",
+      "original_selection": [
+        "45-year-old man presents with right knee pain for three weeks after a fall."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note1",
+      "field": "History of present illness",
+      "original_selection": [
+        "45-year-old man presents with right knee pain for three weeks after a fall."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note2",
+      "field": "Chief complaint",
+      "original_selection": [
+        "Patient presents with a cough for five days."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        true
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note2",
+      "field": "History of present illness",
+      "original_selection": [
+        "Patient presents with a cough for five days.",
+        "She reports low-grade fevers and green sputum."
+      ],
+      "existing_finite": [
+        true,
+        true
+      ],
+      "syntax_only": [
+        true,
+        true
+      ],
+      "explicit_patient": [
+        true,
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note2",
+      "field": "Past medical history",
+      "original_selection": [
+        "She has asthma."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Chief complaint",
+      "original_selection": [
+        "This is a 30-year-old female seen for headaches."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "History of present illness",
+      "original_selection": [
+        "The headaches started two months ago and are worse in the morning.",
+        "She denies visual changes, nausea, or weakness."
+      ],
+      "existing_finite": [
+        true,
+        true
+      ],
+      "syntax_only": [
+        true,
+        true
+      ],
+      "explicit_patient": [
+        false,
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Medications",
+      "original_selection": [
+        "She takes ibuprofen as needed."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Allergies",
+      "original_selection": [
+        "No known drug allergies."
+      ],
+      "existing_finite": [
+        false
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note4",
+      "field": "Smoker",
+      "original_selection": [
+        "She is a nonsmoker."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note5",
+      "field": "Chief complaint",
+      "original_selection": [
+        "Subjective: Patient reports lower back pain for two weeks after lifting boxes."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note5",
+      "field": "History of present illness",
+      "original_selection": [
+        "Subjective: Patient reports lower back pain for two weeks after lifting boxes."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note5",
+      "field": "Examination",
+      "original_selection": [
+        "Objective: Lumbar paraspinal tenderness, straight leg raise negative."
+      ],
+      "existing_finite": [
+        false
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note6",
+      "field": "Chief complaint",
+      "original_selection": [
+        "The patient was seen for removal of a skin lesion on the left forearm."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        true
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Chief complaint",
+      "original_selection": [
+        "Mother brings in her 4-year-old son with ear pain since yesterday."
+      ],
+      "existing_finite": [
+        false
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "History of present illness",
+      "original_selection": [
+        "Mother brings in her 4-year-old son with ear pain since yesterday.",
+        "He has had a runny nose for a week."
+      ],
+      "existing_finite": [
+        false,
+        true
+      ],
+      "syntax_only": [
+        true,
+        true
+      ],
+      "explicit_patient": [
+        false,
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Medications",
+      "original_selection": [
+        "He takes no regular medications."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Examination",
+      "original_selection": [
+        "Examination showed a bulging red left tympanic membrane."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Assessment",
+      "original_selection": [
+        "Assessment is acute otitis media on the left."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note7",
+      "field": "Plan",
+      "original_selection": [
+        "Plan is azithromycin for five days and ibuprofen for pain."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Chief complaint",
+      "original_selection": [
+        "Follow-up for hypertension."
+      ],
+      "existing_finite": [
+        false
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Medications",
+      "original_selection": [
+        "He continues amlodipine 5 mg daily."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Allergies",
+      "original_selection": [
+        "Allergies: none."
+      ],
+      "existing_finite": [
+        false
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Smoker",
+      "original_selection": [
+        "Smoker: no."
+      ],
+      "existing_finite": [
+        false
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Examination",
+      "original_selection": [
+        "Heart and lung examination was normal."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Assessment",
+      "original_selection": [
+        "Assessment is hypertension not at goal."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note8",
+      "field": "Plan",
+      "original_selection": [
+        "Plan is to increase amlodipine to 10 mg daily and recheck in four weeks."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Chief complaint",
+      "original_selection": [
+        "Patient presents with chest tightness on exertion for one month."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        true
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "History of present illness",
+      "original_selection": [
+        "Patient presents with chest tightness on exertion for one month."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        true
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Allergies",
+      "original_selection": [
+        "Allergies: none known."
+      ],
+      "existing_finite": [
+        false
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Smoker",
+      "original_selection": [
+        "Smoker: Yes."
+      ],
+      "existing_finite": [
+        false
+      ],
+      "syntax_only": [
+        false
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Examination",
+      "original_selection": [
+        "Examination is normal."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Assessment",
+      "original_selection": [
+        "Assessment is possible stable angina."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    },
+    {
+      "case": "r1-note10",
+      "field": "Plan",
+      "original_selection": [
+        "Plan is an exercise stress test and aspirin 81 mg daily."
+      ],
+      "existing_finite": [
+        true
+      ],
+      "syntax_only": [
+        true
+      ],
+      "explicit_patient": [
+        false
+      ],
+      "prior_status_unchanged": "conflict"
+    }
+  ]
+}

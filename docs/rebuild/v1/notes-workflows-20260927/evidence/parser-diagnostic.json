@@ -1,0 +1,742 @@
+[
+  {
+    "text": "The patient attends an art class every Monday.",
+    "tokens": [
+      {
+        "text": "The",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "patient",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "patient",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "nsubj",
+        "head": "attends",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "attends",
+        "tag": "VBZ",
+        "pos": "VERB",
+        "dep": "ROOT",
+        "head": "attends",
+        "morph": "Number=Sing|Person=3|Tense=Pres|VerbForm=Fin"
+      },
+      {
+        "text": "an",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "class",
+        "morph": "Definite=Ind|PronType=Art"
+      },
+      {
+        "text": "art",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "compound",
+        "head": "class",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "class",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "dobj",
+        "head": "attends",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "every",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "Monday",
+        "morph": ""
+      },
+      {
+        "text": "Monday",
+        "tag": "NNP",
+        "pos": "PROPN",
+        "dep": "npadvmod",
+        "head": "attends",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "attends",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "The patient sleeps through the night.",
+    "tokens": [
+      {
+        "text": "The",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "patient",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "patient",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "nsubj",
+        "head": "sleeps",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "sleeps",
+        "tag": "VBZ",
+        "pos": "VERB",
+        "dep": "ROOT",
+        "head": "sleeps",
+        "morph": "Number=Sing|Person=3|Tense=Pres|VerbForm=Fin"
+      },
+      {
+        "text": "through",
+        "tag": "IN",
+        "pos": "ADP",
+        "dep": "prep",
+        "head": "sleeps",
+        "morph": ""
+      },
+      {
+        "text": "the",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "night",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "night",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "pobj",
+        "head": "through",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "sleeps",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "He fell from a ladder yesterday and hurt his left wrist.",
+    "tokens": [
+      {
+        "text": "He",
+        "tag": "PRP",
+        "pos": "PRON",
+        "dep": "nsubj",
+        "head": "fell",
+        "morph": "Case=Nom|Gender=Masc|Number=Sing|Person=3|PronType=Prs"
+      },
+      {
+        "text": "fell",
+        "tag": "VBD",
+        "pos": "VERB",
+        "dep": "ROOT",
+        "head": "fell",
+        "morph": "Tense=Past|VerbForm=Fin"
+      },
+      {
+        "text": "from",
+        "tag": "IN",
+        "pos": "ADP",
+        "dep": "prep",
+        "head": "fell",
+        "morph": ""
+      },
+      {
+        "text": "a",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "ladder",
+        "morph": "Definite=Ind|PronType=Art"
+      },
+      {
+        "text": "ladder",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "pobj",
+        "head": "from",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "yesterday",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "npadvmod",
+        "head": "fell",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "and",
+        "tag": "CC",
+        "pos": "CCONJ",
+        "dep": "cc",
+        "head": "fell",
+        "morph": "ConjType=Cmp"
+      },
+      {
+        "text": "hurt",
+        "tag": "VB",
+        "pos": "VERB",
+        "dep": "conj",
+        "head": "fell",
+        "morph": "VerbForm=Inf"
+      },
+      {
+        "text": "his",
+        "tag": "PRP$",
+        "pos": "PRON",
+        "dep": "poss",
+        "head": "wrist",
+        "morph": "Gender=Masc|Number=Sing|Person=3|Poss=Yes|PronType=Prs"
+      },
+      {
+        "text": "left",
+        "tag": "JJ",
+        "pos": "ADJ",
+        "dep": "amod",
+        "head": "wrist",
+        "morph": "Degree=Pos"
+      },
+      {
+        "text": "wrist",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "dobj",
+        "head": "hurt",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "fell",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "The patient walks two blocks daily.",
+    "tokens": [
+      {
+        "text": "The",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "patient",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "patient",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "nsubj",
+        "head": "walks",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "walks",
+        "tag": "VBZ",
+        "pos": "VERB",
+        "dep": "ROOT",
+        "head": "walks",
+        "morph": "Number=Sing|Person=3|Tense=Pres|VerbForm=Fin"
+      },
+      {
+        "text": "two",
+        "tag": "CD",
+        "pos": "NUM",
+        "dep": "nummod",
+        "head": "blocks",
+        "morph": "NumType=Card"
+      },
+      {
+        "text": "blocks",
+        "tag": "NNS",
+        "pos": "NOUN",
+        "dep": "npadvmod",
+        "head": "daily",
+        "morph": "Number=Plur"
+      },
+      {
+        "text": "daily",
+        "tag": "RB",
+        "pos": "ADV",
+        "dep": "advmod",
+        "head": "walks",
+        "morph": ""
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "walks",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "The patient a violin every Monday.",
+    "tokens": [
+      {
+        "text": "The",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "patient",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "patient",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "ROOT",
+        "head": "patient",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "a",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "violin",
+        "morph": "Definite=Ind|PronType=Art"
+      },
+      {
+        "text": "violin",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "appos",
+        "head": "patient",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "every",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "Monday",
+        "morph": ""
+      },
+      {
+        "text": "Monday",
+        "tag": "NNP",
+        "pos": "PROPN",
+        "dep": "npadvmod",
+        "head": "violin",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "patient",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "The patient medications and allergies.",
+    "tokens": [
+      {
+        "text": "The",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "medications",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "patient",
+        "tag": "JJ",
+        "pos": "ADJ",
+        "dep": "amod",
+        "head": "medications",
+        "morph": "Degree=Pos"
+      },
+      {
+        "text": "medications",
+        "tag": "NNS",
+        "pos": "NOUN",
+        "dep": "ROOT",
+        "head": "medications",
+        "morph": "Number=Plur"
+      },
+      {
+        "text": "and",
+        "tag": "CC",
+        "pos": "CCONJ",
+        "dep": "cc",
+        "head": "medications",
+        "morph": "ConjType=Cmp"
+      },
+      {
+        "text": "allergies",
+        "tag": "NNS",
+        "pos": "NOUN",
+        "dep": "conj",
+        "head": "medications",
+        "morph": "Number=Plur"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "medications",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "Warfarin 5 mg daily.",
+    "tokens": [
+      {
+        "text": "Warfarin",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "ROOT",
+        "head": "Warfarin",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "5",
+        "tag": "CD",
+        "pos": "NUM",
+        "dep": "nummod",
+        "head": "mg",
+        "morph": "NumType=Card"
+      },
+      {
+        "text": "mg",
+        "tag": "NNP",
+        "pos": "PROPN",
+        "dep": "npadvmod",
+        "head": "daily",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "daily",
+        "tag": "RB",
+        "pos": "ADV",
+        "dep": "advmod",
+        "head": "Warfarin",
+        "morph": ""
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "Warfarin",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "The patient attending an art class every Monday.",
+    "tokens": [
+      {
+        "text": "The",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "patient",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "patient",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "ROOT",
+        "head": "patient",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "attending",
+        "tag": "VBG",
+        "pos": "VERB",
+        "dep": "acl",
+        "head": "patient",
+        "morph": "Aspect=Prog|Tense=Pres|VerbForm=Part"
+      },
+      {
+        "text": "an",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "class",
+        "morph": "Definite=Ind|PronType=Art"
+      },
+      {
+        "text": "art",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "compound",
+        "head": "class",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "class",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "dobj",
+        "head": "attending",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "every",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "Monday",
+        "morph": ""
+      },
+      {
+        "text": "Monday",
+        "tag": "NNP",
+        "pos": "PROPN",
+        "dep": "npadvmod",
+        "head": "attending",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "patient",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "The patient who attends art classes.",
+    "tokens": [
+      {
+        "text": "The",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "patient",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "patient",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "ROOT",
+        "head": "patient",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "who",
+        "tag": "WP",
+        "pos": "PRON",
+        "dep": "nsubj",
+        "head": "attends",
+        "morph": ""
+      },
+      {
+        "text": "attends",
+        "tag": "VBZ",
+        "pos": "VERB",
+        "dep": "relcl",
+        "head": "patient",
+        "morph": "Number=Sing|Person=3|Tense=Pres|VerbForm=Fin"
+      },
+      {
+        "text": "art",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "compound",
+        "head": "classes",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "classes",
+        "tag": "NNS",
+        "pos": "NOUN",
+        "dep": "dobj",
+        "head": "attends",
+        "morph": "Number=Plur"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "patient",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "Left knee.",
+    "tokens": [
+      {
+        "text": "Left",
+        "tag": "JJ",
+        "pos": "ADJ",
+        "dep": "amod",
+        "head": "knee",
+        "morph": "Degree=Pos"
+      },
+      {
+        "text": "knee",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "ROOT",
+        "head": "knee",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "knee",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "No known drug allergies.",
+    "tokens": [
+      {
+        "text": "No",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "allergies",
+        "morph": ""
+      },
+      {
+        "text": "known",
+        "tag": "VBN",
+        "pos": "VERB",
+        "dep": "amod",
+        "head": "allergies",
+        "morph": "Aspect=Perf|Tense=Past|VerbForm=Part"
+      },
+      {
+        "text": "drug",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "compound",
+        "head": "allergies",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "allergies",
+        "tag": "NNS",
+        "pos": "NOUN",
+        "dep": "ROOT",
+        "head": "allergies",
+        "morph": "Number=Plur"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "allergies",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  },
+  {
+    "text": "The patient visits a friend every Friday.",
+    "tokens": [
+      {
+        "text": "The",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "patient",
+        "morph": "Definite=Def|PronType=Art"
+      },
+      {
+        "text": "patient",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "nsubj",
+        "head": "visits",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "visits",
+        "tag": "VBZ",
+        "pos": "VERB",
+        "dep": "ROOT",
+        "head": "visits",
+        "morph": "Number=Sing|Person=3|Tense=Pres|VerbForm=Fin"
+      },
+      {
+        "text": "a",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "friend",
+        "morph": "Definite=Ind|PronType=Art"
+      },
+      {
+        "text": "friend",
+        "tag": "NN",
+        "pos": "NOUN",
+        "dep": "dobj",
+        "head": "visits",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": "every",
+        "tag": "DT",
+        "pos": "DET",
+        "dep": "det",
+        "head": "Friday",
+        "morph": ""
+      },
+      {
+        "text": "Friday",
+        "tag": "NNP",
+        "pos": "PROPN",
+        "dep": "npadvmod",
+        "head": "visits",
+        "morph": "Number=Sing"
+      },
+      {
+        "text": ".",
+        "tag": ".",
+        "pos": "PUNCT",
+        "dep": "punct",
+        "head": "visits",
+        "morph": "PunctType=Peri"
+      }
+    ]
+  }
+]

@@ -1,0 +1,352 @@
+[
+  {
+    "notes": "Her father attends an art class every Monday.",
+    "new_syntax_candidate": true,
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Her father attends an art class every Monday.",
+          "start": 0,
+          "end": 45
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "Her father attends an art class every Monday.",
+          "start": 0,
+          "end": 45
+        }
+      ],
+      "held_candidate": {
+        "text": "Her father attends an art class every Monday.",
+        "evidence": [
+          {
+            "quote": "Her father attends an art class every Monday.",
+            "start": 0,
+            "end": 45
+          }
+        ],
+        "context": [
+          {
+            "quote": "Her father attends an art class every Monday.",
+            "start": 0,
+            "end": 45,
+            "after": false,
+            "same": true
+          }
+        ],
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "notes": "Patient reports her father attends an art class every Monday.",
+    "new_syntax_candidate": false,
+    "answer": {
+      "text": "Patient reports her father attends an art class every Monday.",
+      "status": "supported",
+      "evidence": [
+        {
+          "quote": "Patient reports her father attends an art class every Monday.",
+          "start": 0,
+          "end": 61
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "Patient reports her father attends an art class every Monday.",
+          "start": 0,
+          "end": 61
+        }
+      ]
+    }
+  },
+  {
+    "notes": "The patient asks whether her father attends an art class every Monday.",
+    "new_syntax_candidate": true,
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient asks whether her father attends an art class every Monday.",
+          "start": 0,
+          "end": 70
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient asks whether her father attends an art class every Monday.",
+          "start": 0,
+          "end": 70
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient asks whether her father attends an art class every Monday.",
+        "evidence": [
+          {
+            "quote": "The patient asks whether her father attends an art class every Monday.",
+            "start": 0,
+            "end": 70
+          }
+        ],
+        "context": [
+          {
+            "quote": "The patient asks whether her father attends an art class every Monday.",
+            "start": 0,
+            "end": 70,
+            "after": false,
+            "same": true
+          }
+        ],
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "notes": "Patient hopes to attend an art class every Monday.",
+    "new_syntax_candidate": true,
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "Patient hopes to attend an art class every Monday.",
+          "start": 0,
+          "end": 50
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "Patient hopes to attend an art class every Monday.",
+          "start": 0,
+          "end": 50
+        }
+      ],
+      "held_candidate": {
+        "text": "Patient hopes to attend an art class every Monday.",
+        "evidence": [
+          {
+            "quote": "Patient hopes to attend an art class every Monday.",
+            "start": 0,
+            "end": 50
+          }
+        ],
+        "context": [
+          {
+            "quote": "Patient hopes to attend an art class every Monday.",
+            "start": 0,
+            "end": 50,
+            "after": false,
+            "same": true
+          }
+        ],
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "notes": "The patient never attends an art class.",
+    "new_syntax_candidate": true,
+    "answer": {
+      "text": "The patient never attends an art class.",
+      "status": "supported",
+      "evidence": [
+        {
+          "quote": "The patient never attends an art class.",
+          "start": 0,
+          "end": 39
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient never attends an art class.",
+          "start": 0,
+          "end": 39
+        }
+      ]
+    }
+  },
+  {
+    "notes": "The patient is escorted to an art class by her father.",
+    "new_syntax_candidate": false,
+    "answer": {
+      "text": "The patient is escorted to an art class by her father.",
+      "status": "supported",
+      "evidence": [
+        {
+          "quote": "The patient is escorted to an art class by her father.",
+          "start": 0,
+          "end": 54
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient is escorted to an art class by her father.",
+          "start": 0,
+          "end": 54
+        }
+      ]
+    }
+  },
+  {
+    "notes": "The patient, whose father attends art classes, attends the group.",
+    "new_syntax_candidate": true,
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient, whose father attends art classes, attends the group.",
+          "start": 0,
+          "end": 65
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient, whose father attends art classes, attends the group.",
+          "start": 0,
+          "end": 65
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient, whose father attends art classes, attends the group.",
+        "evidence": [
+          {
+            "quote": "The patient, whose father attends art classes, attends the group.",
+            "start": 0,
+            "end": 65
+          }
+        ],
+        "context": [
+          {
+            "quote": "The patient, whose father attends art classes, attends the group.",
+            "start": 0,
+            "end": 65,
+            "after": false,
+            "same": true
+          }
+        ],
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "notes": "The patient says \"her father attends an art class\".",
+    "new_syntax_candidate": true,
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "The patient says \"her father attends an art class\".",
+          "start": 0,
+          "end": 51
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient says \"her father attends an art class\".",
+          "start": 0,
+          "end": 51
+        }
+      ],
+      "held_candidate": {
+        "text": "The patient says \"her father attends an art class\".",
+        "evidence": [
+          {
+            "quote": "The patient says \"her father attends an art class\".",
+            "start": 0,
+            "end": 51
+          }
+        ],
+        "context": [
+          {
+            "quote": "The patient says \"her father attends an art class\".",
+            "start": 0,
+            "end": 51,
+            "after": false,
+            "same": true
+          }
+        ],
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "notes": "If the patient improves, the patient attends an art class.",
+    "new_syntax_candidate": true,
+    "answer": {
+      "text": "",
+      "status": "conflict",
+      "evidence": [
+        {
+          "quote": "If the patient improves, the patient attends an art class.",
+          "start": 0,
+          "end": 58
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "If the patient improves, the patient attends an art class.",
+          "start": 0,
+          "end": 58
+        }
+      ],
+      "held_candidate": {
+        "text": "If the patient improves, the patient attends an art class.",
+        "evidence": [
+          {
+            "quote": "If the patient improves, the patient attends an art class.",
+            "start": 0,
+            "end": 58
+          }
+        ],
+        "context": [
+          {
+            "quote": "If the patient improves, the patient attends an art class.",
+            "start": 0,
+            "end": 58,
+            "after": false,
+            "same": true
+          }
+        ],
+        "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+      }
+    }
+  },
+  {
+    "notes": "The patient attends an art class every Monday.",
+    "new_syntax_candidate": true,
+    "answer": {
+      "text": "The patient attends an art class every Monday.",
+      "status": "supported",
+      "evidence": [
+        {
+          "quote": "The patient attends an art class every Monday.",
+          "start": 0,
+          "end": 46
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient attends an art class every Monday.",
+          "start": 0,
+          "end": 46
+        }
+      ]
+    }
+  }
+]

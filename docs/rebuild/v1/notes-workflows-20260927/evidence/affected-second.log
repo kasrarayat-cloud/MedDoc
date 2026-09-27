@@ -1,0 +1,15 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..../opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+................................................................................................
+----------------------------------------------------------------------
+Ran 101 tests in 44.897s
+
+OK
+Preserving test database for alias 'default'...
+Found 101 test(s).
+System check identified no issues (0 silenced).

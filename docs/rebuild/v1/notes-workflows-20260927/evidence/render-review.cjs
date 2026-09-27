@@ -1,0 +1,23 @@
+const fs = require('fs');
+const path = require('path');
+const { chromium } = require('/opt/meddoc-pro/node_modules/playwright');
+(async()=>{
+ const root=path.resolve('rebuild/.runtime/notes-workflows-20260927');
+ const raw=fs.readFileSync(path.join(root,'capture-final/94f86cd111c1/draft-page.html'),'utf8');
+ const html=raw.replace(/<script[\s\S]*?<\/script>/g,'').replace(/<link[^>]+rel="stylesheet"[^>]*>/g,'');
+ const browser=await chromium.launch({headless:true});
+ const page=await browser.newPage({viewport:{width:1440,height:1100}});
+ await page.route('**/*',route=>route.abort());
+ await page.setContent(html);await page.addStyleTag({content:fs.readFileSync('rebuild/static/app.css','utf8')});
+ const region=page.locator('.answer').filter({has:page.locator('[data-question-coverage]')});
+ const parts=await region.locator('[data-question-coverage] li').allTextContents();
+ if(parts.length!==3)throw Error('printed question parts missing');
+ const checkbox=region.locator('input[name^="reviewed_"]');
+ await checkbox.check();if(!await checkbox.isChecked())throw Error('review checkbox did not work');
+ await region.screenshot({path:path.join(root,'compound-review-desktop.png')});
+ await page.setViewportSize({width:390,height:900});
+ await region.screenshot({path:path.join(root,'compound-review-mobile.png')});
+ const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth);
+ fs.writeFileSync(path.join(root,'render-review.json'),JSON.stringify({parts,checkbox_checked:true,mobile_horizontal_overflow:overflow,network:'blocked; actual fixture-rendered HTML with existing local app CSS'},null,2));
+ await browser.close();if(overflow)process.exitCode=1;
+})().catch(e=>{console.error(e);process.exit(1)});

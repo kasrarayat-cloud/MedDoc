@@ -1166,6 +1166,8 @@ V3_HELD_REASON = ('Read from the notes but NOT used as an answer: on its own it 
 
 
 def held_reason(context, word_form, disagree=False):
+    if context and not word_form and all(entry.get('syntax_incomplete') for entry in context):
+        return V3_HELD_REASON
     if context:
         return HELD_REASON_WORD if word_form else HELD_REASON
     if disagree:
@@ -1733,7 +1735,8 @@ def judged_context(governance, notes, index, label, evidence):
             first_start, first_end = first[:2] if first else (0, 0)
             return [{'quote': unit['quote'], 'start': unit['start'], 'end': unit['end'],
                      'after': unit['start'] >= first_end,
-                     'same': not re.search(r'[\r\n]', notes[min(unit['end'], first_end):max(unit['start'], first_start)])}
+                     'same': not re.search(r'[\r\n]', notes[min(unit['end'], first_end):max(unit['start'], first_start)]),
+                     **({'syntax_incomplete': True} if unit.get('syntax_incomplete') else {})}
                     for unit in unique.values()]
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
@@ -2623,6 +2626,13 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                          and (plain_value(parsed[u['id']][1]) or (len(named[parsed[u['id']][0]]) == 1
                               and plain_printed_side_option(named[parsed[u['id']][0]][0], parsed[u['id']][1]))))
                     for u in units]
+    from .v3_syntax import complete_ids
+    # The parser supplies syntax only. The source actor must already be explicit
+    # by the deterministic source grammar or proven by its complete actor ledger.
+    # No context, destination or clinical-polarity rule uses this new allowance.
+    syntax_complete = complete_ids([u for u in units if ':' not in u['quote']
+        and not FINITE_STATEMENT_V3.search(u['quote'])
+        and (EXPLICIT_PATIENT_SUBJECT.match(u['quote']) or u['id'] in actor['units'])])
     return {'units': units, 'evidence_units': evidence_units, 'parsed': parsed,
             'source': {'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)},
             'colon': colon, 'before': before, 'independent': independent, 'general': general, 'groups': groups,
@@ -2631,7 +2641,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'barriers': barriers, 'patients': patients, 'named': named,
             'actor_relations': actor, 'actor_barriers': actor_barriers, 'actor_destinations': actor_destinations,
             'subjects': subjects, 'subject_spans': subject_spans, 'clinical': clinical,
-            'declarations': declarations,
+            'declarations': declarations, 'syntax_complete': syntax_complete,
             'ambiguous_subjects': ambiguous_subjects, 'unresolved_subjects': unresolved_subjects,
             'coupled': coupled, 'unchanged_references': unchanged_references,
             'neutral_references': neutral_references,
@@ -2724,6 +2734,8 @@ def v3_preceding_warnings(reading, label, evidence):
         if index >= 0:
             unit = reading['units'][index]; warnings[unit['id']] = unit
     for unit in selected.values():
+        if not v3_complete_statement(reading, unit, scoped):
+            warnings.setdefault(unit['id'], {**unit, 'syntax_incomplete': True})
         subject = reading['subjects'][unit['id']]
         own = reading['parsed'][unit['id']]
         if (unit['id'] in reading['unresolved_subjects'] or (subject and subject != label)
@@ -2739,6 +2751,18 @@ def v3_preceding_warnings(reading, label, evidence):
                     and reading['block_of'][unit['id']] == reading['block_of'][changer['id']]):
                 warnings[changer['id']] = changer
     return list(warnings.values())
+
+
+def v3_complete_statement(reading, unit, scoped):
+    """Identical syntax allowance for generation and stored draft governance.
+
+    Existing labelled values, finite-word evidence and qualified source-block
+    exceptions retain their contract. The parser adds no context exemption.
+    """
+    return (':' in unit['quote'] or bool(FINITE_STATEMENT_V3.search(unit['quote']))
+            or unit['id'] in reading['syntax_complete']
+            or (unit['id'] in scoped['complete']
+                and unit['id'] in (reading['conditional_units'] | reading['declarations'])))
 
 
 def nearby_entry(notes, unit, near, after):
@@ -2884,12 +2908,11 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             evidence.append({k:unit[k] for k in ('quote','start','end')})
             if unit['correction_value'] and corrected_quantity(unit,field) is None: guarded=True
             if v3 and unit['id'] in governance[11]['preceding']['unresolved_subjects']: guarded=True
-            # A verbless fragment ('Left knee.', 'Warfarin 5 mg daily.') is held: the verb-list rule of the tab contract
-            # (round 2, F3: 'four or more words and a closing mark' adopted 'Warfarin 5 mg daily.' before 'Stopped last
-            # month.' and the question 'Nausea, vomiting or abdominal pain?' as its own answer).
-            if (':' not in quote and not finite.search(quote) and not (v3 and unit['id'] in scoped['complete']
-                    and unit['id'] in (governance[11]['preceding']['conditional_units']
-                                       | governance[11]['preceding']['declarations']))): guarded=True
+            # Fragments still hold. Contract v3 also recognizes complete syntax
+            # beyond the historical verb list, without changing any context guard.
+            if v3:
+                if not v3_complete_statement(governance[11]['preceding'], unit, scoped): guarded=True
+            elif ':' not in quote and not finite.search(quote): guarded=True
             own_value=parsed_of[unit['id']]
             if v3 and own_value and own_value[1] and POINTER_ONLY_VALUE.fullmatch(own_value[1].strip()):
                 guarded=True

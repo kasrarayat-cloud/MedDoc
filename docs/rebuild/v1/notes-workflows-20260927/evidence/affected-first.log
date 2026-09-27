@@ -1,0 +1,29 @@
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..../opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................................................................................................F.............................................................................................
+======================================================================
+FAIL: test_a_held_candidate_shows_the_sentence_that_may_change_it (core.tests.test_v3_ordinary_notes.RoundTwoMutantPins.test_a_held_candidate_shows_the_sentence_that_may_change_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/core/tests/test_v3_ordinary_notes.py", line 868, in test_a_held_candidate_shows_the_sentence_that_may_change_it
+    self.assertEqual((kept['context'], kept['reason']), ([], g.V3_HELD_REASON))
+AssertionError: Tuples differ: ([{'quote': 'Right knee.', 'start': 0, 'end[265 chars]d".') != ([], 'Read from the notes but NOT used as a[273 chars]d".')
+
+First differing element 0:
+[{'quote': 'Right knee.', 'start': 0, 'end': 11, 'after': False, 'same': True}]
+[]
+
+Diff is 860 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 199 tests in 96.173s
+
+FAILED (failures=1)
+Preserving test database for alias 'default'...
+Found 199 test(s).
+System check identified no issues (0 silenced).

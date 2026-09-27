@@ -1,0 +1,15 @@
+test_compound_review_preserves_printed_text_without_inventing_coverage (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_compound_review_preserves_printed_text_without_inventing_coverage) ... ok
+test_dependency_failure_and_bounds_preserve_old_finite_path (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_dependency_failure_and_bounds_preserve_old_finite_path) ... ok
+test_different_package_version_or_model_bytes_fail_closed (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_different_package_version_or_model_bytes_fail_closed) ... ok
+test_fragments_are_not_released_on_generation_or_stored_reader (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_fragments_are_not_released_on_generation_or_stored_reader) ... ok
+test_materially_varied_complete_sentences_keep_exact_text_and_offsets (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_materially_varied_complete_sentences_keep_exact_text_and_offsets) ... ok
+test_negative_activity_is_preserved_not_converted_to_positive (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_negative_activity_is_preserved_not_converted_to_positive) ... ok
+test_no_actor_context_correction_side_or_shape_guard_is_replaced (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_no_actor_context_correction_side_or_shape_guard_is_replaced) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 1.555s
+
+OK
+Found 7 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).
