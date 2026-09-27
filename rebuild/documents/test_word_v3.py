@@ -1498,5 +1498,82 @@ class WrappedCellsAndRows(unittest.TestCase):
             self.assertEqual(paragraphs_bytes(out)[4:], ["10 mg", "oral", "5 mg", "iv", "1 g", "topical"], wrapped)
 
 
+def block_wrapped_grid_bytes():
+    """The refuter's P2 input: a Yes/No grid of checkbox controls whose Chest pain Yes control sits in a paragraph
+    wrapped by a block-level content control inside its cell (w:tc/w:sdt/w:p)."""
+    doc = Document()
+    doc.add_paragraph("Synthetic review of systems")
+    table = doc.add_table(rows=3, cols=3)
+    for c, h in enumerate(["Symptom", "Yes", "No"]):
+        table.cell(0, c).text = h
+    table.cell(1, 0).text = "Chest pain"
+    table.cell(2, 0).text = "Dyspnea"
+    for r in (1, 2):
+        for c in (1, 2):
+            table.cell(r, c).paragraphs[0]._p.append(checkbox_control())
+    wrap_in_control(table.cell(1, 1).paragraphs[0]._p)
+    return docx_bytes(doc)
+
+
+class LoneBoxInAnOptionRow(unittest.TestCase):
+    """Round 3 P2: a box in a paragraph wrapped by a block-level control is its cell's box, and a lone box is never
+    labelled with its row's question while that row holds another box the detector did not give it."""
+
+    def test_a_block_wrapped_yes_control_is_the_rows_yes(self):
+        from documents import word_v3
+        data = block_wrapped_grid_bytes()
+        fields = word_v3.inspect(data)["fields"]
+        self.assertNotIn("Checkbox", [f["label"] for f in fields])
+        chest = fields_by_label(fields)["Chest pain"]
+        self.assertEqual((chest["kind"], chest["options"]), ("choice", ["Yes", "No"]))
+        self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {chest["key"]: "Yes"})),
+                         [("☒", "1"), ("☐", "0"), ("☐", "0"), ("☐", "0")])
+        self.assertEqual(own_controls_shown(word_v3.fill(data, fields, {chest["key"]: "No"})),
+                         [("☐", "0"), ("☒", "1"), ("☐", "0"), ("☐", "0")])
+        places = {row["slot"]: row for row in word_v3.outline(data)["slots"]}
+        self.assertEqual(places["word/document.xml#b/tbl[0]/tr[1]/tc[1]"]["boxes"], 1)
+
+    def assert_no_lone_row_question(self, data, label):
+        from documents import word_v3
+        info = word_v3.inspect(data)
+        lone = [f for f in info["fields"] if f["kind"] == "checkbox" and f["label"] == label]
+        self.assertEqual(lone, [], "a lone box took the row's question although the row prints another box")
+        self.assertTrue(any("another box" in note for note in info["notes"]), info["notes"])
+
+    def test_a_lone_no_box_beside_a_yes_box_it_was_not_given_is_refused(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = doc.add_table(rows=2, cols=3)
+        for c, h in enumerate(["Symptom", "Yes", "No"]):
+            table.cell(0, c).text = h
+        table.cell(1, 0).text = "Chest pain"
+        table.cell(1, 1).text = "☐ Yes"
+        table.cell(1, 2).text = "☐"
+        self.assert_no_lone_row_question(docx_bytes(doc), "Chest pain")
+
+    def test_a_lone_no_box_beside_an_unreadable_yes_is_refused(self):
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = doc.add_table(rows=2, cols=3)
+        for c, h in enumerate(["Symptom", "Yes", "No"]):
+            table.cell(0, c).text = h
+        table.cell(1, 0).text = "Chest pain"
+        outer = checkbox_control()
+        outer.find(qn("w:sdtContent")).append(checkbox_control(checked=True))
+        table.cell(1, 1).paragraphs[0]._p.append(outer)
+        table.cell(1, 2).text = "☐"
+        self.assert_no_lone_row_question(docx_bytes(doc), "Chest pain")
+
+    def test_a_row_with_one_box_per_question_keeps_both(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic history")
+        table = doc.add_table(rows=1, cols=4)
+        for c, text in enumerate(["Fever", "☐", "Consent obtained", "☐"]):
+            table.cell(0, c).text = text
+        fields = word_v3.inspect(docx_bytes(doc))["fields"]
+        self.assertEqual([(f["label"], f["kind"]) for f in fields], [("Fever", "checkbox"), ("Consent obtained", "checkbox")])
+
+
 if __name__ == "__main__":
     unittest.main()
