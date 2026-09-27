@@ -8,6 +8,7 @@ and `manage.py real_mode_payment_check` (read-only) refuses a database holding s
 No provider is called: Stripe Checkout is a mock and every webhook is signed locally with a synthetic secret.
 """
 import tempfile
+import uuid
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
@@ -24,7 +25,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.recorder import MigrationRecorder
 from django.test import TestCase, TransactionTestCase, override_settings
 
-from core.billing import reserve, sandbox_funded
+from core.billing import reserve, sandbox_funded, welcome_credit
 from core.models import AuditEvent, Job, LedgerEntry, Payment, ProviderReceipt, Reservation, Usage, Wallet, WebhookEvent
 from core.tests.test_security import SyntheticFixture
 from core.tests import test_v1_stripe_live as stripe_live  # The module, so its TestCase is not collected twice here.
@@ -534,6 +535,50 @@ class RealModeWorkerNeverSpendsAHoldOnSandboxMoney(SyntheticFixture, TestCase):
         self.assertTrue(generate.called)
         wallet = Wallet.objects.get(user=self.user, kind='paid')
         self.assertEqual((wallet.balance, wallet.reserved), (Decimal('8.5'), 0))
+
+    def split_hold(self, key, promo_first):
+        """reserve() of $3 split $1 promotional / $2 sandbox-funded paid, with the order of the two holds' primary keys
+        chosen: a reader that looks only at the first hold (by primary key) meets the promotional one first when
+        promo_first. Returns the job."""
+        job = self.job(key)
+        reserve(job, Decimal('2'))
+        holds = {r.wallet.kind: r for r in Reservation.objects.filter(job=job).select_related('wallet')}
+        self.assertEqual({kind: (r.amount, r.state) for kind, r in holds.items()},
+                         {'promo': (Decimal('1'), 'held'), 'paid': (Decimal('2'), 'held')})
+        low, high = sorted([uuid.uuid4(), uuid.uuid4()])
+        first, second = ('promo', 'paid') if promo_first else ('paid', 'promo')
+        Reservation.objects.filter(pk=holds[first].pk).update(id=low)
+        Reservation.objects.filter(pk=holds[second].pk).update(id=high)
+        self.assertEqual(Reservation.objects.filter(job=job, state='held').select_related('wallet').first().wallet.kind, first)
+        return job
+
+    def test_R4_3_a_hold_split_between_promotional_credit_and_sandbox_money_is_refused_before_sending(self):
+        """The refuter's R4-3: $1 promotional + $10 sandbox money, and a $3 hold split $1/$2. No test held a split hold,
+        so a reader that looked only at the first hold (H2) or required every hold to be refused (H3) survived. Both
+        orders of the two holds run, so the first hold is the promotional one in one of them."""
+        with override_settings(QUILLMD_WELCOME_CREDIT=Decimal('1')):
+            welcome_credit(self.user)
+        _, wallet = self.sandbox_top_up()
+        promo = Wallet.objects.get(user=self.user, kind='promo')
+        self.assertEqual(promo.balance, 1)
+        for order, promo_first in (('promotional hold first', True), ('paid hold first', False)):
+            with self.subTest(order=order):
+                job = self.split_hold(f'split-{order}', promo_first)
+                generate, transcribe = self.run_worker(**self.REAL_LIVE_AI)
+                generate.assert_not_called()
+                transcribe.assert_not_called()
+                job.refresh_from_db()
+                self.assertEqual(job.state, 'failed')
+                self.assertIn('sandbox (test) payments', job.error)
+                self.assertIn('nothing was charged and the held funds were released', job.error)
+                self.assertEqual(sorted(Reservation.objects.filter(job=job).values_list('wallet__kind', 'state')),
+                                 [('paid', 'released'), ('promo', 'released')])
+                self.assertFalse(Usage.objects.filter(job=job).exists())
+                self.assertFalse(LedgerEntry.objects.filter(job=job).exists())
+                self.assertTrue(AuditEvent.objects.filter(action='usage.sandbox_hold_refused', target=str(job.pk)).exists())
+                wallet.refresh_from_db()
+                promo.refresh_from_db()
+                self.assertEqual((wallet.balance, wallet.reserved, promo.balance, promo.reserved), (10, 0, 1, 0))
 
 
 @override_settings(STRIPE_WEBHOOK_SECRET=SECRET, ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES,
