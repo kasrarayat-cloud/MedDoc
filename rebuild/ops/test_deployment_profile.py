@@ -46,6 +46,7 @@ class CheckedInRecordTests(unittest.TestCase):
         self.assertEqual(loaded.state_root, Path('/var/lib/quillmd-production'))
         self.assertEqual(loaded.environment_file, Path('/run/quillmd-production/application.env'))
         self.assertEqual(loaded.account, 'quillmd-production-app')
+        self.assertEqual(loaded.uid, 931)
         self.assertEqual((loaded.doctor.port, loaded.admin.port), (9140, 9141))
         self.assertEqual((loaded.doctor.bind, loaded.admin.bind), ('127.0.0.1', '127.0.0.1'))
         self.assertEqual(loaded.database_name, 'quillmd_production')
@@ -94,6 +95,7 @@ class MixedProfileTests(unittest.TestCase):
             ('host.install_root', '/opt/meddoc-pro'),
             ('host.configuration_root', '/etc/quillmd'),
             ('service.account', 'quillmd-app'),
+            ('service.uid', 988),
             ('service.unit_prefix', 'quillmd-fresh-'),
             ('service.doctor.port', 9130),
             ('service.admin.port', 9131),
@@ -126,7 +128,8 @@ class MixedProfileTests(unittest.TestCase):
                             ('modes.ai_provider', 'openai'), ('host.docker', 'present'),
                             ('database.tls.sslmode', 'require'), ('service.doctor.bind', '0.0.0.0'),
                             ('database.engine', 'docker-postgresql'), ('host.region', 'eu-west-1'),
-                            ('database.port', 55438)):
+                            ('database.port', 55438), ('service.uid', 0), ('service.uid', 1000),
+                            ('service.uid', 65534), ('service.uid', 999)):
             with self.subTest(path=path, value=value), self.assertRaises(profile.ProfileError):
                 profile.validate(activated(**{path: value}))
 

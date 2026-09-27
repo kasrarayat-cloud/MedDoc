@@ -345,6 +345,8 @@ def probe_production(surface, profile):
     prepare_production_environment(surface, profile)
     identity = check_identity(process_status(), profile.account)
     uid, gid = identity['uid'], identity['gid']
+    # The fixed number keeps a state volume restored onto a rebuilt host owned by this identity.
+    require(uid == profile.uid and gid == profile.uid, 'service_identity_number')
     production_state_parent(profile, gid)
     app = profile.app_root
     checks = {}

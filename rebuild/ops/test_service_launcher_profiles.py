@@ -36,18 +36,19 @@ baseline = source_module.load('service_launcher_private_baseline', BASELINE)
 MODULES = (('baseline', baseline), ('current', launcher))
 UID, GID = 321, 654
 PRODUCTION_HOST = 'quillmd-production.c1a2b3c4d5e6.us-east-1.rds.amazonaws.com'
+PRODUCTION_ID = 931
 
 
-def status(**changes):
+def status(uid=UID, gid=GID, **changes):
     row = {name: '0000000000000000' for name in launcher.CAP_FIELDS}
-    row.update(Uid=f'{UID} {UID} {UID} {UID}', Gid=f'{GID} {GID} {GID} {GID}', Groups=str(GID), NoNewPrivs='1')
+    row.update(Uid=f'{uid} {uid} {uid} {uid}', Gid=f'{gid} {gid} {gid} {gid}', Groups=str(gid), NoNewPrivs='1')
     row.update(changes)
     return row
 
 
-def account(shell='/usr/sbin/nologin', uid=UID, gid=GID):
+def account(shell='/usr/sbin/nologin', uid=UID, gid=GID, group=GID):
     return (patch.object(launcher.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=uid, pw_gid=gid, pw_shell=shell)),
-            patch.object(launcher.grp, 'getgrnam', return_value=SimpleNamespace(gr_gid=GID)))
+            patch.object(launcher.grp, 'getgrnam', return_value=SimpleNamespace(gr_gid=group)))
 
 
 def outcome(call):
@@ -619,16 +620,16 @@ class ProductionHelperTests(unittest.TestCase):
 
 
 class ProductionProbeTests(unittest.TestCase):
-    def run_probe(self, **patches):
+    def run_probe(self, identity_number=PRODUCTION_ID, **patches):
         profile = ProductionProfileFixture.profile()
         calls = []
-        first, second = account()
+        first, second = account(uid=identity_number, gid=identity_number, group=identity_number)
         previous = os.umask(0o022)
         self.addCleanup(os.umask, previous)
         original_tempdir = launcher.tempfile.tempdir
         self.addCleanup(setattr, launcher.tempfile, 'tempdir', original_tempdir)
         defaults = {
-            'process_status': lambda: status(),
+            'process_status': lambda: status(identity_number, identity_number),
             'production_state_parent': lambda profile, gid: calls.append(('state_parent', gid)),
             'denied_open': lambda path, flags, label: calls.append(('open', label, str(path), flags)) or {'denied': True},
             'absent_socket': lambda path, label: calls.append(('absent_socket', label, path)) or {'absent': True},
@@ -656,7 +657,7 @@ class ProductionProbeTests(unittest.TestCase):
         self.assertEqual((report['profile'], report['profile_sha256'], report['surface']), ('production', 'cd' * 32, 'worker'))
         self.assertEqual(report['database'], {'host': PRODUCTION_HOST, 'name': 'quillmd_production',
                                               'role': 'quillmd_production_runtime', 'sslmode': 'verify-full'})
-        self.assertEqual(calls[0], ('state_parent', GID))
+        self.assertEqual(calls[0], ('state_parent', PRODUCTION_ID))
         self.assertEqual([c[1] for c in calls if c[0] == 'open'],
                          ['environment_file', 'operator_configuration', 'code_write', 'launcher_write', 'profile_write'])
         self.assertIn(('open', 'environment_file', '/run/quillmd-production/application.env', os.O_RDONLY), calls)
@@ -683,9 +684,14 @@ class ProductionProbeTests(unittest.TestCase):
                 self.assertEqual(self.run_probe(**{name: fail(label)})[0], ('refused', label))
 
     def test_operator_identity_refuses(self):
-        self.assertEqual(self.run_probe(process_status=lambda: status(Groups=f'{GID} 110'))[0],
+        self.assertEqual(self.run_probe(process_status=lambda: status(PRODUCTION_ID, PRODUCTION_ID,
+                                                                      Groups=f'{PRODUCTION_ID} 110'))[0],
                          ('refused', 'supplementary_groups'))
 
+    def test_a_consistent_identity_with_another_number_refuses(self):
+        # check_identity accepts it (UID, GID and group agree); only the profile's fixed number differs.
+        self.assertEqual(self.run_probe(identity_number=PRODUCTION_ID + 1)[0], ('refused', 'service_identity_number'))
+        self.assertEqual(self.run_probe(identity_number=PRODUCTION_ID)[0][0], 'accepted')
 
 if __name__ == '__main__':
     unittest.main()

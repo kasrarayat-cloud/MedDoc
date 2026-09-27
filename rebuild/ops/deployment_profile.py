@@ -40,6 +40,7 @@ PRIVATE = {
     'paths': ('/opt/meddoc-pro', '/var/lib/quillmd', '/etc/quillmd', '/var/lib/quillmd-encrypted',
               '/mnt/quillmd-fresh-encrypted', '/var/lib/docker'),
     'account': 'quillmd-app',
+    'ids': (996, 988),  # the private identity's UID/GID on the VPS (docs/rebuild/os-isolation.md)
     'unit_prefix': 'quillmd-fresh-',
     'ports': (9130, 9131, 55438, 55439),
     'database_names': ('quillmd_fresh', 'quillmd_restore', 'quillmd_ci'),
@@ -53,7 +54,7 @@ SHAPE = {
     'format': int, 'name': str, 'reviewed_on': str,
     'host': {'provider': str, 'region': str, 'operating_system': str, 'install_root': str,
              'state_root': str, 'configuration_root': str, 'environment_file': str, 'docker': str},
-    'service': {'account': str, 'unit_prefix': str,
+    'service': {'account': str, 'uid': int, 'unit_prefix': str,
                 'doctor': {'bind': str, 'port': int, 'workers': int},
                 'admin': {'bind': str, 'port': int, 'workers': int}},
     'database': {'engine': str, 'instance_identifier': str, 'host': (str, type(None)), 'port': int,
@@ -141,6 +142,7 @@ class Production:
     configuration_root: Path
     environment_file: Path
     account: str
+    uid: int  # also the GID of its own group; fixed so a restored state volume keeps its ownership
     unit_prefix: str
     doctor: Surface
     admin: Surface
@@ -252,6 +254,9 @@ def validate(raw, *, sha256='', require_activation=True):
             and PREFIX.fullmatch(service['unit_prefix']) is not None, 'profile_value')
     require(service['account'] != PRIVATE['account']
             and service['unit_prefix'] != PRIVATE['unit_prefix'], 'profile_mixed')
+    # A fixed system-range number, created before any package so nothing else can take it.
+    require(900 <= service['uid'] <= 989, 'profile_value')
+    require(service['uid'] not in PRIVATE['ids'], 'profile_mixed')
     ports = []
     for name in ('doctor', 'admin'):
         row = service[name]
@@ -291,7 +296,7 @@ def validate(raw, *, sha256='', require_activation=True):
         sha256=sha256, region=region,
         install_root=Path(host['install_root']), state_root=Path(host['state_root']),
         configuration_root=Path(host['configuration_root']), environment_file=Path(host['environment_file']),
-        account=service['account'], unit_prefix=service['unit_prefix'],
+        account=service['account'], uid=service['uid'], unit_prefix=service['unit_prefix'],
         doctor=Surface(**service['doctor']), admin=Surface(**service['admin']),
         database_instance=database['instance_identifier'], database_host=database['host'],
         database_port=database['port'], database_name=database['name'], roles=dict(roles),
@@ -329,3 +334,52 @@ def load_production(path=PROFILE_PATH, *, require_activation=True):
     except (ValueError, UnicodeError, RecursionError):
         raise ProfileError('profile_shape') from None
     return validate(raw, sha256=digest, require_activation=require_activation)
+
+
+SHELL_VALUE = re.compile(r'[A-Za-z0-9._/:@+=-]*')
+
+
+def shell_values(production):
+    """Fixed NAME=value lines for deploy/production/bootstrap-host.sh; never evaluated, only read.
+
+    Every value was validated above; the pattern check is a second fence so a record that somehow
+    carried a quote, space, '$' or newline could never reach a shell as anything but a refusal.
+    """
+    rows = {
+        'PROFILE_SHA256': production.sha256, 'REGION': production.region,
+        'INSTALL_ROOT': str(production.install_root), 'APP_ROOT': str(production.app_root),
+        'STATE_ROOT': str(production.state_root), 'CONFIGURATION_ROOT': str(production.configuration_root),
+        'OPERATOR_DIRECTORY': str(production.operator_directory),
+        'ENVIRONMENT_FILE': str(production.environment_file), 'ACCOUNT': production.account,
+        'ACCOUNT_ID_NUMBER': str(production.uid),
+        'UNIT_PREFIX': production.unit_prefix, 'DOCTOR_PORT': str(production.doctor.port),
+        'ADMIN_PORT': str(production.admin.port), 'CA_BUNDLE': str(production.ca_bundle),
+        'CA_BUNDLE_SHA256': production.ca_bundle_sha256 or '', 'DATABASE_HOST': production.database_host or '',
+        'SECRET_NAME': production.secret_name,
+        'DOCTOR_HOST': production.doctor_origin.removeprefix('https://'),
+        'ADMIN_HOST': production.admin_origin.removeprefix('https://'),
+    }
+    for value in rows.values():
+        require(SHELL_VALUE.fullmatch(value) is not None, 'profile_value')
+    return ''.join(f'{name}={value}\n' for name, value in rows.items())
+
+
+def main(argv=None):
+    import argparse
+    import sys
+    parser = argparse.ArgumentParser(description='Validate the production profile; optionally print bootstrap values.')
+    parser.add_argument('--shell', action='store_true', help='Print fixed NAME=value lines for the bootstrap script.')
+    parser.add_argument('--require-activation', action='store_true')
+    args = parser.parse_args(argv)
+    try:
+        production = load_production(require_activation=args.require_activation)
+    except ProfileError as exc:
+        print('production profile refused: ' + str(exc), file=sys.stderr)
+        return 1
+    sys.stdout.write(shell_values(production) if args.shell else
+                     json.dumps({'valid': True, 'activated': production.activated, 'sha256': production.sha256}) + '\n')
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

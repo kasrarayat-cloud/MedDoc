@@ -14,6 +14,7 @@
   },
   "service": {
     "account": "quillmd-production-app",
+    "uid": 931,
     "unit_prefix": "quillmd-production-",
     "doctor": {"bind": "127.0.0.1", "port": 9140, "workers": 2},
     "admin": {"bind": "127.0.0.1", "port": 9141, "workers": 1}
