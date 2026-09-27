@@ -163,3 +163,12 @@ explicitly says `physical_microphone_verified:false`. Natural human dictation an
 remain unverified. The application/document/operations job is still running at this entry;
 no whole-CI success is claimed. Downloaded three original JSON reports are preserved under
 root runtime `v1-astra-recovery-20260927/ci-b806-browser/`.
+
+
+### Continued CI outcome and reviewed long-question candidate
+
+The b806 application job finished **cancelled by its20-minute timeout**, confirmed by its annotation. Before cancellation,2,043 core tests passed in1029.308s and204 document tests passed in68.642s. An operations fixture failed before cancellation. Root reproduced policy_expired caused by its fixture clock; three related fixture failures in the1155-test local ops run share that cause. All original runs remain retained. Explicit real-Budget clocks fix the tests without changing production guards;57 focused tests and38 independent orchestration/clock probes pass. Two20-minute CI partitions retain every prior check and an always-running required aggregate fails unless both succeed. Exact final remote CI remains pending at this entry.
+
+Word source cf04596e is locally integrated with independent signing/source-location review and31 accounting controls. D30 now71 fields, three visible unresolved boxes, whole-document FAIL; A35 ordinary input remains assisted. Complete D30 map/warning equality supports scoped reuse of the retained missing/ordinary/long workflows/renders. Root verified both fixed signing findings, full Donor context, and seven render pages. Neither native Word nor live Sonnet verification is claimed.
+
+Root combined-source proof:49 actual affected application tests passed (40 in a41-test run with one wrong-module discovery error, then the intended9 mapping-review tests passed12.505s).21 question-box/cost-scanner tests passed11.185s. The original invocation is recorded as failed, not retroactively green. All logs, signing before/after, complete manual source context and selected render-page review are retained under `evidence/long-question-union-20260927/`. Clinical generation bytes remain unchanged at a7bbe3d9efd0db5247dccebeba0cb97137786312b03f22994c394cdfb744a81b.

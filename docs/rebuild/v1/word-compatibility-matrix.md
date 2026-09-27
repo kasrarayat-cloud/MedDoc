@@ -76,3 +76,8 @@ Any supplemental selection must be predeclared by lineage/source before outputs,
 manifest and attempts, and report its own denominator. Nothing here replaces a failed case or resets a result.
 A metadata-only development supplement proposal exists but does not resolve qualification independence.
 See `corpus-lineage-metadata-20260927.json`; no new compatibility score is claimed.
+
+
+## Continued D30 long-question repair — September27
+
+Reviewed source cf04596e retains complete bounded questions/context (1,000 Unicode code points) across detection, manual mapping and assistance. D30 changes from68 to71 detected fields; prior68 are preserved apart from document-order keys. A23/A35 long questions and A44 report-reference box now map. A21 option ownership, A26 cross-question dependency and A40 manager-only section remain visibly unresolved. Whole document: **FAIL**. A35 ordinary source remains held; correction/finalization/export succeeds only as assisted completion. Missing/ordinary/long export evidence and six changed LibreOffice renders are retained; native Word remains unperformed. See `d30-long-question-repair-20260927.md` and independent reports. No original or unseen denominator, first-pass result, or corpus qualification status changes.

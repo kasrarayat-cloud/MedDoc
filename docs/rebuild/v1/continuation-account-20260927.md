@@ -2,7 +2,7 @@
 
 **Milestone: invited U.S. real-patient V1 launch completion. Not ready to launch.**
 This account records the continuation package; `V1-BLOCKERS.md` remains the single blocker list.
-Source identities and verification results are recorded below; further necessary clinical and Word repairs remain active in isolated worktrees.
+Source identities and verification results are recorded below. The reviewed continuation candidate is in draft PR #1288; ordinary-note usefulness and broad Word completeness remain engineering blockers.
 
 ## Preserved and recovered state
 
@@ -153,3 +153,12 @@ Installed state was read again at21:02:39 UTC: both local clinical health endpoi
 `dedac1625032e32c7a149e6771be22e26c307eb1`, synthetic-only. Public clinical endpoints remain503.
 The original draft and all preceding failures are preserved; neither the installed model nor
 production admission changed. No paid generation, purchasing or new spending authority occurred.
+
+
+## Latest continued candidate — reviewed long questions and CI repair
+
+The reviewed long-question repair cf04596e is locally integrated. Full labels/context are preserved through the mapping workflow, and independent signing counterexamples were repaired before integration. D30 now has71 fields and three visibly unresolved boxes; A35 ordinary input still requires clinician correction. Whole-document automatic acceptance remains FAIL. All previous failures, wrong test expectations and render-text extraction discrepancies are retained with their resolutions and limits.
+
+Draft PR #1288's first run passed2,043 core and204 document tests plus browser/accessibility, marketing and secrets checks, but its application job timed out before operations/adapter/audit completed. Four backup fixture clocks were repaired without changing production policy guards. The final workflow partitions core/support into two bounded jobs while preserving the required aggregate and every check. Final candidate CI and artifact identities live in the actionable runtime checkpoint; no result is inferred from an in-progress job.
+
+The next safe engineering sequence remains the open B-G1 source-span/actor/destination/governing-context acceptance contract and B-W1 option/dependency/full-document completeness, using the retained failures. These are internal work, not all funding blockers. Additional corpus rights/lineage, native desktop access, approved exact-model verification and actual production/provider agreements remain external dependencies. No V1 completion or launch date is claimed.

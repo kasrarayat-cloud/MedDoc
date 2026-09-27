@@ -1,6 +1,6 @@
 # D30 long questions and local report wording — bounded repair
 
-Status: **prepared source; independent refutation in progress; D30 remains FAIL**.
+Status: **reviewed source locally integrated; D30 remains FAIL**.
 No deployment, live model request, corpus campaign or native Word check occurred.
 
 Worktree: `/opt/meddoc-pro/.worktrees/v1-word-long-questions`.
@@ -192,3 +192,8 @@ usefulness, faithful per-family qualification and native Word checks remain open
 Complete independent refutation, merge only the reviewed local candidate, and reuse
 unchanged evidence. No new corpus campaign or provider operation is authorized by
 this report. Maintenance and synthetic-only admission must remain.
+
+
+## Root integration disposition
+
+Source cf04596e was integrated only after root reproduction of both signing failures, the independent finished signing/locator pass (604c5f4a), and the31-control accounting pass with final-source identity confirmation (02fa49bf/93688b08). The latter engine hash is `3f2ca5136a876d153b045e5c8dd37b8b8b24b303833263966664c63290a3b856`. Eleven retained controls plus the additional source-boundary control and five actual-engine locator checks satisfy their expectations; the twelfth retained sibling/row ambiguity remains ungraded. This closes those demonstrated findings, not the whole-document gate. Root independently rechecked the two refusals, ordinary descriptive reference, unknown direct request and full manual Donor context, and inspected seven changed render pages. Final combined checks and exact-candidate CI are recorded in the acceptance matrix/checkpoint.
