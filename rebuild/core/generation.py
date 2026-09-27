@@ -1710,15 +1710,16 @@ def judged_context(governance, notes, index, label, evidence):
         warnings = list(scope['corrections'])
         warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence)
         if re.search(SUBJECTS[0], str(label or ''), re.I):
-            spans = {(entry.get('start'), entry.get('end')) for entry in evidence}
+            spans = {span[:2] for entry in evidence if (span := v3_evidence_span(entry))}
             warnings += [unit for unit in scope['units'] if (unit['start'], unit['end']) not in spans]
         if warnings:
             # Keep every warning's location; never turn this into an adoptable suggestion.
             unique = {unit['id']: unit for unit in warnings}
+            first = v3_evidence_span(evidence[0])
+            first_start, first_end = first[:2] if first else (0, 0)
             return [{'quote': unit['quote'], 'start': unit['start'], 'end': unit['end'],
-                     'after': unit['start'] >= evidence[0].get('end', 0),
-                     'same': not re.search(r'[\r\n]', notes[min(unit['end'], evidence[0].get('end', 0)):
-                                                           max(unit['start'], evidence[0].get('start', 0))])}
+                     'after': unit['start'] >= first_end,
+                     'same': not re.search(r'[\r\n]', notes[min(unit['end'], first_end):max(unit['start'], first_start)])}
                     for unit in unique.values()]
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
@@ -2468,6 +2469,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                               and plain_printed_side_option(named[parsed[u['id']][0]][0], parsed[u['id']][1]))))
                     for u in units]
     return {'units': units, 'evidence_units': evidence_units, 'parsed': parsed,
+            'source': {'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)},
             'colon': colon, 'before': before, 'independent': independent, 'general': general, 'groups': groups,
             'inline_options': inline_options,
             'ends_read': ends_read, 'shapes_read': shapes_read, 'blocks': blocks, 'block_of': block_of,
@@ -2485,10 +2487,20 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
 
 
 
+def v3_evidence_span(entry):
+    """An exact evidence shape; old records may omit end, never contradict it."""
+    if not isinstance(entry, dict): return None
+    start, quote = entry.get('start'), entry.get('quote')
+    if type(start) is not int or start < 0 or not isinstance(quote, str) or not quote: return None
+    end = entry.get('end', start + len(quote))
+    if type(end) is not int or end != start + len(quote): return None
+    return start, end, quote
+
+
 def v3_evidence_units(reading, evidence):
     """Resolve only an exact whole source unit or its complete labelled value."""
     return {unit['id']: unit for entry in evidence
-            if (unit := reading['evidence_units'].get((entry.get('start'), entry.get('end'), entry.get('quote'))))}
+            if (unit := reading['evidence_units'].get(v3_evidence_span(entry)))}
 
 
 def v3_scope_selection(reading, label, evidence):
@@ -2531,6 +2543,10 @@ def v3_preceding_warnings(reading, label, evidence):
     """The same paragraph/source-block context on generation, page, save and finalize."""
     if not reading: return []
     label = question_key(label)
+    if any(v3_evidence_span(entry) not in reading['evidence_units'] for entry in evidence):
+        # An unmatched span cannot silently disappear from governance. Keep the
+        # actual note visible for a new decision, including malformed old drafts.
+        return reading['units'] or [reading['source']]
     selected = v3_evidence_units(reading, evidence)
     scoped = v3_scope_selection(reading, label, evidence)
     complete = set()
@@ -2549,7 +2565,9 @@ def v3_preceding_warnings(reading, label, evidence):
             unit = reading['units'][index]; warnings[unit['id']] = unit
     for unit in selected.values():
         subject = reading['subjects'][unit['id']]
-        if unit['id'] in reading['unresolved_subjects'] or (subject and subject != label):
+        own = reading['parsed'][unit['id']]
+        if (unit['id'] in reading['unresolved_subjects'] or (subject and subject != label)
+                or (own and own[0] != label)):
             warnings[unit['id']] = unit
         before, changer = reading['neighbours'][unit['id']]
         if (before and (not reading['colon'][unit['id']] or unit['id'] in reading['inline_options']) and unit['id'] not in complete
@@ -3097,7 +3115,9 @@ def v3_labelled_source(notes, labels, label, evidence, lines=None):
         return False
     lines = lines if lines is not None else LabelledLines(notes, labels)
     for entry in evidence:
-        start, quote = entry.get('start'), entry.get('quote')
+        span = v3_evidence_span(entry)
+        if span is None: return False
+        start, _, quote = span
         located = lines.part(start)
         if located is None:
             return False

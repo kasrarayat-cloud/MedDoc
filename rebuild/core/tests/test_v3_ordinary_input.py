@@ -276,6 +276,33 @@ class CompleteValueEvidenceContext(SimpleTestCase):
         self.assertIn('Seen recently', g.governed_decisions(notes, self.fields, {'recent': {
             'status': 'supported', 'text': 'No', 'reviewed': True, 'evidence': [good]}}))
 
+    def test_absent_historical_end_is_derived_for_context_without_rewriting_evidence(self):
+        for notes, held in (('Father: MI at 50. Smoker: No.', True),
+                            ('Patient presents with knee pain. Smoker: No.', False)):
+            evidence = [{'quote': 'No.', 'start': notes.index('No.')}]
+            answer = {'status': 'supported', 'text': 'No', 'reviewed': True, 'evidence': evidence}
+            self.assertTrue(g.v3_labelled_source(notes, g.recognized_labels(self.fields), 'smoker', evidence))
+            self.assertEqual(g.governed_decisions(notes, self.fields, {'v3_4': answer}), ['Smoker'] if held else [])
+            self.assertNotIn('end', evidence[0])
+
+    def test_malformed_partial_or_wrong_label_evidence_stays_held(self):
+        notes = 'Patient presents with knee pain. Smoker: No. Seen recently: No.'
+        start = notes.index('No.')
+        good = {'quote': 'No.', 'start': start, 'end': start + 3}
+        other = notes.rindex('No.')
+        for bad in ({**good, 'end': start + 2}, {**good, 'end': start + 4},
+                    {**good, 'end': None}, {**good, 'start': start - 1},
+                    {**good, 'quote': 'No', 'end': start + 2},
+                    {'quote': 'No.', 'start': other, 'end': other + 3},
+                    {**good, 'quote': ['No.']}, {**good, 'start': [start]}, None):
+            with self.subTest(evidence=bad):
+                answer = {'status': 'supported', 'text': 'No', 'reviewed': True, 'evidence': [bad]}
+                self.assertFalse(g.v3_labelled_source(notes, g.recognized_labels(self.fields), 'smoker', [bad]))
+                governance = g.governance_for(notes, self.fields)
+                shown = g.as_currently_governed(governance, notes, {**answer, 'label': 'Smoker'})
+                self.assertEqual((shown['status'], shown['text']), ('conflict', ''))
+                self.assertEqual(g.governed_decisions(notes, self.fields, {'v3_4': answer}), ['Smoker'])
+
 
 @override_settings(**LIVE)
 class CompleteValueEvidenceWorkflow(V3EncounterFixture, TestCase):
