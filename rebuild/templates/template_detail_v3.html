@@ -1,3 +1,4 @@
+{% if mapping_assistance_enabled %}<p><a href="{% url 'mapping_assistance' template.pk %}">Mapping assistance and unresolved areas</a></p>{% endif %}
 {% if v3_error %}<div class="notice warning" role="alert" data-v3-error><strong>Not saved.</strong> {{ v3_error }}</div>{% endif %}
 {% if version.confirmed %}<div class="notice success" data-v3-confirmed>Mapping version {{ version.number }} was confirmed by {{ version.confirmed.confirmed_by.email }} on {{ version.confirmed.created_at|date:'M j, Y, H:i' }} UTC: every field checked against the form.</div>
 {% else %}<div class="notice warning" data-v3-unconfirmed><strong>Not yet confirmed.</strong> QuillMD found these answer areas automatically. Check every field against your form: correct labels and kinds, remove anything that is not an answer, and add any area it missed. Documents cannot be created with this form until a clinician confirms the mapping below.</div>{% endif %}

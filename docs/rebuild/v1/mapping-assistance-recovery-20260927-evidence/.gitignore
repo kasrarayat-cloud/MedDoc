@@ -1,0 +1,3 @@
+# Synthetic rendered Word binaries stay local; hashes and generator are committed.
+*.docx
+*.pdf

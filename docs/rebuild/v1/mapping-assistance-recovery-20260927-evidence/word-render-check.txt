@@ -1,0 +1,34 @@
+[
+  {
+    "document": "workflow-original.pdf",
+    "pages": 1,
+    "overlap_pairs": 0,
+    "original_wording_subsequence": true,
+    "entire_answer_present": true,
+    "long_answer_repetitions": null
+  },
+  {
+    "document": "workflow-export.pdf",
+    "pages": 1,
+    "overlap_pairs": 0,
+    "original_wording_subsequence": true,
+    "entire_answer_present": true,
+    "long_answer_repetitions": null
+  },
+  {
+    "document": "workflow-missing.pdf",
+    "pages": 1,
+    "overlap_pairs": 0,
+    "original_wording_subsequence": true,
+    "entire_answer_present": true,
+    "long_answer_repetitions": null
+  },
+  {
+    "document": "workflow-long.pdf",
+    "pages": 2,
+    "overlap_pairs": 0,
+    "original_wording_subsequence": true,
+    "entire_answer_present": true,
+    "long_answer_repetitions": 80
+  }
+]

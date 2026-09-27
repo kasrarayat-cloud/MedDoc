@@ -517,7 +517,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
            'kind_name':v3_mapping.KIND_NAMES.get(f.get('kind'),f.get('kind')),
            'kind_editable':f.get('kind') in v3_mapping.TEXT_KINDS,'options':f.get('options') or [],
            'location':field_location.describe(f,box_keys=box_keys),'context':f.get('context') or '',
-           'origin':'Manual' if f.get('origin')=='manual' else 'Automatic','max_chars':f.get('max_chars'),
+           'origin':{'manual':'Manual','model_assisted':'Model proposal'}.get(f.get('origin'),'Automatic'),'max_chars':f.get('max_chars'),
            'remove':posted.get('remove_'+f['key'])=='on',
            'duplicate':f.get('kind') not in v3_mapping.NEVER_GENERATED and counts.get(question_key(f['label']),0)>1}
           for n,f in enumerate(version.fields,1)]
@@ -528,7 +528,8 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         'posted_add_kind':posted.get('kind',''),'text_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
         'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
         'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.GENERATION_FIELD_LIMIT,
-        'corrections':version.corrections,'statements':[]},status=status)
+        'corrections':version.corrections,'statements':[],
+        'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False)},status=status)
 
 def template_detail_v3(request,t,version):
     from documents import DocumentError
@@ -549,7 +550,8 @@ def v3_new_version(request,t,latest,fields,*,removed=(),added=(),kind_changed=No
     kind_changed=kind_changed or {}
     corrections={'base_version':latest.number,'removed':list(removed),'added':list(added),'kind_changed':kind_changed,'renamed':list(renamed)}
     version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,
-                                           document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,created_by=request.user)
+                                           document_backend=latest.document_backend,contract=latest.contract,corrections=corrections,created_by=request.user,
+                                           assistance={**latest.assistance,'assisted':True} if latest.assistance else {})
     audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number,contract=version.contract,
           removed=[row['key'] for row in removed],added=list(added),kind_changed=kind_changed,renamed=[row['key'] for row in renamed])
     return version
@@ -637,6 +639,7 @@ def v3_confirm(request,t):
         latest=t.versions.order_by('-number').first()
         if request.POST.get('mapping_version')!=str(latest.pk):
             return v3_page(request,t,latest,status=409,error=V3_MAPPING_CHANGED)
+        if latest.assistance.get('unresolved'):raise ValidationError('Resolve every mapping-assistance area before confirming this version.')
         if not latest.fields:raise ValidationError('This mapping has no fields. Add the form\'s answer areas before confirming it.')
         # ⚠️ A box that does not exist can never be confirmed (it would only refuse at export, after the review).
         missing=v3_mapping.missing_boxes(latest.fields,v3_outline(t))
@@ -1942,7 +1945,7 @@ def admin_resolve_job(request,pk):
     data=form.cleaned_data;note=data['evidence_note'].strip()
     from .billing import absorb_failed_job
     settled=Usage.objects.filter(job=job,simulated=False).first()
-    simulated=Usage.objects.filter(job=job,simulated=True).exists() or (job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live')
+    simulated=Usage.objects.filter(job=job,simulated=True).exists() or (job.kind in ('generation','mapping') and job.config.get('mode',settings.AI_MODE)!='live')
     release(job)
     job.state='failed';job.finished_at=timezone.now()
     job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
@@ -1956,7 +1959,7 @@ def admin_resolve_job(request,pk):
     elif data['outcome']=='absorb_platform_failure':
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':data['actual_cost'],'description':'Provider cost absorbed: uncertain outcome resolved by administrator','evidence_reference':note,'recorded_by':request.user})
     else: absorbed=None
-    audit(request.user,'job.resolved',job.pk,department=job.encounter.department,outcome=data['outcome'],evidence_note=note,settled_usage=bool(settled),simulated=simulated,actual_cost=str(absorbed.amount) if absorbed else None)
+    audit(request.user,'job.resolved',job.pk,department=job.department,outcome=data['outcome'],evidence_note=note,settled_usage=bool(settled),simulated=simulated,actual_cost=str(absorbed.amount) if absorbed else None)
     messages.success(request,'Job resolved. Held funds were released and the settled charge was reversed.' if settled else 'Job resolved. Held funds were released and the user was not charged.')
     return redirect('/console/#jobs')
 

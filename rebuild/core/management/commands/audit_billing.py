@@ -71,7 +71,7 @@ def audit_report(file_reader=None):
                 'over_limit_absorbed_exactly':sum(over_rows,Decimal(0))==uncapped-usage.charged_cost and len(over_rows)==(1 if uncapped>usage.charged_cost else 0),
                 'ledger_debit_matches':-sum((entry['amount'] for entry in entries),Decimal(0))==usage.charged_cost,
                 'no_held_reservation':not Reservation.objects.filter(job_id=usage.job_id,state='held').exists(),
-                'usage_scope_matches_job':usage.user_id==usage.job.user_id and usage.department_id==usage.job.encounter.department_id and usage.organization_id==usage.job.encounter.department.organization_id,
+                'usage_scope_matches_job':usage.user_id==usage.job.user_id and usage.department_id==usage.job.department_id and usage.organization_id==usage.job.department.organization_id,
                 'payer_matches_authorized_snapshot':not usage.job.payer or usage.payer==usage.job.payer}
         if receipt:checks['durable_receipt_matches']=all(getattr(receipt,k)==getattr(usage,k) for k in ['provider','provider_request_id','provider_resource_id','units','rates','actual_cost','simulated'])
         if 'list_cost_usd' in usage.rates:

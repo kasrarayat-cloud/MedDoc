@@ -171,7 +171,7 @@ def deliverable(job):
 def may_cancel(job,user):
     """Same rule jobs.cancel enforces: the requester, or an owner or clinician of the department."""
     if job.state!='queued': return False
-    try: membership(user,job.encounter.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
+    try: membership(user,job.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
     except PermissionDenied: return False
     return True
 
@@ -397,7 +397,7 @@ def refuse(kind,detail,job=None):
     # Losing this row costs one line of operator evidence. Losing the release costs a doctor their balance.
     try:
         audit(job.user if job else None,'voice.submission_refused',job.pk if job else '',
-              department=job.encounter.department if job else None,
+              department=job.department if job else None,
               kind=kind,retryable=kind in RETRYABLE,detail=scrubbed(detail))
     except Exception:
         pass
@@ -414,7 +414,7 @@ def refuse_sandbox_hold(job):
     marks the job not processed, charges nothing and releases the hold. The audit write cannot stop the refusal (see
     refuse())."""
     try:
-        audit(job.user,'usage.sandbox_hold_refused',job.pk,department=job.encounter.department,kind=job.kind)
+        audit(job.user,'usage.sandbox_hold_refused',job.pk,department=job.department,kind=job.kind)
     except Exception:
         pass
     return NoProviderRequest(SANDBOX_HOLD_REFUSED)
@@ -507,7 +507,7 @@ def prepare_submission(job):
                    'submission_status':'determined','submission_detail':'; '.join(produced.reasons)[:400],
                    'submission_streams':str(produced.audio_streams),'submission_container':produced.container[:60]}
         # Written BEFORE the request, so a provider call that never returns still leaves a record of what was sent.
-        audit(job.user,'voice.submission_prepared',job.pk,department=job.encounter.department,
+        audit(job.user,'voice.submission_prepared',job.pk,department=job.department,
               source=submitted['submission_source'],container=submitted['submission_container'],
               seconds=submitted['submitted_seconds'],decoded_seconds=submitted['decoded_seconds'],
               submitted_bytes=submitted['submission_bytes'],sha256=submitted['submission_sha256'])
@@ -605,10 +605,13 @@ def submit_transcription(job,raw,key,submitted,params=None):
     return transcript,cost,dict(submitted,duration_seconds=str(duration)),rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
 def run_one():
+    from .mapping_jobs import run_one as run_mapping
+    next_kind=Job.objects.filter(state='queued').order_by('created_at').values_list('kind',flat=True).first()
+    if next_kind=='mapping' and run_mapping(): return True
     with transaction.atomic():
-        job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').order_by('created_at').first()
+        job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').exclude(kind='mapping').order_by('created_at').first()
         if not job: return False
-        try: membership(job.user,job.encounter.department)
+        try: membership(job.user,job.department)
         except Exception:
             job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.request_key=ended_key(job,'failed'); job.save();release(job); return True
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
@@ -713,8 +716,8 @@ def run_one():
             try: absorb_failed_job(job)
             except Exception as absorb_error:
                 # The failed job state is already durable; a failed reversal must never stop the worker. audit_billing flags settled-but-unabsorbed failures.
-                audit(job.user,'usage.absorb_failed',job.pk,department=job.encounter.department,error_class=type(absorb_error).__name__)
-        audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,error_class=type(exc).__name__,
+                audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
+        audit(job.user,'job.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
               billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'fixture' if fixture else 'uncertain')
     return True
 
@@ -726,13 +729,13 @@ def cancel(job,user):
     # Lock the job row only: locking the encounter or department too would invert run_one's encounter-then-job order and deadlock.
     job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department').get(pk=job.pk)
     # The requester may cancel their own queued request; anyone else needs a clinician or owner role in the department.
-    membership(user,job.encounter.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
+    membership(user,job.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
     if job.state!='queued': raise CancellationRefused(CANCEL_REFUSALS.get(job.state,'This request can no longer be cancelled.'))
     job.state='cancelled';job.error=CANCELLED_ERROR;job.finished_at=timezone.now()
     job.request_key=ended_key(job,'cancelled')
     job.save(update_fields=['state','error','finished_at','request_key'])
     release(job)
-    audit(user,'job.cancelled',job.pk,department=job.encounter.department,kind=job.kind)
+    audit(user,'job.cancelled',job.pk,department=job.department,kind=job.kind)
     return job
 
 def reap_abandoned_voice_uploads():

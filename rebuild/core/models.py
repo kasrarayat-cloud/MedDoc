@@ -134,6 +134,7 @@ class TemplateVersion(Entity):
     # The clinician's corrections that made THIS version from the previous one (v3 only):
     # {'base_version', 'removed', 'added', 'kind_changed', 'renamed'}. Automatic fields stay as the engine found them.
     corrections=models.JSONField(default=dict,blank=True)
+    assistance=models.JSONField(default=dict,blank=True)
     class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
     @property
     def confirmed(self):
@@ -187,7 +188,8 @@ class Encounter(Entity):
         if self.patient.department_id!=self.department_id or self.template_version.template.department_id!=self.department_id: raise ValidationError('Patient, template and encounter must share a department.')
         if self.service_date and self.service_date>latest_service_date(): raise ValidationError('The date of service or discharge cannot be in the future.')
 class Job(ProviderIdentifiers,Entity):
-    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT)
+    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT,null=True)
+    mapping_version=models.ForeignKey(TemplateVersion,on_delete=models.PROTECT,null=True,related_name='mapping_jobs')
     user=models.ForeignKey(User,on_delete=models.PROTECT)
     kind=models.CharField(max_length=20,default='generation')
     state=models.CharField(max_length=20,default='queued')
@@ -204,6 +206,16 @@ class Job(ProviderIdentifiers,Entity):
     input_path=models.CharField(max_length=100,blank=True)
     started_at=models.DateTimeField(null=True)
     finished_at=models.DateTimeField(null=True)
+    class Meta:
+        constraints=[models.CheckConstraint(name='job_exactly_one_scope',condition=(
+            models.Q(kind='mapping',encounter__isnull=True,mapping_version__isnull=False)
+            | (~models.Q(kind='mapping') & models.Q(encounter__isnull=False,mapping_version__isnull=True))))]
+    @property
+    def department(self):
+        return self.mapping_version.template.department if self.mapping_version_id else self.encounter.department
+    @property
+    def department_id(self):
+        return self.department.pk
     @property
     def pricing_snapshot(self):
         return self.config.get('pricing_version','Not captured for this historical job')

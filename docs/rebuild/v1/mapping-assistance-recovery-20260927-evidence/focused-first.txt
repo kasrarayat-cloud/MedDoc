@@ -1,0 +1,185 @@
+Creating test database for alias 'default'...
+EEEEEEEEEEE
+======================================================================
+ERROR: test_cross_department_quote_and_hidden_default_route (core.tests.test_mapping_assistance.MappingAssistance.test_cross_department_quote_and_hidden_default_route)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_disabled_flag_cancel_and_revoked_membership_release_without_send (core.tests.test_mapping_assistance.MappingAssistance.test_disabled_flag_cancel_and_revoked_membership_release_without_send)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_full_outline_and_fixed_schema_preserve_long_source_and_untrusted_words (core.tests.test_mapping_assistance.MappingAssistance.test_full_outline_and_fixed_schema_preserve_long_source_and_untrusted_words)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_live_permission_off_refuses_before_reservation_or_provider (core.tests.test_mapping_assistance.MappingAssistance.test_live_permission_off_refuses_before_reservation_or_provider)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_manual_resolution_records_assistance_and_old_version_is_preserved (core.tests.test_mapping_assistance.MappingAssistance.test_manual_resolution_records_assistance_and_old_version_is_preserved)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_missing_duplicated_unknown_or_extra_schema_members_refuse (core.tests.test_mapping_assistance.MappingAssistance.test_missing_duplicated_unknown_or_extra_schema_members_refuse)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_native_envelope_refusal_incomplete_and_wrong_model_never_parse (core.tests.test_mapping_assistance.MappingAssistance.test_native_envelope_refusal_incomplete_and_wrong_model_never_parse)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_scope_and_source_config_are_immutable_in_database (core.tests.test_mapping_assistance.MappingAssistance.test_scope_and_source_config_are_immutable_in_database)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_source_mutation_refuses_before_enqueue (core.tests.test_mapping_assistance.MappingAssistance.test_source_mutation_refuses_before_enqueue)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_worker_uses_template_scope_receipt_ledger_and_review_without_patients (core.tests.test_mapping_assistance.MappingAssistance.test_worker_uses_template_scope_receipt_ledger_and_review_without_patients)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+======================================================================
+ERROR: test_wrong_slots_overlap_and_invented_options_are_visible_preserved_refusals (core.tests.test_mapping_assistance.MappingAssistance.test_wrong_slots_overlap_and_invented_options_are_visible_preserved_refusals)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 49, in setUp
+    self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/mapping_assistance.py", line 65, in compile_request
+    profile=generation.job_request_profile(config)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 248, in job_request_profile
+    _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/generation.py", line 216, in _refuse_profile
+    raise NoProviderRequest(message)
+core.jobs.NoProviderRequest: ['The language-model request settings are invalid: QUILLMD_AI_INFERENCE_GEO must be unset or one of: us. Nothing was sent.']
+
+----------------------------------------------------------------------
+Ran 11 tests in 5.005s
+
+FAILED (errors=11)
+Destroying test database for alias 'default'...
+Found 11 test(s).
+System check identified no issues (0 silenced).

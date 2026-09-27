@@ -980,12 +980,12 @@ class ModeSwitch(OutcomeFixture, TestCase):
         with override_settings(**SONNET_46):
             job = enqueue(encounter, self.user)
             row = admin_console.language_model_rows()[-1]
-        self.assertEqual(row, {'name': 'live generation jobs',
+        self.assertEqual(row, {'name': 'live language-model jobs',
                                'value': '1 queued, 0 running, 0 in reconciliation (drained when all three are 0)',
                                'severity': ''})
         with override_settings(**self.FIXTURE):
             row = admin_console.language_model_rows()[-1]
-        self.assertEqual(row['name'], 'live generation jobs')
+        self.assertEqual(row['name'], 'live language-model jobs')
         self.assertTrue(row['value'].startswith('1 queued, 0 running, 0 in reconciliation — QUILLMD_AI_MODE is not live, '
                                                 'so the worker refuses'), row['value'])
         self.assertEqual(row['severity'], 'warning')
@@ -1036,7 +1036,7 @@ class ModeSwitch(OutcomeFixture, TestCase):
         with override_settings(**SONNET_46):
             job('running')
             self.assertEqual(admin_console.language_model_rows()[-1],
-                             {'name': 'live generation jobs', 'severity': '',
+                             {'name': 'live language-model jobs', 'severity': '',
                               'value': '0 queued, 1 running, 0 in reconciliation (drained when all three are 0)'})
             for state in ('reconciliation', 'reconciliation', 'reconciliation', 'running', 'queued'):
                 job(state)

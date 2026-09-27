@@ -3,7 +3,9 @@ from django.urls import path
 from core import views as v
 from core import recovery
 from core import preview_access
+from core import mapping_views
 urlpatterns=[path('preview/sign-in/',preview_access.sign_in,name='preview_sign_in'),path('preview/sign-out/',preview_access.sign_out,name='preview_sign_out')]
+urlpatterns += [path('templates/<uuid:pk>/assistance/',mapping_views.review,name='mapping_assistance')]
 urlpatterns+=[path('recovery/',recovery.recovery_request,name='recovery_request'),path('recovery/confirm/<uidb64>/<token>/',recovery.RecoveryConfirmView.as_view(),name='recovery_confirm'),path('recovery/complete/',recovery.recovery_complete,name='recovery_complete'),path('verification/resend/',recovery.verification_resend,name='verification_resend')]
 urlpatterns+=[path('health/',v.health,name='health'),path('login/',v.login_view,name='login'),path('logout/',v.logout_view,name='logout'),path('register/',v.register,name='register'),path('mfa/',v.mfa_setup,name='mfa_setup'),path('verify/<str:raw>/',v.verify,name='verify'),path('invite/<str:raw>/',v.invite_accept,name='invite_accept'),path('billing/webhook/',v.webhook,name='webhook')]
 urlpatterns += [path('console/',v.admin_dashboard,name='admin_dashboard'),path('console/audit/',v.audit_view,name='audit'),path('console/accounts/<uuid:pk>/',v.admin_account,name='admin_account'),path('console/usage/<uuid:pk>/reconcile/',v.admin_reconcile_usage,name='admin_reconcile_usage'),path('console/platform-costs/',v.admin_platform_cost,name='admin_platform_cost'),path('console/jobs/<uuid:pk>/resolve/',v.admin_resolve_job,name='admin_resolve_job')]

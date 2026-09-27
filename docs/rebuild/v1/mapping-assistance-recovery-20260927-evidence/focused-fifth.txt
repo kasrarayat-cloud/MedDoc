@@ -1,0 +1,48 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.........E......
+======================================================================
+ERROR: test_mocked_native_receipt_charge_and_financial_views_keep_exact_model (core.tests.test_mapping_assistance.MappingAssistance.test_mocked_native_receipt_charge_and_financial_views_keep_exact_model)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/tests/test_mapping_assistance.py", line 227, in test_mocked_native_receipt_charge_and_financial_views_keep_exact_model
+    self.assertEqual(self.client.get(f'/billing/jobs/{job.pk}/').status_code,200)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 1127, in get
+    response = super().get(
+               ^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 475, in get
+    return self.generic(
+           ^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 671, in generic
+    return self.request(**r)
+           ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 1090, in request
+    self.check_exception(response)
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/test/client.py", line 805, in check_exception
+    raise exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/views.py", line 1696, in billing_job_detail
+    context=financial_context(job,visible);context.pop('audit_targets')
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-mapping-assistance/rebuild/core/admin_queries.py", line 48, in financial_context
+    scope = Department.objects.select_related('organization').get(pk=job.department_id)
+                                                                     ^^^^^^^^^^^^^^^^^
+AttributeError: 'Job' object has no attribute 'department_id'. Did you mean: 'department'?
+
+----------------------------------------------------------------------
+Ran 16 tests in 33.351s
+
+FAILED (errors=1)
+Destroying test database for alias 'default'...
+Found 16 test(s).
+System check identified no issues (0 silenced).
