@@ -1239,19 +1239,63 @@ class IncidentLedgerTests(unittest.TestCase):
                          "the ledger's unsent failure held the real one")
         self.assertEqual(self.state()['incident_id'], held)
 
-    def test_crash_between_the_two_writes_of_a_later_notice_fails_closed_without_email(self):
+    def test_crash_between_the_two_writes_of_a_later_notice_recovers_and_sends_it(self):
+        """⚠️ R3. This used to pin a PERMANENT monitoring_state_unavailable: a monitor that emails
+        nothing, forever, over a notice that provably never began (status.json, the commit point,
+        never named it, and no request record exists for it). It must recover exactly the notice
+        status.json does name, and send what is owed at the next check, once."""
         self.health.return_value = 'backup_failed'
         a.check(self.at)
         self.health.return_value = 'backup_stale'
-        a.check(self.at + timedelta(hours=2))
+        a.check(self.at + timedelta(hours=2))                 # status.json now names a LATER notice
+        committed = self.state()
         self.health.return_value = 'backup_timeout'
-        crash, _ = self.crash_on_second_write()
+        crash, calls = self.crash_on_second_write()
         with crash, self.assertRaises(KeyboardInterrupt):
             a.check(self.at + timedelta(hours=4))
-        for hours in (5, 30):
-            self.assertEqual(a.check(self.at + timedelta(hours=hours))[0]['condition'],
-                             'monitoring_state_unavailable')
-        self.assertEqual(self.sender.call_count, 2)
+        self.assertEqual(calls, [a.NOTICES_FILE, 'status.json'])
+        phantom = self.ledger()['incident']['incident_attempt']
+        self.assertEqual(json.loads((self.alerts / 'status.json').read_text())['incident_attempt'],
+                         committed['incident_attempt'])
+        self.assertFalse(list(self.alerts.glob(f'incident-{phantom}-*')), 'no request began for it')
+        shown, _ = a.status(self.at + timedelta(hours=4, minutes=1))
+        self.assertNotEqual(shown['condition'], 'monitoring_state_unavailable')
+        self.assertEqual((shown['incident']['last_notice'], shown['incident']['last_notice_condition'],
+                          shown['incident']['notices_attempted']), ('escalation', 'backup_stale', 2))
+        result, code = a.check(self.at + timedelta(hours=5))
+        self.assertEqual((code, result['condition'], self.sender.call_count), (1, 'backup_timeout', 3),
+                         'a crash that sent nothing wedged the monitor')
+        self.assertTrue(result['alert']['provider_accepted'])
+        state = self.state()
+        self.assertNotIn(state['incident_attempt'], (phantom, committed['incident_attempt']))
+        self.assertEqual((state['incident_attempt_notice'], state['incident_attempt_count'],
+                          state['incident_conditions_announced'], state['incident_opened_at']),
+                         ('escalation', 3, ['backup_failed', 'backup_stale', 'backup_timeout'], self.at.isoformat()))
+        for text in ('Condition: backup_timeout', 'last notice announced backup_stale', 'notice 3'):
+            self.assertIn(text, self.sender.call_args.args[2])
+        self.assertFalse(list(self.alerts.glob(f'incident-{phantom}-*')), 'the unsent identity is never used')
+        for hours in (6, 7):
+            a.check(self.at + timedelta(hours=hours))
+        self.assertEqual(self.sender.call_count, 3, 'and it is sent once')
+
+    def test_the_recovered_notice_is_exactly_the_one_status_json_names_even_a_reminder(self):
+        """What is recovered is the committed record itself, not a guess at it: a reminder cannot be
+        told from an escalation by anything the later notice leaves behind."""
+        self.health.return_value = 'backup_failed'
+        a.check(self.at)
+        a.check(self.at + timedelta(hours=24))                # a reminder: status.json names it
+        committed = self.state()
+        self.assertEqual(committed['incident_attempt_notice'], 'reminder')
+        self.health.return_value = 'backup_stale'
+        crash, _ = self.crash_on_second_write()
+        with crash, self.assertRaises(KeyboardInterrupt):
+            a.check(self.at + timedelta(hours=25))
+        recovered = a.read_state()
+        self.assertEqual({key: recovered[key] for key in a.RECORD_KEYS + ('announced_at',)},
+                         {key: committed[key] for key in a.RECORD_KEYS + ('announced_at',)})
+        a.check(self.at + timedelta(hours=25, minutes=5))
+        self.assertEqual(self.sender.call_count, 3)
+        self.assertIn('Condition: backup_stale', self.sender.call_args.args[2])
 
     def test_crash_between_the_two_writes_of_a_close_leaves_a_working_monitor(self):
         self.health.return_value = 'backup_failed'
