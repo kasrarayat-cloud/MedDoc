@@ -1611,12 +1611,24 @@ def points_elsewhere(text):
     return bool(POINTING_END.search(text) or POINTING_START.search(text))
 
 
+#: ⚠️ FOR A HOLD, A STOP ENDS A SENTENCE UNLESS IT PROVABLY DOES NOT (round 3, R3-3). `ABBREVIATION` is the SPLITTER's
+#: reading and takes any single letter for an initial, so 'screen for hepatitis C. She is not a smoker' and 'vitamin K.
+#: Warfarin was stopped last month.' were each one sentence, and what followed the letter changed nothing. Read through
+#: here: one full stop after a title or 'e.g.'/'i.e.' (never the end of a sentence), or after 'vs.', 'approx.' or a
+#: dotted run of letters ('p.o.', 'b.i.d.') when the next word begins in lower case or with a digit. Anything else ends a
+#: sentence - a single letter, 'etc.', 'St.', a doubled stop, a stop inside a bracket. The splitter is unchanged.
+READ_THROUGH_TITLE = re.compile(LETTER_BEFORE + r'(?:dr|mr|mrs|ms|prof|e\.g|i\.e)\.$', re.I)
+READ_THROUGH_BEFORE_LOWER = re.compile(LETTER_BEFORE + r'(?:vs|approx|(?:[a-z]\.)+[a-z])\.$', re.I)
+
+
 def inner_sentence_end(text):
-    """Whether one unit's text holds more than one sentence (`INNER_SENTENCE_END`)."""
+    """Whether one unit's text holds more than one sentence (`INNER_SENTENCE_END`), failing closed (R3-3)."""
     for match in INNER_SENTENCE_END.finditer(text):
-        end = match.start() + 1
-        if text[match.start()] == '.' and ABBREVIATION.search(text[max(0, end - 32):end]):
-            continue
+        if match.group().rstrip() == '.':                  # one full stop, no closing mark after it
+            before, following = text[max(0, match.start() - 31):match.start() + 1], text[match.end()]
+            if READ_THROUGH_TITLE.search(before) or (READ_THROUGH_BEFORE_LOWER.search(before)
+                                                     and (following.islower() or following.isdigit())):
+                continue
         return True
     return False
 

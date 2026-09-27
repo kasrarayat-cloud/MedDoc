@@ -906,9 +906,23 @@ class RoundThreeRefutation(SimpleTestCase):
         held_with(self, 'Smoker: yes.\nPlan: screen for hepatitis C. She is not a smoker; that was her husband.', 'Smoker',
                   'Smoker: yes.', 'yes.')
         for notes, label in (('Plan: screen for hepatitis C. She is not a smoker; that was her husband.', 'Plan'),
-                             ('Medications: vitamin K. Warfarin was stopped last month.', 'Medications')):
+                             ('Medications: vitamin K. Warfarin was stopped last month.', 'Medications'),
+                             # Not the refuter's: what is read through only before a lower-case word or a digit, and
+                             # only after one full stop with nothing closing it.
+                             ('Medications: aspirin 81 mg p.o. Stopped last month.', 'Medications'),
+                             ('Medications: aspirin 81 mg p.o.) stopped last month.', 'Medications'),
+                             ('Medications: aspirin etc. Stopped last month.', 'Medications'),
+                             ('Plan: screen for hepatitis C. she is not a smoker.', 'Plan')):
             with self.subTest(notes=notes):
                 held_with(self, notes, label, notes, notes.split(': ', 1)[1])
+        # Still read through: a title, 'e.g.', and a dotted abbreviation or 'approx.' before a lower-case word or digit.
+        for label, notes in (('Past medical history', 'Dr. Smith has reviewed the scan.'),
+                             ('Medications', 'She takes aspirin 81 mg p.o. daily.'),
+                             ('Findings', 'Effusion is present, approx. 5 mm deep.'),
+                             ('Medications', 'She takes analgesics, e.g. Paracetamol, as needed.')):
+            with self.subTest(notes=notes):
+                answer = run(notes, {label: [notes]}, fields=ROUND3)[label]
+                self.assertEqual((answer['status'], answer['text']), ('supported', notes), notes)
 
     def test_r3_6_a_plain_value_or_an_instruction_is_not_a_pointer(self):
         """R3-6: held although nothing in them points at other lines."""
