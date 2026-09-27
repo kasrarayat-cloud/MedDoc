@@ -886,6 +886,27 @@ class ControlsInBoxCells(unittest.TestCase):
         out = word_v3.fill(data, fields, {chest["key"]: "No"})
         self.assertEqual(controls_shown(out), [("☐", "0"), ("☒", "1"), ("☐", "0"), ("☐", "0")])
 
+    def test_a_cell_holding_a_control_beside_another_box_is_unread_and_refused(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic review of systems")
+        table = doc.add_table(rows=2, cols=3)
+        for c, h in enumerate(["Symptom", "Yes", "No"]):
+            table.cell(0, c).text = h
+        table.cell(1, 0).text = "Cough"
+        table.cell(1, 1).text = "☐"                   # a printed box, and a legacy checkbox printed ticked beside it
+        ff_field(table.cell(1, 1).paragraphs[0], "checkbox", checked=True, name="CoughYes")
+        table.cell(1, 2).text = "☐"
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        cough = fields_by_label(fields)["Cough"]
+        self.assertEqual((cough["options"], cough.get("printed_ticked"), cough.get("printed_unread")),
+                         (["Yes", "No"], None, [0]), "never read as unticked")
+        with self.assertRaises(word_v3.V3Failure) as refused:
+            word_v3.fill(data, fields, {cough["key"]: "No"})
+        self.assertEqual(refused.exception.code, "unsupported_layout")
+        self.assertIn("checkbox control beside another box", str(refused.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2039,9 +2039,7 @@ def inspect(data: bytes) -> dict:
         fail("The form has more answer areas than one mapping can hold (%d)." % MAX_FIELDS, "too_many_fields")
     fields = [area_to_field(i + 1, a) for i, a in enumerate(areas)]
     for field in fields:
-        ticked = printed_ticked(detector.index, field)
-        if ticked:
-            field["printed_ticked"] = ticked
+        annotate_printed(detector.index, field)
     return {"contract": CONTRACT, "fields": fields, "notes": notes}
 
 
@@ -2271,6 +2269,29 @@ def glyph_boxes(p):
     return out
 
 
+def box_pieces(p):
+    """[(kind, node, n)] for EVERY box paragraph p shows, in the order its text shows them (paragraph_text: a checkbox
+    control is one box): ('glyph', None, n) for its n-th printed glyph box (glyph_boxes' numbering), ('sdt', the
+    control, None) for a checkbox content control, ('ff', the field's begin run, None) for a legacy checkbox."""
+    _, pieces = paragraph_text(p)
+    out, n = [], 0
+    for pc in pieces:
+        for ch in piece_text(pc):
+            if ch not in (BOX, CHECKED):
+                continue
+            if pc.kind == "obj":
+                out.append(("sdt" if pc.obj == "sdt_checkbox" else "ff", pc.node, None))
+            else:
+                out.append(("glyph", None, n))
+                n += 1
+    return out
+
+
+def cell_boxes(tc):
+    """[(kind, node)] for every box a table cell's paragraphs show, in order (box_pieces' kinds)."""
+    return [(kind, node) for p in tc.iter(q("w:p")) for kind, node, _ in box_pieces(p)]
+
+
 RADIO_CODES = (0x81, 0xF081, 0xA1, 0xF0A1)
 
 
@@ -2371,7 +2392,18 @@ CELL_MARKS = ("X", "x", "✓", "✔", "√", "✗", "✘")
 
 
 def set_cell_box(tc, ticked):
-    """A box cell: its first printed glyph box when it has one; otherwise an X written in (or removed from) it."""
+    """A box cell: the checkbox control it holds, set as that control; else its first printed glyph box when it has
+    one; otherwise an X written in (or removed from) it.
+    ⚠️ A CONTROL IS NEVER WRITTEN OVER: an X over a checkbox control refused every answer, and an untick left a
+    printed tick the reader could not see. A cell holding a control beside another box is refused: which box its
+    answer means is not known."""
+    boxes = cell_boxes(tc)
+    if any(kind != "glyph" for kind, _ in boxes):
+        if len(boxes) != 1:
+            fail("A table cell holds a checkbox control beside another box, so which box its answer means is not known.",
+                 "unsupported_layout")
+        kind, node = boxes[0]
+        return set_sdt_checkbox(node, ticked) if kind == "sdt" else set_ff_checkbox(node, ticked)
     for p in tc.iter(q("w:p")):
         if glyph_boxes(p):
             return set_glyph(p, 0, ticked)
@@ -2744,6 +2776,14 @@ def sdt_checkbox_state(sdt):
     return checked if shown is not None and shown == _state_code(cb, checked) else None
 
 
+def ff_checkbox_state(begin_run):
+    """A legacy checkbox's state (its explicit checked state, else its default), or None when it is not one."""
+    fc = begin_run.find(FLDCHAR)
+    data = fc.find(q("w:ffData")) if fc is not None else None
+    info = ff_info(data) if data is not None else {}
+    return info.get("checked") if info.get("field") == "FORMCHECKBOX" else None
+
+
 def box_state(index, box):
     """Whether one box is ticked, read from the package: True, False, or None when it cannot be read."""
     slot = index.by_id.get("%s#%s" % (box["part"], box["slot"]))
@@ -2752,14 +2792,19 @@ def box_state(index, box):
     if box["kind"] == "sdt":
         return sdt_checkbox_state(slot.el)
     if box["kind"] == "ff":
-        data = slot.el.find(FLDCHAR).find(q("w:ffData"))
-        info = ff_info(data) if data is not None else {}
-        return info.get("checked") if info.get("field") == "FORMCHECKBOX" else None
+        return ff_checkbox_state(slot.el)
     if box["kind"] == "glyph":
         boxes = glyph_boxes(slot.el)
         n = box.get("glyph", 0)
         return boxes[n][2] == CHECKED if n < len(boxes) else None
     if box["kind"] == "cell":
+        # the control a box cell holds is read as that control (set_cell_box writes it so); beside another box: unread
+        boxes = cell_boxes(slot.el)
+        if any(kind != "glyph" for kind, _ in boxes):
+            if len(boxes) != 1:
+                return None
+            kind, node = boxes[0]
+            return sdt_checkbox_state(node) if kind == "sdt" else ff_checkbox_state(node)
         for p in slot.el.iter(q("w:p")):
             boxes = glyph_boxes(p)
             if boxes:
@@ -2858,6 +2903,25 @@ def printed_ticked(index, field):
         return [i for i, state in enumerate(option_states(index, field)) if state]
     except (AttributeError, IndexError, KeyError, TypeError, ValueError):
         return []                       # an annotation for the review page; never a reason to refuse the upload
+
+
+def printed_unread(index, field):
+    """Positions whose printed state cannot be read (a control whose flag and glyph disagree, a cell holding a control
+    beside another box): the pages never call them unticked. An unreadable field is unread throughout."""
+    if field.get("kind") not in ("choice", "multi_choice", "checkbox"):
+        return []
+    try:
+        return [i for i, state in enumerate(option_states(index, field)) if state is None]
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+        return list(range(len(field.get("options") or [])))
+
+
+def annotate_printed(index, field):
+    """The blank form's printed state on a field: `printed_ticked` and `printed_unread`, each only when not empty."""
+    for name, read in (("printed_ticked", printed_ticked), ("printed_unread", printed_unread)):
+        positions = read(index, field)
+        if positions:
+            field[name] = positions
 
 
 def verify_options(data, fields, answers):
@@ -3063,8 +3127,6 @@ def locate(data: bytes, targets: list) -> list:
         field = area_to_field(n, area)
         field["key"] = "m3_%s" % hashlib.sha256(("%s|%s|%s" % (slot.id, json_dumps(target), label)).encode()).hexdigest()[:12]
         field["origin"] = "manual"
-        ticked = printed_ticked(detector.index, field)
-        if ticked:
-            field["printed_ticked"] = ticked
+        annotate_printed(detector.index, field)
         out.append(field)
     return out

@@ -780,6 +780,22 @@ class V3ControlCells(V3Fixture, TestCase):
         self.assertEqual(encounter.status, "finalized", [str(m) for m in response.context["messages"]])
         self.assertEqual(controls_shown(private_path(encounter.export_path).read_bytes()), [("☐", "0"), ("☒", "1"), ("☐", "0")])
 
+    def test_a_printed_state_that_cannot_be_read_is_never_called_unticked(self):
+        from core import v3_mapping
+        choice = {"kind": "choice", "options": ["Yes", "No"], "printed_unread": [0],
+                  "locator": {"contract": "v3", "target": {"type": "checkboxes"}}}
+        self.assertEqual(v3_mapping.review_note(choice), "The chosen option is ticked and every other printed option is "
+                         "left unticked. With no option chosen, the form keeps what it prints; QuillMD cannot read "
+                         "whether Yes is ticked on the blank form.")
+        self.assertEqual(v3_mapping.blank_note(choice), "the exported form keeps what it prints; QuillMD cannot read "
+                         "whether Yes is ticked on the blank form")
+        both = {**choice, "options": ["Yes", "No", "Unsure"], "printed_ticked": [1], "printed_unread": [0, 2]}
+        self.assertEqual(v3_mapping.finalized_note(both, {"text": ""}), "No option chosen; the form keeps what it prints: "
+                         "No ticked; QuillMD cannot read whether Yes, Unsure are ticked on the blank form.")
+        box = {"kind": "checkbox", "options": ["Consent"], "printed_unread": [0], "locator": choice["locator"]}
+        self.assertEqual(v3_mapping.review_note(box), "Ticked here, the box is exported ticked; left unticked, it is "
+                         "exported unticked. QuillMD cannot read whether the blank form prints this box ticked.")
+
 
 def smoker_form_bytes():
     doc = Document()
