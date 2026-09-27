@@ -264,6 +264,40 @@ class ANotesSaveNeverClearsSilently(OrdinaryDraft, TestCase):
         self.assertNotContains(response, UNCHANGED)
 
 
+@override_settings(**TEST_SETTINGS)
+class TheClearedCountsTellAReviewFromNone(OrdinaryDraft, TestCase):
+    """Refutation round 3, F3: the disjoint answer categories dropped the reviewed count, so a changed notes save over two
+    answers a clinician edited and ticked reviewed audited exactly as one over two edits nobody reviewed
+    (answers_edited_not_accepted: 2); and a draft nobody had touched was not counted at all."""
+
+    def cleared_after_edits(self, reviewed):
+        encounter = self.drafted()
+        keys = sorted(encounter.answers)
+        self.post(f'/encounters/{encounter.pk}/save/', encounter,
+                  {**{'answer_' + key: 'Typed by the clinician, synthetic.' for key in keys},
+                   **({'reviewed_' + key: 'on' for key in keys} if reviewed else {})})
+        self.assertEqual(sorted((a['status'], a['reviewed']) for a in encounter.answers.values()),
+                         [('edited', reviewed)] * 2)                                  # (the control)
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
+        self.assertEqual(encounter.answers, {})
+        return last_event('encounter.notes_saved', encounter).get('cleared', {})
+
+    def test_a_clinicians_review_of_edited_answers_is_recorded_when_they_are_cleared(self):
+        counts = self.cleared_after_edits(reviewed=True)
+        self.assertEqual((counts.get('answers_edited_not_accepted'), counts.get('answers_with_clinician_review')), (2, 2))
+
+    def test_edits_nobody_reviewed_are_recorded_as_unreviewed(self):
+        counts = self.cleared_after_edits(reviewed=False)
+        self.assertEqual((counts.get('answers_edited_not_accepted'), counts.get('answers_with_clinician_review')), (2, 0))
+
+    def test_a_draft_nobody_reviewed_or_edited_is_counted_when_it_is_cleared(self):
+        encounter = self.drafted()
+        self.assertEqual(len(encounter.answers), 2)                                       # (the control)
+        self.post(f'/encounters/{encounter.pk}/notes/', encounter, {'notes': encounter.notes + '\nPlan: synthetic.'})
+        counts = last_event('encounter.notes_saved', encounter).get('cleared', {})
+        self.assertEqual((counts.get('answers_unreviewed_unedited'), counts.get('answers_with_clinician_review')), (2, 0))
+
+
 def textarea(page, element_id):
     """The raw content of a rendered <textarea> (before the HTML parser drops its first line feed)."""
     return html.unescape(re.search(r'<textarea id="%s"[^>]*>(.*?)</textarea>' % re.escape(element_id),
