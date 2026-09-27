@@ -204,16 +204,18 @@ CA bundle hash), the launcher path, the role wrapper's production target
 `ops/production_restore_check.py` (triggers, invariants and every referenced file against a restored
 volume, counts only).
 
-**Specified, not implemented (must land before the step that uses it):**
+**Operator implementation status (must be verified on the actual target):**
 
-1. `database_roles.py --profile production`: execute through `psycopg.connect(host=<profile host>,
+1. **Prepared 2026-09-27**, `database_roles.py --profile production`: executes through `psycopg.connect(host=<profile host>,
    sslmode='verify-full', sslrootcert=<profile CA>)` instead of `docker exec`; identify the target by
    `aws rds describe-db-instances --db-instance-identifier quillmd-production` requiring
    `Endpoint.Address` = profile host, `StorageEncrypted` true with the data key, `PubliclyAccessible`
    false, `DeletionProtection` true, engine major 16; accept the master user as maintenance role by
    membership in `rds_superuser` instead of `rolsuper`; create roles with only `LOGIN`/`NOLOGIN` and
    let the existing verify step assert that no managed role has a privileged flag; take role names
-   from the profile; run `verify` only against a drill instance (never live). Needed at cutover G4.
+   from the profile. Its `verify` is now read-only catalog/grant/authentication verification;
+   destructive permission proofs remain confined to a separate drill. Exact target/release/declaration
+   guards, local PostgreSQL proof and remaining AWS checks: `host-readiness-20260927.md`. Needed at cutover G4.
 2. `backup_restore.py` logical capture for production: source and identity from the profile and RDS;
    host `pg_dump --snapshot` over TLS; read files as root in a sandboxed oneshot (the private helper
    uses Docker); stream-encrypt so the 256 MiB Fernet plaintext limit does not cap growth; upload

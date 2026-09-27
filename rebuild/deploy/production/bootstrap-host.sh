@@ -129,7 +129,7 @@ bootstrap plan (profile ${P[PROFILE_SHA256]}, release $release_sha):
   3 packages       nginx python3.12-venv ffmpeg postgresql-client-16 libseccomp2 openssl unzip unattended-upgrades; AWS CLI v2 -> $AWS
   4 hardening      swap off, no core dumps, journal bounded, sysctl, sshd disabled
   5 state volume   $volume_id encrypted with $DATA_KEY_ALIAS -> ${P[STATE_ROOT]} (nodev,nosuid) $( [ $existing_volume = 1 ] && echo "ADOPT existing marker" || echo "FORMAT only if blank" )
-  6 release        rebuild/ -> ${P[APP_ROOT]} (root-owned, no group/other write), venv, collectstatic$( [ -n "$word_artifact" ] && echo ", Word runtime" )
+  6 release        rebuild/ -> ${P[APP_ROOT]} (root-owned, no group/other write), hash-locked wheels, venv, collectstatic$( [ -n "$word_artifact" ] && echo ", Word runtime" )
   7 configuration  ${P[CONFIGURATION_ROOT]} (operator/ and ingress/ 0700), target certificate, admin deny-all, RDS CA bundle
   8 units          ${UNITS[*]/#/${P[UNIT_PREFIX]}} installed + verified, NOT enabled/started; nginx site tested, nginx stopped
   9 receipt        /var/lib/quillmd-bootstrap/receipt.json
@@ -262,7 +262,13 @@ chmod 0710 "$state"
   --artifact-sha256 "$artifact_sha" --release-sha "$release_sha" --profile-sha256 "${P[PROFILE_SHA256]}" \
   --destination "${P[INSTALL_ROOT]}" || refuse "the release did not install"
 app=${P[APP_ROOT]}
-(umask 022 && python3.12 -m venv "$app/.venv" && "$app/.venv/bin/pip" install -q --no-cache-dir -r "$app/requirements.txt")
+"$PYTHON" -B -E -s "$app/ops/dependency_lock.py" --root "$app" || refuse "production dependency lock differs"
+dependency_lock_sha=$(sha256sum -- "$app/requirements-production.lock" | cut -d' ' -f1)
+# Hash mode covers every transitive pin. Wheels only prevents executing source build hooks. Isolated
+# mode ignores operator pip environment/user configuration; hashes pin the approved artifacts.
+(umask 022 && python3.12 -m venv "$app/.venv" && "$app/.venv/bin/python" -m pip --isolated install \
+  -q --no-cache-dir --index-url https://pypi.org/simple --require-hashes --only-binary=:all: \
+  -r "$app/requirements-production.lock")
 (cd "$app" && umask 022 && env -i PATH=/usr/bin:/bin QUILLMD_SECRET_KEY=bootstrap-collectstatic-only \
   QUILLMD_DB_PASSWORD=unused QUILLMD_ENV_MANAGED=1 QUILLMD_STATE_DIR="$state" \
   "$app/.venv/bin/python" -B manage.py collectstatic --noinput -v 0)
@@ -316,6 +322,7 @@ install -d -m 0700 /var/lib/quillmd-bootstrap
   printf '"release_sha":"%s","artifact_sha256":"%s","profile_sha256":"%s",' "$release_sha" "$artifact_sha" "${P[PROFILE_SHA256]}"
   printf '"state_volume":"%s","state_uuid":"%s","adopted_existing_volume":%s,' "$volume_id" "$uuid" "$([ $existing_volume = 1 ] && echo true || echo false)"
   printf '"identity":{"account":"%s","uid":%s,"gid":%s},' "$account" "$number" "$number"
+  printf '"dependency_lock_sha256":"%s",' "$dependency_lock_sha"
   printf '"rds_ca_bundle_sha256":"%s","word_runtime_sha256":"%s","aws_cli_sha256":"%s","units":{' "$ca_sha" "$word_sha" "$cli_sha"
   first=1
   for unit in "${!unit_hashes[@]}"; do

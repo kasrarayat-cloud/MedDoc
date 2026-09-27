@@ -42,7 +42,7 @@ declaration (`docs/foundation/mutations/`), and every deploy has its §2.5 decla
 | P10 | Healthchecks.io (or equivalent outside monitor) account owned by the company, alerting both custodians | G6 |
 | P11 | DNS/registrar account with MFA and registrar lock; ability to add CNAMEs for `app` and `admin` | G1 (ACM validation), G9 |
 | P12 | Engineering, other V1 streams, merged and cited on `main`: real-patient data gate bound to the profile's data mode; live Stripe path; admin surface behind a TLS proxy; client address for rate limits; invitation-only registration (owner's V1 policy); Deepgram opt-out parameter; Sonnet 5 configuration | G3 |
-| P13 | Engineering, this package: `database_roles.py --profile production` (`production-hosting.md` section 4 item 1); hash-pinned `requirements.txt`; a declared, target-pinned first-administrator elevation command (no production-safe one exists: `seed_private`/`seed_admin_demo` are forbidden, `createsuperuser` leaves `verified_at` empty) | G4, G8 |
+| P13 | Prepared engineering: production database-role transport and read-only verifier, hashed production dependency lock, and declared first-admin create/elevate command. See `host-readiness-20260927.md` and `dependency-lock-20260927/REPORT.md`; actual AWS/installed-target verification is still required. Synthetic seed commands remain forbidden. | G4, G8 |
 
 A missing prerequisite stops the plan at the gate that needs it. None of them is replaced by a
 synthetic stand-in.
@@ -177,10 +177,12 @@ checklist, except rows that only G8/G9 can produce, has evidence.
 
 ### G8 Accounts, content and payments (1 day, synthetic content only)
 
-1. First administrator: the owner's account is created with a real mailbox and verified (through
-   registration if the V1 policy leaves it open; otherwise by the declared bootstrap command, since an
-   invitation-only system has nobody to invite the first owner), then the declared elevation command
-   (P13) grants staff to that exact account; the owner enrolls TOTP interactively. Record the account UUID in the declaration. The
+1. First administrator: the declared `bootstrap_first_admin create` makes the exact owner UUID/mailbox
+   unverified and nonstaff, with no clinic or welcome credit. The owner uses normal verification-resend,
+   verifies the mailbox, signs in on the doctor origin and enrolls TOTP. Declared `elevate` then grants
+   staff to that sole account only after both proofs exist and invalidates prior sessions. The owner
+   signs in again with MFA on the admin origin. See `host-readiness-20260927.md`; registration stays
+   invite-only. Record the account UUID in the declaration. The
    operator recovery procedure for a lost authenticator is signed off (`account-recovery.md`).
 2. Templates: the owner re-uploads each authorized blank template (DOCX/AcroForm) from the originals
    he holds; review and approve mappings in production. No filled document is ever uploaded as a

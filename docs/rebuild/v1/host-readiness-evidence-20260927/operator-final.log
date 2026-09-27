@@ -1,0 +1,13 @@
+test_ca_refusal_prevents_connection (ops.test_production_operator.ProductionTargetTests.test_ca_refusal_prevents_connection) ... ok
+test_current_unactivated_profile_cannot_call_aws_or_database (ops.test_production_operator.ProductionTargetTests.test_current_unactivated_profile_cannot_call_aws_or_database) ... ok
+test_declaration_binds_operation_profile_release_and_expiry (ops.test_production_operator.ProductionTargetTests.test_declaration_binds_operation_profile_release_and_expiry) ... ok
+test_each_target_or_protection_difference_refuses (ops.test_production_operator.ProductionTargetTests.test_each_target_or_protection_difference_refuses) ... ok
+test_expected_target_passes (ops.test_production_operator.ProductionTargetTests.test_expected_target_passes) ... ok
+test_non_root_cannot_reach_declaration (ops.test_production_operator.ProductionTargetTests.test_non_root_cannot_reach_declaration) ... ok
+test_privileged_existing_role_refuses (ops.test_production_operator.ProductionTargetTests.test_privileged_existing_role_refuses) ... ok
+test_transport_forces_exact_tls_and_drops_libpq_redirects (ops.test_production_operator.ProductionTargetTests.test_transport_forces_exact_tls_and_drops_libpq_redirects) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.126s
+
+OK

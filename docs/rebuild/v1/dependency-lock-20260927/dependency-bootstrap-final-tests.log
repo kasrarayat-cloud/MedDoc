@@ -1,0 +1,12 @@
+test_changes_to_a_pin_hash_missing_package_or_provenance_refuse (ops.test_dependency_lock.DependencyLockTests.test_changes_to_a_pin_hash_missing_package_or_provenance_refuse) ... ok
+test_checked_in_pins_match_the_full_wheel_lock (ops.test_dependency_lock.DependencyLockTests.test_checked_in_pins_match_the_full_wheel_lock) ... ok
+test_bad_inputs_refuse_in_the_dry_run (ops.test_production_deploy.BootstrapScriptTests.test_bad_inputs_refuse_in_the_dry_run) ... ok
+test_dry_run_verifies_and_prints_the_plan_without_changing_anything (ops.test_production_deploy.BootstrapScriptTests.test_dry_run_verifies_and_prints_the_plan_without_changing_anything) ... ok
+test_execute_refuses_without_root_before_any_change (ops.test_production_deploy.BootstrapScriptTests.test_execute_refuses_without_root_before_any_change) ... ok
+test_syntax_is_valid (ops.test_production_deploy.BootstrapScriptTests.test_syntax_is_valid) ... ok
+test_the_script_never_enables_or_starts_production_services (ops.test_production_deploy.BootstrapScriptTests.test_the_script_never_enables_or_starts_production_services) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.926s
+
+OK
