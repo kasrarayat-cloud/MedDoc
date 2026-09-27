@@ -1,0 +1,74 @@
+{
+  "scope": "synthetic mocked-provider workflow; no actual model evidence",
+  "original_sha256": "217fc1b44483f432d6e6dc92ddb8e8b1c117eb912c8c1a0d037df23f17c4ebba",
+  "export_sha256": "e7875871f0fa305e6bf37266a8ceffdb9f2bd45d053bdac3af64dcb0dd03fb12",
+  "recorded_export_sha256": "e7875871f0fa305e6bf37266a8ceffdb9f2bd45d053bdac3af64dcb0dd03fb12",
+  "notes": "No known drug allergies. Neurological examination is normal.",
+  "fields": [
+    {
+      "key": "v3_1",
+      "kind": "text",
+      "label": "Allergies",
+      "context": "Allergies",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "contract": "v3",
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    },
+    {
+      "key": "v3_2",
+      "kind": "text",
+      "label": "Examination",
+      "context": "Examination",
+      "locator": {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "target": {
+          "type": "cell"
+        },
+        "contract": "v3",
+        "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+      }
+    }
+  ],
+  "answers": {
+    "v3_1": {
+      "text": "No known drug allergies.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 24,
+          "quote": "No known drug allergies.",
+          "start": 0
+        }
+      ],
+      "reviewed": true,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": "22bcd95b-a58c-493e-91e7-ff13e87c4096",
+      "accepted_suggestion": false
+    },
+    "v3_2": {
+      "text": "Neurological examination is normal.",
+      "status": "supported",
+      "evidence": [
+        {
+          "end": 60,
+          "quote": "Neurological examination is normal.",
+          "start": 25
+        }
+      ],
+      "reviewed": true,
+      "edited_by": null,
+      "accepted_by": null,
+      "reviewed_by": "22bcd95b-a58c-493e-91e7-ff13e87c4096",
+      "accepted_suggestion": false
+    }
+  },
+  "status": "finalized"
+}

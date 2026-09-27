@@ -1,0 +1,112 @@
+{
+  "scope": "Synthetic local diagnostics only; existing retained cases remain immutable",
+  "files": [
+    {
+      "path": "01-retained-before.json",
+      "sha256": "07903fea10800213d2f73f60467eec4ab75de310d06890fe75554455b8406abe",
+      "bytes": 9684
+    },
+    {
+      "path": "01-retained-before.log",
+      "sha256": "5842ab0bab3642a8365613206224d6516424fa4b95e7fe86b6ea2185a774d4eb",
+      "bytes": 8600
+    },
+    {
+      "path": "02-positive-red.log",
+      "sha256": "f6132c43e94701e8bdab8f91c8d1dff197ee3d3f686c3b695f0dce75e781f4b5",
+      "bytes": 1255
+    },
+    {
+      "path": "03-focused-first.log",
+      "sha256": "66b442c4cadec94dc03250e3b029a04ab0bf3c95beee01ef2090c41fe80d57cd",
+      "bytes": 5776
+    },
+    {
+      "path": "04-workflow-diagnostic.log",
+      "sha256": "7217e0e4e9d48283de988ada7f478d972dfdc1c1b795c4cb9501e0d7a869c848",
+      "bytes": 2721
+    },
+    {
+      "path": "05-focused.log",
+      "sha256": "b6a13d2249703de8271026e74f7580864d4cb3fe6e5cce89cfd20c1a0bad947d",
+      "bytes": 7454
+    },
+    {
+      "path": "06-retained-after.json",
+      "sha256": "e54b853c0e3fbe23f31fa54e9c457e7aded98ca7e97325529b02a6be1093fe77",
+      "bytes": 9672
+    },
+    {
+      "path": "06-retained-after.log",
+      "sha256": "186f97c1ad93634180762e02bf5e9b7f235f4bb7c7fb21b583762ba837c5865f",
+      "bytes": 8608
+    },
+    {
+      "path": "07-workflow-artifacts.json",
+      "sha256": "7653042010735a98254165d6841d9ed953d3436126b9149a54dca37c22621f62",
+      "bytes": 2098
+    },
+    {
+      "path": "07-workflow-capture.log",
+      "sha256": "17f7e0cfabb93f252689c6d36b71ee0ab27a72ba0347e4731ddbb101c81c2fc4",
+      "bytes": 3054
+    },
+    {
+      "path": "08-scoped-exam-verified-base.json",
+      "sha256": "58904eff18626781f160c6355f7f63d51e3ef879413940ebea6c07ddaf66d013",
+      "bytes": 101984
+    },
+    {
+      "path": "08-scoped-exam-verified-red.json",
+      "sha256": "b90c173f48fbeeb35fbe07411f4c8716fd66982e13c18f186aaf023206c515dd",
+      "bytes": 83569
+    },
+    {
+      "path": "09-final-focused.log",
+      "sha256": "547997860fb08b6efc717cdd4ed733b4d58464b35e8a6cf6bf4b724a393bcb54",
+      "bytes": 7673
+    },
+    {
+      "path": "10-retained-final.json",
+      "sha256": "1ad8f118c61130f63385ed20304a7b6f02a7694b4401b6e49a75556c3a253f3d",
+      "bytes": 9672
+    },
+    {
+      "path": "10-retained-final.log",
+      "sha256": "186f97c1ad93634180762e02bf5e9b7f235f4bb7c7fb21b583762ba837c5865f",
+      "bytes": 8608
+    },
+    {
+      "path": "capture_workflow.py",
+      "sha256": "1223332b14f85b4786ce6a51bc2f9004d9c78402869968ce0eeca2761535a5bb",
+      "bytes": 1609
+    },
+    {
+      "path": "inspect_retained.py",
+      "sha256": "dddd7490edc7581dc0f8f63dbc2c8ff53f4e4c448380c10587665d71997d5073",
+      "bytes": 1838
+    },
+    {
+      "path": "inspect_retained_after.py",
+      "sha256": "6fd2af07bdf7c3e347c4aa804c2dfa14388ccff31048a2e25e60e9a2d0838375",
+      "bytes": 1837
+    },
+    {
+      "path": "inspect_retained_final.py",
+      "sha256": "d3f6a1260aa73825589bdf23af90638a8cf00ed76e8b146a6f7cb3d2b53843b0",
+      "bytes": 1837
+    }
+  ],
+  "runtime_only_word_artifacts": [
+    {
+      "path": "rebuild/.runtime/literal-subjects-20260927/synthetic-finalized.docx",
+      "sha256": "e7875871f0fa305e6bf37266a8ceffdb9f2bd45d053bdac3af64dcb0dd03fb12",
+      "bytes": 36810
+    },
+    {
+      "path": "rebuild/.runtime/literal-subjects-20260927/synthetic-original.docx",
+      "sha256": "217fc1b44483f432d6e6dc92ddb8e8b1c117eb912c8c1a0d037df23f17c4ebba",
+      "bytes": 36749
+    }
+  ]
+}
