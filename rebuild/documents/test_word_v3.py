@@ -983,6 +983,27 @@ class SideMarkersInQuestions(unittest.TestCase):
             self.assertEqual(clean_label(text), label, text)
 
 
+class LegacyDropdownDefault(unittest.TestCase):
+    """R6: a legacy dropdown with no w:result shows its w:default entry (ECMA-376 ddList), not the first."""
+
+    def test_the_default_entry_is_the_one_printed(self):
+        from documents import word_v3
+        doc = Document()
+        doc.add_paragraph("Synthetic injection note")
+        p = doc.add_paragraph("Side: ")
+        ff_field(p, "dropdown", options=["Left", "Right", "Bilateral"], name="Side")
+        default = OxmlElement("w:default")
+        default.set(qn("w:val"), "1")
+        p._p.find(".//" + qn("w:ddList")).insert(0, default)
+        data = docx_bytes(doc)
+        fields = word_v3.inspect(data)["fields"]
+        self.assertEqual((fields[0]["options"], fields[0].get("printed_ticked")), (["Left", "Right", "Bilateral"], [1]))
+        for answer, shown in (("Left", "0"), ("Bilateral", "2")):
+            with tempfile.TemporaryDirectory() as tmp:
+                Path(tmp, "out.docx").write_bytes(word_v3.fill(data, fields, {fields[0]["key"]: answer}))
+                self.assertEqual(ff_result(Path(tmp, "out.docx")), [shown], answer)
+
+
 def fever_cell_bytes():
     """A cell 'Yes' printed box and a legacy checkbox 'No': the cell's text shows the printed box only."""
     doc = Document()
