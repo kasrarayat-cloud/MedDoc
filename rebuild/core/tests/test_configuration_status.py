@@ -173,7 +173,7 @@ class ConfigurationStatusNamesTheModel(TestCase):
                                         'confirmed):')
                     section = [line.strip() for line in lines[start + 1:lines.index('Media tools:')]]
                     mirror = [f"{row['name']}: {row['value']}" for row in rows.get('language_model', [])]
-                    # 7 settings + request profile + pricing_version + live generation jobs, and outside live mode the
+                    # 7 settings + request profile + pricing_version + live language-model jobs, and outside live mode the
                     # 'provider requests' line.
                     self.assertEqual(len(section), 10 if overrides['AI_MODE'] == 'live' else 11)
                     self.assertEqual(mirror, section)
@@ -206,7 +206,7 @@ class ConfigurationStatusNamesTheModel(TestCase):
                     self.assertIn('INACTIVE' if row['name'] == 'request profile' else '(inactive: QUILLMD_AI_MODE is not live)',
                                   row['value'], row['name'])
                     self.assertIn(row['severity'], ('', 'error'))     # error only for UNAVAILABLE, which is real here
-                self.assertEqual(rows[-1]['name'], 'live generation jobs')
+                self.assertEqual(rows[-1]['name'], 'live language-model jobs')
                 for claim in ('request profile: INVALID', 'request profile: legacy', 'request profile: explicit',
                               'request profile: NOT the pre-profile'):
                     self.assertNotIn(claim, report)
@@ -267,16 +267,16 @@ class ConfigurationStatusNamesTheModel(TestCase):
         from django.db import DatabaseError
         from core import admin_console
         from core.models import Job
-        unavailable = {'name': 'live generation jobs', 'value': 'UNAVAILABLE — the job table could not be read',
+        unavailable = {'name': 'live language-model jobs', 'value': 'UNAVAILABLE — the job table could not be read',
                        'severity': 'error'}
         for label, overrides in (('live', SONNET_46), ('fixture', dict(SONNET_46, AI_MODE='fixture'))):
             with self.subTest(mode=label), \
                     patch.object(Job.objects, 'filter', side_effect=DatabaseError('synthetic: the job table is unreadable')):
                 report, _ = self.report(**overrides)
-                self.assertIn('live generation jobs: UNAVAILABLE — the job table could not be read', report)
+                self.assertIn('live language-model jobs: UNAVAILABLE — the job table could not be read', report)
                 self.assertIn('Release gates:', report)
                 with override_settings(**overrides), patch.dict(os.environ, PRICE_ENV):
                     self.assertEqual(admin_console.language_model_rows()[-1], unavailable)
         # Positive control: with the table readable the same line is the count, so the patch above is what made it fail.
         report, _ = self.report(**SONNET_46)
-        self.assertIn('live generation jobs: 0 queued, 0 running, 0 in reconciliation (drained when all three are 0)', report)
+        self.assertIn('live language-model jobs: 0 queued, 0 running, 0 in reconciliation (drained when all three are 0)', report)

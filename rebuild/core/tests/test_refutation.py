@@ -252,8 +252,13 @@ class AuthorizationAndPayerRefutation(TestCase):
         release = CodeSet.objects.create(system="ICD-10-CM", version="synthetic-test", effective_from=timezone.localdate() - timedelta(days=1), effective_until=timezone.localdate() + timedelta(days=1), source_url="https://synthetic.invalid/codes", sha256="0" * 64)
         code = Code.objects.create(release=release, code="R00.0", description="Synthetic fixture; no clinical use")
         CodeSuggestion.objects.create(encounter=encounter, terminology=code, explanation="Synthetic documented code", evidence=encounter.notes, accepted_by=self.user, accepted_at=timezone.now())
-        self.job.kind = "transcription"
-        self.job.save(update_fields=["kind"])
+        # Scope is immutable after creation (0022). Queue a real transcription-shaped
+        # fixture instead of converting an existing generation job behind that guard.
+        self.job.state = "failed"
+        self.job.save(update_fields=["state"])
+        self.job = Job.objects.create(encounter=encounter, user=self.user,
+            request_key="refute:transcription-correction", kind="transcription",
+            config={"mode": "live", "voice_rate_minute": "0.01", "voice_rate_second": ""})
         reserve(self.job, Decimal("0.2"))
         result = ("Correction: R00.0 was not applicable.", Decimal("0.125"), {}, {}, "synthetic-provider", "synthetic-transcription-correction", False)
         with patch("core.jobs.transcribe", return_value=result):

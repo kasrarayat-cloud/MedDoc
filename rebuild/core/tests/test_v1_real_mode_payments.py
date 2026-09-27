@@ -692,6 +692,15 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
             self.assertEqual(self.schema(), (2, 5, 3))
             self.assertIs(Payment.objects.get(pk=live.pk).livemode, True)
             self.assertIs(WebhookEvent.objects.get(event_id='evt_live_rb').livemode, True)
+            # MigrationExecutor reverses descendants before reaching 0020's refusal.
+            # Its protection is atomic for 0020, not for the whole migration graph.
+            # Restore descendants before using the current Job ORM (0022 adds its
+            # mapping_version column); retain the assertions above on the refused state.
+            self.to_leaf()
+            self.assertIn(('core', '0022_mapping_job_scope'), MigrationRecorder(connection).applied_migrations())
+            self.assertEqual(self.schema(), (2, 5, 3))
+            self.assertIs(Payment.objects.get(pk=live.pk).livemode, True)
+            self.assertIs(WebhookEvent.objects.get(event_id='evt_live_rb').livemode, True)
             with override_settings(STRIPE_SECRET_KEY='rk_live_synthetic_adapter', **REAL, **LIVE):
                 self.assertFalse(sandbox_funded(Wallet.objects.get(user=self.user, kind='paid')))
                 reserve(self.job('after-refused-rollback'), Decimal('2'))
