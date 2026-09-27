@@ -214,7 +214,7 @@ class EnvironmentRendererTests(unittest.TestCase):
         text = renderer.fetch(PROFILE, runner)
         self.assertEqual(json.loads(text), self.VALID)
         command, kwargs = calls[0]
-        self.assertEqual(command, ['/snap/bin/aws', 'secretsmanager', 'get-secret-value', '--region', 'us-east-1',
+        self.assertEqual(command, ['/usr/local/bin/aws', 'secretsmanager', 'get-secret-value', '--region', 'us-east-1',
                                    '--secret-id', 'quillmd-production/application-environment', '--query',
                                    'SecretString', '--output', 'text'])
         self.assertNotIn('ANTHROPIC_API_KEY', kwargs['env'])
@@ -357,6 +357,9 @@ class BootstrapScriptTests(unittest.TestCase):
         self.artifact, self.digest = build_artifact(self.temp.name, self.SHA, {
             f'quillmd-{self.SHA}/rebuild/ops/production_profile.json': profile,
             f'quillmd-{self.SHA}/rebuild/manage.py': b'print(1)\n'})
+        self.cli = Path(self.temp.name) / 'awscli-exe-linux-x86_64-synthetic.zip'
+        self.cli.write_bytes(b'synthetic cli bundle')
+        self.cli_sha = hashlib.sha256(b'synthetic cli bundle').hexdigest()
 
     def run_script(self, *arguments):
         return subprocess.run(['bash', str(self.SCRIPT), *arguments], capture_output=True, text=True, timeout=60,
@@ -364,6 +367,7 @@ class BootstrapScriptTests(unittest.TestCase):
 
     def arguments(self, **changes):
         values = {'--release-sha': self.SHA, '--artifact': str(self.artifact), '--artifact-sha256': self.digest,
+                  '--aws-cli-artifact': str(self.cli), '--aws-cli-sha256': self.cli_sha,
                   '--data-volume-id': 'vol-0123456789abcdef0'}
         values.update(changes)
         result = []
@@ -384,6 +388,7 @@ class BootstrapScriptTests(unittest.TestCase):
         self.assertIn(f'{PROFILE.account} uid=gid={PROFILE.uid}', result.stdout)
         self.assertIn(f'-> {PROFILE.state_root} (nodev,nosuid) FORMAT only if blank', result.stdout)
         self.assertIn('dry run: nothing was changed', result.stdout)
+        self.assertIn('AWS CLI v2 -> /usr/local/bin/aws', result.stdout)
 
     def test_bad_inputs_refuse_in_the_dry_run(self):
         cases = [
@@ -393,6 +398,9 @@ class BootstrapScriptTests(unittest.TestCase):
             ({'--artifact': str(Path(self.temp.name) / 'absent.tar.gz')}, 'existing regular file'),
             ({'--artifact-sha256': 'f' * 64}, 'failed verification'),
             ({'--release-sha': 'd' * 40}, 'failed verification'),
+            ({'--aws-cli-artifact': None}, 'aws-cli-artifact must be an existing regular file'),
+            ({'--aws-cli-sha256': 'e' * 64}, 'AWS CLI bundle sha256 differs'),
+            ({'--aws-cli-sha256': 'short'}, 'aws-cli-sha256 must be 64'),
         ]
         for changes, message in cases:
             with self.subTest(changes=changes):

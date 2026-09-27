@@ -87,17 +87,22 @@ P7 and P9 are in hand or scheduled with dates. **No-go** if any BAA is refused.
    must now pass and the test suite stay green. Merge through `scripts/merge-pr.sh`, cite CI on the
    merge commit.
 3. Build the release artifact from the merge commit (`build-release.sh <sha> <dir>`), record its
-   sha256 in the deploy declaration, upload it to the release bucket.
+   sha256 in the deploy declaration, upload it to the release bucket. Download the AWS CLI v2 bundle
+   for a named version (`awscli-exe-linux-x86_64-<version>.zip`), verify its PGP signature as AWS
+   documents, record its sha256, upload it beside the release (the bootstrap installs this bundle,
+   not the snap).
 
-**Go** when the artifact's sha256 is recorded and CI on that exact commit is green.
+**Go** when the artifact's and the CLI bundle's sha256 values are recorded and CI on that exact commit
+is green.
 
 ### G3 Host bootstrap (2 to 4 hours)
 
 1. Launch the instance: recorded Ubuntu 24.04 AMI ID, m7i.large, subnet 1a, `sg-app`, instance role,
    IMDSv2 required hop limit 1, EBS root 30 GB encrypted, user data `cloud-init.yaml`. Create the
    100 GB gp3 state volume with the data key in 1a and attach it.
-2. Through SSM: fetch the artifact, check its sha256, extract to a root staging directory, run
-   `bootstrap-host.sh` **dry run**, read the plan, then `--execute` under the committed declaration.
+2. Through SSM: fetch the release artifact and the AWS CLI bundle, check both sha256 values, extract
+   the release to a root staging directory, run `bootstrap-host.sh` **dry run**, read the plan, then
+   `--execute` under the committed declaration.
 3. Save `/var/lib/quillmd-bootstrap/receipt.json` with the declaration. Remove the bootstrap-only
    `ec2:DescribeVolumes`/`kms:DescribeKey` permissions from the instance role.
 

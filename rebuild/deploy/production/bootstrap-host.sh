@@ -7,13 +7,17 @@
 # the --execute path has NOT been run anywhere yet (docs/rebuild/v1/cutover-plan.md, gate G2).
 #
 #   bootstrap-host.sh --release-sha <40 hex> --artifact <quillmd-<sha>.tar.gz> --artifact-sha256 <64 hex> \
+#                     --aws-cli-artifact <awscli-exe-linux-x86_64-<version>.zip> --aws-cli-sha256 <64 hex> \
 #                     --data-volume-id vol-<17 hex> [--existing-state-volume] \
 #                     [--word-sdk-artifact <tar.gz> --word-sdk-sha256 <64 hex>] [--execute]
 #
 # Every host value (paths, service identity and its fixed number, ports, region, secret name, CA
 # bundle path) comes from rebuild/ops/production_profile.json via `deployment_profile.py --shell`,
 # read from the release that carries this script. The operator supplies only identities, each checked:
-# the commit, the artifact and its sha256, the encrypted data volume, and optionally the Word runtime.
+# the commit, the artifact and its sha256, the AWS CLI v2 bundle (a versioned file whose signature was
+# verified per AWS's instructions and whose sha256 is recorded in the declaration; not the snap, whose
+# confinement is not qualified inside the sandboxed environment unit), the encrypted data volume, and
+# optionally the Word runtime.
 #
 # Steps, in order; each refuses rather than overwrites:
 #   1 preconditions   root; Ubuntu 24.04; EC2 with IMDSv2 only; region = profile; no Docker; no
@@ -21,7 +25,7 @@
 #   2 identity        non-login system user+group with the profile's FIXED number, created before
 #                     any package so nothing else can take it; no supplementary groups.
 #   3 packages        nginx, python3.12-venv, ffmpeg, postgresql-client-16, libseccomp2, openssl,
-#                     unattended-upgrades (security only, no automatic reboot); aws-cli snap. No Docker.
+#                     unattended-upgrades (security only, no automatic reboot); AWS CLI v2 bundle. No Docker.
 #   4 host hardening  swap off and removed; no core dumps; bounded persistent journal; sysctl; sshd off.
 #   5 state volume    the EBS data volume must be encrypted with alias/quillmd-production-data and
 #                     attached here; formatted only when blank (or adopted with --existing-state-volume
@@ -50,12 +54,13 @@ refuse() { echo "bootstrap: REFUSED: $*" >&2; exit 1; }
 note() { echo "bootstrap: $*"; }
 
 execute=0 existing_volume=0
-release_sha='' artifact='' artifact_sha='' volume_id='' word_artifact='' word_sha=''
+release_sha='' artifact='' artifact_sha='' volume_id='' word_artifact='' word_sha='' cli_artifact='' cli_sha=''
 while [ $# -gt 0 ]; do
   case "$1" in
     --execute) execute=1; shift ;;
     --existing-state-volume) existing_volume=1; shift ;;
-    --release-sha|--artifact|--artifact-sha256|--data-volume-id|--word-sdk-artifact|--word-sdk-sha256)
+    --release-sha|--artifact|--artifact-sha256|--data-volume-id|--word-sdk-artifact|--word-sdk-sha256|\
+    --aws-cli-artifact|--aws-cli-sha256)
       [ $# -ge 2 ] || refuse "$1 needs a value"
       case "$1" in
         --release-sha) release_sha=$2 ;;
@@ -64,6 +69,8 @@ while [ $# -gt 0 ]; do
         --data-volume-id) volume_id=$2 ;;
         --word-sdk-artifact) word_artifact=$2 ;;
         --word-sdk-sha256) word_sha=$2 ;;
+        --aws-cli-artifact) cli_artifact=$2 ;;
+        --aws-cli-sha256) cli_sha=$2 ;;
       esac
       shift 2 ;;
     *) refuse "unknown argument (see the header of this script)" ;;
@@ -74,6 +81,8 @@ done
 [[ $artifact_sha =~ ^[0-9a-f]{64}$ ]] || refuse "--artifact-sha256 must be 64 lowercase hex characters"
 [[ $volume_id =~ ^vol-[0-9a-f]{17}$ ]] || refuse "--data-volume-id must look like vol-0123456789abcdef0"
 [ -n "$artifact" ] && [ -f "$artifact" ] && [ ! -L "$artifact" ] || refuse "--artifact must be an existing regular file"
+[ -n "$cli_artifact" ] && [ -f "$cli_artifact" ] && [ ! -L "$cli_artifact" ] || refuse "--aws-cli-artifact must be an existing regular file"
+[[ $cli_sha =~ ^[0-9a-f]{64}$ ]] || refuse "--aws-cli-sha256 must be 64 lowercase hex characters"
 if [ -n "$word_artifact$word_sha" ]; then
   [ -f "$word_artifact" ] && [ ! -L "$word_artifact" ] || refuse "--word-sdk-artifact must be an existing regular file"
   [[ $word_sha =~ ^[0-9a-f]{64}$ ]] || refuse "--word-sdk-sha256 must be 64 lowercase hex characters"
@@ -106,13 +115,15 @@ note "artifact verified: $verification"
 if [ -n "$word_artifact" ]; then
   [ "$(sha256sum -- "$word_artifact" | cut -d' ' -f1)" = "$word_sha" ] || refuse "the Word runtime artifact sha256 differs"
 fi
+[ "$(sha256sum -- "$cli_artifact" | cut -d' ' -f1)" = "$cli_sha" ] || refuse "the AWS CLI bundle sha256 differs"
+AWS=/usr/local/bin/aws
 
 plan() {
   cat <<PLAN
 bootstrap plan (profile ${P[PROFILE_SHA256]}, release $release_sha):
   1 preconditions  root, Ubuntu 24.04, EC2 IMDSv2-only in ${P[REGION]}, no Docker, no $PRIVATE_INSTALL, ${P[INSTALL_ROOT]} absent
   2 identity       ${P[ACCOUNT]} uid=gid=${P[ACCOUNT_ID_NUMBER]}, /usr/sbin/nologin, no home, no supplementary groups
-  3 packages       nginx python3.12-venv ffmpeg postgresql-client-16 libseccomp2 openssl unattended-upgrades; snap aws-cli
+  3 packages       nginx python3.12-venv ffmpeg postgresql-client-16 libseccomp2 openssl unzip unattended-upgrades; AWS CLI v2 -> $AWS
   4 hardening      swap off, no core dumps, journal bounded, sysctl, sshd disabled
   5 state volume   $volume_id encrypted with $DATA_KEY_ALIAS -> ${P[STATE_ROOT]} (nodev,nosuid) $( [ $existing_volume = 1 ] && echo "ADOPT existing marker" || echo "FORMAT only if blank" )
   6 release        rebuild/ -> ${P[APP_ROOT]} (root-owned, no group/other write), venv, collectstatic$( [ -n "$word_artifact" ] && echo ", Word runtime" )
@@ -167,10 +178,14 @@ note "identity $account uid=gid=$number"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q --no-install-recommends nginx python3.12-venv ffmpeg postgresql-client-16 libseccomp2 \
-  openssl ca-certificates curl unattended-upgrades
+  openssl ca-certificates curl unzip unattended-upgrades
 systemctl disable --now nginx
-snap list aws-cli >/dev/null 2>&1 || snap install aws-cli --classic
-[ -x /snap/bin/aws ] || refuse "aws-cli did not install at /snap/bin/aws"
+[ ! -e /usr/local/aws-cli ] || refuse "/usr/local/aws-cli already exists"
+cli_stage=$(mktemp -d)
+unzip -q "$cli_artifact" -d "$cli_stage"
+"$cli_stage/aws/install" --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli
+rm -rf -- "$cli_stage"
+[ -x "$AWS" ] || refuse "the AWS CLI did not install at $AWS"
 cat > /etc/apt/apt.conf.d/52quillmd-production <<'APT'
 // Security updates only, unattended; reboots happen in a declared maintenance window, never automatically.
 Unattended-Upgrade::Allowed-Origins { "${distro_id}:${distro_codename}-security"; "${distro_id}ESMApps:${distro_codename}-apps-security"; "${distro_id}ESM:${distro_codename}-infra-security"; };
@@ -194,11 +209,11 @@ systemctl restart systemd-journald
 systemctl disable --now ssh.socket ssh.service 2>/dev/null || true
 
 # --- 5 state volume -------------------------------------------------------------------------------
-volume_facts=$(/snap/bin/aws ec2 describe-volumes --region "$region" --volume-ids "$volume_id" \
+volume_facts=$("$AWS" ec2 describe-volumes --region "$region" --volume-ids "$volume_id" \
   --query 'Volumes[0].[Encrypted,KmsKeyId,Attachments[0].InstanceId,Attachments[0].State]' --output text) \
   || refuse "cannot describe $volume_id (the bootstrap role needs ec2:DescribeVolumes)"
 read -r encrypted kms_key attached_to attach_state <<< "$volume_facts"
-expected_key=$(/snap/bin/aws kms describe-key --region "$region" --key-id "$DATA_KEY_ALIAS" \
+expected_key=$("$AWS" kms describe-key --region "$region" --key-id "$DATA_KEY_ALIAS" \
   --query KeyMetadata.Arn --output text) || refuse "cannot resolve $DATA_KEY_ALIAS"
 [ "$encrypted" = True ] || refuse "$volume_id is not encrypted"
 [ "$kms_key" = "$expected_key" ] || refuse "$volume_id is not encrypted with $DATA_KEY_ALIAS"
@@ -298,7 +313,7 @@ install -d -m 0700 /var/lib/quillmd-bootstrap
   printf '"release_sha":"%s","artifact_sha256":"%s","profile_sha256":"%s",' "$release_sha" "$artifact_sha" "${P[PROFILE_SHA256]}"
   printf '"state_volume":"%s","state_uuid":"%s","adopted_existing_volume":%s,' "$volume_id" "$uuid" "$([ $existing_volume = 1 ] && echo true || echo false)"
   printf '"identity":{"account":"%s","uid":%s,"gid":%s},' "$account" "$number" "$number"
-  printf '"rds_ca_bundle_sha256":"%s","word_runtime_sha256":"%s","units":{' "$ca_sha" "$word_sha"
+  printf '"rds_ca_bundle_sha256":"%s","word_runtime_sha256":"%s","aws_cli_sha256":"%s","units":{' "$ca_sha" "$word_sha" "$cli_sha"
   first=1
   for unit in "${!unit_hashes[@]}"; do
     [ $first = 1 ] || printf ','

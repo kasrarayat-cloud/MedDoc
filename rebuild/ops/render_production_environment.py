@@ -29,7 +29,7 @@ try:
 except ImportError:
     import deployment_profile
 
-AWS_CLI = '/snap/bin/aws'
+AWS_CLI = '/usr/local/bin/aws'  # AWS CLI v2 bundle installed by bootstrap-host.sh
 MAX_SECRET_BYTES = 64 * 1024
 MAX_VALUE_CHARACTERS = 8192
 FORBIDDEN_CHARACTERS = frozenset('\n\r\x00\'\\')
@@ -106,7 +106,7 @@ def fetch(production, runner=subprocess.run):
                '--secret-id', production.secret_name, '--query', 'SecretString', '--output', 'text']
     try:
         result = runner(command, capture_output=True, timeout=60,
-                        env={'PATH': '/usr/bin:/bin:/snap/bin', 'HOME': '/root', 'AWS_PAGER': ''})
+                        env={'PATH': '/usr/local/bin:/usr/bin:/bin', 'HOME': '/root', 'AWS_PAGER': ''})
     except (OSError, subprocess.TimeoutExpired):
         raise RenderError('secret_fetch') from None
     require(result.returncode == 0, 'secret_fetch')
