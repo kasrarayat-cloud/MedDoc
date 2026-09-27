@@ -1,0 +1,317 @@
+FFFFFFFFFFFFFFFFFFFFFF
+======================================================================
+FAIL: test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) (notes='Allergies: penicillin.\nAssessment: no penicillin allergy.', label='Allergies')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 400, in test_assessment_and_allergy_answers_cannot_ignore_each_other
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'penicillin.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'penicillin.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) (notes='Allergies: penicillin.\nAssessment: no penicillin allergy.', label='Assessment')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 400, in test_assessment_and_allergy_answers_cannot_ignore_each_other
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'no penicillin allergy.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'no penicillin allergy.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) (notes='Allergies: penicillin.\n\nAssessment: no penicillin allergy.', label='Allergies')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 400, in test_assessment_and_allergy_answers_cannot_ignore_each_other
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'penicillin.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'penicillin.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) (notes='Allergies: penicillin.\n\nAssessment: no penicillin allergy.', label='Assessment')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 400, in test_assessment_and_allergy_answers_cannot_ignore_each_other
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'no penicillin allergy.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'no penicillin allergy.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) (notes='Allergies: none.\nAssessment is a probable penicillin allergy.', label='Allergies')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 400, in test_assessment_and_allergy_answers_cannot_ignore_each_other
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'none.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'none.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) (notes='Allergies: none.\nAssessment is a probable penicillin allergy.', label='Assessment')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 400, in test_assessment_and_allergy_answers_cannot_ignore_each_other
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'a probable penicillin allergy.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'a probable penicillin allergy.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) (notes='Allergies: none.\n\nAssessment is a probable penicillin allergy.', label='Allergies')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 400, in test_assessment_and_allergy_answers_cannot_ignore_each_other
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'none.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'none.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_assessment_and_allergy_answers_cannot_ignore_each_other (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_assessment_and_allergy_answers_cannot_ignore_each_other) (notes='Allergies: none.\n\nAssessment is a probable penicillin allergy.', label='Assessment')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 400, in test_assessment_and_allergy_answers_cannot_ignore_each_other
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'a probable penicillin allergy.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'a probable penicillin allergy.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_changed_continuation_and_another_modifying_reference_require_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_changed_continuation_and_another_modifying_reference_require_review) (notes='Current medications are aspirin daily.\nPlan: continue current medications, except aspirin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 415, in test_changed_continuation_and_another_modifying_reference_require_review
+    self.assertEqual(answers[label]['status'], 'conflict')
+AssertionError: 'supported' != 'conflict'
+- supported
++ conflict
+
+
+======================================================================
+FAIL: test_changed_continuation_and_another_modifying_reference_require_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_changed_continuation_and_another_modifying_reference_require_review) (notes='Current medications are aspirin daily.\nPlan: continue current medications and add warfarin.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 415, in test_changed_continuation_and_another_modifying_reference_require_review
+    self.assertEqual(answers[label]['status'], 'conflict')
+AssertionError: 'supported' != 'conflict'
+- supported
++ conflict
+
+
+======================================================================
+FAIL: test_changed_continuation_and_another_modifying_reference_require_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_changed_continuation_and_another_modifying_reference_require_review) (notes='Current medications are aspirin daily.\nPlan: continue current medications.\nAssessment: probable medication error.', label='Medications')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 415, in test_changed_continuation_and_another_modifying_reference_require_review
+    self.assertEqual(answers[label]['status'], 'conflict')
+AssertionError: 'supported' != 'conflict'
+- supported
++ conflict
+
+
+======================================================================
+FAIL: test_changed_continuation_and_another_modifying_reference_require_review (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_changed_continuation_and_another_modifying_reference_require_review) (notes='Current medications are aspirin daily.\nPlan: continue current medications.\nAssessment: probable medication error.', label='Plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 415, in test_changed_continuation_and_another_modifying_reference_require_review
+    self.assertEqual(answers[label]['status'], 'conflict')
+AssertionError: 'supported' != 'conflict'
+- supported
++ conflict
+
+
+======================================================================
+FAIL: test_exact_continuation_does_not_choose_between_multiple_sources (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_exact_continuation_does_not_choose_between_multiple_sources)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 423, in test_exact_continuation_does_not_choose_between_multiple_sources
+    self.assertEqual(answers['Plan']['status'], 'conflict')
+AssertionError: 'supported' != 'conflict'
+- supported
++ conflict
+
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes='Sibling medications are warfarin.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Sibling medications are warfarin.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Sibling medications are warfarin.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes='Allergies: penicillin.\nSibling medications are warfarin.\nPlan: rest.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Sibling medications are warfarin.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Sibling medications are warfarin.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes='Donor medications are warfarin.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Donor medications are warfarin.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Donor medications are warfarin.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes='Allergies: penicillin.\nDonor medications are warfarin.\nPlan: rest.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Donor medications are warfarin.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Donor medications are warfarin.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes="Her sibling's medications are warfarin.")
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', "Her sibling's medications are warfarin.") != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', "Her sibling's medications are warfarin.")
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes='Planned examination will reveal a rash.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Planned examination will reveal a rash.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Planned examination will reveal a rash.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes='Allergies: penicillin.\nPlanned examination will reveal a rash.\nPlan: rest.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Planned examination will reveal a rash.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Planned examination will reveal a rash.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes='Examination will reveal a rash.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Examination will reveal a rash.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Examination will reveal a rash.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_unknown_ownership_and_planned_predicates_never_become_patient_answers (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_unknown_ownership_and_planned_predicates_never_become_patient_answers) (notes='Allergies: penicillin.\nExamination will reveal a rash.\nPlan: rest.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 387, in test_unknown_ownership_and_planned_predicates_never_become_patient_answers
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Examination will reveal a rash.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Examination will reveal a rash.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.306s
+
+FAILED (failures=22)
+Found 4 test(s).
+System check identified no issues (0 silenced).

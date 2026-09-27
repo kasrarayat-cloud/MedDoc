@@ -1,0 +1,330 @@
+{
+  "sha256": "2a173620c44229c7403ba4fb170a2436de00dcfc7637e6357fa4d121f995145b",
+  "cases": [
+    {
+      "name": "unowned-change",
+      "notes": "Current medications are aspirin daily.\n\nA medication was discontinued.\n\nPlan: continue current medications.",
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Current medications are aspirin daily.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Current medications are aspirin daily.",
+            "evidence": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38
+              }
+            ],
+            "context": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "A medication was discontinued.",
+                "start": 40,
+                "end": 70,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 72,
+                "end": 107,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 72,
+              "end": 107
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "continue current medications.",
+            "evidence": [
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 72,
+                "end": 107
+              }
+            ],
+            "context": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "A medication was discontinued.",
+                "start": 40,
+                "end": 70,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 72,
+                "end": 107,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Medications": [
+          "Medications"
+        ],
+        "Plan": [
+          "Plan"
+        ]
+      },
+      "unexpected_supported": [],
+      "unexpected_finalizable": []
+    },
+    {
+      "name": "unowned-addition",
+      "notes": "Current medications are aspirin daily.\n\nWarfarin is another medication.\n\nPlan: continue current medications.",
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Current medications are aspirin daily.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Current medications are aspirin daily.",
+            "evidence": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38
+              }
+            ],
+            "context": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Warfarin is another medication.",
+                "start": 40,
+                "end": 71,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 73,
+                "end": 108,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 73,
+              "end": 108
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "continue current medications.",
+            "evidence": [
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 73,
+                "end": 108
+              }
+            ],
+            "context": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Warfarin is another medication.",
+                "start": 40,
+                "end": 71,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 73,
+                "end": 108,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Medications": [
+          "Medications"
+        ],
+        "Plan": [
+          "Plan"
+        ]
+      },
+      "unexpected_supported": [],
+      "unexpected_finalizable": []
+    },
+    {
+      "name": "unowned-owner",
+      "notes": "Current medications are aspirin daily.\n\nPatient medications are warfarin.\n\nPlan: continue current medications.",
+      "answers": {
+        "Medications": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Current medications are aspirin daily.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "Current medications are aspirin daily.",
+            "evidence": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38
+              }
+            ],
+            "context": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "Patient medications are warfarin.",
+                "start": 40,
+                "end": 73,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 75,
+                "end": 110,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 75,
+              "end": 110
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "continue current medications.",
+            "evidence": [
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 75,
+                "end": 110
+              }
+            ],
+            "context": [
+              {
+                "quote": "Current medications are aspirin daily.",
+                "start": 0,
+                "end": 38,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Patient medications are warfarin.",
+                "start": 40,
+                "end": 73,
+                "after": false,
+                "same": false
+              },
+              {
+                "quote": "Plan: continue current medications.",
+                "start": 75,
+                "end": 110,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "forced_supported_refusals": {
+        "Medications": [
+          "Medications"
+        ],
+        "Plan": [
+          "Plan"
+        ]
+      },
+      "unexpected_supported": [],
+      "unexpected_finalizable": []
+    }
+  ],
+  "red_probe": true
+}

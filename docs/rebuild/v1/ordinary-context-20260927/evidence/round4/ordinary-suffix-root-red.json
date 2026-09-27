@@ -1,0 +1,9 @@
+[
+  {
+    "notes": "Allergies: penicillin.\nMedications are warfarin for the donor.\nPlan: rest.",
+    "label": "Medications",
+    "status": "supported",
+    "text": "warfarin for the donor.",
+    "finalize_refusals": []
+  }
+]

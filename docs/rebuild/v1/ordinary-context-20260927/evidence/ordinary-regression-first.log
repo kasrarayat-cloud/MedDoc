@@ -1,0 +1,161 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.../opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+................................F.............F.........F...........FFFF....F...............F
+======================================================================
+FAIL: test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts (core.tests.test_v3_ordinary_notes.OrdinaryNotesOnV3Forms.test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 65, in test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts
+    self.assertEqual({label: out[label]['status'] for label in picks},
+AssertionError: {'Chief complaint': 'supported', 'Allergies': 'supported', 'Plan': 'supported'} != {'Chief complaint': 'conflict', 'Allergies': 'conflict', 'Plan': 'supported'}
+- {'Allergies': 'supported', 'Chief complaint': 'supported', 'Plan': 'supported'}
+?                ^^^^ ^ --                       ^^^^ ^ --
+
++ {'Allergies': 'conflict', 'Chief complaint': 'conflict', 'Plan': 'supported'}
+?                ^ ^^^^^                        ^ ^^^^^
+
+
+======================================================================
+FAIL: test_intact_paragraph_relaxation_cannot_release_sides_rows_or_duplicate_destinations (core.tests.test_v3_ordinary_notes.RecoveredNoteContext.test_intact_paragraph_relaxation_cannot_release_sides_rows_or_duplicate_destinations)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 1273, in test_intact_paragraph_relaxation_cannot_release_sides_rows_or_duplicate_destinations
+    self.assertEqual({a['status'] for a in out.values()}, {'conflict'})
+AssertionError: Items in the first set but not the second:
+'supported'
+
+======================================================================
+FAIL: test_r3_5_a_line_of_999_labelled_segments_is_split_once (core.tests.test_v3_ordinary_notes.RoundThreeCost.test_r3_5_a_line_of_999_labelled_segments_is_split_once)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 1141, in test_r3_5_a_line_of_999_labelled_segments_is_split_once
+    self.assertEqual((adopted['q']['status'], adopted['q']['text']), ('supported', 'No'))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'No')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'No')
+
+======================================================================
+FAIL: test_r3_1_the_plain_value_grammar_fails_closed (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_the_plain_value_grammar_fails_closed) (notes='Smoker: yes. Findings: details overleaf.')
+Not the refuter's inputs: each part of the grammar, pinned by a later value only that part makes not plain.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 917, in test_r3_1_the_plain_value_grammar_fails_closed
+    held_with(self, notes, label, quote, quote.split(': ', 1)[1])
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 866, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'Yes', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes', None)
++ ('conflict', '', None) : Smoker: yes. Findings: details overleaf.
+
+======================================================================
+FAIL: test_r3_1_the_plain_value_grammar_fails_closed (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_the_plain_value_grammar_fails_closed) (notes='Smoker: yes. Plan: rest ice elevation compression.')
+Not the refuter's inputs: each part of the grammar, pinned by a later value only that part makes not plain.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 917, in test_r3_1_the_plain_value_grammar_fails_closed
+    held_with(self, notes, label, quote, quote.split(': ', 1)[1])
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 866, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'Yes', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes', None)
++ ('conflict', '', None) : Smoker: yes. Plan: rest ice elevation compression.
+
+======================================================================
+FAIL: test_r3_1_the_plain_value_grammar_fails_closed (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_the_plain_value_grammar_fails_closed) (notes='Smoker: yes. Allergies: penicillin, latex.')
+Not the refuter's inputs: each part of the grammar, pinned by a later value only that part makes not plain.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 917, in test_r3_1_the_plain_value_grammar_fails_closed
+    held_with(self, notes, label, quote, quote.split(': ', 1)[1])
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 866, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'Yes', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes', None)
++ ('conflict', '', None) : Smoker: yes. Allergies: penicillin, latex.
+
+======================================================================
+FAIL: test_r3_1_the_plain_value_grammar_fails_closed (core.tests.test_v3_ordinary_notes.RoundThreeRefutation.test_r3_1_the_plain_value_grammar_fails_closed) (notes='Smoker: yes. Allergies: penicillin (rash).')
+Not the refuter's inputs: each part of the grammar, pinned by a later value only that part makes not plain.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 917, in test_r3_1_the_plain_value_grammar_fails_closed
+    held_with(self, notes, label, quote, quote.split(': ', 1)[1])
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 866, in held_with
+    test.assertEqual((answer['status'], answer['text'], answer.get('suggestion')), ('conflict', '', None), notes)
+AssertionError: Tuples differ: ('supported', 'Yes', None) != ('conflict', '', None)
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Yes', None)
++ ('conflict', '', None) : Smoker: yes. Allergies: penicillin (rash).
+
+======================================================================
+FAIL: test_a_held_candidate_shows_the_sentence_that_may_change_it (core.tests.test_v3_ordinary_notes.RoundTwoMutantPins.test_a_held_candidate_shows_the_sentence_that_may_change_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 849, in test_a_held_candidate_shows_the_sentence_that_may_change_it
+    self.assertEqual(kept['context'], [{'quote': 'Her father has heart disease.', 'start': 0, 'end': 29, 'after': False,
+AssertionError: Lists differ: [{'qu[30 chars]sease.', 'start': 0, 'end': 29, 'after': False, 'same': False}] != [{'qu[30 chars]sease.', 'start': 0, 'end': 29, 'after': False, 'same': True}]
+
+First differing element 0:
+{'quo[28 chars]isease.', 'start': 0, 'end': 29, 'after': False, 'same': False}
+{'quo[28 chars]isease.', 'start': 0, 'end': 29, 'after': False, 'same': True}
+
+  [{'after': False,
+    'end': 29,
+    'quote': 'Her father has heart disease.',
+-   'same': False,
+?           ^^^^
+
++   'same': True,
+?           ^^^
+
+    'start': 0}]
+
+======================================================================
+FAIL: test_a_scope_word_or_a_quotation_anywhere_holds_every_answer_in_the_note (core.tests.test_v3_ordinary_notes.ScopeInOrdinarySentences.test_a_scope_word_or_a_quotation_anywhere_holds_every_answer_in_the_note) (extra=' Return if symptoms worsen.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_notes.py", line 307, in test_a_scope_word_or_a_quotation_anywhere_holds_every_answer_in_the_note
+    self.assertEqual((out[label]['status'], out[label]['text']), ('conflict', ''), label)
+AssertionError: Tuples differ: ('supported', 'Patient presents with right knee pain for three weeks.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Patient presents with right knee pain for three weeks.')
++ ('conflict', '') : Chief complaint
+
+----------------------------------------------------------------------
+Ran 93 tests in 18.994s
+
+FAILED (failures=9)
+Destroying test database for alias 'default'...
+Found 93 test(s).
+System check identified no issues (0 silenced).

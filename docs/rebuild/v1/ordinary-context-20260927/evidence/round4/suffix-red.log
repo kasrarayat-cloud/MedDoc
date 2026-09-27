@@ -1,0 +1,52 @@
+FFF
+======================================================================
+FAIL: test_medication_for_complement_does_not_establish_patient_ownership (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_for_complement_does_not_establish_patient_ownership) (quote='Medications are warfarin for the donor.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 468, in test_medication_for_complement_does_not_establish_patient_ownership
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'warfarin for the donor.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'warfarin for the donor.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_medication_for_complement_does_not_establish_patient_ownership (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_for_complement_does_not_establish_patient_ownership) (quote='Current medications are warfarin for an unrelated recipient.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 468, in test_medication_for_complement_does_not_establish_patient_ownership
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'Current medications are warfarin for an unrelated recipient.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'Current medications are warfarin for an unrelated recipient.')
++ ('conflict', '')
+
+======================================================================
+FAIL: test_medication_for_complement_does_not_establish_patient_ownership (core.tests.test_v3_ordinary_context.RefutedOwnershipAndCoupling.test_medication_for_complement_does_not_establish_patient_ownership) (quote='Medications: warfarin for the donor.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 468, in test_medication_for_complement_does_not_establish_patient_ownership
+    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+AssertionError: Tuples differ: ('supported', 'warfarin for the donor.') != ('conflict', '')
+
+First differing element 0:
+'supported'
+'conflict'
+
+- ('supported', 'warfarin for the donor.')
++ ('conflict', '')
+
+----------------------------------------------------------------------
+Ran 1 test in 0.233s
+
+FAILED (failures=3)
+Found 1 test(s).
+System check identified no issues (0 silenced).

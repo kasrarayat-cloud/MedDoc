@@ -1,0 +1,44 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+F..........F...............................
+======================================================================
+FAIL: test_complete_ordinary_prose_reaches_the_original_word_form (core.tests.test_v3_ordinary_context.CompleteOrdinaryNoteWorkflow.test_complete_ordinary_prose_reaches_the_original_word_form)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 203, in test_complete_ordinary_prose_reaches_the_original_word_form
+    self.walk(' '.join((head, allergy, plan)), {'Chief complaint': [head], 'Allergies': [allergy], 'Plan': [plan]},
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 181, in walk
+    self.assertEqual({label: (answers[self.key(label)]['status'], answers[self.key(label)]['text']) for label in expected},
+AssertionError: {'Chief complaint': ('conflict', ''), 'Allergies': ('conflict',[78 chars]s.')} != {'Chief complaint': ('supported', 'Patient presents with right [145 chars]s.')}
+- {'Allergies': ('conflict', ''),
+-  'Chief complaint': ('conflict', ''),
++ {'Allergies': ('supported', 'penicillin.'),
++  'Chief complaint': ('supported',
++                      'Patient presents with right knee pain for three weeks.'),
+   'Plan': ('supported', 'physiotherapy twice weekly and review in six weeks.')}
+
+======================================================================
+FAIL: test_the_retained_complete_ordinary_note_has_three_exact_answers (core.tests.test_v3_ordinary_context.IndependentSourceBlocks.test_the_retained_complete_ordinary_note_has_three_exact_answers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-ordinary-context/rebuild/core/tests/test_v3_ordinary_context.py", line 82, in test_the_retained_complete_ordinary_note_has_three_exact_answers
+    self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', expected))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'Patient presents with right knee pain for three weeks.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'Patient presents with right knee pain for three weeks.')
+
+----------------------------------------------------------------------
+Ran 44 tests in 5.000s
+
+FAILED (failures=2)
+Destroying test database for alias 'default'...
+Found 44 test(s).
+System check identified no issues (0 silenced).

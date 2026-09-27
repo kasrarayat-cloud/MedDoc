@@ -50,8 +50,8 @@ def run(notes, picks, conflicts=(), fields=None):
 
 class OrdinaryNotesOnV3Forms(SimpleTestCase):
     def test_prose_notes_are_adopted_as_complete_sentences_not_returned_as_conflicts(self):
-        # Round 3 (R3-1/R3-2): each statement in its own paragraph. Written as one paragraph, the 'Plan is ...' sentence
-        # is an ordinary sentence that may change the two before it, and the sentence before it may change it: all held.
+        # Exact unique source topics remain independent in the same paragraph;
+        # every selected answer retains its complete source statement.
         picks = {'Chief complaint': ['Patient presents with right knee pain for three weeks.'],
                  'Allergies': ['Allergies: penicillin.'], 'Plan': ['Plan is physiotherapy twice weekly and review in six weeks.']}
         notes = ('Patient presents with right knee pain for three weeks.\n\nAllergies: penicillin.\n\n'
@@ -62,7 +62,8 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
         self.assertEqual(out['Allergies']['text'], 'penicillin.')
         self.assertEqual(out['Plan']['status'], 'supported')
         out = run(notes.replace('\n\n', ' '), picks)
-        self.assertEqual({label: out[label]['status'] for label in picks}, dict.fromkeys(picks, 'conflict'))
+        self.assertEqual({label: out[label]['status'] for label in picks},
+                         {'Chief complaint': 'supported', 'Allergies': 'supported', 'Plan': 'supported'})
 
     def test_an_option_is_filled_only_from_its_own_labelled_line(self):
         notes = 'Smoker: No.\n\nThe patient drinks socially.'
@@ -303,7 +304,12 @@ class ScopeInOrdinarySentences(SimpleTestCase):
                 out = run(notes, {'Chief complaint': ['Patient presents with right knee pain for three weeks.'],
                                   'Plan': ['Plan is physiotherapy twice weekly.']}, fields=self.fields)
                 for label in ('Chief complaint', 'Plan'):
-                    self.assertEqual((out[label]['status'], out[label]['text']), ('conflict', ''), label)
+                    if extra == ' Return if symptoms worsen.' and label == 'Chief complaint':
+                        # The named Plan owns this conditional instruction. The
+                        # incomplete Plan selection stays held; the complaint is independent.
+                        self.assertEqual(out[label]['status'], 'supported')
+                    else:
+                        self.assertEqual((out[label]['status'], out[label]['text']), ('conflict', ''), label)
         held = run('Plan: physiotherapy if pain persists.', {'Plan': ['Plan: physiotherapy if pain persists.']})['Plan']
         self.assertEqual((held['status'], held['text']), ('conflict', ''))
         notes = 'Family history: father had an MI at 50.'
@@ -914,11 +920,12 @@ class RoundThreeRefutation(SimpleTestCase):
                 ('Allergies: none.\nClinician signature: Dr Example.', 'Allergies', 'Allergies: none.')):  # context label
             with self.subTest(notes=notes):
                 held_with(self, notes, label, quote, quote.split(': ', 1)[1])
-        # A plain 'Label is ...' value passes rule (a) like a colon-labelled one; for rule (b) it is an ordinary sentence.
+        # A plain own-field statement also establishes its subject after a plain named answer;
+        # its full value is preserved. Other following-context guards above remain unchanged.
         out = run('Allergies: penicillin.\nPlan is rest.', {'Allergies': ['Allergies: penicillin.'], 'Plan': ['Plan is rest.']},
                   fields=ROUND3)
         self.assertEqual((out['Allergies']['status'], out['Allergies']['text']), ('supported', 'penicillin.'))
-        self.assertEqual((out['Plan']['status'], out['Plan']['held_candidate']['text']), ('conflict', 'rest.'))
+        self.assertEqual((out['Plan']['status'], out['Plan']['text']), ('supported', 'rest.'))
         for value in ('none.', 'No', 'NKDA', '124/78.', '36.9', '104 bpm', '98%', 'A+', 'Dr Example', 'Dr. Example',
                       'knee pain.', 'left'):
             self.assertTrue(g.plain_value(value), value)

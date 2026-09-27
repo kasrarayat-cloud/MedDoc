@@ -1,0 +1,132 @@
+{
+  "sha256": "166947914409a575269c2bd5e174bdc62b2ae73239ab0754900b85d32c84c24f",
+  "cases": [
+    {
+      "name": "unowned-change",
+      "notes": "Current medications are aspirin daily.\n\nA medication was discontinued.\n\nPlan: continue current medications.",
+      "answers": {
+        "Medications": {
+          "text": "Current medications are aspirin daily.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Current medications are aspirin daily.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "continue current medications.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 72,
+              "end": 107
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_supported_refusals": {
+        "Medications": [],
+        "Plan": []
+      },
+      "unexpected_supported": [
+        "Medications",
+        "Plan"
+      ],
+      "unexpected_finalizable": [
+        "Medications",
+        "Plan"
+      ]
+    },
+    {
+      "name": "unowned-addition",
+      "notes": "Current medications are aspirin daily.\n\nWarfarin is another medication.\n\nPlan: continue current medications.",
+      "answers": {
+        "Medications": {
+          "text": "Current medications are aspirin daily.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Current medications are aspirin daily.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "continue current medications.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 73,
+              "end": 108
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_supported_refusals": {
+        "Medications": [],
+        "Plan": []
+      },
+      "unexpected_supported": [
+        "Medications",
+        "Plan"
+      ],
+      "unexpected_finalizable": [
+        "Medications",
+        "Plan"
+      ]
+    },
+    {
+      "name": "unowned-owner",
+      "notes": "Current medications are aspirin daily.\n\nPatient medications are warfarin.\n\nPlan: continue current medications.",
+      "answers": {
+        "Medications": {
+          "text": "Current medications are aspirin daily.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Current medications are aspirin daily.",
+              "start": 0,
+              "end": 38
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "continue current medications.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: continue current medications.",
+              "start": 75,
+              "end": 110
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "forced_supported_refusals": {
+        "Medications": [],
+        "Plan": []
+      },
+      "unexpected_supported": [
+        "Medications",
+        "Plan"
+      ],
+      "unexpected_finalizable": [
+        "Medications",
+        "Plan"
+      ]
+    }
+  ],
+  "red_probe": true
+}

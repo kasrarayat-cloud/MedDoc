@@ -1,0 +1,19 @@
+{
+  "notes": "Current medications are aspirin daily.\nCurrent medications are metformin twice daily.",
+  "picks": [
+    "Current medications are aspirin daily."
+  ],
+  "answer": {
+    "text": "Current medications are aspirin daily.",
+    "status": "supported",
+    "evidence": [
+      {
+        "quote": "Current medications are aspirin daily.",
+        "start": 0,
+        "end": 38
+      }
+    ],
+    "reviewed": false
+  },
+  "finalize": []
+}

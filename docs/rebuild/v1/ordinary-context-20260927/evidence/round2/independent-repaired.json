@@ -1,0 +1,590 @@
+{
+  "generation_sha256": "f6e8789f73cf006b05f2bd51bca78b6051610588746cef32cdf9af53f863d1c4",
+  "cases": [
+    {
+      "case": "question-before-return",
+      "notes": "Plan: amoxicillin? Return if symptoms worsen.",
+      "units": [
+        {
+          "id": 1,
+          "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+          "start": 0,
+          "end": 45,
+          "correction_value": null
+        }
+      ],
+      "picks": {
+        "Plan": [
+          1
+        ]
+      },
+      "answers": {
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+              "start": 0,
+              "end": 45
+            }
+          ],
+          "held_candidate": {
+            "text": "amoxicillin? Return if symptoms worsen.",
+            "evidence": [
+              {
+                "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+                "start": 0,
+                "end": 45
+              }
+            ],
+            "context": [
+              {
+                "quote": "Plan: amoxicillin? Return if symptoms worsen.",
+                "start": 0,
+                "end": 45,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "denial-before-return",
+      "notes": "Plan: no amoxicillin. Return if symptoms worsen.",
+      "units": [
+        {
+          "id": 1,
+          "quote": "Plan: no amoxicillin. Return if symptoms worsen.",
+          "start": 0,
+          "end": 48,
+          "correction_value": null
+        }
+      ],
+      "picks": {
+        "Plan": [
+          1
+        ]
+      },
+      "answers": {
+        "Plan": {
+          "text": "no amoxicillin. Return if symptoms worsen.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: no amoxicillin. Return if symptoms worsen.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Plan: no amoxicillin. Return if symptoms worsen.",
+              "start": 0,
+              "end": 48
+            }
+          ]
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "aunt-allergy",
+      "notes": "Her aunt has asthma.\nAllergies: penicillin.\nPlan is physiotherapy twice weekly.",
+      "units": [
+        {
+          "id": 1,
+          "quote": "Her aunt has asthma.",
+          "start": 0,
+          "end": 20,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Allergies: penicillin.",
+          "start": 21,
+          "end": 43,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan is physiotherapy twice weekly.",
+          "start": 44,
+          "end": 79,
+          "correction_value": null
+        }
+      ],
+      "picks": {
+        "Allergies": [
+          2
+        ],
+        "Plan": [
+          3
+        ]
+      },
+      "answers": {
+        "Allergies": {
+          "text": "penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 21,
+              "end": 43
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan is physiotherapy twice weekly.",
+              "start": 44,
+              "end": 79
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "physiotherapy twice weekly.",
+            "evidence": [
+              {
+                "quote": "Plan is physiotherapy twice weekly.",
+                "start": 44,
+                "end": 79
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 21,
+                "end": 43,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "family-specific",
+      "notes": "For her aunt.\nAllergies: penicillin.\nPlan is physiotherapy twice weekly.",
+      "units": [
+        {
+          "id": 1,
+          "quote": "For her aunt.",
+          "start": 0,
+          "end": 13,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Allergies: penicillin.",
+          "start": 14,
+          "end": 36,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan is physiotherapy twice weekly.",
+          "start": 37,
+          "end": 72,
+          "correction_value": null
+        }
+      ],
+      "picks": {
+        "Allergies": [
+          2
+        ],
+        "Plan": [
+          3
+        ]
+      },
+      "answers": {
+        "Allergies": {
+          "text": "penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 14,
+              "end": 36
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan is physiotherapy twice weekly.",
+              "start": 37,
+              "end": 72
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "physiotherapy twice weekly.",
+            "evidence": [
+              {
+                "quote": "Plan is physiotherapy twice weekly.",
+                "start": 37,
+                "end": 72
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 14,
+                "end": 36,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "family-nurse",
+      "notes": "The nurse has asthma.\nAllergies: penicillin.\nPlan is physiotherapy twice weekly.",
+      "units": [
+        {
+          "id": 1,
+          "quote": "The nurse has asthma.",
+          "start": 0,
+          "end": 21,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Allergies: penicillin.",
+          "start": 22,
+          "end": 44,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan is physiotherapy twice weekly.",
+          "start": 45,
+          "end": 80,
+          "correction_value": null
+        }
+      ],
+      "picks": {
+        "Allergies": [
+          2
+        ],
+        "Plan": [
+          3
+        ]
+      },
+      "answers": {
+        "Allergies": {
+          "text": "penicillin.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: penicillin.",
+              "start": 22,
+              "end": 44
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan is physiotherapy twice weekly.",
+              "start": 45,
+              "end": 80
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "physiotherapy twice weekly.",
+            "evidence": [
+              {
+                "quote": "Plan is physiotherapy twice weekly.",
+                "start": 45,
+                "end": 80
+              }
+            ],
+            "context": [
+              {
+                "quote": "Allergies: penicillin.",
+                "start": 22,
+                "end": 44,
+                "after": false,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "direct-patient",
+      "notes": "Patient presents with cough.\nAllergies: none known.\nPlan: amoxicillin.\nReturn if symptoms worsen.",
+      "units": [
+        {
+          "id": 1,
+          "quote": "Patient presents with cough.",
+          "start": 0,
+          "end": 28,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Allergies: none known.",
+          "start": 29,
+          "end": 51,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Plan: amoxicillin.",
+          "start": 52,
+          "end": 70,
+          "correction_value": null
+        },
+        {
+          "id": 4,
+          "quote": "Return if symptoms worsen.",
+          "start": 71,
+          "end": 97,
+          "correction_value": null
+        }
+      ],
+      "picks": {
+        "Chief complaint": [
+          1
+        ],
+        "Allergies": [
+          2
+        ],
+        "Plan": [
+          3,
+          4
+        ]
+      },
+      "answers": {
+        "Chief complaint": {
+          "text": "Patient presents with cough.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Patient presents with cough.",
+              "start": 0,
+              "end": 28
+            }
+          ],
+          "reviewed": false
+        },
+        "Allergies": {
+          "text": "none known.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Allergies: none known.",
+              "start": 29,
+              "end": 51
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "amoxicillin.\nReturn if symptoms worsen.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: amoxicillin.",
+              "start": 52,
+              "end": 70
+            },
+            {
+              "quote": "Return if symptoms worsen.",
+              "start": 71,
+              "end": 97
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "repeated-plan",
+      "notes": "Plan: take one tablet.\nWait ten minutes.\nTake one tablet.",
+      "units": [
+        {
+          "id": 1,
+          "quote": "Plan: take one tablet.",
+          "start": 0,
+          "end": 22,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Wait ten minutes.",
+          "start": 23,
+          "end": 40,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Take one tablet.",
+          "start": 41,
+          "end": 57,
+          "correction_value": null
+        }
+      ],
+      "picks": {
+        "Plan": [
+          3,
+          2,
+          1
+        ]
+      },
+      "answers": {
+        "Plan": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Plan: take one tablet.",
+              "start": 0,
+              "end": 22
+            },
+            {
+              "quote": "Wait ten minutes.",
+              "start": 23,
+              "end": 40
+            },
+            {
+              "quote": "Take one tablet.",
+              "start": 41,
+              "end": 57
+            }
+          ],
+          "reviewed": false,
+          "held_candidate": {
+            "text": "take one tablet.\nWait ten minutes.\nTake one tablet.",
+            "evidence": [
+              {
+                "quote": "Plan: take one tablet.",
+                "start": 0,
+                "end": 22
+              },
+              {
+                "quote": "Wait ten minutes.",
+                "start": 23,
+                "end": 40
+              },
+              {
+                "quote": "Take one tablet.",
+                "start": 41,
+                "end": 57
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        }
+      },
+      "finalize_refusals": []
+    },
+    {
+      "case": "wrong-side",
+      "notes": "History: right knee pain.\nPlan: inject the left knee.\nReturn if symptoms worsen.",
+      "units": [
+        {
+          "id": 1,
+          "quote": "History: right knee pain.",
+          "start": 0,
+          "end": 25,
+          "correction_value": null
+        },
+        {
+          "id": 2,
+          "quote": "Plan: inject the left knee.",
+          "start": 26,
+          "end": 53,
+          "correction_value": null
+        },
+        {
+          "id": 3,
+          "quote": "Return if symptoms worsen.",
+          "start": 54,
+          "end": 80,
+          "correction_value": null
+        }
+      ],
+      "picks": {
+        "History": [
+          1
+        ],
+        "Plan": [
+          2,
+          3
+        ]
+      },
+      "answers": {
+        "History": {
+          "text": "right knee pain.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "History: right knee pain.",
+              "start": 0,
+              "end": 25
+            }
+          ],
+          "reviewed": false
+        },
+        "Plan": {
+          "text": "inject the left knee.\nReturn if symptoms worsen.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Plan: inject the left knee.",
+              "start": 26,
+              "end": 53
+            },
+            {
+              "quote": "Return if symptoms worsen.",
+              "start": 54,
+              "end": 80
+            }
+          ],
+          "reviewed": false
+        }
+      },
+      "finalize_refusals": []
+    }
+  ]
+}
