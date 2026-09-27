@@ -14,10 +14,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  python:
-    name: Fresh application tests
+  python-checks:
+    name: Fresh Python (${{ matrix.lane }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [core, support]
     services:
       postgres:
         image: postgres:16-alpine
@@ -73,15 +77,32 @@ jobs:
       - name: Verify kernel sandbox library
         run: ldconfig -p | grep 'libseccomp.so.2'
       - name: Qualify isolated reviewer SSH access
+        if: matrix.lane == 'support'
         run: python3 -B scripts/ops/tests/test_reviewer_tunnel_access.py -v
-      - name: Fresh application, document and operations tests
-        run: bash scripts/ci/verify-fresh.sh python
+      - name: Fresh Python partition
+        run: bash scripts/ci/verify-fresh.sh python-${{ matrix.lane }}
       - name: Actual Word adapter and kernel qualification
+        if: matrix.lane == 'support'
         working-directory: rebuild
         run: |
           python documents/sdk_word/verify_adapter_v2.py --original '../WM IOV Template.docx' --runtime "$QUILLMD_WORD_RUNTIME" --manifest "$QUILLMD_WORD_MANIFEST" --manifest-sha "$QUILLMD_WORD_MANIFEST_SHA256" --output .runtime/word-qualification
       - name: Python dependency audit
+        if: matrix.lane == 'support'
         run: python -m pip_audit -r rebuild/requirements.txt
+
+  python:
+    # Preserve the required check name. A skipped/cancelled/failed partition must
+    # fail this aggregate; default needs behaviour would silently skip it.
+    name: Fresh application tests
+    needs: [python-checks]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every Python partition
+        env:
+          QUILLMD_PYTHON_RESULT: ${{ needs.python-checks.result }}
+        run: test "$QUILLMD_PYTHON_RESULT" = success
 
   marketing:
     name: Marketing build

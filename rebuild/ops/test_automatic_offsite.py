@@ -390,8 +390,12 @@ class AutomaticOffsiteTests(unittest.TestCase):
 
     def test_execute_live_path_fixture_records_completion_and_no_restore(self):
         parent, _ = self.bundle()
+        # Budget's default clock is bound at import time; patching auto.now alone
+        # does not freeze it. Exercise the real budget with an explicit fixture clock.
+        budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
         with patch.object(auto, 'now', return_value=self.at), patch.object(auto, 'policy', return_value=self.policy), \
-                patch.object(auto.offsite, 'configuration', return_value=self.config):
+                patch.object(auto.offsite, 'configuration', return_value=self.config), \
+                patch.object(auto, 'Budget', return_value=budget):
             result = auto.execute(state=self.state, key=self.key, backups=parent,
                                   transport_factory=lambda config, budget: self.remote)
         self.assertEqual(result['state'], 'complete')
@@ -399,6 +403,19 @@ class AutomaticOffsiteTests(unittest.TestCase):
         self.assertFalse(result['independent_custody_verified'])
         self.assertEqual(result['last_remote_complete']['object_count'], 2)
         self.assertEqual(len(list(self.state.glob('202*.json'))), 1)
+
+    def test_execute_expired_budget_refuses_before_transport_even_with_valid_outer_clock(self):
+        parent, _ = self.bundle()
+        budget = auto.Budget(self.state, self.policy, clock=lambda: self.at + timedelta(days=8))
+        factory = Mock()
+        with patch.object(auto, 'now', return_value=self.at), patch.object(auto, 'policy', return_value=self.policy), \
+                patch.object(auto.offsite, 'configuration', return_value=self.config), \
+                patch.object(auto, 'Budget', return_value=budget):
+            result = auto.execute(state=self.state, key=self.key, backups=parent, transport_factory=factory)
+        self.assertEqual(result['state'], 'refused')
+        self.assertEqual(result['reason_code'], 'policy_expired')
+        self.assertFalse(result['provider_calls_permitted'])
+        factory.assert_not_called()
 
     def test_inspect_and_execute_never_echo_unknown_protected_status_fields(self):
         proof = {'run_id': self.run_id, 'manifest_cipher_sha256': 'a' * 64, 'verified_at': self.at.isoformat(),
