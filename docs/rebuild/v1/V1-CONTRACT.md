@@ -77,7 +77,7 @@ are not broadly excluded to improve a percentage. A detected field is not proof 
 
 | function | V1 path | evidence | V1 status |
 |---|---|---|---|
-| `claude-sonnet-5` | model-keyed request profile (disabled thinking / medium effort), refusal/incomplete never adopted, new receipts record geography/thinking/stop, 1.5× preserved, 4.6 rollback preserved | account model metadata verified; four free token-count requests recorded; migration code on candidate | BUILT — **prepared, not served**; paid request and worker verification require eligible authority |
+| `claude-sonnet-5` | model-keyed request profile (disabled thinking / medium effort), refusal/incomplete never adopted, new receipts record geography/thinking/stop, 1.5× preserved, 4.6 rollback preserved | account model metadata verified; eight free token-count requests recorded (including output-text input-token proxies); migration code on candidate | BUILT — **prepared, not served**; paid request and worker verification require eligible authority |
 
 ## Administration, audit, operations
 

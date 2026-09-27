@@ -67,3 +67,12 @@ pages cover original/ordinary/missing/long answers (1/1/1/2pages), not native Wo
 After integration,37mapping/WM/settlement checks passed;49independent pure metering controls passed.
 Flags remain off and nothing was installed. The final candidate suites will be cited separately after
 remaining source-context and production-status changes finish. No aggregate launch percentage is inferred.
+
+## Corpus custody update
+
+The separately frozen unseen qualification20 has 20 independently adjudicated lineages, 1,834 sealed
+original-only answer areas and 5,502 local expectations. No candidate ran on it. Its three legacyDOC files
+remain in the denominator; the current refusal caps automatic success at17/20, so no attempt is admitted.
+The bounded158inventory review cannot provide the development10 supplement: optimistic source-capped
+ceiling8. Original60/44lineages and all first-pass results are unchanged. See the custody and bounded
+inventory adjudication reports. This is evidence preparation, not Word compatibility acceptance.
