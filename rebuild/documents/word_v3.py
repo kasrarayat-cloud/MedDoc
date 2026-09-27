@@ -2318,7 +2318,8 @@ def set_sdt_checkbox(sdt, ticked):
         fail("A stored checkbox is no longer a checkbox control.", "mapping_mismatch")
     ch = cb.find(q("w14:checked"))
     if ch is None:
-        ch = etree.SubElement(cb, q("w14:checked"))
+        ch = etree.Element(q("w14:checked"))
+        cb.insert(0, ch)                         # schema order: checked, checkedState, uncheckedState
     ch.set(q("w14:val"), "1" if ticked else "0")
     state = cb.find(q("w14:checkedState" if ticked else "w14:uncheckedState"))
     code = (state.get(q("w14:val")) if state is not None else None) or ("2612" if ticked else "2610")
