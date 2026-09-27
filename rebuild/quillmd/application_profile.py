@@ -25,6 +25,10 @@ STRIPE_KEY_PATTERNS = {
     'live': re.compile(r'(?:sk|rk)_live_[A-Za-z0-9_]+'),
 }
 
+#: Stripe's webhook endpoint signing secret. The webhook verifies every event with the configured value exactly as
+#: settings holds it (unstripped), so the startup check tests that same value.
+WEBHOOK_SECRET_PATTERN = re.compile(r'whsec_[A-Za-z0-9]+')
+
 #: Hosts a recipient's browser cannot reach, or that exist only inside the test client.
 NON_PUBLIC_HOSTS = frozenset({'localhost', '127.0.0.1', '::1', 'testserver', '0.0.0.0'})
 
@@ -177,8 +181,13 @@ def stripe_live_problems(env, *, allowed_hosts, secret_key, webhook_secret, app_
     problems = []
     if not stripe_key_matches(secret_key, 'live'):
         problems.append('STRIPE_SECRET_KEY must be a live secret or restricted key (sk_live_ or rk_live_)')
-    if not (webhook_secret or '').strip():
-        problems.append('STRIPE_WEBHOOK_SECRET must be set, or paid checkouts are never credited')
+    # A padded value or another kind of key can never verify a signature: every paid event would be refused, charged
+    # and never credited. The value checked is the one the webhook uses, and the environment must hold exactly it.
+    # A well-formed secret of a DIFFERENT endpoint cannot be detected here; the bounded live payment test finds it.
+    if not (isinstance(webhook_secret, str) and WEBHOOK_SECRET_PATTERN.fullmatch(webhook_secret)
+            and env.get('STRIPE_WEBHOOK_SECRET') == webhook_secret):
+        problems.append('STRIPE_WEBHOOK_SECRET must be the endpoint signing secret exactly (whsec_ followed by letters '
+                        'and digits, no spaces), or paid checkouts are never credited')
     # The preview gate answers 403 to Stripe's webhook, which carries no preview grant: a paid live
     # checkout would be charged and never credited. Read raw, like real mode: the stricter reading.
     if raw(env, 'QUILLMD_PREVIEW_AUTH_ENABLED', '0') == '1':

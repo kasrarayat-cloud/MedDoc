@@ -54,7 +54,7 @@ def start(env):
 
 class LiveModeRefusesToStartHalfConfigured(SimpleTestCase):
     COMPLETE = {'QUILLMD_STRIPE_MODE': 'live', 'STRIPE_SECRET_KEY': 'rk_live_synthetic_never_real',
-                'STRIPE_WEBHOOK_SECRET': 'whsec_synthetic_never_real', 'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com'}
+                'STRIPE_WEBHOOK_SECRET': 'whsec_SyntheticNeverReal0001', 'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com'}
 
     def test_complete_live_configuration_starts(self):
         result = start(self.COMPLETE)
@@ -71,6 +71,22 @@ class LiveModeRefusesToStartHalfConfigured(SimpleTestCase):
                 result = start({**self.COMPLETE, name: value})
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(name, result.stderr.strip().splitlines()[-1])
+                self.assertNotIn('synthetic_never_real', result.stderr)
+                self.assertNotIn('SyntheticNeverReal', result.stderr)
+
+    def test_live_mode_refuses_a_webhook_secret_that_can_never_verify(self):
+        """F1: the webhook signs with the value exactly as configured, so a padded value or another kind of key
+        refuses the start instead of charging every live payer and crediting none."""
+        for value in (' whsec_SyntheticNeverReal0001', 'whsec_SyntheticNeverReal0001 ', 'whsec_SyntheticNeverReal0001\n',
+                      '\twhsec_SyntheticNeverReal0001', 'whsec_Synthetic NeverReal0001', 'whsec_synthetic_never_real',
+                      'whsec_', 'WHSEC_SyntheticNeverReal0001', 'rk_live_SyntheticNeverReal0001', 'pk_live_SyntheticNeverReal0001',
+                      'sk_live_SyntheticNeverReal0001', 'SyntheticNeverReal0001'):
+            with self.subTest(value=repr(value)):
+                result = start({**self.COMPLETE, 'STRIPE_WEBHOOK_SECRET': value})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, '')
+                self.assertIn('STRIPE_WEBHOOK_SECRET must be the endpoint signing secret exactly', result.stderr.strip().splitlines()[-1])
+                self.assertNotIn('SyntheticNeverReal', result.stderr)
                 self.assertNotIn('synthetic_never_real', result.stderr)
 
     def test_live_mode_refuses_the_preview_gate_which_would_403_every_webhook(self):

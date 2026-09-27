@@ -213,7 +213,7 @@ class OriginIsAnOriginOnly(SimpleTestCase):
 class RealModeTakesOnlyLivePaymentsOrNone(SimpleTestCase):
     """R1: real data mode starts with payments off (no server key) or with live Stripe, never with a sandbox key."""
     LIVE = {'QUILLMD_STRIPE_MODE': 'live', 'STRIPE_SECRET_KEY': 'rk_live_synthetic_never_real',
-            'STRIPE_WEBHOOK_SECRET': 'whsec_synthetic_never_real'}
+            'STRIPE_WEBHOOK_SECRET': 'whsec_SyntheticNeverReal0001'}
     EXPRESSION = '{"mode": s.QUILLMD_DATA_MODE, "stripe": s.QUILLMD_STRIPE_MODE}'
 
     def test_payments_off_starts(self):
@@ -228,6 +228,16 @@ class RealModeTakesOnlyLivePaymentsOrNone(SimpleTestCase):
         result = start(environment(self.LIVE), self.EXPRESSION)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), {'mode': 'real', 'stripe': 'live'})
+
+    def test_real_and_live_refuse_a_padded_webhook_secret(self):
+        """F1: the value the webhook verifies with is the one checked, unstripped."""
+        for value in (' whsec_SyntheticNeverReal0001', 'whsec_SyntheticNeverReal0001 ', 'rk_live_SyntheticNeverReal0001'):
+            with self.subTest(value=repr(value)):
+                result = start(environment({**self.LIVE, 'STRIPE_WEBHOOK_SECRET': value}), self.EXPRESSION)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertTrue(any(item.startswith('STRIPE_WEBHOOK_SECRET must be the endpoint signing secret exactly')
+                                    for item in refusal_items(result.stderr)), result.stderr[-400:])
+                self.assertNotIn('SyntheticNeverReal', result.stderr)
 
     def test_a_sandbox_key_refuses_to_start_and_names_the_mode_not_the_key(self):
         for key in ('sk_test_synthetic_never_real', 'rk_test_synthetic_never_real', 'sk_live_synthetic_never_real'):
