@@ -1410,3 +1410,34 @@ class TheSaveNamesAClinicianDecisions(OrdinaryDraft, TestCase):
                          'decision to leave blank; 3 reviewed by a clinician). ')
         self.assertEqual(said(reviewed_unedited=2, with_clinician_review=2),    # (no decision: the sentence as before)
                          'Cleared, and recorded under your name: the answer draft (2 answers, 2 reviewed by a clinician). ')
+
+
+@override_settings(**TEST_SETTINGS)
+class AnAcceptedCodeIsNotTakenOver(OrdinaryDraft, TestCase):
+    """Refutation round 4, R4-6 (pre-existing): accepting a code does not renumber the revision, so a Coding tab opened
+    before clinician A accepted it still posts the current revision. Clinician B's Accept from that page answered 302,
+    re-stamped accepted_by as B and audited a second coding.accept. It is now refused, 409, naming who accepted it and when
+    (their email, as the page shows it), with no audit row — chosen over an idempotent no-op, which would have answered B as
+    if B's own acceptance had been recorded."""
+    CODED = OrdinaryDraft.NOTES + '\nAssessment: documented as R00.0.'
+
+    def test_a_stale_accept_from_a_second_clinician_is_refused_and_keeps_the_first(self):
+        _template, version = self.upload(self.make_docx(), 'docx')
+        encounter = self.create_encounter(version, self.CODED)
+        synthetic_code()
+        self.client.post(f'/encounters/{encounter.pk}/coding/', {'revision': encounter.revision})
+        offer = CodeSuggestion.objects.get(encounter=encounter)
+        second = Client(); second.force_login(self.member('guards-second-clinician', 'clinician'))
+        url, fields = page_form(second.get(f'/encounters/{encounter.pk}/?tab=coding'), f'/coding/{offer.pk}/accept/')
+        self.assertEqual(self.client.post(url, fields).status_code, 302)                 # (A accepts; B's page is older)
+        offer.refresh_from_db()
+        first = (offer.accepted_by_id, offer.accepted_at)
+        self.assertEqual(first[0], self.user.pk)                                         # (the control)
+        refused = second.post(url, fields)
+        text = html.unescape(refused.content.decode())
+        when = timezone.localtime(first[1]).strftime('%Y-%m-%d %H:%M %Z')
+        offer.refresh_from_db()
+        self.assertEqual((refused.status_code, f'already accepted by {self.user.email}, at {when}.' in text,
+                          'Nothing was accepted.' in text, (offer.accepted_by_id, offer.accepted_at),
+                          AuditEvent.objects.filter(action='coding.accept').count()),
+                         (409, True, True, first, 1))
