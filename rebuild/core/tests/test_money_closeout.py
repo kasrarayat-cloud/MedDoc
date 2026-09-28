@@ -519,6 +519,9 @@ class NoCredentialOpenAIAdapter(DeniedNetwork, SyntheticFixture, TestCase):
         row = AuditEvent.objects.filter(action='job.failed', target=str(job.pk)).get()
         self.assertEqual((row.details['billing'], row.details['error_class']), ('not_processed', 'NoProviderRequest'))
         self.assertTrue(all(w.reserved == 0 for w in Wallet.objects.filter(user=self.user)))
+        from core.management.commands.audit_billing import audit_report
+        report = audit_report()
+        self.assertTrue(report['all_checks_pass'], report)
         # Released exactly once: nothing is pending, and the encounter takes a new request without an administrator.
         self.assertFalse(Job.objects.filter(encounter=self.encounter, state__in=['queued', 'running', 'reconciliation'])
                          .exists())
@@ -600,3 +603,46 @@ class NoCredentialOpenAIAdapter(DeniedNetwork, SyntheticFixture, TestCase):
                 '"Could not resolve authentication method. Expected either api_key or admin_api_key to be set."')
             self.assertTrue(run_job())
         self.assert_uncertain_with_its_hold(job)
+
+    def test_control_a_stand_in_constructor_at_generates_own_call_site_stays_an_unknown_outcome(self):
+        """Only the SDK's own constructor frame is proof. The same class and message raised at the very same call site by
+        any other code (a wrapper, a later SDK that delegates its checks) keeps the conservative outcome."""
+        job = self.enqueued()
+
+        def stand_in(**kwargs):
+            raise openai.OpenAIError('Missing credentials. Please pass an `api_key`, `workload_identity`, '
+                                     '`admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment '
+                                     'variable.')
+        with no_credential_for_any_provider(), patch('openai.OpenAI', new=stand_in):
+            self.assertTrue(run_job())
+        self.assert_uncertain_with_its_hold(job)
+
+
+class OpenAIConstructorProof(DeniedNetwork, SimpleTestCase):
+    """R1-MONEY2-OPENAI, the predicate itself: the real SDK constructor's refusal proves nothing left only when QuillMD's
+    own construction in generate() made it. The same refusal reached any other way stays an unknown outcome."""
+
+    def setUp(self):
+        super().setUp()
+        self.deny_network()
+
+    def raised(self, call):
+        # Caught by hand: assertRaises strips the traceback, and the traceback is the proof being tested.
+        try:
+            call()
+        except Exception as error:
+            return error
+        self.fail('the call did not raise')
+
+    def test_the_sdk_constructor_refusing_outside_generate_is_not_proof(self):
+        from core.jobs import never_transmitted
+        fields = [{'key': 'symptoms', 'label': 'Symptoms', 'kind': 'text', 'locator': {'cell': 0}}]
+        with override_settings(**OPENAI_LIVE), no_credential_for_any_provider():
+            elsewhere = self.raised(lambda: REAL_OPENAI(timeout=5, max_retries=0))
+            proved = self.raised(lambda: g.generate('Symptoms: no chest pain', fields, g.configuration()))
+        for refused in (elsewhere, proved):
+            self.assertIs(type(refused), openai.OpenAIError)
+            self.assertIn('Missing credentials', str(refused))
+        self.assertFalse(never_transmitted(elsewhere))
+        self.assertTrue(never_transmitted(proved))
+        self.assertEqual(self.connects, [])

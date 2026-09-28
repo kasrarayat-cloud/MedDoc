@@ -95,3 +95,23 @@ Reviewed replacement normalized identity:
 This is a scoped finished-diff financial review, not a blind refresh. The
 scanner/profile suite must pass on the actual tree before this identity is
 cited as verified.
+
+## R1-MONEY2-OPENAI addendum — single-job classification only
+
+The optional OpenAI adapter (`AI_PROVIDER=openai`; the production launcher pins
+`anthropic`) reached MONEY-2 by two shapes the Anthropic-only predicate missed:
+openai 2.54.0 raises the base `OpenAIError` inside the client constructor when
+no credential exists (the construction sits in `generate()`'s
+`before_the_provider` block, inactive for a legacy form), and with only
+`OPENAI_ADMIN_KEY` set its own `_validate_headers` raises `TypeError` while
+building the only attempt (`max_retries=0`). Both ended 'Provider outcome is
+uncertain' with the hold kept.
+
+`jobs.never_transmitted` now also recognises, by code-object identity of the
+innermost frame and never by message: openai's `OpenAI._validate_headers`
+(TypeError), and openai's `OpenAI.__init__` raising the base `OpenAIError`
+when its caller frame is `generation.generate` itself. SDK code objects are
+read from already-loaded modules only; nothing is imported in the handler.
+Only `core/jobs.py` changed. `generation.py`, `v3_field_relations.py`,
+`generation_batch.py`, `batch_jobs.py` and `mapping_jobs.py` are unchanged, so
+every fixed identity above stands; no request, price, hold or send changed.
