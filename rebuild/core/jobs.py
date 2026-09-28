@@ -6,6 +6,7 @@ import json
 import re
 import secrets
 import os
+import sys
 import time
 import httpx
 from django.conf import settings
@@ -36,6 +37,50 @@ class CancellationRefused(ValidationError):
 
 class NoProviderRequest(ValidationError):
     """Raised before any provider request is made: nothing billable happened, so the held funds are released."""
+
+
+#: What the doctor reads when the provider SDK refused to build a request for want of a credential. Fixed, non-clinical.
+PROVIDER_NOT_CONNECTED='Generation provider is not connected.'
+
+
+def sdk_code(module,owner,name):
+    """The code object of a LOADED provider SDK's own method, or None. Nothing is imported: an SDK this process never
+    loaded cannot be in a traceback, and an exception handler must not pay for, or fail on, an import."""
+    try: return getattr(getattr(sys.modules[module],owner),name).__code__
+    except Exception: return None
+
+
+def never_transmitted(error):
+    """True only when a provider SDK refused before its request existed, so provably nothing left (MONEY-2).
+
+    The proof is structural, never a message match: the innermost frame is the SDK's own refusal code. Two shapes:
+    - A TypeError from the SDK's own header validation while BUILDING the request, inside `_build_request`, before
+      `_client.send`, on the only attempt (max_retries=0). anthropic 0.125.0 resolves its credential there, not when the
+      client is constructed (no api_key, auth_token or credentials provider); openai 2.54.0 does the same for a client
+      constructed with only OPENAI_ADMIN_KEY, which satisfies its constructor but gives the Responses request no bearer
+      credential (R1-MONEY2-OPENAI).
+    - The base OpenAIError itself (never a subclass: APIConnectionError and every other transport or status error is a
+      subclass) raised by openai's own client constructor, called directly from generation.generate: with no credential at
+      all no client exists, so nothing can have been sent. That construction sits in a before_the_provider block that is
+      inactive for a legacy form, so it read as an unknown outcome and the hold was kept (R1-MONEY2-OPENAI).
+    Every send sits outside its pre-provider guard, and the send sites stay exactly as the cost scanner binds them; the
+    failure is classified where it lands. Anything else, including a later SDK that moves either check, the same class
+    and message raised by a send, or a constructor reached from anywhere but generate(), stays an unknown outcome with its
+    hold kept: the conservative status quo, never a guess.
+    """
+    trace=error.__traceback__
+    if trace is None: return False
+    frames=[]
+    while trace is not None: frames.append(trace.tb_frame.f_code); trace=trace.tb_next
+    # Identity, never equality: code objects compare equal by content, and only the SDK's own object is proof. A missing
+    # SDK or method gives None, which is never a frame's code, so it proves nothing.
+    if type(error) is TypeError:
+        return any(frames[-1] is code for code in (sdk_code('anthropic._client','Anthropic','_validate_headers'),
+                                                   sdk_code('openai._client','OpenAI','_validate_headers')))
+    OpenAIError=getattr(sys.modules.get('openai._exceptions'),'OpenAIError',None)
+    if OpenAIError is None or type(error) is not OpenAIError: return False
+    return (len(frames)>1 and frames[-1] is sdk_code('openai._client','OpenAI','__init__')
+            and frames[-2] is getattr(generation.generate,'__code__',None))
 
 
 class RecordingOverLimit(ValidationError):
@@ -711,6 +756,8 @@ def run_one():
             job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)
     except Exception as exc:
+        # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
+        if not provider_returned and never_transmitted(exc): exc=NoProviderRequest(PROVIDER_NOT_CONNECTED)
         # A timeout can be billable. Never retry it or release its reservation as if cost were known.
         known=Usage.objects.filter(job=job).exists()
         fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'

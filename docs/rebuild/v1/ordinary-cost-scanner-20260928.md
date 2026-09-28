@@ -59,3 +59,59 @@ The integrated `cost-union-17f0-01` run passed17 scanner/profile methods in
 global-dependency, bypass/alias/dispatch and changed-module negative controls
 passed. This reuses unchanged historical request evidence; it sends no provider
 request and changes no historical profile, receipt, charge or reservation.
+
+## MONEY-1 / MONEY-2 addendum — batch billing classification only
+
+Reviewed the finished normalized delta of `core/batch_jobs.py` against the
+candidate `bf8f7b78` before changing its fixed identity. Only three functions
+changed, and none of them changes a request, a price, a hold or a send:
+
+- `finish`: QuillMD's own configuration is compared first. A changed
+  configuration now stops the complete batch as a platform failure (`stop`
+  without `user_declined`, so every settled child is absorbed through
+  `absorb_failed_job`) instead of the user's not-adopted charge (MONEY-1). The
+  user-side decline checks and the adoption statements are unchanged.
+- `stop`: a child counts as sent when it has a send intent and no durable
+  `not_transmitted` event.
+- `run_one`: only the `except` handler changed. When the SDK's own
+  request-build refusal (no credential) is proved structurally by
+  `jobs.never_transmitted`, it records `not_transmitted` and does not mark the
+  child uncertain (MONEY-2). The `try` body is AST-identical: the plan,
+  `b.request` wire, request digest, sandbox and held-amount checks, the
+  `Anthropic(timeout=...,max_retries=0)` construction, the send intent,
+  `client.messages.create(**wire)`, the settlement and staging.
+
+`generation.py`, `v3_field_relations.py` and `generation_batch.py` are unchanged,
+so their identities remain. The single-job and mapping classification lives in
+`jobs.run_one` and `mapping_jobs.run_one`, which are outside every send
+boundary. The mapping `send` is unchanged. No request is repeated. A consumed
+send intent stays consumed, and the child is cancelled with its hold released
+exactly once.
+
+Reviewed replacement normalized identity:
+
+- `core/batch_jobs.py`: `17623922c4281d303374aef30d2de0898d4816cae602b6fe055cf582e636ad58`.
+
+This is a scoped finished-diff financial review, not a blind refresh. The
+scanner/profile suite must pass on the actual tree before this identity is
+cited as verified.
+
+## R1-MONEY2-OPENAI addendum — single-job classification only
+
+The optional OpenAI adapter (`AI_PROVIDER=openai`; the production launcher pins
+`anthropic`) reached MONEY-2 by two shapes the Anthropic-only predicate missed:
+openai 2.54.0 raises the base `OpenAIError` inside the client constructor when
+no credential exists (the construction sits in `generate()`'s
+`before_the_provider` block, inactive for a legacy form), and with only
+`OPENAI_ADMIN_KEY` set its own `_validate_headers` raises `TypeError` while
+building the only attempt (`max_retries=0`). Both ended 'Provider outcome is
+uncertain' with the hold kept.
+
+`jobs.never_transmitted` now also recognises, by code-object identity of the
+innermost frame and never by message: openai's `OpenAI._validate_headers`
+(TypeError), and openai's `OpenAI.__init__` raising the base `OpenAIError`
+when its caller frame is `generation.generate` itself. SDK code objects are
+read from already-loaded modules only; nothing is imported in the handler.
+Only `core/jobs.py` changed. `generation.py`, `v3_field_relations.py`,
+`generation_batch.py`, `batch_jobs.py` and `mapping_jobs.py` are unchanged, so
+every fixed identity above stands; no request, price, hold or send changed.

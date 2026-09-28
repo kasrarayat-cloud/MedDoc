@@ -971,7 +971,9 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # undercharging replacement of Decimal. These fixed identities accompany reviewed
 # offline compiler/price witnesses; they are never learned from inspected source.
 # Any semantic module change fails until its dependency/price proof is reviewed.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': '9173e760118b7346d83032f6ccad5cc48518ef6be2ee0e9e4fb1fd5a86682ff5', 'core/batch_jobs.py': 'e65e011858028e27b1e35c3aeef00e0ce4182dee209c02552b923f964088595c'}
+# The MONEY-1/MONEY-2 addendum (ordinary-cost-scanner-20260928.md) reviews the
+# batch_jobs delta: billing classification in finish/stop/run_one's handler only.
+BATCH_PRICED_MODULES = {'core/generation_batch.py': '9173e760118b7346d83032f6ccad5cc48518ef6be2ee0e9e4fb1fd5a86682ff5', 'core/batch_jobs.py': '17623922c4281d303374aef30d2de0898d4816cae602b6fe055cf582e636ad58'}
 
 # Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
 # quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
