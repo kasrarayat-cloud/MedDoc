@@ -25,6 +25,8 @@ from core import models as m, retention, disposition_execution as x, disposition
 from core.security import scoped
 from core.tests.test_retention_preservation import Fixture, ISOLATED
 
+DURABLE = 'This document has a durable disposition instruction and is unavailable.'
+
 
 class ExecutionFixture(Fixture):
     def setup_execution(self):
@@ -190,10 +192,41 @@ class EmptyDraftExecution(ExecutionFixture, TestCase):
         self.assertFalse(scoped(m.Encounter, self.scope[0]).filter(pk=row.pk).exists())
         request = RequestFactory().get('/synthetic/'); request.user = self.scope[0]
         with self.assertRaises(Http404): views.api_encounter(request, row.pk)
-        with self.assertRaises(ValidationError): jobs.enqueue(row, self.scope[0])
+        # The durable-intent refusal itself, not any refusal: an empty draft refuses a generation for having no notes
+        # anyway, which let this assertion pass with the journal check deleted from jobs.enqueue's lock (RF-R3).
+        with self.assertRaisesMessage(ValidationError, DURABLE): jobs.enqueue(row, self.scope[0])
         self.assertFalse(m.Job.objects.filter(encounter=row).exists())
         result = x.execute(self.admin, instruction.pk, self.genesis)
         self.assertEqual(len(j.verified()), 1); self.assertEqual(result.outcome, 'empty_draft_deleted')
+
+    def test_durable_intent_refuses_a_transcription_the_one_request_an_empty_draft_accepts(self):
+        """RF-R3. Reproduce (the finding's input): an approved exact empty draft whose execute fails after its journal
+        append (DispositionCompletion.objects.create raises), leaving a durable pending intent; then jobs.enqueue(row,
+        clinician, 'transcription', <2 s synthetic WAV>) under STANDARD_ENV. With require_access deleted from
+        disposition_execution.lock_available, every test passed and this enqueue queued a transcription and held money
+        on a draft whose disposal is durably journaled. It must refuse, naming the durable instruction."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from core import jobs
+        from core.security import store_upload
+        from core.tests.audio_fixtures import wav_bytes
+        from core.tests.test_recording_limit import STANDARD_ENV
+
+        def recording(tag):
+            return store_upload(SimpleUploadedFile(f'{tag}.wav', wav_bytes(seconds=2, tag=tag), content_type='audio/wav'), 'audio')
+        row, instruction = self.approved()
+        with patch.object(m.DispositionCompletion.objects, 'create', side_effect=RuntimeError('SYNTHETIC crash')):
+            with self.assertRaises(RuntimeError): x.execute(self.admin, instruction.pk, self.genesis)
+        self.assertTrue(m.Encounter.objects.filter(pk=row.pk).exists()); self.assertEqual(len(j.verified()), 1)
+        clinician = self.scope[0]
+        with patch.dict(os.environ, STANDARD_ENV):
+            with self.assertRaisesMessage(ValidationError, DURABLE):
+                jobs.enqueue(row, clinician, 'transcription', recording('rfr3-durable'))
+            self.assertFalse(m.Job.objects.exists()); self.assertFalse(m.Reservation.objects.exists())
+            # Positive control: an exact empty draft with no instruction queues the same request.
+            other = self.empty()
+            job = jobs.enqueue(other, clinician, 'transcription', recording('rfr3-control'))
+        self.assertEqual((job.kind, job.state, job.encounter_id), ('transcription', 'queued', other.pk))
+        self.assertTrue(m.Reservation.objects.filter(job=job, state='held').exists())
 
     def test_replay_on_older_conflicting_snapshot_only_suppresses_and_never_erases_it(self):
         row, instruction = self.approved()

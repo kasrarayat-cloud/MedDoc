@@ -14,7 +14,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout
 from django.core.exceptions import PermissionDenied,ValidationError
 from django.core import signing
-from django.db import transaction,IntegrityError
+from django.db import transaction,IntegrityError,DatabaseError
 from django.http import FileResponse,HttpResponse,JsonResponse,Http404
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
@@ -39,6 +39,12 @@ from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_INPUT_UNITS
 
 def error_message(exc):
     return '; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc)
+
+
+def unavailable(exc):
+    """A refusal because the document itself is gone (disposed of while the request ran): its page would be a 404."""
+    from .disposition_execution import DocumentUnavailable
+    return isinstance(exc,DocumentUnavailable)
 
 
 def document_backend(info):
@@ -308,7 +314,9 @@ def verify(request,raw):
         label=welcome_credit_label() if settings.QUILLMD_REGISTRATION=='open' else ''
         return render(request,'confirm.html',{'title':'Verify your test account' if settings.SYNTHETIC_ONLY else 'Verify your account','description':f'Confirm ownership of this email to activate your personal {label} welcome credit.' if label else 'Confirm ownership of this email to activate your account.'})
     with transaction.atomic():
-        user=User.objects.select_for_update().get(pk=v.user_id)
+        # FOR NO KEY UPDATE, as welcome_credit (below) takes it: never FOR UPDATE on an account this transaction holds
+        # while it locks a wallet (the global lock order, core.retention; RF-R1).
+        user=User.objects.select_for_update(no_key=True).get(pk=v.user_id)
         v=Verification.objects.select_for_update().get(pk=v.pk)
         if v.used_at or v.expires_at<=timezone.now() or user.verified_at or not user.is_active: raise Http404
         user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
@@ -1044,7 +1052,13 @@ def generate_view(request,pk):
             messages.info(request,'These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.')
         else:
             messages.success(request,'Generation queued. Refresh this page to view the result.')
-    except ValidationError as exc:messages.error(request,error_message(exc))
+    except ValidationError as exc:
+        messages.error(request,error_message(exc))
+        if unavailable(exc):return redirect('dashboard')
+    except DatabaseError:
+        # enqueue is one transaction: a database failure (a deadlock victim, a lock timeout, a lost connection) rolled all
+        # of it back, so nothing was queued, held, sent or charged (RF-R1). Said so, never a 500.
+        messages.error(request,'The generation could not be queued. Nothing was sent or charged. Try again.')
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -1535,6 +1549,16 @@ def voice(request,pk):
     except ValidationError as exc:
         if relative:cleanup_file(private_path(relative))
         messages.error(request,error_message(exc))
+        if unavailable(exc):return redirect('dashboard')
+    except DatabaseError:
+        # enqueue is one transaction, so a database failure (a lock timeout, a deadlock victim, a lost connection) rolled
+        # all of it back: nothing was queued, held, sent or charged. The stored recording has no owner; remove it (RF-1).
+        if relative:cleanup_file(private_path(relative))
+        messages.error(request,'The recording could not be queued. Nothing was sent or charged. Upload it again.')
+    except BaseException:
+        # Anything else is a defect and is reported as one, but it never strands the recording it interrupted.
+        if relative:cleanup_file(private_path(relative))
+        raise
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -1574,7 +1598,13 @@ def voice_approve(request,pk):
             raise ValidationError('The document changed after the quote. Upload the recording again; nothing was sent.')
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
             raise ValidationError('The quoted recording is no longer available. Upload it again; nothing was sent.')
-        job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
+        try:job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
+        except DatabaseError:
+            # enqueue rolled back whole: nothing was queued, held, sent or charged (RF-R1). Only this call: a failure after
+            # it returned would follow a queued job. The recording stays with its signed approval, which is still valid, so
+            # it can be approved again; the reaper removes it if nobody does.
+            messages.error(request,'The approved recording could not be queued. Nothing was sent or charged. Approve it again, or upload it again.')
+            return redirect('encounter_detail',pk=pk)
         if job.input_path!=relative:cleanup_file(path,encounter_id=e.pk)
         audit(request.user,'voice.limit_approved',job.pk,department=e.department,charge_limit=str(data['charge_limit']))
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")
@@ -1838,7 +1868,12 @@ def checkout(request):
         if payer=='personal':wallet=Wallet.objects.get(user=request.user,kind='paid')
         else:
             organization_id=payer.split(':',1)[1]
-            if not Membership.objects.select_for_update().filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
+            # FOR NO KEY UPDATE (the global lock order, core.retention): this join also locks the owner's account and
+            # department rows, held while the Payment row's commit-time check waits for the organization's paid wallet,
+            # which a request in that department holds before its own commit takes FOR KEY SHARE on the department.
+            # FOR UPDATE refused that: the top-up was a deadlock victim (RF-R1's class). Suspension, demotion and
+            # membership changes still wait for this check.
+            if not Membership.objects.select_for_update(no_key=True).filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
             wallet,_=Wallet.objects.get_or_create(organization_id=organization_id,kind='paid')
         # Real data mode never spends a balance sandbox payments funded (reserve() refuses it), so live money is never
         # taken into one: refused before any Payment row or Stripe call. The payer is told what to do, and nothing that

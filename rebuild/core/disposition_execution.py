@@ -24,6 +24,10 @@ def enabled():
         raise ValidationError('Executable disposition is unavailable; no approved policy is installed.')
 
 
+class DocumentUnavailable(ValidationError):
+    """The document row is gone (disposed of while the request ran): the request is refused, never a crash."""
+
+
 def require_access(target_id, *, own_instruction=None):
     target = str(target_id)
     if m.DispositionTombstone.objects.filter(target_id=target).exists():
@@ -33,6 +37,19 @@ def require_access(target_id, *, own_instruction=None):
             instruction = entry['body']['instruction']
             if instruction['target_id'] == target and instruction['id'] != str(own_instruction):
                 raise ValidationError('This document has a durable disposition instruction and is unavailable.')
+
+
+def lock_available(target_id):
+    """Lock, for writing, a document the caller read earlier in another transaction (a request's page lookup).
+
+    Disposition deletes an exact empty draft, and it may commit between that read and this lock: select_for_update()
+    then finds no row. That is a refusal the clinician is told about, never Encounter.DoesNotExist (RF-3). Only
+    disposition deletes an encounter (every reference is PROTECT), so a missing row means disposed."""
+    row = m.Encounter.objects.select_for_update().filter(pk=target_id).first()
+    if row is None:
+        raise DocumentUnavailable('This document is no longer available. Nothing was queued, sent or charged.')
+    require_access(row.pk)
+    return row
 
 
 def available(query):

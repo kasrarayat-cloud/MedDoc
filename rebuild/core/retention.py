@@ -23,6 +23,34 @@ from .security import audit, private_path
 LOCK_KEY=716849203517
 SCOPES={'organization':Organization,'department':Department,'patient':Patient,'encounter':Encounter}
 
+# ⚠️ ONE GLOBAL LOCK ORDER. LOCK_KEY is a single advisory lock that every preserved clinical write takes implicitly
+# (the 0025/0026/0030 triggers: UPDATE/DELETE of an encounter, patient, template, department, job or code suggestion,
+# INSERT of an encounter, a hold, a release or a tombstone), so it is held by most clinical transactions until commit.
+# A transaction that holds a row lock another one needs while waiting for LOCK_KEY deadlocks. The order is:
+#
+#   1. source/scope rows    account (User), organization, department, patient, encounter, template, generation batch
+#   2. job rows             Job
+#   3. the preservation lock (lock_preservation(), or any trigger above)
+#   4. money rows           Reservation, then Wallet (sorted by pk)
+#   5. commit               deferred foreign-key checks take FOR KEY SHARE on every row a new row references
+#
+# Levels may be skipped, never reversed. Billing's job-scoped entry points (reserve, release, settle, absorb_failed_job)
+# take level 3 themselves before any money row, so no caller can reach a wallet lock ahead of a later job.save() (RF-1).
+# Level 5 comes last by construction, and a transaction reaches it still holding its locks of levels 1-4. So a row that
+# OTHER transactions point at from rows they insert without locking it first (an account, organization, department or
+# patient: audit, job, usage, payment and membership rows do) is never held FOR UPDATE by a transaction that goes on to
+# wait for a later level (LOCK_KEY or a money row). It is locked FOR NO KEY UPDATE, which does not conflict with FOR
+# KEY SHARE and still excludes concurrent updates and deletion. Encounter, template and job rows keep FOR UPDATE: every
+# row pointing at one is inserted under that row's own lock (jobs, batches, codes and holds under their encounter's;
+# versions under their template's; reservations, ledger entries, usage and platform costs under their job's).
+# The instances: create_hold's scope row (RF-2); welcome_credit's and the clinic acceptance's account row, held while
+# it locks the promotional wallet the account's own requests hold before their commit-time FOR KEY SHARE on it (RF-R1);
+# the organization top-up's owner check, whose join also locks the owner's account and department while its payment
+# waits for the organization's wallet, and a held reconciliation charge, locked of=('self',) so its select_related
+# department is not (RF-R1's class); the department a payer change updates, whose trigger then waits for LOCK_KEY
+# (RF-R2). A bare select_for_update() over a join or beside select_related() locks every joined row: name the rows
+# with of=, or use no_key=True.
+
 
 def lock_preservation():
     if connection.vendor!='postgresql' or not connection.in_atomic_block:
@@ -56,7 +84,11 @@ def create_hold(actor,scope,target,authority,request_key):
         if target is not None:raise ValidationError('Global preservation has no target.')
         fields={}
     elif scope in SCOPES:
-        try:row=SCOPES[scope].objects.select_for_update().get(pk=target)
+        # FOR NO KEY UPDATE, not FOR UPDATE (the global lock order above, level 5): the in-flight clinical write this
+        # waits for (at lock_preservation) re-checks its new rows' foreign keys at commit with FOR KEY SHARE on this
+        # very row, which FOR UPDATE refused, so neither could finish (RF-2). This mode still excludes deletion,
+        # key changes and every concurrent update of the scope row, and a second hold on it.
+        try:row=SCOPES[scope].objects.select_for_update(no_key=True).get(pk=target)
         except (ValueError,ValidationError,SCOPES[scope].DoesNotExist):raise ValidationError('Invalid preservation scope.')
         fields={scope:row}
     else:raise ValidationError('Invalid preservation scope.')
