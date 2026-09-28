@@ -694,3 +694,398 @@ class WholeFormDestinations(unittest.TestCase):
         _, out, _ = layout_source.prepare(raw, mapping=proposal['fields'], answers={own['key']: answer})
         cell = w.SlotIndex(w.open_package(out)).by_id['word/document.xml#b/tbl[0]/tr[1]/tc[1]'].el
         self.assertEqual([w.text_of(p) for p in cell.findall(w.q('w:p'))], [instruction, answer])
+
+
+# ─── Refutation 2026-09-28, third round (F1-F10) ────────────────────────────────────────────────────────────────────
+
+
+def drawn(pdf, lines, before=b'', after=b''):
+    """A synthetic page in the pinned profile's embedded fixture font, painted in the order given.
+    lines: [(y, [(x, text) | (x, None) for a native checkbox | (x, True) for a ticked one])]."""
+    import io
+    from pypdf import PdfReader
+    from pypdf.generic import DecodedStreamObject, NameObject
+    reader = PdfReader(io.BytesIO(pdf.fixture)); page = reader.pages[0]
+    font = next(name for name, ref in page['/Resources']['/Font'].items() if ref.get_object().get('/Subtype') == '/TrueType')
+    stream = b'.1 w\n' + before
+    for y, items in lines:
+        for x, text in items:
+            if text is None or text is True:
+                stream += f'0 0 0 RG {x} {y - 2} 10 10 re S\n'.encode()
+                if text is True:
+                    stream += f'{x} {y + 8} m {x + 10} {y - 2} l S {x + 10} {y + 8} m {x} {y - 2} l S\n'.encode()
+            else:
+                stream += f'q 0 0 0 rg BT {x} {y} Td {font} 11 Tf <{text.encode().hex()}> Tj ET Q\n'.encode()
+    content = DecodedStreamObject(); content.set_data(stream + after); page[NameObject('/Contents')] = content
+    return reader.pages
+
+
+class PaintedFixture(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from .test_layout_containment import SequenceContainment
+        cls.pdf = SequenceContainment('test_fixture_font_keeps_literal_character_codes')
+        SequenceContainment.setUpClass()
+
+
+class NeverPrintedCharacters(PaintedFixture):
+    """F1: two places that print the same thing count as two, whatever the source holds that never prints."""
+
+    def form(self, spleen_header='\tNormal\tAbnormal', *, hidden=False, liver_header='\tNormal\tAbnormal', caps=False):
+        from docx.oxml import OxmlElement
+        liver = ['12b.\tLiver', (liver_header, (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (4320, 5760)),
+                 ('Tenderness\t1 ☐\t2 ☐', (4320, 5760))]
+        spleen = ['12c.\tSpleen', (spleen_header, (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (2880, 4320)),
+                  ('Tenderness\t1 ☐\t2 ☐', (2880, 4320))]
+        doc = stopped_form([[liver, ['If abnormal,', 'describe below']], [spleen, ['']]], (6480, 2880))
+        header = doc.tables[0].cell(1, 0).paragraphs[1]
+        if hidden:
+            run = header.add_run('X'); run._r.get_or_add_rPr().append(OxmlElement('w:vanish'))
+        if caps:
+            for run in header.runs:
+                run._r.get_or_add_rPr().append(OxmlElement('w:caps'))
+        return data(doc)
+
+    def test_characters_that_never_print_do_not_make_a_repeated_place_unique(self):
+        for name, raw in (('soft hyphen', self.form('\tNor­mal\tAbnormal')),
+                          ('zero width space', self.form('\tNor​mal\tAbnormal')),
+                          ('word joiner', self.form('\tNor⁠mal\tAbnormal')),
+                          ('hidden run', self.form(hidden=True)),
+                          ('capitals by formatting', self.form('\tnormal\tabnormal', liver_header='\tNORMAL\tABNORMAL', caps=True))):
+            with self.subTest(name):
+                proposal, _, _ = layout_source.prepare(raw)
+                candidates = proposal['manifest']['candidates']
+                liver = [c for c in candidates if c['source']['row']['slot'].startswith('b/tbl[0]/tr[0]/')]
+                self.assertEqual(len(liver), 2)
+                self.assertEqual({c['rendered_source']['source_occurrences'] for c in candidates}, {2})
+
+    def cell(self, y, title, shift, *, wrap=False):
+        """One coded cell, painted as the renderer paints a cell: title, header, rows, in order."""
+        header = [(y - 20, [(200, 'Normal'), (300, 'Abnormal')])] if not wrap else \
+            [(y - 20, [(200, 'Normal')]), (y - 30, [(200, 'Abnormal')])]
+        rows = [(y - 45 - 20 * n, [(20, label), (212 + shift, '1 '), (222 + shift, None), (322 + shift, '2 '), (332 + shift, None)])
+                for n, label in enumerate(('Palpation', 'Tenderness'))]
+        return [(y, [(20, title)])] + header + rows
+
+    def test_a_place_rendered_twice_is_never_measured_on_the_other_place(self):
+        from .layout_geometry import containment
+        proposal, _, _ = layout_source.prepare(self.form())
+        candidates = proposal['manifest']['candidates']
+        for candidate in candidates:  # what an undercounting source key reports
+            candidate['rendered_source']['source_occurrences'] = 1
+        liver = {c['id'] for c in candidates if c['source']['row']['slot'].startswith('b/tbl[0]/tr[0]/')}
+        # Liver prints its boxes one column right. Its neighbour cell prints on Liver's title and header
+        # baselines, painted after Liver's cell; or Liver's header wraps. Spleen prints the same text, aligned.
+        neighbour = self.cell(400, '12b. Liver', 100) + [(400, [(420, 'If abnormal,')]), (380, [(420, 'describe below')])]
+        wrapped = self.cell(400, '12b. Liver', 100, wrap=True)
+        for name, liver_lines in (('neighbour on its baselines', neighbour), ('wrapped header', wrapped)):
+            with self.subTest(name):
+                pages = drawn(self.pdf, liver_lines + self.cell(250, '12c. Spleen', 0))
+                result = containment(pages, candidates)
+                self.assertFalse([m for m in result['measurements'] if m['candidate'] in liver])
+                self.assertTrue(liver <= {h['candidate'] for h in result['held']})
+                answered = [dict(c, untouched=False) if c['id'] in liver else c for c in candidates]
+                with self.assertRaises(ValueError):
+                    containment(pages, answered)
+
+
+class RowQuestionCells(unittest.TestCase):
+    """F2: only a plain question cell of the same row names a coded row."""
+
+    def test_a_merged_group_cell_is_context_and_each_row_keeps_its_own_title(self):
+        for control in ('glyph', 'ff'):
+            with self.subTest(control=control):
+                rows = [[['Abdomen'], ['Liver summary', '', ('\tNormal\tEnlarged', (1440, 2880)), ('\t1 ☐\t2 ☐', (1440, 2880))]],
+                        [[''], ['Spleen summary', '', ('\tNormal\tEnlarged\tNot felt', (1440, 2880, 4320)),
+                                ('\t1 ☐\t2 ☐\t3 ☐', (1440, 2880, 4320))]]]
+                doc = stopped_form(rows, (2880, 6480), control=control)
+                doc.tables[0].cell(0, 0).merge(doc.tables[0].cell(1, 0))
+                detector, _, _ = detect(data(doc))
+                areas = [a for _, _, a in detector.layout_candidates]
+                self.assertEqual([(a.label, a.options) for a in areas],
+                                 [('Liver summary', ['Normal', 'Enlarged']), ('Spleen summary', ['Normal', 'Enlarged', 'Not felt'])])
+                self.assertTrue(all('Abdomen' in a.context for a in areas))
+
+    def test_a_cell_holding_its_own_answer_is_never_the_row_question(self):
+        murmur = ['Murmur', '', ('\tAbsent\tPresent', (1440, 2880)), ('\t1 ☐\t2 ☐', (1440, 2880))]
+        for text, control in (('Referred to cardiology ☐', 'ff'), ('Referred to cardiology ☐', 'glyph'),
+                              ('Date examined: ____________', 'glyph'), ('Temperature ▯▯.▯ °C', 'glyph')):
+            with self.subTest(text=text, control=control):
+                detector, _, notes = detect(data(stopped_form([[[text], murmur]], (2880, 6480), control=control)))
+                self.assertEqual([a.label for _, _, a in detector.layout_candidates], [])
+                self.assertTrue(any('holds its own answer' in n for n in notes))
+        # A plain question to the left still names the row.
+        detector, _, _ = detect(data(stopped_form([[['Heart'], murmur]], (2880, 6480), control='glyph')))
+        self.assertEqual([a.label for _, _, a in detector.layout_candidates], ['Heart'])
+
+
+class WordsAndCodesBeforeBoxes(unittest.TestCase):
+    """F3: a code or word printed before each box never becomes the next box's option."""
+
+    def test_a_code_printed_before_every_box_in_any_form_is_noted(self):
+        rows = ['Finding\t1 - ☐\t2 - ☐\t3 - ☐ Other', 'Finding\t#1 ☐\t#2 ☐\t#3 ☐ Other', 'Finding\ta) ☐\tb) ☐\tc) ☐ Other',
+                'Finding\ta ☐\tb ☐\tc ☐ Other', 'Finding\tI ☐\tII ☐\tIII ☐ Other', 'Finding\t1a ☐\t1b ☐\t1c ☐ Other',
+                'Finding\t1= ☐\t2= ☐\t3= ☐ Other', 'Finding\t1: ☐\t2: ☐\t3: ☐ Other']
+        for control in ('glyph', 'ff'):
+            for row in rows:
+                with self.subTest(control=control, row=row):
+                    result = w.inspect(data(coded_form(['4.\tThyroid', '\tNormal\tAbnormal\tNot done', row], control=control)))
+                    self.assertEqual([f['label'] for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'], [])
+                    self.assertTrue(any('response codes are not option labels' in n for n in result['notes']))
+
+    def test_words_printed_before_their_boxes_are_noted_and_never_shifted_onto_the_next_box(self):
+        for control in ('glyph', 'ff'):
+            for line in ('Smoker: Yes ☐ No ☐', 'Enlarged: Y ☐ N ☐ Unknown ☐', 'Smoker ☐   Diabetic ☐'):
+                with self.subTest(control=control, line=line):
+                    result = w.inspect(data(coded_form([line], control=control, heading=None)))
+                    self.assertEqual([f['label'] for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'], [])
+                    self.assertTrue(any('printed before' in n or 'response codes are not option labels' in n
+                                        for n in result['notes']))
+        # Positive controls: words and numbers printed after their boxes stay those boxes' options.
+        for line, label, options in (('Grade: ☐ A ☐ B ☐ C', 'Grade', ['A', 'B', 'C']),
+                                     ('Smoker? ☐ Yes ☐ No', 'Smoker?', ['Yes', 'No']),
+                                     ('Stage ☐ I ☐ II ☐ III', 'Stage', ['I', 'II', 'III']),
+                                     ('Is this a ☐ new ☐ follow-up visit', 'Is this a', ['new', 'follow-up visit']),
+                                     ('Pain\t☐ 0\t☐ 1\t☐ 2', 'Pain', ['0', '1', '2']),
+                                     ('☐ a ☐ b ☐ c', 'Choose', ['a', 'b', 'c'])):
+            for control in ('glyph', 'ff'):
+                with self.subTest(control=control, line=line):
+                    result = w.inspect(data(coded_form([line], control=control, heading=None)))
+                    self.assertEqual([(f['label'], f['options']) for f in result['fields']
+                                      if f['locator']['target']['type'] == 'checkboxes'], [(label, options)])
+
+
+class HeaderLegendCodes(unittest.TestCase):
+    """F4: a printed header whose codes disagree with the row's codes is ambiguous."""
+
+    def test_a_legend_whose_codes_contradict_the_row_codes_is_noted(self):
+        legend = ('\t2 = Abnormal\t1 = Normal', (2880, 4320))
+        for name, cell in (('two rows', ['12b.\tLiver', legend, ('Palpable\t1 ☐\t2 ☐', (2880, 4320)), '',
+                                         ('Tender\t1 ☐\t2 ☐', (2880, 4320))]),
+                           ('one tab pair', ['12b.\tLiver', legend, ('Palpable\t1 ☐\t2 ☐', (2880, 4320))])):
+            with self.subTest(name):
+                detector, _, notes = detect(data(stopped_form([[cell, ['']]], (6480, 2880))))
+                self.assertEqual(detector.layout_candidates, [])
+                self.assertTrue(any('codes' in n and ('Coded column sequence at ' in n or 'Tab-column options at ' in n)
+                                    for n in notes))
+        # A legend whose codes agree with the rows keeps its printed words as the options.
+        agreeing = ['12b.\tLiver', ('\t1 = Normal\t2 = Abnormal', (2880, 4320)), ('Palpable\t1 ☐\t2 ☐', (2880, 4320)), '',
+                    ('Tender\t1 ☐\t2 ☐', (2880, 4320))]
+        detector, _, _ = detect(data(stopped_form([[agreeing, ['']]], (6480, 2880))))
+        self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates],
+                         [('Palpable', ['1 = Normal', '2 = Abnormal']), ('Tender', ['1 = Normal', '2 = Abnormal'])])
+
+
+def table_doc(*tables):
+    doc = Document()
+    for rows in tables:
+        table = doc.add_table(rows=len(rows), cols=len(rows[0]))
+        for r, cells in enumerate(rows):
+            for c, text in enumerate(cells):
+                table.cell(r, c).text = text
+        doc.add_paragraph('')
+    return data(doc)
+
+
+class ValueRowsAreNotHeaders(unittest.TestCase):
+    """F5 and F8: a row that prints answer places is never a column header for the rows below it."""
+
+    def test_a_row_of_value_cells_never_names_the_values_below_it(self):
+        raw = table_doc([('Medication', 'Dose (mg)'), ('Aspirin', '▯▯▯'), ('Other: ______________', '▯▯▯'),
+                         ('Other: ______________', '▯▯▯')],
+                        [('Level', 'Left (cm)', 'Right (cm)'), ('Calf at ____ cm below patella', '▯▯▯', '▯▯▯'),
+                         ('Thigh at ____ cm above patella', '▯▯▯', '▯▯▯')])
+        fields = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}
+        for slot in ('b/tbl[0]/tr[2]/tc[1]/p[0]', 'b/tbl[0]/tr[3]/tc[1]/p[0]'):
+            self.assertNotIn('▯', fields[slot]['label'])
+            self.assertIn('Dose (mg)', fields[slot]['label'] + ' ' + fields[slot]['context'])
+        for row in (1, 2):
+            left, right = fields['b/tbl[1]/tr[%d]/tc[1]/p[0]' % row], fields['b/tbl[1]/tr[%d]/tc[2]/p[0]' % row]
+            self.assertNotIn('▯', left['label'] + right['label'])
+            self.assertIn('Left (cm)', left['label'] + ' ' + left['context'])
+            self.assertIn('Right (cm)', right['label'] + ' ' + right['context'])
+            self.assertNotIn('Right (cm)', left['label'] + ' ' + left['context'])
+            self.assertNotIn('Left (cm)', right['label'] + ' ' + right['context'])
+
+    def test_a_row_of_inline_answer_gaps_is_not_the_header_of_the_items_below(self):
+        from .test_word_v3 import ff_field
+        doc = Document(); cell = doc.add_table(rows=1, cols=1).cell(0, 0)
+        cell.paragraphs[0].text = 'Optional items'
+        inner = cell.add_table(rows=3, cols=1)
+        inner.cell(0, 0).text = '5. Number of completed sessions:        6. Average duration of sessions:    minutes'
+        for r, (question, options) in enumerate((('7. Provider type:', ('Speech therapist', 'Physical therapist')),
+                                                 ('8. Format:', ('Individual', 'Group'))), 1):
+            paragraph = inner.cell(r, 0).paragraphs[0]; paragraph.add_run(question + '  ')
+            for n, option in enumerate(options):
+                ff_field(paragraph, 'checkbox', name='I%d_%d' % (r, n)); paragraph.add_run(' ' + option + '    ')
+        fields = [f for f in w.inspect(data(doc))['fields'] if f['kind'] in ('choice', 'multi_choice')]
+        self.assertEqual([f['label'] for f in fields], ['Provider type', 'Format'])
+        for field in fields:
+            self.assertIn('Optional items', field['context'])
+            self.assertNotIn('completed sessions', field['context'])
+
+
+class PrintedContentIsNotAnInstruction(unittest.TestCase):
+    """F6 (and the guards F9 found untested): only an explicit request to write in a cell makes it a destination."""
+
+    def test_printed_notes_doses_and_explanations_are_not_answer_destinations(self):
+        raw = table_doc([('Medication', 'Dose', 'Instructions', 'Given (initials)'),
+                         ('Warfarin', '5 mg', 'Note: INR must be checked before each dose', '')],
+                        [('Topic', 'Printed explanation', 'Patient initials'), ('Risks', 'Detail: bleeding, infection, nerve injury', '')])
+        fields = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}
+        self.assertNotIn('b/tbl[0]/tr[1]/tc[2]', fields)
+        self.assertNotIn('b/tbl[1]/tr[1]/tc[1]', fields)
+        self.assertFalse([f for f in fields.values() if f.get('source_instructions')])
+
+    def test_an_instruction_is_a_destination_only_in_a_plain_cell_under_a_printed_column_header(self):
+        instruction = 'If palpable, describe here'
+        # No printed column header over the instruction: it is printed text, not a place to answer.
+        raw = table_doc([('Liver', instruction, '')])
+        self.assertNotIn('b/tbl[0]/tr[0]/tc[1]', {f['locator']['slot'] for f in w.inspect(raw)['fields']})
+        # A cell holding more than the instruction (three printed paragraphs) is not plain.
+        doc = Document(); table = doc.add_table(rows=2, cols=3)
+        for c, text in enumerate(('Organ', 'Findings', 'Initials')):
+            table.cell(0, c).text = text
+        table.cell(1, 0).text = 'Liver'
+        table.cell(1, 1).text = instruction
+        table.cell(1, 1).add_paragraph('(size, edge, consistency)'); table.cell(1, 1).add_paragraph('and tenderness')
+        self.assertNotIn('b/tbl[0]/tr[1]/tc[1]', {f['locator']['slot'] for f in w.inspect(data(doc))['fields']})
+        # Positive control: the same instruction alone, under a header, beside the row's label.
+        doc = Document(); table = doc.add_table(rows=2, cols=3)
+        for c, text in enumerate(('Organ', 'Findings', 'Initials')):
+            table.cell(0, c).text = text
+        table.cell(1, 0).text = 'Liver'; table.cell(1, 1).text = instruction
+        own = {f['locator']['slot']: f for f in w.inspect(data(doc))['fields']}['b/tbl[0]/tr[1]/tc[1]']
+        self.assertEqual(own['locator']['target']['type'], 'cell_append')
+
+
+class NeighbourTextOnTheSameBaseline(PaintedFixture):
+    """F7: a comment written beside an answered coded row shares its baselines; the row is measured on its own ink."""
+
+    def prepared(self):
+        summary = ['Head summary', '', ('\tNormal\tAbnormal\tExam not done', (2880, 4320, 5760)),
+                   ('\t1 ☐\t2 ☐\t3 ☐', (2880, 4320, 5760)), '']
+        raw = data(stopped_form([[summary, ['']]], (6480, 2880)))
+        proposal, _, _ = layout_source.prepare(raw)
+        head = next(f for f in proposal['fields'] if f.get('layout_candidate'))
+        comment = next(f for f in proposal['fields'] if f['locator']['slot'].startswith('b/tbl[0]/tr[0]/tc[1]'))
+        answers = {head['key']: 'Abnormal', comment['key']: 'Scalp laceration 2 cm, sutured.'}
+        prepared, _, _ = layout_source.prepare(raw, mapping=proposal['fields'], answers=answers)
+        [candidate] = prepared['manifest']['candidates']
+        self.assertIs(candidate['untouched'], False)
+        return candidate
+
+    cell = [(300, [(20, 'Head summary')]), (280, [(150, 'Normal'), (230, 'Abnormal'), (310, 'Exam not done')]),
+            (260, [(162, '1 '), (172, None), (242, '2 '), (252, True), (342, '3 '), (352, None)])]
+
+    def test_an_answered_row_is_measured_on_its_own_ink_beside_its_comment(self):
+        from .layout_geometry import containment
+        candidate = self.prepared()
+        comment = [(300, [(420, 'Scalp laceration 2')]), (280, [(420, 'cm, sutured.')])]
+        result = containment(drawn(self.pdf, self.cell + comment), [candidate])
+        self.assertTrue(result['passed']); self.assertEqual(result['held'], [])
+        self.assertEqual({(m['header']['y'], m['row']['y']) for m in result['measurements']}, {(280, 260)})
+        self.assertEqual(len(result['measurements']), 3)
+
+    def test_text_that_is_not_printed_beside_the_row_still_refuses(self):
+        from .layout_geometry import containment
+        candidate = self.prepared()
+        for stray in ([(280, [(420, 'Unrelated words')])],       # not the row's other cells
+                      [(280, [(60, 'Scalp')])],                  # the comment cell is to the right, never the left
+                      [(280, [(360, 'cm, sutured.')])]):         # inside the row's own printed extent
+            with self.subTest(stray=stray), self.assertRaises(ValueError):
+                containment(drawn(self.pdf, self.cell + stray), [candidate])
+
+
+class CentredControlsUnderNarrowWords(PaintedFixture):
+    """F10: a code and box centred under a narrower option word belong to it; nothing wider is loosened."""
+
+    def candidate(self, options=('No', 'Yes'), label='Supple'):
+        glyph = lambda text: [{'kind': 'glyph', 'text': text}]
+        header = [[]] + [glyph(o) for o in options]
+        row = [glyph(label)] + [glyph(str(i + 1) + ' ') + [{'kind': 'ff_checkbox', 'text': '￼', 'checked': False}]
+                                for i in range(len(options))]
+        return {'id': 'c', 'source': {'options': list(options)}, 'optional': True, 'untouched': True,
+                'rendered_source': {'header': header, 'row': row, 'row_dot_leaders': False, 'header_index': 0,
+                                    'source_occurrences': 1, 'sequence': [{'segments': header, 'dot_leaders': False},
+                                                                          {'segments': row, 'dot_leaders': False}]}}
+
+    def lines(self, first=197, second=297, headers=((200, 'No'), (300, 'Yes'))):
+        return [(300, list(headers)),
+                (280, [(20, 'Supple'), (first, '1 '), (first + 10, None), (second, '2 '), (second + 10, None)])]
+
+    def test_a_centred_code_and_box_under_a_narrower_word_is_owned_by_it(self):
+        from .layout_geometry import containment
+        result = containment(drawn(self.pdf, self.lines()), [self.candidate()])
+        self.assertEqual(result['held'], [])
+        self.assertTrue(result['passed']); self.assertEqual(len(result['measurements']), 2)
+
+    def test_the_centre_must_lie_under_the_word_and_the_segment_inside_its_column(self):
+        from .layout_geometry import containment, geometry
+        header = next(l for l in geometry(drawn(self.pdf, self.lines())[0]) if l['y'] == 300)
+        no_right = max(r['ink'][2] for r in header['records'][:2])
+        # The segment '1 ' + box spans x+1.21 .. x+20.05 in this font; its centre is x+10.63.
+        for first in (no_right - 10.63 + .01,):   # centre just right of 'No'
+            with self.subTest(first=first):
+                result = containment(drawn(self.pdf, self.lines(first=first)), [self.candidate()])
+                self.assertEqual([h['candidate'] for h in result['held']], ['c'])
+        # Words close together: the centre is under 'Normal' but the segment reaches past the midpoint.
+        close = ((100, 'Normal'), (142, 'Abnormal'))
+        result = containment(drawn(self.pdf, self.lines(first=124.4, second=150, headers=close)),
+                             [self.candidate(('Normal', 'Abnormal'))])
+        self.assertEqual([h['candidate'] for h in result['held']], ['c'])
+
+
+class WitnessGuards(PaintedFixture):
+    """F9: every repaired guard of the witness has a test that fails when the guard is removed."""
+
+    header = [[], [{'kind': 'glyph', 'text': 'Normal'}], [{'kind': 'glyph', 'text': 'Abnormal'}]]
+
+    def titled(self, **flags):
+        row = [[]] + [[{'kind': 'glyph', 'text': str(i + 1) + ' '}, {'kind': 'ff_checkbox', 'text': '￼', 'checked': False}]
+                      for i in range(2)]
+        paragraphs = [[[{'kind': 'glyph', 'text': 'Head summary'}]], self.header, row]
+        return dict({'id': 'head', 'source': {'options': ['Normal', 'Abnormal']}, 'rendered_source': {
+            'header': self.header, 'row': row, 'row_dot_leaders': False, 'header_index': 1, 'source_occurrences': 1,
+            'sequence': [{'segments': p, 'dot_leaders': False} for p in paragraphs]}}, **flags)
+
+    lines = [(300, [(20, 'Head summary')]), (280, [(100, 'Normal'), (200, 'Abnormal')]),
+             (260, [(110, '1 '), (120, None), (210, '2 '), (220, None)])]
+
+    def test_a_fill_painted_just_after_a_glyph_covers_it(self):
+        from .layout_geometry import containment, geometry
+        order = self.lines[1:] + self.lines[:1]   # the title is painted last
+        title = next(l for l in geometry(drawn(self.pdf, order)[0]) if l['text'] == 'Head summary')
+        ink = title['records'][-1]['ink']
+        width = ink[2] - ink[0]
+        cover = f'q 1 1 1 rg {ink[0] + width / 4} {ink[1]} {width / 2} {ink[3] - ink[1]} re f Q\n'.encode()
+        self.assertTrue(containment(drawn(self.pdf, order), [self.titled()])['passed'])
+        with self.assertRaises(ValueError):
+            containment(drawn(self.pdf, order, after=cover), [self.titled()])
+
+    def test_a_fill_beneath_the_text_must_contrast_with_it(self):
+        from .layout_geometry import containment
+        for grey, visible in ((.4, False), (.5, True)):
+            with self.subTest(grey=grey):
+                shade = f'q {grey} {grey} {grey} rg 5 245 390 70 re f Q\n'.encode()
+                if visible:
+                    self.assertTrue(containment(drawn(self.pdf, self.lines, before=shade), [self.titled()])['passed'])
+                else:
+                    with self.assertRaises(ValueError):
+                        containment(drawn(self.pdf, self.lines, before=shade), [self.titled()])
+
+    def test_the_title_line_is_part_of_the_one_contiguous_rendering(self):
+        from .layout_geometry import containment
+        interrupted = self.lines[:1] + [(100, [(20, 'Other')])] + self.lines[1:]
+        with self.assertRaises(ValueError):
+            containment(drawn(self.pdf, interrupted), [self.titled()])
+        self.assertTrue(containment(drawn(self.pdf, self.lines + [(100, [(20, 'Other')])]), [self.titled()])['passed'])
+
+    def test_a_copy_printed_in_a_page_header_part_is_counted(self):
+        doc = coded_form(['10.\tLungs', '\tNormal\tAbnormal', 'Percussion\t1 ☐\t2 ☐', '', 'Auscultation\t1 ☐\t2 ☐'],
+                         control='glyph')
+        header = doc.sections[0].header
+        header.paragraphs[0].text = '\tNormal\tAbnormal'; header.add_paragraph('Percussion\t1 ☐\t2 ☐')
+        proposal, _, _ = layout_source.prepare(data(doc))
+        counts = {c['source']['label']: c['rendered_source']['source_occurrences'] for c in proposal['manifest']['candidates']}
+        self.assertEqual(counts, {'Percussion': 2, 'Auscultation': 1})
