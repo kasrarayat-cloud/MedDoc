@@ -72,7 +72,9 @@ def accept(request, raw):
                         return HttpResponse('This invitation is no longer valid. Ask QuillMD for a new one.',
                                             status=409, content_type='text/plain')
                     if existing:
-                        user = User.objects.select_for_update().get(pk=existing.pk)
+                        # FOR NO KEY UPDATE: welcome_credit locks this account's wallet next, and the account's own
+                        # in-flight requests take FOR KEY SHARE on this row at commit (core.retention, RF-R1).
+                        user = User.objects.select_for_update(no_key=True).get(pk=existing.pk)
                     else:
                         user = form.save(commit=False)
                         user.username = invitation.email

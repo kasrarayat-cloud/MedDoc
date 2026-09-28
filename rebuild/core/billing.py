@@ -58,7 +58,12 @@ def signed_exact(value):
 
 @transaction.atomic
 def welcome_credit(user):
-    user=User.objects.select_for_update().get(pk=user.pk)
+    # FOR NO KEY UPDATE, never FOR UPDATE (the global lock order, core.retention): this transaction goes on to lock the
+    # promotional wallet, and every request of this account that holds that wallet re-checks its new rows' foreign keys
+    # at commit with FOR KEY SHARE on this very row, which FOR UPDATE refuses. An existing clinician accepting an
+    # invitation deadlocked with their own upload, generation or settlement (RF-R1). This mode still serializes two
+    # grants for one account (it conflicts with itself) and excludes deletion and key changes.
+    user=User.objects.select_for_update(no_key=True).get(pk=user.pk)
     if not user.verified_at: raise ValidationError('Welcome credit requires a verified account.')
     wallet,_=Wallet.objects.get_or_create(user=user,kind='promo')
     Wallet.objects.get_or_create(user=user,kind='paid')

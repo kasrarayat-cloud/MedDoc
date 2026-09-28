@@ -1053,6 +1053,10 @@ def generate_view(request,pk):
     except ValidationError as exc:
         messages.error(request,error_message(exc))
         if unavailable(exc):return redirect('dashboard')
+    except DatabaseError:
+        # enqueue is one transaction: a database failure (a deadlock victim, a lock timeout, a lost connection) rolled all
+        # of it back, so nothing was queued, held, sent or charged (RF-R1). Said so, never a 500.
+        messages.error(request,'The generation could not be queued. Nothing was sent or charged. Try again.')
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -1583,7 +1587,13 @@ def voice_approve(request,pk):
             raise ValidationError('The document changed after the quote. Upload the recording again; nothing was sent.')
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
             raise ValidationError('The quoted recording is no longer available. Upload it again; nothing was sent.')
-        job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
+        try:job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
+        except DatabaseError:
+            # enqueue rolled back whole: nothing was queued, held, sent or charged (RF-R1). Only this call: a failure after
+            # it returned would follow a queued job. The recording stays with its signed approval, which is still valid, so
+            # it can be approved again; the reaper removes it if nobody does.
+            messages.error(request,'The approved recording could not be queued. Nothing was sent or charged. Approve it again, or upload it again.')
+            return redirect('encounter_detail',pk=pk)
         if job.input_path!=relative:cleanup_file(path,encounter_id=e.pk)
         audit(request.user,'voice.limit_approved',job.pk,department=e.department,charge_limit=str(data['charge_limit']))
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")

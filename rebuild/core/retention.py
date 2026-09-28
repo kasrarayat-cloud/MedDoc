@@ -28,7 +28,7 @@ SCOPES={'organization':Organization,'department':Department,'patient':Patient,'e
 # INSERT of an encounter, a hold, a release or a tombstone), so it is held by most clinical transactions until commit.
 # A transaction that holds a row lock another one needs while waiting for LOCK_KEY deadlocks. The order is:
 #
-#   1. source/scope rows    organization, department, patient, encounter, template, generation batch
+#   1. source/scope rows    account (User), organization, department, patient, encounter, template, generation batch
 #   2. job rows             Job
 #   3. the preservation lock (lock_preservation(), or any trigger above)
 #   4. money rows           Reservation, then Wallet (sorted by pk)
@@ -36,8 +36,11 @@ SCOPES={'organization':Organization,'department':Department,'patient':Patient,'e
 #
 # Levels may be skipped, never reversed. Billing's job-scoped entry points (reserve, release, settle, absorb_failed_job)
 # take level 3 themselves before any money row, so no caller can reach a wallet lock ahead of a later job.save() (RF-1).
-# Level 5 comes after level 3 by construction, so a level-1 lock held by a transaction that then waits for LOCK_KEY
-# must not conflict with FOR KEY SHARE: create_hold locks its scope row FOR NO KEY UPDATE (RF-2).
+# Level 5 comes last by construction, and every transaction reaches it holding the locks of levels 3-4, so a row lock
+# held while waiting for a later level (LOCK_KEY or a money row) must not conflict with FOR KEY SHARE: such a row is
+# locked FOR NO KEY UPDATE, never FOR UPDATE. create_hold's scope row (RF-2); welcome_credit's account row and the
+# clinic acceptance's, held while it locks the promotional wallet that the account's own requests hold before their
+# commit-time FOR KEY SHARE on that account (RF-R1).
 
 
 def lock_preservation():
