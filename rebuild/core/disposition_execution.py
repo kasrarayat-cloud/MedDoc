@@ -25,18 +25,18 @@ def enabled():
 
 
 class DocumentUnavailable(ValidationError):
-    """The document was disposed of, or has a disposition instruction: the request is refused, never a crash."""
+    """The document row is gone (disposed of while the request ran): the request is refused, never a crash."""
 
 
 def require_access(target_id, *, own_instruction=None):
     target = str(target_id)
     if m.DispositionTombstone.objects.filter(target_id=target).exists():
-        raise DocumentUnavailable('This document has a disposition instruction and is unavailable.')
+        raise ValidationError('This document has a disposition instruction and is unavailable.')
     if getattr(settings, 'DISPOSITION_JOURNAL_PATH', ''):
         for entry in journal.verified():
             instruction = entry['body']['instruction']
             if instruction['target_id'] == target and instruction['id'] != str(own_instruction):
-                raise DocumentUnavailable('This document has a durable disposition instruction and is unavailable.')
+                raise ValidationError('This document has a durable disposition instruction and is unavailable.')
 
 
 def lock_available(target_id):

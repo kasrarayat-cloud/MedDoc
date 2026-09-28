@@ -1589,10 +1589,6 @@ def voice_approve(request,pk):
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")
     except ValidationError as exc:
         messages.error(request,error_message(exc))
-        if unavailable(exc):
-            # The document is gone, so nothing can ever approve this recording: remove it now, not at the reaper's window.
-            cleanup_file(path)
-            return redirect('dashboard')
     except OSError:
         messages.error(request,'The quoted recording is no longer available. Upload it again; nothing was sent.')
     return redirect('encounter_detail',pk=pk)
