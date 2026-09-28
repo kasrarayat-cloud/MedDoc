@@ -1,0 +1,32 @@
+{
+  "engine_sha256": "7d2296ea679c7e804bdb8ea88a7a539c01cb7654527f1b0b65dc87f3ee42c2a6",
+  "cases": [
+    {
+      "case": "inner_scope_headers_neutral_parent",
+      "field_count": 0,
+      "complete_context_visible": true,
+      "all_original_members_preserved": true,
+      "notes": [
+        "Nested option grid at word/document.xml#b/tbl[0]/tr[0]/tc[0]/tbl[0]: The grid contains separate printed headers, context or answer areas whose ownership is unresolved. Printed source: Which findings apply? Tick all that apply. Options: DonorRecipient\u2610 Abnormal\u2610 Abnormal"
+      ]
+    },
+    {
+      "case": "consent_scope_specific",
+      "field_count": 0,
+      "complete_context_visible": true,
+      "all_original_members_preserved": true,
+      "notes": [
+        "Nested option grid at word/document.xml#b/tbl[0]/tr[0]/tc[0]/tbl[0]: The complete source contains signing/consent instructions. Governing context: Participant consent for optional procedures Printed source: Which procedures are authorized? Tick all that apply. Options: \u2610 Blood sampling\u2610 Tissue storage"
+      ]
+    },
+    {
+      "case": "signature_scope_specific",
+      "field_count": 0,
+      "complete_context_visible": true,
+      "all_original_members_preserved": true,
+      "notes": [
+        "Nested option grid at word/document.xml#b/tbl[0]/tr[0]/tc[0]/tbl[0]: The complete source contains signing/consent instructions. Governing context: Signed declaration Printed source: Which procedures are authorized? Tick all that apply. Options: \u2610 Blood sampling\u2610 Tissue storage"
+      ]
+    }
+  ]
+}

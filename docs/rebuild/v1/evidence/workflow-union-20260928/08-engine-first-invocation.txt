@@ -1,0 +1,1 @@
+First invocation from rebuild used ../.venv/bin/python; exited127 before tests because interpreter path was wrong. Correct retry uses .venv/bin/python from rebuild. No application failure or passing test inferred.
