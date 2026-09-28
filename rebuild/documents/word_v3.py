@@ -2628,7 +2628,11 @@ class Detector:
                         complete = False;problem = "A marked spacer or unresolved layout boundary separates the source."
             if not complete or len(pending) != len(candidates):
                 self.notes.append("Tab-column options at " + cell.id + ": " + problem + " Printed source: " + source)
-                for slot in candidates:
+                # ⚠️ A REFUSED SOURCE'S TEXT LINES ARE HELD WITH ITS ROWS (CI 36479289351): claiming only the rows left
+                # the literal header to the text-option rule, which offered the header's words as options and would have
+                # ticked the header line while the row's own boxes stayed empty. A line with its own box or blank is
+                # still read on its own control (and a coded one is noted there), never on this source's structure.
+                for slot in candidates + [p for p in paragraphs if self.text_only_line(p)]:
                     self.claimed.add(id(slot.el))
                 continue
             self.claimed.add(id(paragraphs[0].el))
@@ -2641,6 +2645,10 @@ class Detector:
                     self.claimed.add(id(row.el))
                     self.notes.append("Layout verification required for tab-column answer at " + row.id +
                                       ". Printed question: " + area.label + ". Section: " + area.context)
+
+    def text_only_line(self, slot):
+        """A paragraph with no box and no blank: it can become a field only by borrowing another line's structure."""
+        return not self.box_units(slot) and not self.blank_spans(*self.ptext(slot.el))
 
     def coded_choice_paragraph(self, slot):
         """Recognise response codes only as evidence that labels live elsewhere."""
@@ -2909,6 +2917,10 @@ class Detector:
             if reason:
                 self.notes.append("Coded column sequence at " + cell.id + ": " + reason + " Printed source: "
                                   + " | ".join(self.ptext(p.el)[0] for p in cell.children if p.kind == "p"))
+                # Its text lines are held, as a refused tab-column source's are: no weaker rule re-reads its title or
+                # header as a question of their own words. Its rows go on to the checkbox rule, which notes each one.
+                for paragraph in (s for s in cell.children if s.kind == "p" and self.text_only_line(s)):
+                    self.claimed.add(id(paragraph.el))
                 continue
             # This complete source supersedes the tab-stop refusal for the same cell.
             refused = "Tab-column options at " + cell.id + ": "
