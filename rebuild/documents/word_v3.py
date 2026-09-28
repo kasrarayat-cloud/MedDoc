@@ -1996,6 +1996,51 @@ class Detector:
             return None
         return (nid, lvl, self.numbering().get(nid, {}).get(lvl, "decimal"))
 
+    def list_marker_is_plain(self, info):
+        """Resolve the printed level marker before treating a list as descriptors.
+
+        Checkbox glyphs can live in numbering.xml rather than paragraph text.
+        An override replaces the level; ambiguous or linked definitions cannot
+        establish this rule's plain-list ownership.
+        """
+        if "word/numbering.xml" not in self.package.names:
+            return False
+        root = self.package.tree("word/numbering.xml")
+        nums = [n for n in root.findall(q("w:num")) if n.get(q("w:numId")) == info[0]]
+        if len(nums) != 1 or len(nums[0].findall(q("w:abstractNumId"))) != 1:
+            return False
+        aid = nums[0].find(q("w:abstractNumId")).get(q("w:val"))
+        abstracts = [a for a in root.findall(q("w:abstractNum")) if a.get(q("w:abstractNumId")) == aid]
+        if len(abstracts) != 1 or any(abstracts[0].find(q("w:" + name)) is not None
+                                      for name in ("numStyleLink", "styleLink")):
+            return False
+        levels = [level for level in abstracts[0].findall(q("w:lvl")) if level.get(q("w:ilvl")) == info[1]]
+        overrides = [o for o in nums[0].findall(q("w:lvlOverride")) if o.get(q("w:ilvl")) == info[1]]
+        if len(levels) != 1 or len(overrides) > 1:
+            return False
+        if overrides:
+            replacements = overrides[0].findall(q("w:lvl"))
+            if len(replacements) > 1:
+                return False
+            if replacements:
+                levels = replacements
+        level = levels[0]
+        if level.get(q("w:ilvl")) != info[1] or level.find(q("w:lvlPicBulletId")) is not None:
+            return False
+        formats, markers = level.findall(q("w:numFmt")), level.findall(q("w:lvlText"))
+        if len(formats) != 1 or formats[0].get(q("w:val")) != info[2] or len(markers) > 1:
+            return False
+        # A missing marker adds no printed control. An explicit malformed marker
+        # or a marker rendered as a box in any declared font is unresolved here.
+        if not markers:
+            return True
+        marker = markers[0].get(q("w:val"))
+        if marker is None:
+            return False
+        fonts = [""] + [v.lower() for f in level.findall("./" + q("w:rPr") + "/" + q("w:rFonts"))
+                         for k, v in f.attrib.items() if k in (q("w:ascii"), q("w:hAnsi"), q("w:cs"), q("w:eastAsia"))]
+        return not any(map_char(ch, font) in (BOX, CHECKED) for ch in marker for font in fonts)
+
     def rule_text_option_choices(self):
         for parent in [None] + [s for s in self.index.slots if s.kind in ("tc", "txbx", "sdt")]:
             if parent is None:
@@ -2578,6 +2623,10 @@ class Detector:
             r"^(?:please\s+)?(?:set out|provide|describe|explain|detail|list)\b", text, re.I))
 
     @staticmethod
+    def question_box_reference(text):
+        return re.search(r"\b(?:above|previous|following)\s+(?:question|answer|section)\b|\bas above\b|\bsame as\b", text, re.I)
+
+    @staticmethod
     def question_box_signing(text):
         # Only the demonstrated temporal/source-reference phrases qualify.
         # A direct request about "the initial report" remains ambiguous, as do
@@ -2667,7 +2716,7 @@ class Detector:
                     or not self.tab_source_visible(slot)
                     or any(x.tag in unsafe or x.tag == q("w:br") and x.get(q("w:type")) != "page"
                            for x in node.iter())
-                    or info[1] not in self.numbering().get(info[0], {})):
+                    or info[1] not in self.numbering().get(info[0], {}) or not self.list_marker_is_plain(info)):
                 return None
             text = re.sub(r"\s+", " ", self.text(node)).strip()
             if (not text or len(text) > MAX_MAPPING_LABEL or self.blank_spans(*self.ptext(node))
@@ -2686,15 +2735,40 @@ class Detector:
         if (id(node) in self.claimed or not prompt.endswith(("?", ":"))
                 or not (self.question_box_request(prompt) or re.match(r"^(?:what|which|where|how|who|when)\b", prompt, re.I)
                         or self.question_box_authorship(prompt))
+                or self.question_box_reference(prompt)
                 or self.question_box_paragraph(node)[2] or not self.tab_source_visible(question)
                 or any(x.tag in unsafe for x in node.iter()) or self.blank_spans(*self.ptext(node))):
             return None
+        # Plain local instructions carry ownership too. Preserve their full text
+        # and anchors up to the preceding heading/table, without borrowing across
+        # a competing question or an unresolved source block.
+        instructions = []
+        prior = node.getprevious()
+        while prior is not None and prior.tag == q("w:p"):
+            slot = self.index.by_el.get(id(prior))
+            heading, _, barrier = self.question_box_paragraph(prior)
+            if heading:
+                break
+            text = re.sub(r"\s+", " ", self.text(prior)).strip()
+            if (slot is None or barrier or not self.tab_source_visible(slot)
+                    or any(x.tag in unsafe for x in prior.iter())):
+                return None
+            if text:
+                if (self.list_info(prior) or self.question_box_request(text) or self.question_box_reference(text)
+                        or self.blank_spans(*self.ptext(prior)) or BOX in text or CHECKED in text):
+                    return None
+                instructions.insert(0, {"part": slot.part, "slot": slot.path,
+                                        "fingerprint": fingerprint(prior), "text": text})
+            elif not self.plain_spacing_paragraph(slot):
+                return None
+            prior = prior.getprevious()
         context, problem = self.question_box_context(question, require_visible=True)
-        context = " > ".join(x for x in (context, prompt,
+        context = " > ".join(x for x in (context, *[i["text"] for i in instructions], prompt,
                               "Printed descriptors: " + " | ".join(x["text"] for x in descriptors)) if x)
         if (problem or len(prompt) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT
                 or self.question_box_signing(context)
-                or re.search(r"\b(?:select|choose|tick|check|mark|circle|indicate)\b|\b(?:only one|one only|all that apply)\b",
+                or re.search(r"\b(?:select|choose|tick|check|mark|circle|indicate)\b|\b(?:only one|one only|all that apply)\b"
+                             r"|\b(?:only|solely|exclusively)\b[^>]*\bother\b|\bother\b[^>]*\bonly\b",
                              context, re.I)):
             return None
         protection = ("This area is reserved for another author's comments. Ordinary clinician notes do not establish that author's statement."
@@ -2706,6 +2780,8 @@ class Detector:
                     "definitions": {name: hashlib.sha256(self.package.zip.read(name)).hexdigest()
                                     for name in ("word/numbering.xml", "word/_rels/document.xml.rels")
                                     if name in self.package.names}}
+        if instructions:
+            relation["instructions"] = instructions
         return question, prompt, context, protection, relation, sources
 
     @staticmethod
@@ -2755,6 +2831,9 @@ class Detector:
                     self.protected_regions.add(cell.id)
                 if not self.is_empty_cell(cell):
                     continue
+                paragraphs = [s for s in cell.children if s.kind == "p"]
+                if not paragraphs or not all(self.tab_source_visible(p) for p in paragraphs):
+                    continue
                 self.add(Area("long_text", label, cell, {"type": "cell"}, context=list_context,
                               complete_source=True, protection=protection, source_questions=[relation]))
                 for source in [owner] + sources:
@@ -2785,7 +2864,7 @@ class Detector:
                 if blanks > 2:
                     break
                 previous = previous.getprevious()
-            reference = re.search(r"\b(?:above|previous|following)\s+(?:question|answer|section)\b|\bas above\b|\bsame as\b", raw, re.I)
+            reference = self.question_box_reference(raw)
             related = self.previous_question_source(question, raw, context) if reference and question is not None else None
             if related:
                 context += " > Related preceding question: " + related["question"]
@@ -4339,7 +4418,10 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             if relation.get("relation") == "immediate_previous_question":
                 refs = [relation.get("source"), relation.get("reference")]
             elif relation.get("relation") == "paragraph_list_answer" and isinstance(relation.get("descriptors"), list):
-                refs = [relation.get("source")] + relation["descriptors"]
+                instructions = relation.get("instructions", [])
+                if not isinstance(instructions, list):
+                    fail("The related question instructions are invalid.", "invalid_mapping")
+                refs = [relation.get("source")] + relation["descriptors"] + instructions
             else:
                 fail("The related question mapping is invalid.", "invalid_mapping")
             for ref in refs:

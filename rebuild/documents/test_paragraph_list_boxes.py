@@ -6,6 +6,7 @@ import unittest
 from zipfile import ZipFile, ZIP_DEFLATED
 
 from docx import Document
+from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from lxml import etree
@@ -164,3 +165,91 @@ class ParagraphListBoxes(unittest.TestCase):
         output = w.fill(original, [field], {field['key']: answer})
         self.assertEqual(field, old)
         self.assertEqual(Document(io.BytesIO(output)).tables[0].cell(0, 0).text, answer)
+
+    def test_destination_hidden_directly_or_by_style_is_not_an_answer_field(self):
+        for case in ('direct', 'paragraph', 'inherited', 'table'):
+            with self.subTest(case=case):
+                doc = form(); paragraph = doc.tables[0].cell(0, 0).paragraphs[0]
+                if case == 'direct':
+                    paragraph.add_run('').font.hidden = True
+                else:
+                    kind = WD_STYLE_TYPE.TABLE if case == 'table' else WD_STYLE_TYPE.PARAGRAPH
+                    style = doc.styles.add_style('HiddenAnswer', kind); style.font.hidden = True
+                    if case == 'inherited':
+                        child = doc.styles.add_style('AnswerChild', kind); child.base_style = style; style = child
+                    if case == 'table': doc.tables[0].style = style
+                    else: paragraph.style = style
+                self.assertFalse(w.inspect(data(doc))['fields'])
+
+    def test_visible_destination_and_later_style_change_are_rechecked_at_export(self):
+        doc = form(); style = doc.styles.add_style('HiddenAnswer', WD_STYLE_TYPE.PARAGRAPH)
+        style.font.hidden = False; doc.tables[0].cell(0, 0).paragraphs[0].style = style
+        raw = data(doc); field = self.owned(raw); answer = 'The patient lives with family.'
+        output = w.fill(raw, [field], {field['key']: answer})
+        index = w.SlotIndex(w.open_package(output)); detector = w.Detector(index.package)
+        cell = index.by_id[field['locator']['part'] + '#' + field['locator']['slot']]
+        self.assertEqual(w.text_of(cell.el), answer)
+        self.assertTrue(all(detector.tab_source_visible(p) for p in cell.children if p.kind == 'p'))
+        changed = rewrite(raw, 'word/styles.xml', lambda b: b.replace(b'<w:vanish w:val="0"/>', b'<w:vanish/>'))
+        self.assertNotEqual(changed, raw)
+        with self.assertRaises(w.V3Failure) as failure:
+            w.fill(changed, [field], {field['key']: answer})
+        self.assertEqual(failure.exception.code, 'mapping_mismatch')
+
+    def test_preceding_selection_or_other_only_instruction_does_not_own_whole_answer(self):
+        for text in ('Tick one residence below. Use the box only to specify Other.',
+                     'Use the box only to specify Other.', 'Use the box for Other only.',
+                     'Choose all that apply below.'):
+            with self.subTest(instruction=text):
+                doc = form(); p = doc.add_paragraph(text); doc.paragraphs[1]._p.addprevious(p._p)
+                self.assertFalse([f for f in w.inspect(data(doc))['fields']
+                                  if any(r.get('relation') == 'paragraph_list_answer' for r in f.get('source_questions', []))])
+
+    def test_complete_local_instruction_is_preserved_and_bound_at_export(self):
+        doc = form(); instruction = 'Use clinical observations recorded during this period.'
+        p = doc.add_paragraph(instruction); doc.paragraphs[1]._p.addprevious(p._p)
+        raw = data(doc); field = self.owned(raw); relation = field['source_questions'][0]
+        self.assertIn(instruction, field['context'])
+        self.assertEqual([i['text'] for i in relation['instructions']], [instruction])
+        answer = 'The patient lives with family.'
+        self.assertEqual(Document(io.BytesIO(w.fill(raw, [field], {field['key']: answer}))).tables[0].cell(0, 0).text, answer)
+        changed = rewrite(raw, 'word/document.xml', lambda b: b.replace(instruction.encode(), b'Use the box only to specify Other.'))
+        with self.assertRaises(w.V3Failure) as failure:
+            w.fill(changed, [field], {field['key']: answer})
+        self.assertEqual(failure.exception.code, 'mapping_mismatch')
+        incomplete = copy.deepcopy(field); incomplete['source_questions'][0].pop('instructions')
+        with self.assertRaises(w.V3Failure) as failure:
+            w.fill(raw, [incomplete], {field['key']: answer})
+        self.assertEqual(failure.exception.code, 'mapping_mismatch')
+
+    def test_numbering_checkbox_markers_including_override_and_symbol_font_refuse(self):
+        for case in ('literal', 'checked', 'wingdings', 'override'):
+            with self.subTest(marker=case):
+                doc = form(); numbering = doc.part.numbering_part.element
+                level = next(a for a in numbering.findall(qn('w:abstractNum'))
+                             if a.get(qn('w:abstractNumId')) == '90').find(qn('w:lvl'))
+                if case == 'override':
+                    number = next(n for n in numbering.findall(qn('w:num')) if n.get(qn('w:numId')) == '10')
+                    override = OxmlElement('w:lvlOverride'); override.set(qn('w:ilvl'), '0')
+                    level = copy.deepcopy(level); override.append(level); number.append(override)
+                marker = OxmlElement('w:lvlText'); marker.set(qn('w:val'), {'checked': '☒', 'wingdings': 'o'}.get(case, '☐'))
+                level.append(marker)
+                if case == 'wingdings':
+                    props = OxmlElement('w:rPr'); fonts = OxmlElement('w:rFonts'); fonts.set(qn('w:ascii'), 'Wingdings')
+                    props.append(fonts); level.append(props)
+                self.assertFalse([f for f in w.inspect(data(doc))['fields']
+                                  if any(r.get('relation') == 'paragraph_list_answer' for r in f.get('source_questions', []))])
+
+    def test_plain_courier_bullet_remains_a_descriptor(self):
+        doc = form(); level = next(a for a in doc.part.numbering_part.element.findall(qn('w:abstractNum'))
+                                  if a.get(qn('w:abstractNumId')) == '90').find(qn('w:lvl'))
+        marker = OxmlElement('w:lvlText'); marker.set(qn('w:val'), 'o'); level.append(marker)
+        props = OxmlElement('w:rPr'); fonts = OxmlElement('w:rFonts'); fonts.set(qn('w:ascii'), 'Courier New')
+        props.append(fonts); level.append(props)
+        self.owned(data(doc))
+
+    def test_unresolved_references_cannot_claim_a_complete_list_question(self):
+        for reference in ('above question', 'previous answer', 'following section', 'as above', 'same as'):
+            with self.subTest(reference=reference):
+                raw = data(form(question='What residence applies in relation to the ' + reference + ':'))
+                self.assertFalse(w.inspect(raw)['fields'])
