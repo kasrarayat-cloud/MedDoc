@@ -1806,6 +1806,16 @@ class RoundFourGuardsArePinned(unittest.TestCase):
             'Smoker: If yes Current ☐ Former ☐ Never', 'Diet: what type Normal ☐ Soft ☐ Liquid ☐ Other',
             'Smoker? If yes Yes ☐ No ☐ Unknown'), controls=('ff',))
 
+    def test_a_middle_or_extra_member_of_the_after_box_set_is_never_the_question(self):
+        # A scale can have a member its family lists do not name at first sight: such a word before the first box is an
+        # option too, and the set's apparent closure never reads it as the question.
+        held_before_boxes(self, ('Result Borderline ☐ Normal ☐ Abnormal ☐ Not done',
+                                 'Urine protein Trace ☐ Negative ☐ Positive ☐ Not done',
+                                 'Location Midline ☐ Left ☐ Right ☐ Unknown', 'Sex Intersex ☐ Male ☐ Female ☐ Other',
+                                 'Murmur Suspected ☐ Present ☐ Absent ☐ Not assessed',
+                                 'Marital status Engaged ☐ Single ☐ Married ☐ Other ____', 'Pain Maybe ☐ Yes ☐ No ☐ Unknown',
+                                 'Test Incomplete ☐ Pass ☐ Fail ☐ Not done'), controls=('ff',))
+
     def test_a_question_that_ends_before_the_first_box_is_read(self):
         for line, label, options in (
                 ('Weight ..... kg ☐ measured ☐ stated', 'Weight ..... kg', ['measured', 'stated']),
