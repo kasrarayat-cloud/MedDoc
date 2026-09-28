@@ -72,6 +72,14 @@ class SourcePolicy(unittest.TestCase):
         field = next(f for f in w.inspect(data(doc))['fields'] if f['locator']['target']['type'] == 'cell')
         self.assertEqual(field['answer_policy']['source_author'], 'patient')
 
+    def test_example_marker_case_does_not_change_patient_authorship(self):
+        for heading in ('For EXAMPLE:', 'FOR EXAMPLE:', 'For instance:', 'For INSTANCE:'):
+            with self.subTest(heading=heading):
+                doc = Document(); doc.add_paragraph('For the patient:'); doc.add_paragraph(heading)
+                pair(doc, 'What progress have you made?')
+                field = next(f for f in w.inspect(data(doc))['fields'] if f['locator']['target']['type'] == 'cell')
+                self.assertEqual(field.get('answer_policy', {}).get('source_author'), 'patient')
+
     def test_clinician_review_of_symptom_report_is_not_patient_attestation(self):
         doc = Document(); pair(doc, 'Confirm the patient report of chest pain was reviewed by the clinician.')
         self.assertNotIn('answer_policy', w.inspect(data(doc))['fields'][0])

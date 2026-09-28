@@ -3167,7 +3167,7 @@ class Detector:
         for a in self.areas:
             if a.slot.part == "word/document.xml":
                 continue
-            key = (a.kind, a.label, a.slot.path, json_dumps(a.target))
+            key = (a.kind, a.label, a.context, tuple(a.options), a.slot.path, json_dumps(a.target))
             by_key.setdefault(key, []).append(a)
         for key, group in by_key.items():
             if len(group) < 2:
@@ -3254,13 +3254,16 @@ MAX_SOURCE_INSTRUCTION_CHARS = 20000
 
 def cell_instruction_source(index, field):
     loc = field.get("locator") or {}
-    slot = index.by_id.get(str(loc.get("part")) + "#" + str(loc.get("slot")))
-    if slot is None or slot.kind != "tc":
-        fail("The preserved cell instructions no longer identify an answer area.", "mapping_mismatch")
-    text = "\n".join(text_of(p) for p in slot.el.findall(q("w:p"))).strip()
-    if not text or len(text) > MAX_SOURCE_INSTRUCTION_CHARS:
-        fail("The complete answer-cell instructions exceed the supported metadata bound.", "mapping_limit")
-    return [{"part": slot.part, "slot": slot.path, "fingerprint": fingerprint(slot.el), "text": text}]
+    result = []
+    for ref in [loc] + list((loc.get("target") or {}).get("copies", [])):
+        slot = index.by_id.get(str(ref.get("part")) + "#" + str(ref.get("slot")))
+        if slot is None or slot.kind != "tc":
+            fail("The preserved cell instructions no longer identify an answer area.", "mapping_mismatch")
+        text = "\n".join(text_of(p) for p in slot.el.findall(q("w:p"))).strip()
+        if not text or len(text) > MAX_SOURCE_INSTRUCTION_CHARS:
+            fail("The complete answer-cell instructions exceed the supported metadata bound.", "mapping_limit")
+        result.append({"part": slot.part, "slot": slot.path, "fingerprint": fingerprint(slot.el), "text": text})
+    return result
 
 
 def mapped_fields(detector, areas):

@@ -29,6 +29,9 @@ def annotate(detector, fields):
                 current = None
             elif role and role[1].lower() == 'patient':
                 current = source(root, text)
+            elif role and role[1].casefold() in ('example', 'instance'):
+                # Capitalization does not turn an explanatory marker into a role.
+                pass
             elif (role and re.search(r'\b(?:clinicians?|doctors?|physicians?|nurses?|supervisors?|parents?|guardians?|'
                                       r'carers?|caregivers?|witnesses?|employers?|managers?|representatives?)\b', role[1], re.I)) or \
                     (role and (re.fullmatch(r'[A-Z][A-Z /&-]{1,20}', role[1]) or

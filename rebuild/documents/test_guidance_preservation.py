@@ -24,6 +24,37 @@ def form():
 
 
 class GuidancePreservation(unittest.TestCase):
+    def test_repeated_header_instructions_all_reach_the_mapping(self):
+        from docx.shared import Inches
+        doc = Document(); doc.settings.odd_and_even_pages_header_footer = True
+        instructions = ['Do not disclose information about the mother.',
+                        'Do not disclose information about the father.']
+        for header, text in zip((doc.sections[0].header, doc.sections[0].even_page_header), instructions):
+            table = header.add_table(rows=1, cols=2, width=Inches(6))
+            table.cell(0, 0).text = 'What progress have you made?'
+            table.cell(0, 1).paragraphs[0].add_run(text).font.color.rgb = RGBColor.from_string('808080')
+        original = data(doc); fields = w.inspect(original)['fields']
+        self.assertEqual(len(fields), 1)
+        self.assertEqual([item['text'] for item in fields[0]['source_instructions']], instructions)
+        changed = copy.deepcopy(fields); changed[0]['source_instructions'].pop()
+        with self.assertRaises(w.V3Failure): w.fill(original, changed, {changed[0]['key']: 'A complete observation.'})
+
+    def test_equal_header_labels_with_different_subjects_are_separate_answers(self):
+        from docx.shared import Inches
+        doc = Document(); doc.settings.odd_and_even_pages_header_footer = True
+        for header, role in zip((doc.sections[0].header, doc.sections[0].even_page_header), ('Donor', 'Recipient')):
+            header.paragraphs[0].text = role; header.paragraphs[0].style = 'Heading 1'
+            table = header.add_table(rows=1, cols=2, width=Inches(6))
+            table.cell(0, 0).text = 'Name'
+            table.cell(0, 1).paragraphs[0].add_run('Enter the full name.').font.color.rgb = RGBColor.from_string('808080')
+        original = data(doc); fields = w.inspect(original)['fields']
+        self.assertEqual(len(fields), 2)
+        self.assertEqual(len({field['context'] for field in fields}), 2)
+        target = next(f for f in fields if 'Donor' in f['context'])
+        final = w.fill(original, fields, {target['key']: 'SYNTHETIC DONOR'})
+        before = w.open_package(original); after = w.open_package(final)
+        self.assertEqual(before.zip.read('word/header2.xml'), after.zip.read('word/header2.xml'))
+
     def test_new_mapping_preserves_all_instruction_paragraphs_and_appends_full_answer(self):
         original = form(); fields = w.inspect(original)['fields']; field = fields[0]
         self.assertEqual(field['locator']['target']['type'], 'cell_append')
