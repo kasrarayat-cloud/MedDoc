@@ -1,0 +1,4 @@
+usage: dependency_lock.py [-h] --root ROOT
+dependency_lock.py: error: the following arguments are required: --root
+
+exit=2

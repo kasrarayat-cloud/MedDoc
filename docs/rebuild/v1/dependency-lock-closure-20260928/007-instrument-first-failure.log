@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/dependency-lock-repair-20260928/004-build-contract.py", line 17, in <module>
+    names=[x for x in z.namelist() if x.endswith('.dist-info/METADATA')];assert len(names)==1
+                                                                                ^^^^^^^^^^^^^
+AssertionError
