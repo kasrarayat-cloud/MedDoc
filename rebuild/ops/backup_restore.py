@@ -28,6 +28,7 @@ FILE_QUERIES = [
     ('audio', "SELECT input_path,'' FROM core_job WHERE input_path<>''"),
     ('receipt', "SELECT result_path,result_sha256 FROM core_job WHERE result_path<>''"),
     ('receipt', "SELECT result_path,result_sha256 FROM core_providerreceipt WHERE result_path<>''"),
+    ('batch_response', "SELECT result_path,result_sha256 FROM core_generationbatchresponse WHERE result_path<>''"),
 ]
 INVARIANTS = {
     'wallet_bounds': 'SELECT count(*) FROM core_wallet WHERE balance<0 OR reserved<0 OR reserved>balance',

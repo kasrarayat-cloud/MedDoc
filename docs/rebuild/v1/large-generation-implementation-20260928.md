@@ -54,3 +54,11 @@ Independent finished-diff clinical/adoption/retention and financial/interruption
 Runtime and all first-pass evidence: `rebuild/.runtime/large-generation-20260928/`. The active checkpoint identifies processes and next safe action. Copied immutable logs and source hashes accompany the final report commit.
 
 Finished source hashes and immutable evidence copies: [evidence manifest](evidence/large-generation-20260928/manifest.json). Source has no active writer/process after this freeze. No push, merge, install or deployment was performed.
+
+## Independent refutation R-B1 — restore contract follow-up
+
+Root's exact39c fresh-migration witness found51 enabled guards but the release verifier expected39, with12 unexpected guards and6 old preservation-body hashes. Author reproduced it in17; original failure is retained. Expected identities now come from reviewed0027 composed SQL, never from the inspected database:51 guards and17 function bodies. The parity fixture reads the exact declared0026→0027 replacement rather than mistaking isolated literals for the composed forward migration. Unknown/missing/disabled/replaced definitions still refuse.
+
+`GenerationBatchResponse` is now an explicit required path/hash in the shared backup/restore file reference reader, even without a Job/ProviderReceipt reference. Missing/corrupt response-only files refuse; matching files pass. Existing historical restore reports remain unchanged.
+
+19:3 actual PostgreSQL tests PASS0.090s, including fresh exact parity, real disabled trigger/replaced function refusals and executable file-reference queries.20:33 pure ops tests PASS1.060s, including36 targeted new-guard mutations and missing/corrupt response-file controls. No core clinical/financial/migration source changed in this follow-up. Financial F1/F2 independent findings are separately pending repair; this closes only R-B1 subject to root replay.
