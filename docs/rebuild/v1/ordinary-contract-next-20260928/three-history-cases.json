@@ -1,0 +1,1017 @@
+{
+  "method": "Read-only projection of retained original results; no candidate execution or new campaign.",
+  "source_path": "/opt/meddoc-pro/rebuild/.runtime/v1-astra-recovery-20260927/patient-topics-union-retained.json",
+  "source_sha256": "28bac03e50f3a8b7a6571f0be9f97da35fde744d60d67ba4d1c4e24f33aedb71",
+  "source_generation_sha256": "a7bbe3d9efd0db5247dccebeba0cb97137786312b03f22994c394cdfb744a81b",
+  "retained_denominator": 77,
+  "recorded_supported": 26,
+  "current_notes_candidate": "5961be4a3a8c4543e00fa4b53ed098196644966b",
+  "cases": [
+    {
+      "name": "r1-note1",
+      "notes": "45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an MRI of the right knee and physiotherapy referral.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "original_all_picks": {
+        "Chief complaint": [
+          "45-year-old man presents with right knee pain for three weeks after a fall."
+        ],
+        "History of present illness": [
+          "45-year-old man presents with right knee pain for three weeks after a fall."
+        ],
+        "Past medical history": [
+          "He has hypertension and takes lisinopril 10 mg daily."
+        ],
+        "Medications": [
+          "He has hypertension and takes lisinopril 10 mg daily."
+        ],
+        "Allergies": [
+          "Allergies: penicillin."
+        ],
+        "Smoker": [
+          "Smoker: No."
+        ],
+        "Examination": [
+          "On examination there is a small effusion and medial joint line tenderness."
+        ],
+        "Assessment": [
+          "Assessment is a probable medial meniscus tear."
+        ],
+        "Plan": [
+          "Plan is an MRI of the right knee and physiotherapy referral."
+        ]
+      },
+      "recorded_selected_supported": 5,
+      "recorded_selected_total": 9,
+      "targets": [
+        {
+          "field": "Chief complaint",
+          "original_selection": [
+            "45-year-old man presents with right knee pain for three weeks after a fall."
+          ],
+          "recorded_status": "conflict",
+          "recorded_text": "",
+          "candidate": {
+            "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+            "evidence": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          },
+          "evidence": [
+            {
+              "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+              "start": 0,
+              "end": 75
+            }
+          ],
+          "expected_scope": "complete original selected history wording, preserving every qualifier; no invented clinical facts"
+        },
+        {
+          "field": "History of present illness",
+          "original_selection": [
+            "45-year-old man presents with right knee pain for three weeks after a fall."
+          ],
+          "recorded_status": "conflict",
+          "recorded_text": "",
+          "candidate": {
+            "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+            "evidence": [
+              {
+                "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+                "start": 0,
+                "end": 75
+              }
+            ],
+            "context": [
+              {
+                "quote": "He has hypertension and takes lisinopril 10 mg daily.",
+                "start": 76,
+                "end": 129,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          },
+          "evidence": [
+            {
+              "quote": "45-year-old man presents with right knee pain for three weeks after a fall.",
+              "start": 0,
+              "end": 75
+            }
+          ],
+          "expected_scope": "complete original selected history wording, preserving every qualifier; no invented clinical facts"
+        }
+      ]
+    },
+    {
+      "name": "r1-note2",
+      "notes": "Patient presents with a cough for five days.\nShe reports low-grade fevers and green sputum.\nShe has asthma.\nMedications: salbutamol inhaler as needed.\nAllergies: none known.\nSmoker: no.\nChest examination revealed crackles at the right base.\nAssessment: community-acquired pneumonia.\nPlan: amoxicillin 500 mg three times daily for five days.\nReturn if symptoms worsen.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "original_all_picks": {
+        "Chief complaint": [
+          "Patient presents with a cough for five days."
+        ],
+        "History of present illness": [
+          "Patient presents with a cough for five days.",
+          "She reports low-grade fevers and green sputum."
+        ],
+        "Past medical history": [
+          "She has asthma."
+        ],
+        "Medications": [
+          "Medications: salbutamol inhaler as needed."
+        ],
+        "Allergies": [
+          "Allergies: none known."
+        ],
+        "Smoker": [
+          "Smoker: no."
+        ],
+        "Examination": [
+          "Chest examination revealed crackles at the right base."
+        ],
+        "Assessment": [
+          "Assessment: community-acquired pneumonia."
+        ],
+        "Plan": [
+          "Plan: amoxicillin 500 mg three times daily for five days.",
+          "Return if symptoms worsen."
+        ]
+      },
+      "recorded_selected_supported": 6,
+      "recorded_selected_total": 9,
+      "targets": [
+        {
+          "field": "Chief complaint",
+          "original_selection": [
+            "Patient presents with a cough for five days."
+          ],
+          "recorded_status": "conflict",
+          "recorded_text": "",
+          "candidate": {
+            "text": "Patient presents with a cough for five days.",
+            "evidence": [
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44
+              }
+            ],
+            "context": [
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          },
+          "evidence": [
+            {
+              "quote": "Patient presents with a cough for five days.",
+              "start": 0,
+              "end": 44
+            }
+          ],
+          "expected_scope": "complete original selected history wording, preserving every qualifier; no invented clinical facts"
+        },
+        {
+          "field": "History of present illness",
+          "original_selection": [
+            "Patient presents with a cough for five days.",
+            "She reports low-grade fevers and green sputum."
+          ],
+          "recorded_status": "conflict",
+          "recorded_text": "",
+          "candidate": {
+            "text": "Patient presents with a cough for five days.\nShe reports low-grade fevers and green sputum.",
+            "evidence": [
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44
+              },
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91
+              }
+            ],
+            "context": [
+              {
+                "quote": "She reports low-grade fevers and green sputum.",
+                "start": 45,
+                "end": 91,
+                "after": true,
+                "same": false
+              },
+              {
+                "quote": "Patient presents with a cough for five days.",
+                "start": 0,
+                "end": 44,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She has asthma.",
+                "start": 92,
+                "end": 107,
+                "after": true,
+                "same": false
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          },
+          "evidence": [
+            {
+              "quote": "Patient presents with a cough for five days.",
+              "start": 0,
+              "end": 44
+            },
+            {
+              "quote": "She reports low-grade fevers and green sputum.",
+              "start": 45,
+              "end": 91
+            }
+          ],
+          "expected_scope": "complete original selected history wording, preserving every qualifier; no invented clinical facts"
+        }
+      ]
+    },
+    {
+      "name": "r1-note4",
+      "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Chief complaint",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_2",
+          "label": "History of present illness",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_3",
+          "label": "Past medical history",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_4",
+          "label": "Medications",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_5",
+          "label": "Allergies",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_6",
+          "label": "Smoker",
+          "kind": "choice",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Yes",
+            "No"
+          ]
+        },
+        {
+          "key": "v3_7",
+          "label": "Examination",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_8",
+          "label": "Assessment",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_9",
+          "label": "Plan",
+          "kind": "long_text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[4]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        },
+        {
+          "key": "v3_10",
+          "label": "Consent obtained",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "options": [
+            "Consent obtained"
+          ]
+        },
+        {
+          "key": "v3_11",
+          "label": "Clinician signature",
+          "kind": "signature",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[5]",
+            "target": {
+              "type": "span",
+              "start": 0,
+              "end": 0,
+              "shape": "after_label"
+            },
+            "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ],
+      "original_all_picks": {
+        "Chief complaint": [
+          "This is a 30-year-old female seen for headaches."
+        ],
+        "History of present illness": [
+          "The headaches started two months ago and are worse in the morning.",
+          "She denies visual changes, nausea, or weakness."
+        ],
+        "Medications": [
+          "She takes ibuprofen as needed."
+        ],
+        "Allergies": [
+          "No known drug allergies."
+        ],
+        "Smoker": [
+          "She is a nonsmoker."
+        ],
+        "Examination": [
+          "Neurological examination is normal."
+        ],
+        "Assessment": [
+          "Assessment is tension-type headache."
+        ],
+        "Plan": [
+          "Plan is to start amitriptyline 10 mg at night.",
+          "She will follow up in six weeks."
+        ]
+      },
+      "recorded_selected_supported": 3,
+      "recorded_selected_total": 8,
+      "targets": [
+        {
+          "field": "Chief complaint",
+          "original_selection": [
+            "This is a 30-year-old female seen for headaches."
+          ],
+          "recorded_status": "conflict",
+          "recorded_text": "",
+          "candidate": {
+            "text": "This is a 30-year-old female seen for headaches.",
+            "evidence": [
+              {
+                "quote": "This is a 30-year-old female seen for headaches.",
+                "start": 0,
+                "end": 48
+              }
+            ],
+            "context": [
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          },
+          "evidence": [
+            {
+              "quote": "This is a 30-year-old female seen for headaches.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "expected_scope": "complete original selected history wording, preserving every qualifier; no invented clinical facts"
+        },
+        {
+          "field": "History of present illness",
+          "original_selection": [
+            "The headaches started two months ago and are worse in the morning.",
+            "She denies visual changes, nausea, or weakness."
+          ],
+          "recorded_status": "conflict",
+          "recorded_text": "",
+          "candidate": {
+            "text": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness.",
+            "evidence": [
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115
+              },
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163
+              }
+            ],
+            "context": [
+              {
+                "quote": "This is a 30-year-old female seen for headaches.",
+                "start": 0,
+                "end": 48,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She denies visual changes, nausea, or weakness.",
+                "start": 116,
+                "end": 163,
+                "after": true,
+                "same": true
+              },
+              {
+                "quote": "The headaches started two months ago and are worse in the morning.",
+                "start": 49,
+                "end": 115,
+                "after": false,
+                "same": true
+              },
+              {
+                "quote": "She takes ibuprofen as needed.",
+                "start": 164,
+                "end": 194,
+                "after": true,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          },
+          "evidence": [
+            {
+              "quote": "The headaches started two months ago and are worse in the morning.",
+              "start": 49,
+              "end": 115
+            },
+            {
+              "quote": "She denies visual changes, nausea, or weakness.",
+              "start": 116,
+              "end": 163
+            }
+          ],
+          "expected_scope": "complete original selected history wording, preserving every qualifier; no invented clinical facts"
+        }
+      ]
+    }
+  ]
+}
