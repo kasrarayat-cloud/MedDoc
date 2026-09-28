@@ -167,6 +167,239 @@ def _simple_fact(doc, question):
     return 'clinical_actor' if clinical_actor else 'entity'
 
 
+class _Unbounded(Exception):
+    """A predicate with more syntactic readings than this bounded reader keeps."""
+
+
+class OpposedClaim(ValueError):
+    """A selected statement is directly opposed; the relation read refuses it."""
+
+
+# A predicate head's dependants that restate or rename it (each conjunct or
+# appositive is a complete reading of its own), qualify it adverbially, or
+# carry no topic word at all. Everything else is part of the complete topic.
+_ALTERNATES = ('conj', 'appos')
+_ADVERBIAL = ('advmod', 'npadvmod')
+_NO_TOPIC = ('neg', 'preconj', 'cc', 'punct')
+# Copular complements by dependency role, never by part of speech: the pinned
+# tagger reads "well" as an adverb in "is well" and an adjective in "is not well".
+_PREDICATES = ('acomp', 'oprd', 'attr')
+_INDIRECT = ('xcomp', 'ccomp', 'advcl')
+# A nominal complement's noun also occurs as an ordinary argument ("The nurse
+# reviewed it"); only there, and only for a noun, is an occurrence no claim. An
+# adjective or verb in an unrecognised role still withholds.
+_NOMINAL = ('NOUN', 'PROPN', 'PRON', 'NUM')
+_ARGUMENTS = ('nsubj', 'nsubjpass', 'dobj', 'iobj', 'dative', 'pobj', 'agent')
+_READINGS = 64
+
+
+def _topic_word(token):
+    # Articles, punctuation and negation are never topic identity; negation is
+    # read as polarity from the dependency parse, not from a list of words.
+    return not (token.is_punct or token.is_space or token.dep_ in _NO_TOPIC
+                or 'Art' in token.morph.get('PronType'))
+
+
+def _combine(left, right):
+    result = {tuple(sorted(a + b)) for a in left for b in right}
+    if len(result) > _READINGS: raise _Unbounded()
+    return result
+
+
+def _topic_readings(token, top=False):
+    """Every complete reading of one predicate subtree, as source token indices.
+
+    The whole literal subtree is always a reading. A coordinated or appositive
+    nominal also states the predicate of each conjunct/renaming, and an adverbial
+    qualifier may be absent; at the predicate head, material before the head may
+    be absent too (tagger variance). This only widens what is the SAME topic, so
+    it can withhold an answer and never grants one.
+    """
+    own = {(token.i,)} if _topic_word(token) else {()}
+    alternates = []
+    for child in sorted(token.children, key=lambda t: t.i):
+        if top and child.dep_ in ('conj', 'cc'):
+            continue  # a coordinated predicate head is its own occurrence
+        if child.dep_ in _NO_TOPIC or child.is_punct or child.is_space:
+            continue
+        if child.dep_ in _ALTERNATES:
+            alternates.append(_topic_readings(child))
+        elif child.dep_ in _ADVERBIAL or (top and child.i < token.i):
+            own = own | _combine(own, _topic_readings(child))
+        else:
+            own = _combine(own, _topic_readings(child))
+    whole = own
+    for readings in alternates:
+        whole = _combine(whole, readings)
+    result = own | whole
+    for readings in alternates:
+        result |= readings
+    if len(result) > _READINGS: raise _Unbounded()
+    return result
+
+
+def _main_clause(verb):
+    while verb.dep_ == 'conj' and verb.head is not verb:
+        verb = verb.head
+    return verb.dep_ == 'ROOT'
+
+
+def _clause_subject(verb):
+    while True:
+        found = [t for t in verb.children if t.dep_ in SUBJECTS]
+        if found: return found[0]
+        if verb.dep_ != 'conj' or verb.head is verb: return None
+        verb = verb.head
+
+
+def _possible_patient(actor):
+    """Whether the claim's actor may be the patient. Only a possessed nominal
+    other than the patient ("her mother", "the patient's father") is another
+    actor; a pronoun, name, abbreviation, unpossessed noun or omitted subject
+    remains unresolved and may be the patient. Nothing here admits an answer.
+    """
+    if actor is None: return True
+    heads = [actor, *actor.conjuncts]
+    return any(t.text.casefold() == 'patient' or not any(c.dep_ == 'poss' for c in t.children)
+               for t in heads)
+
+
+def _conjunct_chain(token):
+    """A coordinated complement shares its first conjunct's role and clause."""
+    chain = [token]
+    while chain[-1].dep_ == 'conj' and chain[-1].head is not chain[-1]:
+        chain.append(chain[-1].head)
+    return chain
+
+
+def _occurrence(token):
+    """The polarity, time and actor of one predicate occurrence, by syntax only."""
+    chain = _conjunct_chain(token)
+    head = chain[-1]
+    verb = head.head if (head.dep_ in _PREDICATES + _INDIRECT and head.head is not head
+                         and head.head.pos_ in ('AUX', 'VERB')) else None
+    spine = list(chain)
+    if verb is not None:
+        spine += [verb] + [c for c in verb.children if c.dep_ in ('aux', 'auxpass', 'advmod', 'npadvmod')]
+    spine += [c for t in chain for c in t.children if c.dep_ in _ADVERBIAL]
+    negative = sum(c.dep_ == 'neg' for t in spine for c in t.children) % 2 == 1
+    # Reported, conditional-complement, infinitival or otherwise embedded
+    # predicates, and either/neither coordination, are not the note's own
+    # plain assertion: their polarity is never taken to agree with an answer.
+    uncertain = any(t.dep_ == 'preconj' for t in token.subtree)
+    # A predicate before a label colon is a heading ("Subject to MAPPA: No."):
+    # its answer follows the colon, so its own syntax asserts no polarity.
+    from .generation import COLONS
+    uncertain = uncertain or any(c in COLONS for t in token.doc[token.i + 1:] for c in t.text)
+    tense = None
+    if verb is not None:
+        embedded = head.dep_ not in _PREDICATES or not _main_clause(verb)
+        uncertain = uncertain or embedded
+        actor = _clause_subject(verb)
+        auxiliaries = [c for c in verb.children if c.dep_ in ('aux', 'auxpass')]
+        value = verb.morph.get('Tense')
+        # Only two simple finite main-clause verbs with explicitly different
+        # tense are two different times. Every auxiliary, aspect or modal may
+        # overlap, and reported speech shifts tense ("she said she was not").
+        if not embedded and not auxiliaries and 'Fin' in verb.morph.get('VerbForm') and len(value) == 1:
+            tense = value[0]
+    elif head.dep_ == 'ROOT':
+        actor = next((c for c in head.children if c.dep_ in SUBJECTS), None)
+    elif head.dep_ == 'amod':
+        actor = head.head
+    elif token.pos_ in _NOMINAL and head.dep_ in _ARGUMENTS:
+        return None  # a noun as an ordinary subject/object is no predication
+    else:
+        actor, uncertain = None, True
+    return {'negative': negative, 'uncertain': uncertain, 'tense': tense,
+            'patient': _possible_patient(actor)}
+
+
+def _claim(token):
+    occurrence = _occurrence(token)
+    if occurrence is None: return None
+    try:
+        readings = {tuple(token.doc[i].text.casefold() for i in r) for r in _topic_readings(token, top=True) if r}
+    except _Unbounded:
+        readings = None  # compared by its head word alone, which only withholds
+    return {'word': token.text.casefold(), 'readings': readings, **occurrence}
+
+
+def _opposes(selected, other):
+    if selected['word'] != other['word'] or not (selected['patient'] and other['patient']):
+        return False
+    if (selected['readings'] is not None and other['readings'] is not None
+            and not selected['readings'] & other['readings']):
+        return False
+    if selected['tense'] is not None and other['tense'] is not None and selected['tense'] != other['tense']:
+        return False
+    return selected['uncertain'] or other['uncertain'] or selected['negative'] != other['negative']
+
+
+def _selected_claims(doc):
+    """Every copular complement of the selected statement, read by its role."""
+    claims = []
+    for token in doc:
+        head = _conjunct_chain(token)[-1]
+        if ((head.dep_ in _PREDICATES and head.head is not head and head.head.pos_ in ('AUX', 'VERB'))
+                or (head.dep_ == 'ROOT' and token.pos_ == 'ADJ')):
+            claims.append(_claim(token))
+    return claims
+
+
+def opposed_ids(selected, reading):
+    """Selected units whose patient copular claim is directly opposed elsewhere.
+
+    A model's "independent" label cannot erase a direct opposite: the same
+    complete predicate (same topic), for the patient or an unresolved actor,
+    at a time not proven different, with the opposite or an unasserted polarity.
+    This applies to every selected unit whichever reader admitted it, and it
+    only ever withholds. The whole source is read, in every compatibility
+    reading; an opposing unit beyond the parser's bounds withholds the claim.
+    """
+    from . import generation as g
+    docs = reading.setdefault('_ordinary_opposite_docs', {})
+    variants = reading.setdefault('_ordinary_opposite_readings', {})
+
+    def readings_of(text):
+        if text not in variants:
+            variants[text] = list(g.safety_readings(text))
+        return variants[text]
+    try:
+        with syntax._lock:
+            parser = syntax._parser()
+            if parser is None: return set()
+
+            def parsed(texts):
+                missing = [t for t in dict.fromkeys(texts) if t not in docs]
+                for text, doc in zip(missing, parser.pipe(missing, batch_size=16)):
+                    docs[text] = doc
+                return [docs[t] for t in texts]
+
+            held = set()
+            for unit in selected:
+                texts = readings_of(unit['quote'])
+                if any(len(t) > syntax.MAX_CHARACTERS for t in texts): continue
+                claims = [c for doc in parsed(texts) for c in _selected_claims(doc)]
+                claims = [c for c in claims if c is not None and c['patient']]
+                if not claims: continue
+                words = {c['word'] for c in claims}
+                others = [(u, readings_of(u['quote'])) for u in reading['units'] if u['id'] != unit['id']]
+                others = [(u, texts) for u, texts in others
+                          if any(word in text.casefold() for text in texts for word in words)]
+                if (len(others) > syntax.MAX_UNITS
+                        or any(len(t) > syntax.MAX_CHARACTERS for _, texts in others for t in texts)):
+                    held.add(unit['id']); continue
+                for doc in parsed([t for _, texts in others for t in texts]):
+                    occurrences = [_claim(token) for token in doc if token.text.casefold() in words]
+                    if any(_opposes(claim, other) for other in occurrences if other is not None
+                           for claim in claims):
+                        held.add(unit['id']); break
+            return held
+    except (ValueError, TypeError, RuntimeError, OSError, KeyError, AttributeError, IndexError):
+        return {unit['id'] for unit in selected}
+
+
 def _elicited_report(text, doc, destination, question):
     # A completed elicitation, not a future/conditional response. The entire
     # reported clause and corroborating actor are retained, never patientized.
@@ -193,6 +426,16 @@ def _elicited_report(text, doc, destination, question):
 
 
 def complete_ids(field, units, reading):
+    """Selected units this reader admits; raises OpposedClaim to refuse them all.
+
+    The ordinary relation revalidation (generation, review, save, finalization)
+    calls this once with every selected unit, for every field kind, before any
+    admission route is consulted, and refuses the whole relation on ValueError.
+    The direct-opposite hold therefore covers units admitted by every reader,
+    while the separately priced and pinned relation module stays unchanged.
+    """
+    if opposed_ids(units, reading):
+        raise OpposedClaim('A selected patient statement is directly opposed elsewhere in the source.')
     if field.get('kind') not in ('text', 'long_text'): return set()
     candidates = [u for u in units[:syntax.MAX_UNITS] if isinstance(u.get('quote'), str)
                   and 0 < len(u['quote']) <= syntax.MAX_CHARACTERS and u['quote'].endswith('.')

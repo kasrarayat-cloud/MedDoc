@@ -112,6 +112,193 @@ class OrdinaryFieldRelations(SimpleTestCase):
         with override_settings(V3_FIELD_RELATIONS=False):
             self.assertEqual(g.governed_decisions(first, fields, answers), [fields[0]['label']])
 
+    def test_direct_opposite_copular_source_cannot_be_declared_independent(self):
+        first = 'The patient is subject to Multi-Agency Public Protection Arrangements (MAPPA).'
+        negative = first.replace(' is ', ' is not ')
+        fields = [field('f', 'Please confirm that this patient is subject to Multi-Agency Public Protection Arrangements (MAPPA)')]
+        for other in (negative, negative.replace('The patient', 'This patient'), negative.replace('is not', "isn't")):
+            for notes in (first + ' ' + other, other + ' ' + first):
+                for picks in ([first], [other], [first, other]):
+                    with self.subTest(notes=notes, picks=picks):
+                        # Unselected units default to the adversarial "independent" relation.
+                        answer = offered(notes, fields, {'f': picks})['f']
+                        self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+
+    def test_copular_context_keeps_standalone_polarity_and_distinct_time_or_topic(self):
+        first = 'The patient is responsive to physiotherapy.'
+        negative = first.replace(' is ', ' is not ')
+        fields = [field('f', 'Clinical observation')]
+        for notes, selected in (
+            (first, first), (negative, negative),
+            (first + ' The patient was not responsive to physiotherapy.', first),
+            ('The patient was responsive to physiotherapy. ' + negative, negative),
+            (first + ' The patient is not responsive to medication.', first),
+            (first + ' The patient is not allergic to penicillin.', first),
+        ):
+            with self.subTest(notes=notes):
+                answers = offered(notes, fields, {'f': [selected]})
+                self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', selected))
+                self.assert_stored_clear(notes, fields, answers)
+
+    def assert_opposed(self, selected, other, label='Status under the arrangements', orders=None):
+        """Held on generation, and a stored supported copy is held on review/save."""
+        fields = [field('f', label)]
+        for notes in orders or (selected + ' ' + other, other + ' ' + selected):
+            with self.subTest(notes=notes):
+                # Unselected units default to the adversarial "independent" relation.
+                answer = offered(notes, fields, {'f': [selected]})['f']
+                self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+                start = notes.index(selected)
+                stored = {k: v for k, v in answer.items() if k != 'held_candidate'}
+                stored.update(status='supported', text=selected,
+                              evidence=[{'quote': selected, 'start': start, 'end': start + len(selected)}])
+                self.assertEqual(g.governed_decisions(notes, fields, {'f': stored}), [label])
+                row = g.as_currently_governed(g.governance_for(notes, fields), notes, {**fields[0], **stored})
+                self.assertEqual((row['status'], row['text']), ('conflict', ''))
+
+    def test_direct_opposite_holds_whichever_reader_admitted_the_selected_statement(self):
+        # Every reader's admission is covered: "isn't" is admitted by the sentence-syntax
+        # reader, "stable" by the generic one. Negation is the parser's neg dependency
+        # in every form, never a list of words.
+        positive = 'The patient is subject to the arrangements.'
+        for selected, other in (
+                (positive, "The patient isn't subject to the arrangements."),
+                ("The patient isn't subject to the arrangements.", positive),
+                # Admitted only by the sentence-syntax reader (an adverb is outside
+                # the copular reader's syntax), so the hold cannot live in either reader.
+                ("The patient isn't currently subject to the arrangements.", positive),
+                (positive, "The patient's not subject to the arrangements."),
+                (positive, 'The patient is never subject to the arrangements.'),
+                (positive, 'The patient is no longer subject to the arrangements.'),
+                (positive, 'The patient is not currently subject to the arrangements.'),
+                (positive, 'The patient is possibly not subject to the arrangements.'),
+                (positive, 'The patient may not be subject to the arrangements.'),
+                (positive, 'The patient has not been subject to the arrangements.'),
+                ('The patient is stable.', 'The patient is not stable.'),
+                ('The patient is not stable.', 'The patient is stable.')):
+            self.assert_opposed(selected, other)
+        # An unterminated final statement, an elliptical or telegraphic one, and
+        # compatibility readings of the same words are complete opposites too.
+        self.assert_opposed(positive, 'The patient is not subject to the arrangements',
+                            orders=[positive + ' The patient is not subject to the arrangements'])
+        for other in ('Not subject to the arrangements.', 'Patient not subject to the arrangements.',
+                      'The patient not subject to the arrangements.', 'Pt is not subject to the arrangements.',
+                      'She is not subject to the arrangements.', 'The client is not subject to the arrangements.',
+                      'The patient is not sub\u200bject to the arrangements.',
+                      'The patient is not \uff53\uff55\uff42\uff4a\uff45\uff43\uff54 to the arrangements.'):
+            self.assert_opposed(positive, other)
+
+    def test_same_topic_is_the_complete_predicate_with_its_coordinated_and_renamed_readings(self):
+        full = 'The patient is subject to Multi-Agency Public Protection Arrangements (MAPPA).'
+        question = 'Please confirm that this patient is subject to Multi-Agency Public Protection Arrangements (MAPPA)'
+        for other in ('The patient is not subject to MAPPA.',
+                      'The patient is not subject to Multi-Agency Public Protection Arrangements.',
+                      'The patient is not subject to the Multi-Agency Public Protection Arrangements (MAPPA).',
+                      'Subject to Multi-Agency Public Protection Arrangements (MAPPA): No.'):
+            self.assert_opposed(full, other, question)
+        physiotherapy = 'The patient is responsive to physiotherapy.'
+        for selected, other in ((physiotherapy, 'The patient is not responsive to physiotherapy or medication.'),
+                                (physiotherapy, 'The patient is neither responsive to physiotherapy nor to medication.'),
+                                ('The patient is not responsive to physiotherapy.',
+                                 'The patient is responsive to physiotherapy and medication.'),
+                                (physiotherapy, 'The patient is not responsive to physiotherapy today.'),
+                                (physiotherapy, 'The patient is not responsive enough to physiotherapy.'),
+                                ('The patient is subject to the arrangements.',
+                                 'The patient is not subject to arrangements.'),
+                                ('The patient is not subject to the arrangements.', 'Patient subject to the arrangements.'),
+                                (physiotherapy, 'The patient is calm and not responsive to physiotherapy.'),
+                                (physiotherapy, 'The patient is calm and is not responsive to physiotherapy.')):
+            self.assert_opposed(selected, other, 'Clinical observation')
+        # Positive controls: a different complete predicate is a different topic,
+        # and an agreeing restatement or a generic attributive use is not opposition.
+        for selected, other, label in (
+                (full, 'The patient is not subject to MAPPA level 2.', question),
+                (full, 'The patient is not subject to a restriction order.', question),
+                (full, 'The patient is subject to MAPPA.', question),
+                (full, 'Patients subject to MAPPA are reviewed monthly.', question),
+                (physiotherapy, 'The patient is responsive to physiotherapy and medication.', 'Clinical observation'),
+                (physiotherapy, 'The patient is calm and responsive to physiotherapy.', 'Clinical observation'),
+                (physiotherapy, 'The patient is not responsive to medication or hydrotherapy.', 'Clinical observation')):
+            fields = [field('f', label)]
+            for notes in (selected + ' ' + other, other + ' ' + selected):
+                with self.subTest(notes=notes):
+                    answers = offered(notes, fields, {'f': [selected]})
+                    self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', selected))
+                    self.assert_stored_clear(notes, fields, answers)
+
+    def test_copular_complement_is_read_by_its_role_not_its_part_of_speech(self):
+        # The pinned tagger reads "well" as an adverb in one sentence and an
+        # adjective in the other; a nominal complement and a participle
+        # coordinated into the complement are copular claims too.
+        for selected, other in (('The patient is well.', 'The patient is not well.'),
+                                ('The patient is not well.', 'The patient is well.'),
+                                ('The patient is a smoker.', 'The patient is not a smoker.'),
+                                ('The patient is not a smoker.', 'The patient is a smoker.'),
+                                ('The patient is alert and oriented.', 'The patient is not oriented.')):
+            self.assert_opposed(selected, other, 'Clinical observation')
+        fields = [field('f', 'Clinical observation')]
+        for selected, other in (('The patient is well.', 'The patient was not well.'),
+                                ('The patient is a smoker.', 'Her husband is not a smoker.'),
+                                ('The patient is a smoker.', 'The patient is not a drinker.'),
+                                # The same noun as an ordinary argument is not a predication.
+                                ('The patient is a nurse.', 'The nurse did not review the wound.'),
+                                ('The patient is a smoker.', 'The patient does not live with a smoker.'),
+                                ('The patient is alert and oriented.', 'The patient is not agitated.')):
+            for notes in (selected + ' ' + other, other + ' ' + selected):
+                with self.subTest(notes=notes):
+                    answers = offered(notes, fields, {'f': [selected]})
+                    self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', selected))
+                    self.assert_stored_clear(notes, fields, answers)
+
+    def test_embedded_reported_or_conditional_opposites_never_count_as_agreement(self):
+        positive = 'The patient is subject to the arrangements.'
+        for other in ('The patient reports that she is not subject to the arrangements.',
+                      'It is not true that the patient is subject to the arrangements.',
+                      'The patient denies being subject to the arrangements.',
+                      'If discharged, the patient is not subject to the arrangements.',
+                      'Is the patient not subject to the arrangements?',
+                      'The patient is either subject to the arrangements or on licence.',
+                      # Reported speech shifts tense: an embedded past is not a proven other time.
+                      'The patient said that she was not subject to the arrangements.',
+                      'The officer reported that the patient was not subject to the arrangements.'):
+            self.assert_opposed(positive, other)
+
+    def test_opposite_actor_and_time_bounds_keep_ordinary_answers_useful(self):
+        allergy = 'The patient is not allergic to penicillin.'
+        # Another actor is only an explicit possessed nominal; the same complete
+        # predicate for an unresolved actor (possibly the patient) still holds.
+        for other in ('Her mother is allergic to penicillin.', "The patient's father is allergic to penicillin.",
+                      'The patient was allergic to penicillin.'):
+            for notes in (allergy + ' ' + other, other + ' ' + allergy):
+                with self.subTest(notes=notes):
+                    answers = offered(notes, [field('f', 'Allergies')], {'f': [allergy]})
+                    self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', allergy))
+                    self.assert_stored_clear(notes, [field('f', 'Allergies')], answers)
+        for other in ('Mother is allergic to penicillin.', 'He is allergic to penicillin.',
+                      'The patient and her mother are allergic to penicillin.',
+                      'Mr Smith is allergic to penicillin.'):
+            self.assert_opposed(allergy, other, 'Allergies')
+
+    def test_opposite_reader_fails_closed_beyond_its_bounds_or_on_parser_error(self):
+        from core import v3_literal_facts as literal
+        positive = 'The patient is subject to the arrangements.'
+        fields = [field('f', 'Status under the arrangements')]
+        # More same-word statements than the bounded reader parses, or one too long.
+        many = ' '.join(f'The arrangements subject note {i} is filed.' for i in range(65))
+        long = 'The patient is subject to the arrangements ' + 'and review ' * 120 + 'today.'
+        for notes in (positive + ' ' + many, positive + ' ' + long):
+            with self.subTest(notes=notes[:80]):
+                self.assertEqual(offered(notes, fields, {'f': [positive]})['f']['status'], 'conflict')
+        control = positive + ' ' + ' '.join(f'The review note {i} is filed.' for i in range(65))
+        self.assertEqual(offered(control, fields, {'f': [positive]})['f']['status'], 'supported')
+        reading = {'units': [{'id': 1, 'quote': positive, 'start': 0, 'end': len(positive)}]}
+
+        class Broken:
+            def pipe(self, texts, batch_size=16):
+                raise RuntimeError('parser failure')
+        with patch.object(literal.syntax, '_parser', return_value=Broken()):
+            self.assertEqual(literal.opposed_ids(reading['units'], reading), {1})
+
     def test_identical_contexts_and_ambiguous_labelled_answers_stay_held(self):
         notes = 'The patient reports intermittent buzzing.'
         fields = repeated(); fields[1]['context'] = fields[0]['context']
