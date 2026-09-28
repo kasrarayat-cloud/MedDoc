@@ -348,6 +348,39 @@ class MappingAssistance(TestCase):
         self.assertEqual(self.template.versions.count(),1)
 
     @override_settings(AI_MODE='live',QUILLMD_MAPPING_ASSISTANCE_LIVE=True)
+    def test_no_provider_credential_is_not_processed_and_releases_the_hold(self):
+        """MONEY-2, the mapping path. Reproduce: live mapping, every ANTHROPIC_* variable unset, a HOME with no profile,
+        the REAL anthropic SDK, every connect refused. RED on bf8f7b78: the SDK raised TypeError while building the
+        request inside messages.create, so the job went to 'reconciliation' ('Provider outcome or settlement is
+        uncertain') with its hold still held. Control: the same real SDK with ANTHROPIC_API_KEY set sends once."""
+        import httpx
+        from core.tests.test_money_closeout import (REAL_ANTHROPIC, SYNTHETIC_KEY, message_json, no_provider_credential,
+                                                   over_mock_transport, synthetic_credential)
+        self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+        job=self.enqueue();connects=[]
+        def refuse(*args,**kwargs):
+            connects.append(args);raise OSError('synthetic test: the network is denied')
+        with no_provider_credential(),patch('anthropic.Anthropic',REAL_ANTHROPIC),patch('socket.socket.connect',side_effect=refuse):
+            self.assertTrue(jobs.run_one())
+        job.refresh_from_db();self.assertEqual(job.state,'failed',job.error)
+        self.assertTrue(job.error.startswith('not_processed: '),job.error)
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state',flat=True)),['released'])
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists());self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertEqual(connects,[])
+        self.assertTrue(all(w.reserved==0 for w in Wallet.objects.filter(user=self.user)))
+        # Positive control: the same real SDK and a fresh request, with the credential present, leaves exactly once.
+        fresh=self.enqueue();self.assertNotEqual(fresh.pk,job.pk);sent=[]
+        def handler(request):
+            sent.append(request)
+            return httpx.Response(200,json=message_json(json.dumps(self.body()),ident='msg_synthetic_mapping'),
+                                  headers={'request-id':'req_synthetic_mapping'})
+        with synthetic_credential(),patch('socket.socket.connect',side_effect=refuse),over_mock_transport(handler):
+            self.assertTrue(jobs.run_one())
+        fresh.refresh_from_db();self.assertEqual(fresh.state,'succeeded',fresh.error)
+        self.assertEqual(len(sent),1);self.assertEqual(sent[0].headers.get('x-api-key'),SYNTHETIC_KEY)
+        self.assertEqual(connects,[])
+
+    @override_settings(AI_MODE='live',QUILLMD_MAPPING_ASSISTANCE_LIVE=True)
     def test_unknown_provider_outcome_keeps_hold_and_same_attempt_without_retry(self):
         self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
         job=self.enqueue()
