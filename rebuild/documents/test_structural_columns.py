@@ -1792,6 +1792,7 @@ class RoundFourGuardsArePinned(unittest.TestCase):
             'Pupils: [Equal] ☐ Unequal ☐ Irregular',                  # ... printed in brackets
             'Blood type A+ ☐ O+ ☐ B+ ☐ AB+', 'Lesion size 5cm ☐ 10cm ☐ 15cm ☐ 20cm',  # the printed form
             'Smoker type: Heavy smoker ☐ Light smoker ☐ Social smoker ☐ Ex-smoker',  # the same last word
+            'Seizure type: Focal seizure ☐ Absence seizure ☐ Tonic seizure ☐ Unclassified',
             'Referral Cardiology ☐ Neurology ☐ Discussed with ____', 'Referral Cardiology ☐ Neurology ☐ Discussed with ......',
             'Referral Cardiology ☐ Neurology ☐ Discussed with ……', 'Referral Cardiology ☐ Neurology ☐ Details: see notes',
             'Referral Cardiology ☐ Neurology ☐ Why?', 'Referral Cardiology ☐ Neurology ☐ If other, specify',  # write-ins
