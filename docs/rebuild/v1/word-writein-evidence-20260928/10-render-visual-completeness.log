@@ -1,0 +1,23 @@
+{
+  "ordinary": {
+    "literal_pdf_text_match": true,
+    "word_sequence_after_excluding_repeated_page_headers_and_box_symbols": true,
+    "expected_repetitions": 0,
+    "visible_repetitions": 0,
+    "visual_pages_inspected": [
+      2
+    ],
+    "visual_observation": "Selected Other state and answer visible in its original column; ordinary wraps; long continues on next page. Following questions remain ordered and legible on inspected pages; no clipping or overlap observed. Inserted square glyphs visibly remain literal. PDF text extraction reorders some glyphs; exact answer text verified independently in DOCX XML. Native Word not performed."
+  },
+  "long": {
+    "literal_pdf_text_match": false,
+    "word_sequence_after_excluding_repeated_page_headers_and_box_symbols": true,
+    "expected_repetitions": 45,
+    "visible_repetitions": 18,
+    "visual_pages_inspected": [
+      2,
+      3
+    ],
+    "visual_observation": "Selected Other state and answer visible in its original column; ordinary wraps; long continues on next page. Following questions remain ordered and legible on inspected pages; no clipping or overlap observed. Inserted square glyphs visibly remain literal. PDF text extraction reorders some glyphs; exact answer text verified independently in DOCX XML. Native Word not performed."
+  }
+}

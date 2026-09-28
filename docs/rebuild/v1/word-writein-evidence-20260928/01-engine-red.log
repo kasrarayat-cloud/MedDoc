@@ -1,0 +1,84 @@
+test_ambiguous_blank_shapes_remain_visible (documents.test_question_boxes.NestedWriteIns.test_ambiguous_blank_shapes_remain_visible) ... ok
+test_changed_source_identity_refuses_write_in (documents.test_question_boxes.NestedWriteIns.test_changed_source_identity_refuses_write_in) ... ERROR
+test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) ... 
+  test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='glyph', blank='underscores') ... FAIL
+  test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='glyph', blank='tab') ... FAIL
+  test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='sdt', blank='underscores') ... FAIL
+  test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='sdt', blank='tab') ... FAIL
+  test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='ff', blank='underscores') ... FAIL
+  test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='ff', blank='tab') ... FAIL
+test_signing_scope_and_complete_context_limits_are_not_relaxed (documents.test_question_boxes.NestedWriteIns.test_signing_scope_and_complete_context_limits_are_not_relaxed) ... ERROR
+
+======================================================================
+ERROR: test_changed_source_identity_refuses_write_in (documents.test_question_boxes.NestedWriteIns.test_changed_source_identity_refuses_write_in)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 707, in test_changed_source_identity_refuses_write_in
+    field = next(f for f in result['fields'] if f['locator']['target']['type'] == 'span')
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+StopIteration
+
+======================================================================
+ERROR: test_signing_scope_and_complete_context_limits_are_not_relaxed (documents.test_question_boxes.NestedWriteIns.test_signing_scope_and_complete_context_limits_are_not_relaxed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 697, in test_signing_scope_and_complete_context_limits_are_not_relaxed
+    field = next(f for f in result['fields'] if f['locator']['target']['type'] == 'span')
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+StopIteration
+
+======================================================================
+FAIL: test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='glyph', blank='underscores')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 652, in test_disjoint_blank_and_choice_preserve_source_and_independent_states
+    self.assertEqual(len(spans), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='glyph', blank='tab')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 652, in test_disjoint_blank_and_choice_preserve_source_and_independent_states
+    self.assertEqual(len(spans), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='sdt', blank='underscores')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 652, in test_disjoint_blank_and_choice_preserve_source_and_independent_states
+    self.assertEqual(len(spans), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='sdt', blank='tab')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 652, in test_disjoint_blank_and_choice_preserve_source_and_independent_states
+    self.assertEqual(len(spans), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='ff', blank='underscores')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 652, in test_disjoint_blank_and_choice_preserve_source_and_independent_states
+    self.assertEqual(len(spans), 1)
+AssertionError: 0 != 1
+
+======================================================================
+FAIL: test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) (control='ff', blank='tab')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 652, in test_disjoint_blank_and_choice_preserve_source_and_independent_states
+    self.assertEqual(len(spans), 1)
+AssertionError: 0 != 1
+
+----------------------------------------------------------------------
+Ran 4 tests in 1.039s
+
+FAILED (failures=6, errors=2)
+Found 4 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

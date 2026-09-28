@@ -1,0 +1,97 @@
+{
+  "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+  "source_engine_sha256": "f3afb208c085c6edaa64f97d26ebe7f76739fe0c07ac87b26f91da6207ae8077",
+  "field": {
+    "key": "v3_17",
+    "kind": "text",
+    "label": "Other:",
+    "context": "Detailed Patient Headache Questionnaire (Current Headache) > 10. Please indicate what your headaches usually feel like: (tick all that apply):",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]",
+      "target": {
+        "end": 43,
+        "type": "span",
+        "shape": "blank",
+        "start": 9
+      },
+      "contract": "v3",
+      "fingerprint": "8c410b973de9916e4b39105c63f4ba693c72690700929e93dffb06ce8eb1f329"
+    }
+  },
+  "notes": "The patient reports pressure around the forehead.",
+  "generated_answer": {
+    "text": "",
+    "status": "conflict",
+    "evidence": [
+      {
+        "quote": "The patient reports pressure around the forehead.",
+        "start": 0,
+        "end": 49
+      }
+    ],
+    "reviewed": false,
+    "own_evidence": [
+      {
+        "quote": "The patient reports pressure around the forehead.",
+        "start": 0,
+        "end": 49
+      }
+    ],
+    "held_candidate": {
+      "text": "The patient reports pressure around the forehead.",
+      "evidence": [
+        {
+          "quote": "The patient reports pressure around the forehead.",
+          "start": 0,
+          "end": 49
+        }
+      ],
+      "context": [],
+      "reason": "This question appears 4 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them."
+    }
+  },
+  "final_answer": {
+    "text": "The patient reports pressure around the forehead.",
+    "status": "edited",
+    "evidence": [
+      {
+        "end": 49,
+        "quote": "The patient reports pressure around the forehead.",
+        "start": 0
+      }
+    ],
+    "reviewed": true,
+    "edited_by": "fdfb2200-4cdc-4b8e-b14c-d3fc44a532f5",
+    "accepted_by": null,
+    "reviewed_by": "fdfb2200-4cdc-4b8e-b14c-d3fc44a532f5",
+    "own_evidence": [
+      {
+        "end": 49,
+        "quote": "The patient reports pressure around the forehead.",
+        "start": 0
+      }
+    ],
+    "held_candidate": {
+      "text": "The patient reports pressure around the forehead.",
+      "reason": "This question appears 4 times on the form; the notes do not say which one, so none of them was filled. Enter each answer yourself, or rename the questions in the form mapping so each label names one of them.",
+      "context": [],
+      "evidence": [
+        {
+          "end": 49,
+          "quote": "The patient reports pressure around the forehead.",
+          "start": 0
+        }
+      ]
+    },
+    "accepted_suggestion": false
+  },
+  "export_sha256": "48334d7dfc55079329a39d95fcdea2618e99c2607dd0c95b9118d7a1433ae608",
+  "state": "finalized",
+  "original_download_identical": true,
+  "mapping_review_roundtrip_identical": true,
+  "outside_targets_unchanged": true,
+  "all_missing_package_members_unchanged": false,
+  "checkbox_selection": "independent explicit clinician selection; never inferred from write-in",
+  "document_success": false
+}

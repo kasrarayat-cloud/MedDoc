@@ -1,0 +1,197 @@
+[
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/01-engine-red.log",
+    "bytes": 7540,
+    "sha256": "c3933264a5ccac3d0fdecc020609b285c4a6f50eb8f3bbc10634b0817aea7fb1"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/02-original-http-red.log",
+    "bytes": 3656,
+    "sha256": "e756b59f565dcd7367da06e4c3aa6b262e83c8265c73c400b7988fae41c9eb87"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/03-engine-first-after.log",
+    "bytes": 2106,
+    "sha256": "22fe3fef10581e0b078fc304e311cd472f3a9afda5f99db45c2ac94a56d6ab64"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/04-authenticated-after.log",
+    "bytes": 3139,
+    "sha256": "a3ce209021e4b5d937258af9d64be17e83b9a0e150cc5de84269f20a67292dbe"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/05-affected-engine.log",
+    "bytes": 20070,
+    "sha256": "e1b7e7148bcfebc9ce772b8313780805c677901849cade5f94ad514d17bfcebe"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/06-inspect-render.log",
+    "bytes": 4596,
+    "sha256": "7849e60e5377b3f679292f8f019dd69bbc228dc797d0bf63a601b094d1d0f2e3"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/06-original-map-delta.json",
+    "bytes": 4595,
+    "sha256": "fdc7b0a6980a2f79f088f78daef245b6077802a7762812cbc57ed3a9bec6ab28"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/07-render-command.json",
+    "bytes": 847,
+    "sha256": "9b3f098889768af1f9fc49bedba994e8028b372c9704fa30aaada7a31a666bfc"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/07-render.log",
+    "bytes": 1668,
+    "sha256": "ac4fd5a8f17bd41dc26fd8274970d0820ebcc053a522ac515d0ee80083bf14da"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/08-render-comparison.json",
+    "bytes": 12978,
+    "sha256": "499b14caca29526c07323727c732718ac08b6177b6fe234b3ae2b9f1099a5e4e"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/09-expected-destination-trace.json",
+    "bytes": 8717,
+    "sha256": "51148270a01f52b28d2e312f4f89daf6dc9f0f0f1ebd8e1222925ebf3e19c8b8"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/10-render-check-first-failure.log",
+    "bytes": 285,
+    "sha256": "64d2c4496144d19734164e7efe61851a55a5a3538c152c9b75180a7f4c9df445"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/10-render-first-reading.json",
+    "bytes": 25931,
+    "sha256": "c7ef59ae3c113d94bb6abea2d73239a46b6918e2fd6801ff2e3a19069f046e20"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/10-render-visual-completeness.json",
+    "bytes": 1316,
+    "sha256": "0346e5db791ce67485251f11fbec02992407587ea7682178f6c4f2dc8a5a1e90"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/10-render-visual-completeness.log",
+    "bytes": 1317,
+    "sha256": "5bf8668f56521cc6e05355d74f13f9243a3a88c10ce9532e36c009b8bcca5116"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/11-final-render-disposition.json",
+    "bytes": 1761,
+    "sha256": "dec63f12e568cd88fc32c3dba0bdcef02f829e1e26c53cf6352a50fd8afe6934"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-after/long.docx",
+    "bytes": 26204,
+    "sha256": "7909ebd3117c3203c8590abd48a173aeda031efa863a50f2a770bb05a462f6db"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-after/long.json",
+    "bytes": 6236,
+    "sha256": "0f816c2844a97dedc6a45023a6eaa90453faefd5c6e691af7e386b2010e1be72"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-after/missing.docx",
+    "bytes": 26036,
+    "sha256": "fdfca49601684ebac5183e4c54fed81442b1e00d29835dfa1c2f3a1516eb887a"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-after/missing.json",
+    "bytes": 1586,
+    "sha256": "9d8d088ebc5c8cf36fc394e0f845dc4ff55e107435b703a6cf9e042035fef11b"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-after/ordinary.docx",
+    "bytes": 26138,
+    "sha256": "48334d7dfc55079329a39d95fcdea2618e99c2607dd0c95b9118d7a1433ae608"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-after/ordinary.json",
+    "bytes": 3271,
+    "sha256": "a48945d5360c6c37f976511d3c6b8187a5c819c6522981c917768d7e9171e8b2"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-after/original.docx",
+    "bytes": 29510,
+    "sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-after/uploaded-map.json",
+    "bytes": 68568,
+    "sha256": "1b70a69d2667f8194dcaa5d0ff196820027a9ee612b26a6f16ffe18c79778b7d"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-red/original.docx",
+    "bytes": 29510,
+    "sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/D03-http-red/uploaded-map.json",
+    "bytes": 66182,
+    "sha256": "1c97385fa05985c4e724c431008f7bce206e8993ae8c586d168682ba9800c8d7"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/PLAN.md",
+    "bytes": 2743,
+    "sha256": "32c7aa1618981a71e17320b95daba3426aa9e5bd815b6a896e7dbaccc6ecca18"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/finish_evidence.py",
+    "bytes": 1075,
+    "sha256": "0178f67ac75ce868abdfc25a4765cfe76f59f04b3cb39375bb8b7ca986152ba2"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/inspect_and_render.py",
+    "bytes": 1824,
+    "sha256": "bebe9687f7c1acb03f74105f64940fa69516fceabcdbf62c2c3305b0e24ab5c9"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render-output/long-page-2.png",
+    "bytes": 199617,
+    "sha256": "296d10e9f15c6560b1ec94fd4597b54b6153fcb3134cf4a90a292d8b300df8e7"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render-output/long-page-3.png",
+    "bytes": 193349,
+    "sha256": "35ae25c74769249f759bf14095ee71129095c09c680743316fea359ec8c2867a"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render-output/long.pdf",
+    "bytes": 146154,
+    "sha256": "c0b2fb20e1350bdc8cb7a9381cd55d1f6793017caf52fa89a036a8356a86f216"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render-output/ordinary-page-2.png",
+    "bytes": 185003,
+    "sha256": "6ad2d3ddf370b974f8074e6bad21c97dcb4d0473270b38e779f48a04c20b3485"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render-output/ordinary.pdf",
+    "bytes": 148747,
+    "sha256": "bb0bce743a47f6765d70f1efa6ac8451da15243f84ff13480849e4e9ced66309"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render-output/original-page-2.png",
+    "bytes": 180938,
+    "sha256": "196fdcb447714ff28ef6b47159b7fd15666ea280f5eaf32178f411cd1d7cf85d"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render_check.py",
+    "bytes": 1057,
+    "sha256": "e4775633d5b3218f3e7834be684e06e51204edbd06d15600df51c7a294e439b6"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render_completeness.py",
+    "bytes": 1358,
+    "sha256": "d9c5df4f089a888f718db117f14b7a5ca1a51655fd784cc44391d58d73b28d97"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render_completeness_v2.py",
+    "bytes": 1443,
+    "sha256": "2c5deb11ad8e27f4166bb13be66ef9e3bb81740687cfcdfa33b1cb28f7617e8f"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/source-commit-message.txt",
+    "bytes": 284,
+    "sha256": "8867d6987673c0e01b4ded4e23d62302858d6834978caa18a91df45e9a87112b"
+  }
+]
