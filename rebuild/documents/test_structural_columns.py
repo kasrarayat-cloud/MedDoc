@@ -1355,6 +1355,19 @@ class PatientInstructionsAreNotDestinations(unittest.TestCase):
         self.assertNotIn('500 mg', own['label'])
         self.assertIn('Metformin', own['label'])
 
+    def test_a_group_label_merged_over_several_rows_never_names_an_instructed_cell(self):
+        doc = Document(); table = doc.add_table(rows=3, cols=4)
+        for r, cells in enumerate((('System', 'Organ', 'Findings', 'Initials'),
+                                   ('Abdomen', 'Liver', 'Describe any findings here', ''),
+                                   ('', 'Spleen', 'Describe any findings here', ''))):
+            for c, text in enumerate(cells):
+                table.cell(r, c).text = text
+        table.cell(1, 0).merge(table.cell(2, 0))
+        fields = {f['locator']['slot']: f for f in w.inspect(data(doc))['fields']}
+        self.assertEqual([(fields[s]['label'], fields[s]['locator']['target']['type'])
+                          for s in ('b/tbl[0]/tr[1]/tc[2]', 'b/tbl[0]/tr[2]/tc[2]')],
+                         [('Liver — Findings', 'cell_append'), ('Spleen — Findings', 'cell_append')])
+
 
 class RoundTwoGuardsArePinned(unittest.TestCase):
     """R3-6: each round-two guard has a test that fails when the guard is removed."""

@@ -3536,8 +3536,11 @@ class Detector:
                         continue
                     label = self.row_label(tslot, r, c.info["col"])
                     if instructed:
-                        # The row's own item names an instructed cell, never a value printed beside it ('500 mg').
-                        label = self.row_identity(tslot, r, c.info["col"]) or label
+                        # The row's own item (its leftmost label cell) names an instructed cell, never a value printed
+                        # beside it ('500 mg'); a group label merged over several rows is context, never the item.
+                        items = [x for x in sorted(rows[r], key=lambda x: x.info["col"]) if x.info["col"] < c.info["col"]
+                                 and not x.info["vmerge"] and self.is_label_cell(x)]
+                        label = clean_label(self.cell_text(items[0])) if items else label
                     header = clean_label(self.column_header(tslot, c.info["col"], r))
                     below = self.label_below(tslot, c)
                     if placeholder and not label and not header:
