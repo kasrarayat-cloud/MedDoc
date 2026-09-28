@@ -197,3 +197,43 @@ class LayoutTransport(unittest.TestCase):
                         with self.assertRaises(DocumentError): verify_document(b'original')
                 finally: thread.join(5)
                 self.assertFalse(thread.is_alive())
+
+
+class LayoutHeldProposals(unittest.TestCase):
+    """The service publishes only measured destinations and names every individually held proposal."""
+
+    def setUp(self):
+        from .layout_server import retain_verified
+        self.retain = retain_verified
+        row = lambda n: {'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[%d]' % n}
+        self.manifest = {'candidates': [
+            {'id': 'required', 'source': {'row': row(1), 'label': 'Hair', 'context': 'Head'}},
+            {'id': 'held', 'optional': True, 'untouched': True,
+             'source': {'row': row(3), 'label': 'Supple', 'context': 'Neck'}},
+            {'id': 'measured', 'optional': True, 'untouched': True,
+             'source': {'row': row(5), 'label': 'Masses', 'context': 'Neck'}}]}
+        self.fields = [{'key': 'v3_1', 'layout_candidate': 'required'}, {'key': 'v3_2', 'layout_candidate': 'held'},
+                       {'key': 'v3_3', 'layout_candidate': 'measured'}, {'key': 'v3_4'}]
+
+    def receipt(self, identity):
+        return {'candidate': identity}
+
+    def test_held_proposals_are_removed_and_reported_with_their_printed_source(self):
+        fields, warnings = self.retain(copy.deepcopy(self.fields), ['existing'], self.manifest,
+                                       {'held': [{'candidate': 'held', 'reason': 'outside'}]}, self.receipt)
+        self.assertEqual([f['key'] for f in fields], ['v3_1', 'v3_3', 'v3_4'])
+        self.assertEqual([f.get('layout_verified') for f in fields],
+                         [{'candidate': 'required'}, {'candidate': 'measured'}, None])
+        self.assertEqual(warnings[0], 'existing')
+        self.assertEqual(len(warnings), 2)
+        self.assertIn('b/tbl[0]/tr[0]/tc[0]/p[3]', warnings[1]); self.assertIn('Supple', warnings[1])
+        self.assertIn('Neck', warnings[1])
+
+    def test_nothing_else_can_be_held(self):
+        for held in ([{'candidate': 'required'}], [{'candidate': 'unknown'}], [{'candidate': 'held'}, {'candidate': 'held'}],
+                     [{}], ['held']):
+            with self.subTest(held=held), self.assertRaises(ValueError):
+                self.retain(copy.deepcopy(self.fields), [], self.manifest, {'held': held}, self.receipt)
+        touched = copy.deepcopy(self.manifest); touched['candidates'][1]['untouched'] = False
+        with self.assertRaises(ValueError):
+            self.retain(copy.deepcopy(self.fields), [], touched, {'held': [{'candidate': 'held'}]}, self.receipt)

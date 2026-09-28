@@ -69,6 +69,31 @@ def render(workspace):
     return output
 
 
+def retain_verified(fields, warnings, manifest, proof, receipt):
+    """Publish only measured destinations. An individually held optional proposal is removed and
+    reported with its complete printed source; it is never silently dropped or verified."""
+    candidates = {c['id']: c for c in manifest['candidates']}
+    held = [item.get('candidate') if isinstance(item, dict) else None for item in proof.get('held', [])]
+    if len(set(held)) != len(held) or any(identity not in candidates or candidates[identity].get('optional') is not True
+                                         or candidates[identity].get('untouched') is not True for identity in held):
+        raise ValueError('Unexpected held layout candidate')
+    notes = list(warnings)
+    for identity in held:
+        source = candidates[identity]['source']
+        notes.append('Layout verification held the coded-column answer at ' + source['row']['part'] + '#'
+                     + source['row']['slot'] + ': the rendered form does not establish its printed columns. '
+                     'Printed question: ' + source['label'] + '. Section: ' + source['context'])
+    kept = []
+    for field in fields:
+        identity = field.get('layout_candidate')
+        if identity in held:
+            continue
+        if identity:
+            field['layout_verified'] = receipt(identity)
+        kept.append(field)
+    return kept, notes
+
+
 def qualify(request, evidence_root):
     if not isinstance(request, dict) or set(request) != {'source', 'mapping', 'answers'}:
         raise ValueError('Invalid layout request')
@@ -122,12 +147,9 @@ def qualify(request, evidence_root):
             'font_resolution_sha256': digest((rendered / 'font-resolution.txt').read_bytes()),
             'source_preparer_sha256': digest((ROOT / 'layout_source.py').read_bytes()),
             'word_engine_sha256': digest((ROOT / 'word_v3.py').read_bytes())}
-        fields = prepared['fields']
-        for field in fields:
-            if field.get('layout_candidate'):
-                field['layout_verified'] = {'source_sha256': digest(data), 'candidate': field['layout_candidate'],
-                                            'profile_sha256': profile_sha}
-        response = {'verified': True, 'receipt': receipt, 'fields': fields, 'warnings': prepared['warnings'],
+        fields, warnings = retain_verified(prepared['fields'], prepared['warnings'], manifest, proof,
+            lambda identity: {'source_sha256': digest(data), 'candidate': identity, 'profile_sha256': profile_sha})
+        response = {'verified': True, 'receipt': receipt, 'fields': fields, 'warnings': warnings,
                     'states': prepared['states'],
                     'document': base64.b64encode(document).decode()}
         (workspace / 'receipt.json').write_bytes(canonical(receipt))

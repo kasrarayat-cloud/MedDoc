@@ -6,6 +6,8 @@ The renderer service recomputes it from bytes, rather than accepting client span
 import hashlib
 import json
 import re
+import unicodedata
+from bisect import bisect_right
 
 if __package__:
     from . import word_v3 as w
@@ -114,6 +116,177 @@ def rendered_paragraph(paragraph):
     return result
 
 
+def rendered_columns(paragraph, starts):
+    """Partition all printed characters at source code/header boundaries.
+
+    Literal spaces remain part of the complete match. Tabs have no printed
+    character; their geometry still comes solely from the unchanged PDF.
+    """
+    text, pieces = w.paragraph_text(paragraph)
+    if (not starts or starts[0] != 0 or sorted(set(starts)) != starts
+            or any(type(n) is not int or n < 0 or n > len(text) for n in starts)):
+        w.fail('Invalid complete column partition.', 'layout_unresolved')
+    result = [[] for _ in starts]
+    for piece in pieces:
+        if piece.kind == 'tab':
+            continue
+        if piece.kind == 'obj':
+            if piece.obj == 'ff_checkbox':
+                state = w.ff_checkbox_state(piece.node)
+                if type(state) is not bool: w.fail('Unknown native checkbox state.', 'layout_unresolved')
+                item = {'kind': 'ff_checkbox', 'text': '\ufffc', 'checked': state}
+            elif piece.obj == 'sdt_checkbox':
+                state = w.sdt_checkbox_state(piece.node)
+                if type(state) is not bool: w.fail('Unknown content-control state.', 'layout_unresolved')
+                item = {'kind': 'glyph', 'text': '☒' if state else '☐'}
+            else: w.fail('Unresolved object in complete source sequence.', 'layout_unresolved')
+        elif piece.kind in ('t', 'sym'):
+            item = {'kind': 'glyph', 'text': w.piece_text(piece)}
+        else: w.fail('Unresolved source sequence piece.', 'layout_unresolved')
+        if len(item['text']) != piece.end - piece.start:
+            w.fail('A printed source piece changed length.', 'layout_unresolved')
+        for offset, char in enumerate(item['text'], piece.start):
+            if offset >= len(text.rstrip(' \t')):
+                continue
+            result[bisect_right(starts, offset) - 1].append(dict(item, text=char))
+    return result
+
+
+HIDE = ("w:vanish", "w:specVanish", "w:webHidden")
+
+
+def unprinted(char):
+    """A character that prints nothing by itself: format controls (soft hyphen, zero-width space, word
+    joiner, bidirectional marks, ...), control characters and the other default-ignorable code points."""
+    code = ord(char)
+    return (unicodedata.category(char) in ("Cf", "Cc") or code in (0x034F, 0x115F, 0x1160, 0x3164, 0xFFA0)
+            or 0x180B <= code <= 0x180F or 0xFE00 <= code <= 0xFE0F or 0xE0000 <= code <= 0xE0FFF)
+
+
+class Printed:
+    """What a paragraph can print, as a coarse key for counting places that print the same text.
+
+    Every space, every character that prints nothing and every run that may be hidden (directly, by its
+    character style, its paragraph style or the document defaults) is removed, letters are case-folded
+    (capitals may come from formatting) and box states are merged. This removes the known ways a source
+    character prints nothing; it is not a proof that the key equals what prints (a field the renderer
+    recomputes, or text a table style hides, is not modelled). A count over it can still under-count, so
+    the rendered witness also refuses a sequence the rendering paints twice (layout_geometry.rendered_elsewhere)."""
+
+    def __init__(self, package):
+        styles = package.tree("word/styles.xml") if "word/styles.xml" in package.names else None
+        self.styles = {} if styles is None else {s.get(w.q("w:styleId")): s for s in styles.findall(w.q("w:style"))}
+        defaults = None if styles is None else styles.find(w.q("w:docDefaults") + "/" + w.q("w:rPrDefault"))
+        self.everything = self.hides(defaults)
+        default = lambda kind: next((s.get(w.q("w:styleId")) for s in self.styles.values()
+                                     if s.get(w.q("w:type")) == kind and s.get(w.q("w:default")) in ("1", "true", "on")), None)
+        self.default_paragraph, self.default_character = default("paragraph"), default("character")
+        self._style = {}
+
+    @staticmethod
+    def hides(node):
+        return node is not None and any(n.tag in {w.q(t) for t in HIDE}
+                                        and (n.get(w.q("w:val")) or "1").lower() not in ("0", "false", "off")
+                                        for n in node.iter())
+
+    def style_hides(self, name):
+        """A style (with everything it is based on) that may hide text; an unknown or cyclic one may."""
+        if name not in self._style:
+            self._style[name] = True  # a cycle through this style resolves as hiding
+            style = self.styles.get(name)
+            if style is None:
+                result = name is not None
+            else:
+                based = style.find(w.q("w:basedOn"))
+                result = self.hides(style.find(w.q("w:rPr"))) or (based is not None and self.style_hides(based.get(w.q("w:val"))))
+            self._style[name] = result
+        return self._style[name]
+
+    def run_hidden(self, run):
+        props = run.find(w.q("w:rPr"))
+        style = props.find(w.q("w:rStyle")) if props is not None else None
+        name = style.get(w.q("w:val")) if style is not None else self.default_character
+        return self.hides(props) or (name is not None and self.style_hides(name))
+
+    def key(self, paragraph):
+        props = paragraph.find(w.q("w:pPr"))
+        style = props.find(w.q("w:pStyle")) if props is not None else None
+        name = style.get(w.q("w:val")) if style is not None else self.default_paragraph
+        if self.everything or (name is not None and self.style_hides(name)):
+            return ""
+        text, pieces = w.paragraph_text(paragraph)
+        kept = "".join(text[piece.start:piece.end] for piece in pieces
+                       if piece.run is None or not self.run_hidden(piece.run))
+        return "".join(c for c in kept.casefold() if not c.isspace() and not unprinted(c)).replace(w.CHECKED, w.BOX)
+
+
+def printed_stream(package):
+    """Every nonempty printed paragraph of every displayed part, in document order. Text-box and
+    fallback copies are included, so a repeated place is counted, never missed."""
+    printed = Printed(package)
+    return printed, [key for part in package.displayed_parts() for p in package.tree(part).iter(w.q("w:p"))
+                     for key in [printed.key(p)] if key]
+
+
+def occurrences(stream, paragraphs):
+    printed, keys = stream[0], [stream[0].key(p) for p in paragraphs]
+    if not all(keys):
+        return 0
+    stream = stream[1]
+    return sum(1 for i in range(len(stream) - len(keys) + 1) if stream[i:i + len(keys)] == keys)
+
+
+def rendered_characters(paragraph):
+    """The characters a paragraph renders, as the witness reads them: a native checkbox is one vector
+    control, a checkbox content control its state glyph; spaces are removed."""
+    text, pieces = w.paragraph_text(paragraph)
+    out = []
+    for piece in pieces:
+        if piece.kind == "obj":
+            if piece.obj == "ff_checkbox":
+                out.append("\ufffc")
+            elif piece.obj == "sdt_checkbox":
+                out.append(w.CHECKED if w.sdt_checkbox_state(piece.node) is True else w.BOX)
+        elif piece.kind in ("t", "sym"):
+            out.append(w.piece_text(piece))
+    return "".join("".join(out).split())
+
+
+def neighbours(paragraph):
+    """What the other cells of the paragraph's table row print, left and right of its own cell. Text
+    written beside an answered row shares its baselines; only this text may (layout_geometry.match_line)."""
+    cell = next(paragraph.iterancestors(w.q("w:tc")), None)
+    row = next(cell.iterancestors(w.q("w:tr")), None) if cell is not None else None
+    if row is None:
+        return {"left": "", "right": ""}
+    cells = w.row_cells_of(row)
+    at = next(i for i, c in enumerate(cells) if c is cell)
+    text = lambda group: "".join(rendered_characters(p) for c in group for p in c.iter(w.q("w:p")))
+    return {"left": text(cells[:at]), "right": text(cells[at + 1:])}
+
+
+def touched_destinations(mapping, answers):
+    """Every (part, slot) that an answered mapping field may write, including its boxes."""
+    result = []
+    for field in mapping:
+        if answers.get(field.get("key")) in (None, "", []):
+            continue
+        loc = field.get("locator") or {}
+        target = loc.get("target") or {}
+        refs = [loc] + list(loc.get("extra", [])) + list(target.get("copies", [])) + list(target.get("boxes", []))
+        refs += [{"part": anchor.get("part"), "slot": path}
+                 for anchor in [loc] + list(target.get("copies", [])) for path in target.get("paragraphs", [])]
+        if target.get("type") == "table_rows":
+            refs.append({"part": loc.get("part"), "slot": target.get("table")})
+        result.extend((str(ref.get("part")), str(ref.get("slot"))) for ref in refs)
+    return result
+
+
+def overlaps(a, b):
+    """One slot is the other, contains it or lies inside it."""
+    return a[0] == b[0] and (a[1] == b[1] or a[1].startswith(b[1] + "/") or b[1].startswith(a[1] + "/"))
+
+
 def prepare(data, *, mapping=None, answers=None):
     package = w.open_package(data)
     fonts = safety(package)
@@ -157,14 +330,50 @@ def prepare(data, *, mapping=None, answers=None):
         package = w.open_package(actual)
         safety(package)
         paragraph_pairs = [(resolve_path(package, r["header"]), resolve_path(package, r["row"])) for r in retained]
+        sequences = [[resolve_path(package, ref) for ref in r.get('sequence', [])] for r in retained]
     else:
         paragraph_pairs = [(header.el, row.el) for header, row, _ in candidates]
-    for description, (header, row) in zip(descriptions, paragraph_pairs):
-        model = {'header':rendered_paragraph(header), 'row':rendered_paragraph(row),
-                 'row_dot_leaders':any(n.get(w.q('w:leader')) == 'dot' for n in row.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))}
+        sequences = [[detector.index.by_id[ref['part'] + '#' + ref['slot']].el
+                      for ref in area.target.get('column_sequence', {}).get('source', [])]
+                     for _, _, area in candidates]
+    written = touched_destinations(mapping, answers) if mapping is not None else []
+    stream = printed_stream(package)  # the package that is rendered: the original, or the export
+    for description, (header, row), sequence in zip(descriptions, paragraph_pairs, sequences):
+        relation = description['source']['row']['target'].get('column_sequence')
+        if relation:
+            at = relation.get('header_index')
+            if (len(sequence) != len(relation['source']) or len(sequence) < 2 or type(at) is not int
+                    or not 0 <= at < len(sequence) - 1):
+                w.fail('Incomplete retained printed source sequence.', 'mapping_mismatch')
+            model = {'sequence': [{'segments': rendered_columns(p, ref['starts']),
+                                   'dot_leaders': any(n.get(w.q('w:leader')) == 'dot'
+                                       for n in p.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))}
+                                  for p, ref in zip(sequence, relation['source'])],
+                     'header_index': at, 'row_dot_leaders': False}
+            model['header'] = model['sequence'][at]['segments']
+            model['row'] = model['sequence'][-1]['segments']
+            nodes = sequence
+            sources = [(ref['part'], ref['slot'], ref['fingerprint']) for ref in relation['source']]
+        else:
+            model = {'header':rendered_paragraph(header), 'row':rendered_paragraph(row),
+                     'row_dot_leaders':any(n.get(w.q('w:leader')) == 'dot' for n in row.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))}
+            nodes = [header, row]
+            sources = [(description['source'][k]['part'], description['source'][k]['slot'],
+                        description['source'][k]['fingerprint']) for k in ('header', 'row')]
         if len(model['header']) != len(description['source']['options']) + 1 or len(model['row']) != len(model['header']):
             w.fail('A complete printed tab relation changed.', 'layout_unresolved')
+        # The witness measures only a sequence printed once; any other place printing it is ambiguous.
+        model['source_occurrences'] = occurrences(stream, nodes)
+        model['neighbours'] = neighbours(nodes[-1])
         description['rendered_source'] = model
+        # Only a coded-column sequence is a separately holdable proposal, and only
+        # while this export leaves its own answer row byte-identical and unanswered
+        # (earlier rows of its printed sequence are other questions and may be).
+        # A held proposal never publishes its destination.
+        part, slot, fp = sources[-1]
+        description['optional'] = bool(relation)
+        description['untouched'] = (w.fingerprint(nodes[-1]) == fp
+                                    and not any(overlaps(destination, (part, slot)) for destination in written))
     # V2 uses unique original-text alignment. It introduces no annotation glyphs,
     # run splits or bookmarks; both independently rendered packages stay exact.
     anchors = []
