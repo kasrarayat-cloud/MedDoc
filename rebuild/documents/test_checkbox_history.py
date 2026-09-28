@@ -330,6 +330,33 @@ class CheckboxHistory(unittest.TestCase):
             'w:w="2400" w:hAnchor="page" w:vAnchor="page" w:x="8000" w:y="3000"/>'))
         self.assertUnresolved(data(doc), note='native-checkbox history source is unresolved')
 
+    def test_explicit_single_selection_variants_never_accept_multiple_outside_history(self):
+        # The ordinary checkbox question path (not the history rule).
+        for question in ('Treatment(s) - select just one:', 'Treatment(s) - select exactly one:',
+                         'Treatment(s) - pick one:', 'Which apply? Select a single option:',
+                         'Treatment(s) - indicate only one:'):
+            for control in ('glyph', 'ff'):
+                with self.subTest(question=question, control=control):
+                    doc = Document(); p = doc.add_paragraph(question + ' ')
+                    for i, option in enumerate(('Physiotherapy', 'Hydrotherapy', 'Literacy')):
+                        if control == 'ff': ff_field(p, 'checkbox', name='G' + str(i))
+                        else: p.add_run('☐')
+                        p.add_run(' ' + option + '   ')
+                    raw = data(doc); field = self.field(raw)
+                    self.assertEqual(field['kind'], 'choice')
+                    with self.assertRaises(w.V3Failure):
+                        w.fill(raw, [field], {field['key']: field['options'][:2]})
+        for question in ('Treatment(s):', 'Treatment(s) - tick all that apply:'):
+            with self.subTest(question=question):
+                doc = Document(); p = doc.add_paragraph(question + ' ')
+                for option in ('Physiotherapy', 'Hydrotherapy', 'Literacy'):
+                    p.add_run('☐'); p.add_run(' ' + option + '   ')
+                raw = data(doc); field = self.field(raw)
+                self.assertEqual(field['kind'], 'multi_choice')
+                output = w.fill(raw, [field], {field['key']: field['options'][:2]})
+                index = w.SlotIndex(w.open_package(output))
+                self.assertEqual([w.box_state(index, b) for b in field['locator']['target']['boxes']], [True, True, False])
+
     def test_d31_shaped_leave_history_accepts_two_leave_selections(self):
         # Synthetic mirror of D31's A15 layout (no corpus content): a long
         # section instruction box, question/answer tables, then the leave list

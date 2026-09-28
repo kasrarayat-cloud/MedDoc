@@ -719,6 +719,12 @@ ENTER_HINT = re.compile(r"^(?:enter|insert|type|add|specify)\s+\S.{0,60}$", re.I
 CHECK_ALL = re.compile(r"\b(?:check|tick|mark|select|circle)\s+all\s+that\s+apply\b|\ball that apply\b|\bselect up to\b|"
                        r"\b(?:check|tick|mark|select)\s+(?:any|as many)\b", re.I)
 CHECK_ONE = re.compile(r"\b(?:check|tick|choose|select|mark|circle)\s+(?:only\s+)?one\b|\bone only\b", re.I)
+# Explicit one-only commands CHECK_ONE's wording misses ("select just one", "pick one", "select a single option").
+# choice_kind uses it ONLY to keep a question single, never to allow more selections; "pick one or more" is left
+# to the existing rules rather than read as one-only.
+EXPLICIT_ONE = re.compile(r"\b(?:check|tick|choose|select|mark|circle|pick|indicate)\s+(?:(?:only|just|exactly)\s+)?"
+                          r"(?:one|1|a\s+single)\b(?!\s*(?:or|and|to|/|-|–)\s)"
+                          r"|\bsingle\s+(?:option|answer|response|choice|selection)\b", re.I)
 # Native-checkbox history cardinality (Detector.native_history_source). A sentence that speaks about selecting,
 # how many, or exclusivity must be ONE complete positive command (HISTORY_ONE / HISTORY_MANY); anything else,
 # negated or limited commands included, leaves the history unresolved rather than independent.
@@ -1247,7 +1253,7 @@ class Detector:
 
     def choice_kind(self, question: str, options: list, hint: str = "") -> str:
         text = " ".join([question or "", hint or ""])
-        if CHECK_ONE.search(text):
+        if CHECK_ONE.search(text) or EXPLICIT_ONE.search(text):
             return "choice"
         if options and all(YESNO.match((o or "").strip()) for o in options):
             return "choice"
