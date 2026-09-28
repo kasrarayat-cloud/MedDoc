@@ -1,0 +1,137 @@
+{
+  "source_engine_sha256": "f3afb208c085c6edaa64f97d26ebe7f76739fe0c07ac87b26f91da6207ae8077",
+  "added_trace": [
+    {
+      "expected": {
+        "id": "A28",
+        "label": "Other:",
+        "context": "Q10 Headache feel > Other",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "Underscore run after \"Other:\"; renders on the line below the label."
+      },
+      "actual": {
+        "kind": "text",
+        "label": "Other:",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > 10. Please indicate what your headaches usually feel like: (tick all that apply):",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]",
+          "target": {
+            "end": 43,
+            "type": "span",
+            "shape": "blank",
+            "start": 9
+          },
+          "contract": "v3",
+          "fingerprint": "8c410b973de9916e4b39105c63f4ba693c72690700929e93dffb06ce8eb1f329"
+        }
+      }
+    },
+    {
+      "expected": {
+        "id": "A38",
+        "label": "Other:",
+        "context": "Q15 Symptoms 1 to 2 days before onset > Other",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "Underscore run after \"Other:\" (merged cell, 3 columns); renders on the line below the label."
+      },
+      "actual": {
+        "kind": "text",
+        "label": "Other:",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > 15. Do you experience any of these symptoms 1 to 2 days before the onset of headache? Please tick all that apply.",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[14]/tc[0]/tbl[0]/tr[5]/tc[0]/p[0]",
+          "target": {
+            "end": 81,
+            "type": "span",
+            "shape": "blank",
+            "start": 9
+          },
+          "contract": "v3",
+          "fingerprint": "e0a1e9e3642b2275082e4f34abf6a9cb0b414adf1b0bd58f52a392f3046fddd7"
+        }
+      }
+    },
+    {
+      "expected": {
+        "id": "A47",
+        "label": "Other:",
+        "context": "Q17 Aura before headache > Visual > Other",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "Underscore run after \"Other:\"."
+      },
+      "actual": {
+        "kind": "text",
+        "label": "Other:",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > 17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply. > Visual:",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]",
+          "target": {
+            "end": 28,
+            "type": "span",
+            "shape": "blank",
+            "start": 9
+          },
+          "contract": "v3",
+          "fingerprint": "eb72f9dbc79d6f49bd1fa559a511615892a4cf675130b2f716b524ccfad3a6ae"
+        }
+      }
+    },
+    {
+      "expected": {
+        "id": "A69",
+        "label": "Other:",
+        "context": "Q19 Activities that worsen headache > Other",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "Underscore run after \"Other:\" (merged cell, 4 columns); renders on the line below the label."
+      },
+      "actual": {
+        "kind": "text",
+        "label": "Other:",
+        "context": "Detailed Patient Headache Questionnaire (Current Headache) > 19. Do any of the following activities worsen your headache once it starts?",
+        "locator": {
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[18]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]",
+          "target": {
+            "end": 71,
+            "type": "span",
+            "shape": "blank",
+            "start": 9
+          },
+          "contract": "v3",
+          "fingerprint": "ab64ca759a2ef5f4fe5d379a7ee30cd68ee839f607d017bd4a7875cbe16bcbbd"
+        }
+      }
+    }
+  ],
+  "remaining_notes": [
+    "Nested option grid at word/document.xml#b/tbl[0]/tr[8]/tc[0]/tbl[0]: Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice. Printed source: 9. Where are your headaches located in general? Please tick all that apply, and indicate right or left where appropriate. Options: ☐ Temple - ☐ Right  ☐ Left☐ Front of head ☐ Ear -  ☐Right ☐ Left ☐ Back of head - ☐ Right  ☐ Left ☐ Around head ☐ Neck ☐ Top of head - ☐ Right  ☐ Left ☐ Eye - ☐ Right  ☐ Left ☐ Jaw ☐ Other ____________________ ",
+    "Nested option grid at word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]: Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice. Printed source: 16. Do you experience any of these symptoms during your headache? Please tick all that apply. Options: ☐ Nausea or upset stomach/vomiting ☐ Sensitivity to smells ☐ Sensitivity to light (prefer a dark room) ☐ Difficulty thinking/concentrating/focusing ☐ Sensitivity to sound (prefer a quiet room) ☐ Difficulty speaking/slurred speech ☐ Sore/stiff neck ☐ Increased Urination ☐ Vision changes (blurred, spots, patterns) ☐ Anxiety ☐ Eye tearing in only ONE EYE ☐ Irritability ☐ Runny nose in only ONE NOSTRIL ☐ Memory problems ☐ Ringing in ears ☐ Increased appetite ☐ Eye-redness [☐ Right  ☐ Left] ☐ Decreased appetite ☐ Drooping eyelid [☐ Right  ☐ Left]☐ Diarrhoea ☐ Swelling of eyelid [☐ Right  ☐ Left]☐ Constipation ☐ Change in pupil [☐ Larger  ☐ Smaller]☐ Insomnia ☐ Dizziness/vertigo ☐ Sleepiness ☐ Imbalance ☐ Confusion☐ Numbness/Tingling [Where? ___________________ ] ☐ Stroke like symptoms (facial droop, droopy eyelid, unable to move one arm or leg)☐ Other: ____________________________________________________________________________",
+    "Nested option grid at word/document.xml#b/tbl[0]/tr[15]/tc[0]/tbl[0]: Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice. Printed source: 16. Do you experience any of these symptoms during your headache? Please tick all that apply. Options: ☐ Nausea or upset stomach/vomiting ☐ Sensitivity to smells ☐ Sensitivity to light (prefer a dark room) ☐ Difficulty thinking/concentrating/focusing ☐ Sensitivity to sound (prefer a quiet room) ☐ Difficulty speaking/slurred speech ☐ Sore/stiff neck ☐ Increased Urination ☐ Vision changes (blurred, spots, patterns) ☐ Anxiety ☐ Eye tearing in only ONE EYE ☐ Irritability ☐ Runny nose in only ONE NOSTRIL ☐ Memory problems ☐ Ringing in ears ☐ Increased appetite ☐ Eye-redness [☐ Right  ☐ Left] ☐ Decreased appetite ☐ Drooping eyelid [☐ Right  ☐ Left]☐ Diarrhoea ☐ Swelling of eyelid [☐ Right  ☐ Left]☐ Constipation ☐ Change in pupil [☐ Larger  ☐ Smaller]☐ Insomnia ☐ Dizziness/vertigo ☐ Sleepiness ☐ Imbalance ☐ Confusion☐ Numbness/Tingling [Where? ___________________ ] ☐ Stroke like symptoms (facial droop, droopy eyelid, unable to move one arm or leg)☐ Other: ____________________________________________________________________________",
+    "Nested option grid at word/document.xml#b/tbl[0]/tr[16]/tc[0]/tbl[1]: Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice. Printed source: 17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply. Visual: Sensory and other: Options: ☐ Numbness/tingling [Where? ___________________ ]☐ Light headedness ☐ Speech difficulty ☐ One-sided weakness [☐ Right  ☐ Left]☐ Vertigo ☐ Confusion/déjà vu/hallucinations ☐ Dizziness/unsteadiness ☐ Other: ______________________ ",
+    "Nested option grid at word/document.xml#b/tbl[0]/tr[19]/tc[0]/tbl[0]: There is not one complete printed parent question. Printed source: 20. Do any of the following factors relieve your headaches: Options: ☐ Lying down ☐ Dark quiet room ☐ Hot compress ☐ Massage ☐ N/A☐ Standing ☐ Ice/Cold compress ☐ Keeping active/pacing ☐ Pregnancy ☐ Other: ______________________________________________________________________"
+  ],
+  "document_success": false
+}

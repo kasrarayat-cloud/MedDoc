@@ -1,0 +1,47 @@
+{
+  "original_sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff",
+  "source_engine_sha256": "f3afb208c085c6edaa64f97d26ebe7f76739fe0c07ac87b26f91da6207ae8077",
+  "field": {
+    "key": "v3_17",
+    "kind": "text",
+    "label": "Other:",
+    "context": "Detailed Patient Headache Questionnaire (Current Headache) > 10. Please indicate what your headaches usually feel like: (tick all that apply):",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]",
+      "target": {
+        "end": 43,
+        "type": "span",
+        "shape": "blank",
+        "start": 9
+      },
+      "contract": "v3",
+      "fingerprint": "8c410b973de9916e4b39105c63f4ba693c72690700929e93dffb06ce8eb1f329"
+    }
+  },
+  "notes": "Administrative visit record.",
+  "generated_answer": {
+    "text": "",
+    "status": "missing",
+    "evidence": [],
+    "reviewed": false
+  },
+  "final_answer": {
+    "text": "",
+    "status": "missing",
+    "evidence": [],
+    "reviewed": true,
+    "edited_by": null,
+    "accepted_by": null,
+    "reviewed_by": "fdfb2200-4cdc-4b8e-b14c-d3fc44a532f5",
+    "accepted_suggestion": false
+  },
+  "export_sha256": "fdfca49601684ebac5183e4c54fed81442b1e00d29835dfa1c2f3a1516eb887a",
+  "state": "finalized",
+  "original_download_identical": true,
+  "mapping_review_roundtrip_identical": true,
+  "outside_targets_unchanged": true,
+  "all_missing_package_members_unchanged": true,
+  "checkbox_selection": "independent explicit clinician selection; never inferred from write-in",
+  "document_success": false
+}

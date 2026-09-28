@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        lane: [core, support]
+        lane: [core-1, core-2, support]
     services:
       postgres:
         image: postgres:16-alpine
@@ -81,6 +81,14 @@ jobs:
         run: python3 -B scripts/ops/tests/test_reviewer_tunnel_access.py -v
       - name: Fresh Python partition
         run: bash scripts/ci/verify-fresh.sh python-${{ matrix.lane }}
+      - name: Preserve core discovery manifest
+        if: always() && matrix.lane != 'support'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-${{ matrix.lane }}-manifest
+          path: rebuild/.runtime/${{ matrix.lane == 'core-1' && 'core-shard-1' || 'core-shard-2' }}.json
+          if-no-files-found: error
+          include-hidden-files: true
       - name: Actual Word adapter and kernel qualification
         if: matrix.lane == 'support'
         working-directory: rebuild
@@ -103,6 +111,14 @@ jobs:
         env:
           QUILLMD_PYTHON_RESULT: ${{ needs.python-checks.result }}
         run: test "$QUILLMD_PYTHON_RESULT" = success
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fresh-core-*-manifest
+          path: core-manifests
+          merge-multiple: true
+      - name: Prove exact core discovery coverage
+        run: python3 rebuild/ops/ci_test_shards.py --source-sha '${{ github.sha }}' core-manifests/core-shard-1.json core-manifests/core-shard-2.json
 
   marketing:
     name: Marketing build

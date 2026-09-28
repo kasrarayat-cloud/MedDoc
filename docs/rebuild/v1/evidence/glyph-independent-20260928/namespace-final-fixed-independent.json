@@ -1,0 +1,377 @@
+{
+  "source": "e48f3e616246e5c3a3f4518975f5dc9a1f782a2ef9bb75ca65c208e5d779eb10",
+  "cases": [
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2610",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": true,
+      "original_state": "\u2612",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2610",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "First"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "Last"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "2caee5c3d6aa4fdc294120193db017f737d05ac12c499816850b08897070c134",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "25b7291eb9423f87aef7f27e03932863351a7b0c98e32b48ddcd14a57973895b",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    },
+    {
+      "single_run": false,
+      "original_state": "\u2612",
+      "selection": [
+        "First",
+        "Last"
+      ],
+      "answer_sha256": "68f6eeb5d58b2557e68a1e8d44028c032573e00ab0373569be343029e0ba4d77",
+      "physical_text_exact": true,
+      "other_package_parts_identical": true
+    }
+  ]
+}

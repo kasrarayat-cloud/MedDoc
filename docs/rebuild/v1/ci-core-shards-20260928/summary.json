@@ -1,0 +1,17 @@
+{
+  "tests": 2097,
+  "classes": 391,
+  "shard_counts": [
+    1049,
+    1048
+  ],
+  "universe_sha256": "5c184f35741b8458f94e11e84e9f8a977282f07968f15a5560d59b0edfbd14c9",
+  "source_sha": "c3e32e7c4a997363543505463be612c6a529c3ab",
+  "baseline_count": 2097,
+  "network_and_db_blocked": true,
+  "executed_core_tests": 0,
+  "prior_log_sha256": "45eaf65d6ec235978cd3278a033ccf33ea27fa4a70bd6cd80eb43873a9ac0e90",
+  "prior_ci_test_ids": 2097,
+  "prior_ci_unique_ids": 2097,
+  "prior_ci_same_universe": true
+}

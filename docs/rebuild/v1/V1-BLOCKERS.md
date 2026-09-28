@@ -8,7 +8,7 @@ with its evidence and what clears it. **E** = engineering in this programme; **O
 
 | id | blocker | evidence | clears when | who |
 |---|---|---|---|---|
-| B-W1 | **Custom Word automatic compatibility** and independent-corpus evidence fail the gate | historical engine proxy dev 3/40, **holdout 0/20**; incomplete workflow/checkbox/native evidence; 60 files but 44 declared lineages; old reserved qualification set of 20 files / 12 lineages preserved; separate fresh 20 / 20 cohort frozen with sealed original-only maps, but three legacy `.doc` refusals cap this candidate at 17/20. The bounded inventory plus one new licensed original cannot establish a feasible independent40/20 pair; exact joint bounds and unresolved intrinsic checks are in corpus-independent-renewal-final-20260928.md. Original development40 rights now support33 private offline replays/7held; this changes no denominator. Python FOSS conversion was rejected for demonstrated content/control loss; D30 saved71-field result is preserved. Reviewed spacer ownership removes8 false fields to63 without dropping an answer area; A10 composite metadata retains full descriptive type; A35 activity sentence now survives without an answer edit in a mocked authenticated route, while unanswered disclosure subquestions and other mapping defects still fail the whole document. D31 removes9 analogous false spacer fields. D03 nested question/cardinality repair remains under independent refutation | preserve every first-pass result; establish independent authorship; complete mapping work offline; satisfy 54/60 overall, 18/20 holdout and ≥75% per family through the app. Holdout-informed repairs also need ≥18/20 on a separately predeclared unseen cohort. Model calls need eligible authority | E + O (spend / native access) |
+| B-W1 | **Custom Word automatic compatibility** and independent-corpus evidence fail the gate | historical engine proxy dev 3/40, **holdout 0/20**; incomplete workflow/checkbox/native evidence; 60 files but 44 declared lineages; old reserved qualification set of 20 files / 12 lineages preserved; separate fresh 20 / 20 cohort frozen with sealed original-only maps, but three legacy `.doc` refusals cap this candidate at 17/20. The bounded inventory plus one new licensed original cannot establish a feasible independent40/20 pair; exact joint bounds and unresolved intrinsic checks are in corpus-independent-renewal-final-20260928.md. Original development40 rights now support33 private offline replays/7held; this changes no denominator. Python FOSS conversion was rejected for demonstrated content/control loss; D30 saved71-field result is preserved. Reviewed spacer ownership removes8 false fields to63 without dropping an answer area; A10 composite metadata retains full descriptive type; A35 activity sentence now survives without an answer edit in a mocked authenticated route, while unanswered disclosure subquestions and other mapping defects still fail the whole document. D31 removes9 analogous false spacer fields. D03 nested question/cardinality, inherited-signature and inner-column-scope repairs are independently closed; exact original glyph identity now survives inserted checkbox-like text and local XML namespace aliases. D03 still fails whole-document coverage; four independently expected Other write-in areas are now qualified separately from their checkbox controls (43→47fields), but subordinate choices/cardinality and tab-column ownership remain unresolved | preserve every first-pass result; establish independent authorship; complete mapping work offline; satisfy 54/60 overall, 18/20 holdout and ≥75% per family through the app. Holdout-informed repairs also need ≥18/20 on a separately predeclared unseen cohort. Model calls need eligible authority | E + O (spend / native access) |
 | B-W2 | Word v3 in the app: mapping review with corrections, confirmation before use, answers for choice/checkbox/table kinds, export | reviewed detector/mapping/export repairs locally integrated; combined74workflow tests pass; bounded mapping assistance now independently refuted and locally integrated with both flags off; D30 scope and signing defects independently closed; bounded long-question/context contract integrated | final CI and target installation/acceptance; B-W1 remains separate | E |
 | B-W3 | Native Microsoft Word acceptance of holdout/qualification outputs | LibreOffice renders are evidence, not native acceptance | the owner opens the exported files in desktop Word and records the result | O |
 | B-G1 | **Ordinary typed/dictated notes, including the qualified WM form**, lack acceptable end-to-end evidence | reviewed correction/consent and required WM path locally integrated; bounded ordinary-source repairs integrated, with excessive holds still present; unchanged retained ten-note probe26/77 supported, not accepted. Root255 preceding-union,85 literal-union and155 latest clinical-union checks pass; independent58 correction probes close the demonstrated source defects but do not close usefulness. Live exact-model usefulness still unverified | integrate necessary reviewed WM path and generic repairs; verify useful positives plus missing/denied/corrected/side/row cases through worker → correction → finalization → export; exact-model synthetic verification. Labelled-note workaround does not close this | E + O (eligible live spend) |
@@ -36,7 +36,7 @@ with its evidence and what clears it. **E** = engineering in this programme; **O
 |---|---|---|---|---|
 | B-O1 | Backups with a **verified restore** on the production host | no production host yet | scheduled encrypted capture + restore drill into isolation with measured RPO/RTO | E (after B-H1) |
 | B-O2 | Independent recovery access and key custody | one custodian; LUKS key beside the data on the VPS | two custodians or an offline copy, each proven by retrieval and restore | O |
-| B-O3 | Delivered alerts, including **escalation inside an open incident** | escalation/reminder repair completed on branch (`alerts-round3-recovery-20260927.md`); installed incident and delivery remain unverified | integrate reviewed repair, then confirm recipient delivery and escalation from the actual production host | E + O |
+| B-O3 | Delivered alerts, including **escalation inside an open incident** | escalation/reminder repair completed on branch (`alerts-round3-recovery-20260927.md`); reviewed repair is integrated locally; installed incident and delivery remain unverified | install the reviewed candidate after its gates, then confirm recipient delivery and escalation from the actual production host | E + O |
 | B-O4 | Outside-host monitoring | adapter built, no check URL | a heartbeat service account; missed-heartbeat test passes | O + E |
 | B-O5 | Independent penetration test | none has run | vendor test of the production host and release; findings retested | V + O |
 | B-O6 | Whole-host recovery drill | only unplanned reboots survived | fresh-instance rebuild from vaulted material, measured | E (after B-H1) |
@@ -64,3 +64,32 @@ Unchanged old proxy results and original first-pass failures remain preserved. S
 `word-composite-kind-20260928.md`, `retention-independent-closure-20260928.md` and the corpus renewal report.
 All unfinished developer-owned gates stay open; legal/account/spending dependencies are consolidated only
 in `V1-EXTERNAL-REQUEST.md`.
+
+## CI and corpus correction at the 2026-09-28 continuation
+
+Draft stacked PR1289 targets the preserved draft PR1288 branch. On exact527930e7, browser/accessibility,
+marketing and secrets passed; support CI failed five checks (stale full dependency lock, stale partition
+assertion, three cost-scanner assertions). The224 document tests passed before that support failure;
+Word/kernel qualification and dependency audit were skipped by that job, not passed. Core subsequently passed2,097tests but its20-minute job timed out during teardown; the job remains failed.
+The scanner first repair was independently refuted with unreachable-history-block and early-return
+counterexamples, then repaired:12focused checks and all retained mutants pass. The89-artifact dependency
+closure preserves the original64 identities and independently resolves124active dependency edges.
+A reviewed two-lane core split preserves all2,097 discovered IDs and passes12focused checks; actual
+transport/timing and the combined descendant still require CI. No failed run is relabeled.
+
+The sealed eight-file investigation adds five conservative lineages but a shared-source cap permits only
+one net cohort addition. The current supported DEV ceiling is26/40, or27with the new-source lead; these
+are conditional upper bounds. The external request and original corpus failures remain separate from
+developer-owned completeness, ordinary-note, batching and retention/disposition work.
+
+## Supported ordinary answers still lost at adoption
+
+The D03 Q10 Other write-in path now passes isolated authenticated upload→mapping review→mocked
+worker→correction→finalization→download, including original checkbox preservation. Independent
+physical probes pass12positive combinations and7visible refusals. Its clear ordinary sentence
+“The patient reports that the headache usually feels like intermittent buzzing.” is supported by
+source validation, then held by a label-only duplicate check because four different questions have
+Other fields. All four complete contexts are retained in evidence. This is a demonstrated
+developer-owned usefulness defect, not necessarily ambiguous input and not a successful automatic
+document. A separate existing unique-field opposite-side gap is also preserved for the reusable
+context/choice repair. Safeguards and mandatory plain-note support must both survive that repair.

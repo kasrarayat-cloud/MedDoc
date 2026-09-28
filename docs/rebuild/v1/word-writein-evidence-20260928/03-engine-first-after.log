@@ -1,0 +1,18 @@
+test_ambiguous_blank_shapes_remain_visible (documents.test_question_boxes.NestedWriteIns.test_ambiguous_blank_shapes_remain_visible) ... ok
+test_changed_source_identity_refuses_write_in (documents.test_question_boxes.NestedWriteIns.test_changed_source_identity_refuses_write_in) ... ok
+test_disjoint_blank_and_choice_preserve_source_and_independent_states (documents.test_question_boxes.NestedWriteIns.test_disjoint_blank_and_choice_preserve_source_and_independent_states) ... ok
+test_signing_scope_and_complete_context_limits_are_not_relaxed (documents.test_question_boxes.NestedWriteIns.test_signing_scope_and_complete_context_limits_are_not_relaxed) ... ok
+test_full_nested_question_and_cardinality_preserve_scope_and_checked_state (documents.test_question_boxes.NestedCheckboxOwnership.test_full_nested_question_and_cardinality_preserve_scope_and_checked_state) ... ok
+test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context) ... ok
+test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed) ... ok
+test_nested_source_cannot_lose_local_subject_or_page_boundary (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_source_cannot_lose_local_subject_or_page_boundary) ... ok
+test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible) ... ok
+test_single_nested_option_keeps_its_complete_question_and_subsection (documents.test_question_boxes.NestedCheckboxOwnership.test_single_nested_option_keeps_its_complete_question_and_subsection) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 4.030s
+
+OK
+Found 10 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

@@ -1,0 +1,37 @@
+test_inserted_box_character_never_becomes_the_printed_after_box (documents.test_word_v3.SourceBoundGlyphWrites.test_inserted_box_character_never_becomes_the_printed_after_box) ... 
+  test_inserted_box_character_never_becomes_the_printed_after_box (documents.test_word_v3.SourceBoundGlyphWrites.test_inserted_box_character_never_becomes_the_printed_after_box) (before='glyph', after='glyph') ... FAIL
+  test_inserted_box_character_never_becomes_the_printed_after_box (documents.test_word_v3.SourceBoundGlyphWrites.test_inserted_box_character_never_becomes_the_printed_after_box) (before=None, after='glyph') ... FAIL
+
+======================================================================
+FAIL: test_inserted_box_character_never_becomes_the_printed_after_box (documents.test_word_v3.SourceBoundGlyphWrites.test_inserted_box_character_never_becomes_the_printed_after_box) (before='glyph', after='glyph')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_word_v3.py", line 1779, in test_inserted_box_character_never_becomes_the_printed_after_box
+    self.assertEqual(physical, expected)
+AssertionError: 'Choices? ☒ Before: literal ☒ symbol retained ☐ After' != 'Choices? ☒ Before: literal ☐ symbol retained ☒ After'
+- Choices? ☒ Before: literal ☒ symbol retained ☐ After
+?                            ^                 ^
++ Choices? ☒ Before: literal ☐ symbol retained ☒ After
+?                            ^                 ^
+
+
+======================================================================
+FAIL: test_inserted_box_character_never_becomes_the_printed_after_box (documents.test_word_v3.SourceBoundGlyphWrites.test_inserted_box_character_never_becomes_the_printed_after_box) (before=None, after='glyph')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_word_v3.py", line 1779, in test_inserted_box_character_never_becomes_the_printed_after_box
+    self.assertEqual(physical, expected)
+AssertionError: 'Choices? literal ☒ symbol retained ☐ After' != 'Choices? literal ☐ symbol retained ☒ After'
+- Choices? literal ☒ symbol retained ☐ After
+?                  ^                 ^
++ Choices? literal ☐ symbol retained ☒ After
+?                  ^                 ^
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.397s
+
+FAILED (failures=2)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

@@ -1,0 +1,15 @@
+{
+  "tests": 2097,
+  "classes": 391,
+  "shard_counts": [
+    1049,
+    1048
+  ],
+  "universe_sha256": "5c184f35741b8458f94e11e84e9f8a977282f07968f15a5560d59b0edfbd14c9",
+  "source_sha": "c3e32e7c4a997363543505463be612c6a529c3ab",
+  "randomized_independent_plans": 300,
+  "full_baseline_ids": 2097,
+  "independent_tests": "12 methods PASS; no core tests executed",
+  "result": "PASS",
+  "limitations": "Actual workflow transport and elapsed time require descendant CI"
+}

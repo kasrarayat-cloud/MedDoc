@@ -1,0 +1,27 @@
+{
+  "source": "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls",
+  "word_v3_sha256": "bc7933b67b044197c3ff632530af09ca5c8f9f32090a1f671b70fc46b6ebc7ff",
+  "cases": [
+    {
+      "case": "glyph-then-fixed-link",
+      "original_sha256": "190827420893884f2f95320d9695930d65d9350689fb85f450e1e81012b29120",
+      "blank_byte_identical": true,
+      "historical_code": "protected_hyperlink",
+      "direct_code": "protected_hyperlink",
+      "direct_xml_unchanged": true
+    },
+    {
+      "case": "linked-glyph-only",
+      "original_sha256": "801213925f42982f8e69c5f01f70343d4d05b0479bf7f3cdb62afe7652f23cfc",
+      "blank_byte_identical": true,
+      "historical_code": "protected_hyperlink",
+      "direct_code": "protected_hyperlink",
+      "direct_xml_unchanged": true
+    }
+  ],
+  "native_checkbox_separate_link_positive": {
+    "field_count": 1,
+    "links_unchanged": true,
+    "checked": "1"
+  }
+}

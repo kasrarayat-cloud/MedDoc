@@ -1,0 +1,26 @@
+[
+  {
+    "mode": "missing",
+    "prior_path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-workflows-20260927/D30-workflow-after/missing.docx",
+    "prior_sha256": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+    "new_sha256": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+    "changed_package_members": [],
+    "reuse_render": true
+  },
+  {
+    "mode": "ordinary",
+    "prior_path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-workflows-20260927/D30-workflow-after/ordinary.docx",
+    "prior_sha256": "6795144363a34ff46c82ceb9bec2334e3a6690f5dae7ff1ebc43989b1b3fb61e",
+    "new_sha256": "6795144363a34ff46c82ceb9bec2334e3a6690f5dae7ff1ebc43989b1b3fb61e",
+    "changed_package_members": [],
+    "reuse_render": true
+  },
+  {
+    "mode": "long",
+    "prior_path": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-workflows-20260927/D30-workflow-after/long.docx",
+    "prior_sha256": "0148e7ca2f8e81b4a1b5cd9a613f70b895871833626d7910cb7bd1a07d17d627",
+    "new_sha256": "0148e7ca2f8e81b4a1b5cd9a613f70b895871833626d7910cb7bd1a07d17d627",
+    "changed_package_members": [],
+    "reuse_render": true
+  }
+]

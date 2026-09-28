@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-workflow-20260928/render_completeness.py", line 17, in <module>
+    assert out[mode]['full_answer_visible']
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

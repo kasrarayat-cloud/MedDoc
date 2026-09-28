@@ -1,0 +1,21 @@
+{
+  "source": {
+    ".github/workflows/test.yml": "a09bc2a05996426053836c09842fa264d304aecab858e42a1c6ccf86818473f2",
+    "scripts/ci/verify-fresh.sh": "a5814822373234782996193f8db0e8d06a9360268d26b1ffed8f060c102438ad",
+    "rebuild/ops/ci_test_shards.py": "c78c0519b7a95318bd4c1651ca60d97a8fb9160f871ee7194afa57d6205bb80c",
+    "rebuild/ops/ci_test_runner.py": "3a567bad423cc4836207dc74228f46394a8809fee62bc426fee91f30615c5944",
+    "rebuild/ops/test_ci_test_shards.py": "d7cb3fab2d6a571f7b4f0f9a595b9bb0af89e0dbca6ef90f494836f76fe24d56",
+    "rebuild/ops/test_ci_gate_partitions.py": "e81b09fad3dada2791f7ade5b430fdba710f24e2925ff57e0105331f700282da"
+  },
+  "evidence": {
+    "baseline-ids.json": "dc7a30f6904d4631644353c1b77165c7332943ebf0fe2fac95618d3b2c47adac",
+    "core-shard-1.json": "fc040c3718d94fe226a15892da8d4155247c455b169abca5b730ee778803db9b",
+    "core-shard-2.json": "f02c9436d3ac3b0a9b600178d8db4e8df489d92821fe9365d3250730ac91dd4b",
+    "discover.py": "9bfc5d1cb682ace8ed1585e7c1ba7028740cfead5a06336daf1d3169df55cd32",
+    "discovery.log": "c308f111973360b5fedbe9d7f094ada21cd446f9acc0ccf01af2094637f45fb7",
+    "first-log-parser-diagnostic.json": "ba5b0bcc4dcedd933802d9854ac3adf54f1e867f2973d7ea770a2135dde32052",
+    "focused-frozen.log": "b9379fe6e3607ed8fc71908f9fdf431a604ad869432e13812c67e94be8e347cb",
+    "summary.json": "39ea25e29fe15e882acb69d2af771d4e3c5e11e740b2d40bf5bbc584edf9238a",
+    "verify-log-v2.py": "a0cc2050c3766540b38b01e791af4560d2f132567b6b517a964300246e7ffe7e"
+  }
+}

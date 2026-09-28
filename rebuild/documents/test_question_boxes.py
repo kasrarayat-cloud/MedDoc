@@ -585,8 +585,8 @@ class NestedCheckboxOwnership(unittest.TestCase):
         self.assertFalse([f for f in mixed['fields'] if f['locator']['target']['type'] == 'checkboxes'])
         self.assertTrue(any('subordinate' in note and 'Right' in note and 'Left' in note for note in mixed['notes']))
         write_in = w.inspect(data(self.form(write_in=True)))
-        self.assertTrue(any('Unassigned write-in' in note and 'Other' in note and '/tc[1]/p[0]' in note
-                            for note in write_in['notes']))
+        self.assertTrue(any(f['label'] == 'Other:' and f['locator']['target']['type'] == 'span'
+                            for f in write_in['fields']))
 
     def test_single_nested_option_keeps_its_complete_question_and_subsection(self):
         for subsection in (False, True):
@@ -625,3 +625,87 @@ class NestedCheckboxOwnership(unittest.TestCase):
                 self.assertTrue(any('Nested option' in note for note in result['notes']))
                 if case == 'headers':
                     self.assertTrue(any('Donor' in note and 'Recipient' in note for note in result['notes']))
+
+
+class NestedWriteIns(unittest.TestCase):
+    def form(self, *, control='glyph', checked=False, blank='underscores', label='Additional detail:',
+             heading='Current visit', subsection=True, suffix=''):
+        from .test_word_v3 import checkbox_control, ff_field
+        doc = NestedCheckboxOwnership().form(heading=heading, subsection=subsection)
+        paragraph = doc.tables[0].cell(0, 0).tables[0].cell(0, 1).paragraphs[0]
+        paragraph.clear()
+        if control == 'glyph': paragraph.add_run('☒' if checked else '☐')
+        elif control == 'sdt': paragraph._p.append(checkbox_control(checked=checked))
+        else: ff_field(paragraph, 'checkbox', checked=checked)
+        paragraph.add_run(' ' + label + ' ')
+        paragraph.add_run('_____' if blank == 'underscores' else '\t').underline = blank == 'tab'
+        if suffix: paragraph.add_run(suffix)
+        return doc
+
+    def test_disjoint_blank_and_choice_preserve_source_and_independent_states(self):
+        for control in ('glyph', 'sdt', 'ff'):
+            for blank in ('underscores', 'tab'):
+                with self.subTest(control=control, blank=blank):
+                    raw = data(self.form(control=control, checked=True, blank=blank))
+                    result = w.inspect(raw)
+                    spans = [f for f in result['fields'] if f['locator']['target']['type'] == 'span']
+                    self.assertEqual(len(spans), 1)
+                    field = spans[0]
+                    self.assertEqual(field['label'], 'Additional detail:')
+                    self.assertEqual(field['context'],
+                        'Current visit > Which symptoms occur? Tick all that apply. > During exertion:')
+                    group = next(f for f in result['fields'] if f['kind'] == 'multi_choice')
+                    self.assertEqual(group['printed_ticked'], [1])
+                    self.assertFalse(result['notes'])
+                    with ZipFile(io.BytesIO(raw)) as before, ZipFile(io.BytesIO(w.fill(raw, result['fields'], {}))) as after:
+                        self.assertEqual({n: before.read(n) for n in before.namelist()},
+                                         {n: after.read(n) for n in after.namelist()})
+                    for value in ('Ordinary detail.', 'Literal ☐ and ☒ remain text.\n' + 'Retained long detail. ' * 45):
+                        output = w.fill(raw, result['fields'], {field['key']: value})
+                        index = w.SlotIndex(w.open_package(output));slot = index.by_id['word/document.xml#' + field['locator']['slot']]
+                        self.assertEqual(w.paragraph_text(slot.el)[0],
+                                         (w.CHECKED if control == 'glyph' else w.BOX) + ' Additional detail: ' + value)
+                        # Read the first physical source control, never an inserted glyph ordinal.
+                        self.assertTrue(w.box_state(index, group['locator']['target']['boxes'][-1]))
+                        if blank == 'tab':
+                            inserted = next(node for node in slot.el.iter(w.T) if value.split('\n')[0] in (node.text or ''))
+                            self.assertIsNotNone(inserted.getparent().find(w.q('w:rPr') + '/' + w.q('w:u')))
+                    output = w.fill(raw, result['fields'], {group['key']: ['Tightness']})
+                    index = w.SlotIndex(w.open_package(output));slot = index.by_id['word/document.xml#' + field['locator']['slot']]
+                    self.assertIn('_____' if blank == 'underscores' else '\t', w.paragraph_text(slot.el)[0])
+                    self.assertFalse(w.box_state(index, group['locator']['target']['boxes'][-1]))
+
+    def test_ambiguous_blank_shapes_remain_visible(self):
+        for suffix in (' then _____', ' after review', ' ☐ Separate'):
+            with self.subTest(suffix=suffix):
+                result = w.inspect(data(self.form(suffix=suffix)))
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'span'])
+                self.assertTrue(any('Printed' in note and suffix.strip() in note for note in result['notes']))
+
+    def test_signing_scope_and_complete_context_limits_are_not_relaxed(self):
+        for heading, label in (('Consent', 'Additional detail:'), ('Signed declaration', 'Additional detail:'),
+                               ('Current visit', 'Initial here:'), ('Current visit', 'Signature:')):
+            with self.subTest(heading=heading, label=label):
+                result = w.inspect(data(self.form(heading=heading, label=label)))
+                spans = [f for f in result['fields'] if f['locator']['target']['type'] == 'span'
+                         and f['kind'] not in ('signature', 'initials')]
+                self.assertFalse(spans)
+        doc = self.form(heading='', subsection=False)
+        question = 'Which ' + 'q' * 993 + '?'
+        self.assertEqual(len(question), 1000)
+        doc.tables[0].cell(0, 0).paragraphs[0].text = question
+        result = w.inspect(data(doc))
+        field = next(f for f in result['fields'] if f['locator']['target']['type'] == 'span')
+        self.assertEqual(field['context'], question)
+        doc.tables[0].cell(0, 0).paragraphs[0].text += 'x'
+        result = w.inspect(data(doc))
+        self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'span'])
+        self.assertTrue(any('exceeds' in note for note in result['notes']))
+
+    def test_changed_source_identity_refuses_write_in(self):
+        raw = data(self.form(control='ff'))
+        result = w.inspect(raw)
+        field = next(f for f in result['fields'] if f['locator']['target']['type'] == 'span')
+        field['locator']['fingerprint'] = '0' * 64
+        with self.assertRaises(w.V3Failure):
+            w.fill(raw, result['fields'], {field['key']: 'Synthetic detail.'})

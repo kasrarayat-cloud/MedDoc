@@ -112,6 +112,13 @@ for a form generation is (request bytes + 12,000) input tokens plus the request 
 **$0.144** (8,000-token cap, ordinary notes), **$0.224** (16,000-token cap, adaptive thinking), or
 **$0.264** (20,000-token cap, blank mapping only): 32,000 x $2/M plus the stated output cap x $10/M.
 
+The default-off ordinary-history contract adds the measured UTF-8 byte length of its instructions,
+complete response schema and target-key payload to the input bound, priced at the same input rate.
+The examples above exclude that additional charge. It does not increase the output cap. The cost
+source check admits only that exact guarded, additive formula, including the native Sonnet 5
+request gate; missing components, substituted rates, changed divisors and unrecognized adjustments
+fail the check. These are reservation bounds, not measured provider usage or live validation.
+
 **Output caps this table assumes:** the output cap of each provider call is the job's request
 profile's `max_output_tokens`, the same value `maximum_cost` (notes) or `mapping_assistance.compile_request` (mapping) prices, so the hold always covers the cap
 that is sent. The output caps a request profile can set are 6,000, 8,000, 16,000 and 20,000 tokens: 6,000 under

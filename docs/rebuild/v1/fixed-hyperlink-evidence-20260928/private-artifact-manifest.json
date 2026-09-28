@@ -1,0 +1,187 @@
+[
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/01-before.log",
+    "sha256": "53bab930f85969774f7e437fe4738a619637fd952cc0ac0d2af8600293c09e19",
+    "bytes": 17030
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/02-before-corrected-instrument.log",
+    "sha256": "366c3425aa46ebcd24b9caae0405ed1ada114afb81e1b2c825d1151afffbf5d4",
+    "bytes": 16037
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/03-after.log",
+    "sha256": "6cad12221ed41dd02d2f050e4b8ea69f95ca98b4dc789930aabd133959b1b5ae",
+    "bytes": 1180
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/04-affected.log",
+    "sha256": "77a17efbe6aee9c27fb99ad1594d7e8ab2fa82b2042e14dc5f67788c187dbadd",
+    "bytes": 222
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/05-cell-self-refutation.log",
+    "sha256": "18fe3115a3b47865c9bc31432361bf8790009b8f4107d2368643402e4b0c9c27",
+    "bytes": 1622
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/06-after-cell.log",
+    "sha256": "0639948405cf9c3dcc38176b0eb190048b0a0cc022b0f7a544afff93bea36029",
+    "bytes": 106
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/07-authenticated-D30.log",
+    "sha256": "1ba5065db92d64ceb650d7472818de573242cd42b061b8068e3f191fe9734d5a",
+    "bytes": 1851
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/08-authenticated-D30-final.log",
+    "sha256": "0614680024dcb3b3f96bfeb204ed5cb8ad74f3cc7a96faf3989e651b43d6cdf5",
+    "bytes": 527
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/09-final-focused.log",
+    "sha256": "b0a80dd01da54de91c003e17414186f87359ce78be1a7a65f8f0c57a34465d14",
+    "bytes": 1701
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-after.json",
+    "sha256": "240b9f3fc0eb24ea076e5f05ebfdc8d49153a5fb14b644079f894e249ff261de",
+    "bytes": 36448
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-before-candidate.json",
+    "sha256": "19356aa4e2cd3709887eedd2bbc943236b056ac891987d49382e773b007893b2",
+    "bytes": 36886
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-map-comparison.json",
+    "sha256": "60707ac36da6c46a0ea6c990865085c62522e515dead8c869df5f2bc19756f8f",
+    "bytes": 876
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-workflow-after/long.docx",
+    "sha256": "0148e7ca2f8e81b4a1b5cd9a613f70b895871833626d7910cb7bd1a07d17d627",
+    "bytes": 82908
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-workflow-after/long.json",
+    "sha256": "b9e6d7a412b52ab0690340e1b068aa7f08398eb236ad5b4a4c6b0508771e4f08",
+    "bytes": 7453
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-workflow-after/missing.docx",
+    "sha256": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+    "bytes": 82768
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-workflow-after/missing.json",
+    "sha256": "e029c8b9587636371ce8f2723c854bd29118d09ec182d0ae47e3b1014b830dc0",
+    "bytes": 1145
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-workflow-after/ordinary.docx",
+    "sha256": "6795144363a34ff46c82ceb9bec2334e3a6690f5dae7ff1ebc43989b1b3fb61e",
+    "bytes": 82806
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-workflow-after/ordinary.json",
+    "sha256": "d344f443e6350f80c6702cfeceee1362d55bbd7a4a5868425f0fd241029f6002",
+    "bytes": 1498
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-workflow-after/original.docx",
+    "sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+    "bytes": 88646
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D30-workflow-after/uploaded-map.json",
+    "sha256": "2748ae8d9828ab024343898625589bdd6051a3fdd18dcd51ddeecbf9e9a7a6af",
+    "bytes": 33582
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D31-after.json",
+    "sha256": "1f5e5a233473d0fd2827ca39695502e5f3dd745ffbd74b97fc3c019e07fbfcaa",
+    "bytes": 38244
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D31-before.json",
+    "sha256": "7dc06d16501e7d4a16b7f0f174d1cd51984cf97a470c4e121480ca54cf3b884d",
+    "bytes": 38861
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/D31-comparison.json",
+    "sha256": "784ba1aa4bcadedfae58a540f23b34a858e40ce9b95a22b8e7694947d176465a",
+    "bytes": 86
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/D30-workflow-after/long.docx",
+    "sha256": "0148e7ca2f8e81b4a1b5cd9a613f70b895871833626d7910cb7bd1a07d17d627",
+    "bytes": 82908
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/D30-workflow-after/long.json",
+    "sha256": "34b484e83b6b126ad60d4bbb9213537118243d184b1be462aa6f375fb7281ee6",
+    "bytes": 7453
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/D30-workflow-after/missing.docx",
+    "sha256": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+    "bytes": 82768
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/D30-workflow-after/missing.json",
+    "sha256": "f0e18c8bd06a662f14a2bcf67d06b6071618ca15b05ecddd3b67199f3e8dd7c8",
+    "bytes": 1145
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/D30-workflow-after/ordinary.docx",
+    "sha256": "6795144363a34ff46c82ceb9bec2334e3a6690f5dae7ff1ebc43989b1b3fb61e",
+    "bytes": 82806
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/D30-workflow-after/ordinary.json",
+    "sha256": "4cfc1aef16ce23435ec673e7837084f0238f8c46df9d27535a3ceb7597912296",
+    "bytes": 1498
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/D30-workflow-after/original.docx",
+    "sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+    "bytes": 88646
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/D30-workflow-after/uploaded-map.json",
+    "sha256": "2748ae8d9828ab024343898625589bdd6051a3fdd18dcd51ddeecbf9e9a7a6af",
+    "bytes": 33582
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/auth-final/test_d30_links.py",
+    "sha256": "a955e824754095ae207c0a010ea4992f7f5b0fe841ad90d11e54e2ad8ab5bb73",
+    "bytes": 3303
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/compare_d31.py",
+    "sha256": "e6c03a19ca2f252a1d47ef72e15391a14e0736ef6ba03c65d1b1d13f57bb7ac7",
+    "bytes": 628
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/original-source-first.json",
+    "sha256": "cafbfdf05757bf031454c2f6a091019fd8ffa03e16c3fee03b1721e658e4fee5",
+    "bytes": 66027
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/render-reuse.json",
+    "sha256": "d8f079dec36351981c6c7067e90de4c271ff3badcd173879fcbf519cecd2d2d5",
+    "bytes": 1214
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/test-first-instrument.py",
+    "sha256": "eae6aab18be9193a32856eb014f8754b96f911bbe81e804b0c6902f382dac375",
+    "bytes": 4740
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/.runtime/fixed-instructions-20260928/test_d30_links.py",
+    "sha256": "a955e824754095ae207c0a010ea4992f7f5b0fe841ad90d11e54e2ad8ab5bb73",
+    "bytes": 3303
+  }
+]

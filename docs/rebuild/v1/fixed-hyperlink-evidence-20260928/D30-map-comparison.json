@@ -1,0 +1,27 @@
+{
+  "before": 63,
+  "after": 62,
+  "removed": [
+    {
+      "label": "The completed report should be submitted to the Mental Health Casework Section by email to",
+      "kind": "text",
+      "context": "Request a reduction in reporting frequency",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/p[252]",
+        "target": {
+          "type": "span",
+          "start": 92,
+          "end": 118,
+          "shape": "hint"
+        },
+        "fingerprint": "2e8759d1a5be1672e612a4b106c11494ab74f0eb7ba0d40d2197ce269719da25"
+      }
+    }
+  ],
+  "all_remaining_metadata_identical_except_enumeration_key": true,
+  "old_mapping_fill_refused": true,
+  "whole_document": "FAIL:58expectedphysicalmatches4extras4missing;62isnotcompleteness",
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f"
+}

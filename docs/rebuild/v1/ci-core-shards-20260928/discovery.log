@@ -1,0 +1,7 @@
+/opt/meddoc-pro/.worktrees/v1-ci-core-shards/rebuild/core/tests/test_tab_form_policy.py:69: SyntaxWarning: invalid escape sequence '\('
+  """⚠️ THE DECLARED BOUND WAS REACHABLE BY ANOTHER SPELLING.
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/ci-core-shards-20260928/discover.py", line 31, in <module>
+    assert len(prior)==2097 and len(prior)==len(set(prior)) and summary['prior_ci_same_universe']
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

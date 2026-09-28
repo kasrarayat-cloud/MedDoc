@@ -1,0 +1,282 @@
+test_colored_contact_is_never_an_answer_hint_in_common_parts (documents.test_hyperlink_destinations.HyperlinkDestinations.test_colored_contact_is_never_an_answer_hint_in_common_parts) ... ok
+test_content_control_refusal_precedes_any_source_mutation (documents.test_hyperlink_destinations.HyperlinkDestinations.test_content_control_refusal_precedes_any_source_mutation) ... FAIL
+test_explicit_answer_marker_inside_link_is_visible_and_unassigned (documents.test_hyperlink_destinations.HyperlinkDestinations.test_explicit_answer_marker_inside_link_is_visible_and_unassigned) ... ok
+test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) ... 
+  test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='rich', block=False) ... FAIL
+  test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='rich', block=True) ... FAIL
+  test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='dropdown', block=False) ... FAIL
+  test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='dropdown', block=True) ... FAIL
+  test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='date', block=False) ... FAIL
+  test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='date', block=True) ... FAIL
+test_insertion_in_or_at_end_of_hyperlink_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_insertion_in_or_at_end_of_hyperlink_refuses) ... ok
+test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) ... 
+  test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='rich', block=False) ... FAIL
+  test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='rich', block=True) ... FAIL
+  test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='dropdown', block=False) ... FAIL
+  test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='dropdown', block=True) ... FAIL
+  test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='date', block=False) ... FAIL
+  test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='date', block=True) ... FAIL
+test_link_only_value_cell_is_not_replacement_guidance (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_only_value_cell_is_not_replacement_guidance) ... ok
+test_linked_checkbox_is_unassigned_and_historical_write_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_linked_checkbox_is_unassigned_and_historical_write_refuses) ... 
+  test_linked_checkbox_is_unassigned_and_historical_write_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_linked_checkbox_is_unassigned_and_historical_write_refuses) (position='body') ... FAIL
+  test_linked_checkbox_is_unassigned_and_historical_write_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_linked_checkbox_is_unassigned_and_historical_write_refuses) (position='table') ... FAIL
+test_normal_blank_after_link_keeps_text_and_relationship (documents.test_hyperlink_destinations.HyperlinkDestinations.test_normal_blank_after_link_keeps_text_and_relationship) ... ok
+test_old_mapping_cannot_replace_fixed_hyperlink (documents.test_hyperlink_destinations.HyperlinkDestinations.test_old_mapping_cannot_replace_fixed_hyperlink) ... ok
+test_old_whole_cell_mapping_cannot_remove_later_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_old_whole_cell_mapping_cannot_remove_later_link) ... ok
+test_separate_blank_in_link_bearing_block_control_still_fills (documents.test_hyperlink_destinations.HyperlinkDestinations.test_separate_blank_in_link_bearing_block_control_still_fills) ... FAIL
+test_unlinked_blue_guidance_cell_remains_fillable (documents.test_hyperlink_destinations.HyperlinkDestinations.test_unlinked_blue_guidance_cell_remains_fillable) ... ok
+test_unlinked_colored_explicit_hint_remains_fillable (documents.test_hyperlink_destinations.HyperlinkDestinations.test_unlinked_colored_explicit_hint_remains_fillable) ... ok
+
+======================================================================
+FAIL: test_content_control_refusal_precedes_any_source_mutation (documents.test_hyperlink_destinations.HyperlinkDestinations.test_content_control_refusal_precedes_any_source_mutation)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 169, in test_content_control_refusal_precedes_any_source_mutation
+    with self.assertRaises(w.V3Failure) as rejected:
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='rich', block=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 160, in test_historical_control_mapping_cannot_remove_link
+    with self.assertRaises(w.V3Failure) as rejected:
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='rich', block=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 160, in test_historical_control_mapping_cannot_remove_link
+    with self.assertRaises(w.V3Failure) as rejected:
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='dropdown', block=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 160, in test_historical_control_mapping_cannot_remove_link
+    with self.assertRaises(w.V3Failure) as rejected:
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='dropdown', block=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 160, in test_historical_control_mapping_cannot_remove_link
+    with self.assertRaises(w.V3Failure) as rejected:
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='date', block=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 160, in test_historical_control_mapping_cannot_remove_link
+    with self.assertRaises(w.V3Failure) as rejected:
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_historical_control_mapping_cannot_remove_link (documents.test_hyperlink_destinations.HyperlinkDestinations.test_historical_control_mapping_cannot_remove_link) (kind='date', block=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 160, in test_historical_control_mapping_cannot_remove_link
+    with self.assertRaises(w.V3Failure) as rejected:
+AssertionError: V3Failure not raised
+
+======================================================================
+FAIL: test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='rich', block=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 144, in test_link_bearing_content_controls_are_visible_but_not_whole_answers
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Answer', 'kind'[220 chars]d'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Answer', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[0]/sdt[0]', 'target': {'type': 'sdt_text'}, 'fingerprint': '8770882f752655b26f12606c6093c3e7278fa1766174e1cb4271653eed4af76d'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Answer',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '8770882f752655b26f12606c6093c3e7278fa1766174e1cb4271653eed4af76d',
+-               'part': 'word/document.xml',
+-               'slot': 'b/p[0]/sdt[0]',
+-               'target': {'type': 'sdt_text'}}}]
+
+======================================================================
+FAIL: test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='rich', block=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 144, in test_link_bearing_content_controls_are_visible_but_not_whole_answers
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Answer', 'kind'[215 chars]5'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Answer', 'kind': 'text', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/sdt[0]', 'target': {'type': 'sdt_text'}, 'fingerprint': '288ec788341800ac8756e4720f12079b5d447324b24675b1e5709d9df6972e35'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Answer',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '288ec788341800ac8756e4720f12079b5d447324b24675b1e5709d9df6972e35',
+-               'part': 'word/document.xml',
+-               'slot': 'b/sdt[0]',
+-               'target': {'type': 'sdt_text'}}}]
+
+======================================================================
+FAIL: test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='dropdown', block=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 144, in test_link_bearing_content_controls_are_visible_but_not_whole_answers
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Answer', 'kind'[250 chars]o']}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Answer', 'kind': 'choice', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[0]/sdt[0]', 'target': {'type': 'sdt_choice'}, 'fingerprint': '35443fb0e383d20f7c248698c8c8f50597fe2fe3e8ffaa341bc44fcf9f3c309a'}, 'options': ['Yes', 'No']}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'choice',
+-   'label': 'Answer',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '35443fb0e383d20f7c248698c8c8f50597fe2fe3e8ffaa341bc44fcf9f3c309a',
+-               'part': 'word/document.xml',
+-               'slot': 'b/p[0]/sdt[0]',
+-               'target': {'type': 'sdt_choice'}},
+-   'options': ['Yes', 'No']}]
+
+======================================================================
+FAIL: test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='dropdown', block=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 144, in test_link_bearing_content_controls_are_visible_but_not_whole_answers
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Choice', 'kind'[245 chars]o']}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Choice', 'kind': 'choice', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/sdt[0]', 'target': {'type': 'sdt_choice'}, 'fingerprint': '69c79ffba583c2066c7404d671b0a8fa9ab949529aabc32202f4b0dee5ca10dd'}, 'options': ['Yes', 'No']}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'choice',
+-   'label': 'Choice',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '69c79ffba583c2066c7404d671b0a8fa9ab949529aabc32202f4b0dee5ca10dd',
+-               'part': 'word/document.xml',
+-               'slot': 'b/sdt[0]',
+-               'target': {'type': 'sdt_choice'}},
+-   'options': ['Yes', 'No']}]
+
+======================================================================
+FAIL: test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='date', block=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 144, in test_link_bearing_content_controls_are_visible_but_not_whole_answers
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Answer', 'kind'[234 chars]d'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Answer', 'kind': 'date', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[0]/sdt[0]', 'target': {'type': 'sdt_text', 'date': True}, 'fingerprint': '0b8cda14e728d03cadf4f8a2a67658bfcb95b8fd2e7764d0c060150d21e6515d'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'date',
+-   'label': 'Answer',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '0b8cda14e728d03cadf4f8a2a67658bfcb95b8fd2e7764d0c060150d21e6515d',
+-               'part': 'word/document.xml',
+-               'slot': 'b/p[0]/sdt[0]',
+-               'target': {'date': True, 'type': 'sdt_text'}}}]
+
+======================================================================
+FAIL: test_link_bearing_content_controls_are_visible_but_not_whole_answers (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_bearing_content_controls_are_visible_but_not_whole_answers) (kind='date', block=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 144, in test_link_bearing_content_controls_are_visible_but_not_whole_answers
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Date', 'kind': [227 chars]f'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Date', 'kind': 'date', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/sdt[0]', 'target': {'type': 'sdt_text', 'date': True}, 'fingerprint': '27859910bb29d3481589732929fdc33ec224d223cd096f0120e686913aabd54f'}}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'date',
+-   'label': 'Date',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '27859910bb29d3481589732929fdc33ec224d223cd096f0120e686913aabd54f',
+-               'part': 'word/document.xml',
+-               'slot': 'b/sdt[0]',
+-               'target': {'date': True, 'type': 'sdt_text'}}}]
+
+======================================================================
+FAIL: test_linked_checkbox_is_unassigned_and_historical_write_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_linked_checkbox_is_unassigned_and_historical_write_refuses) (position='body')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 182, in test_linked_checkbox_is_unassigned_and_historical_write_refuses
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Send copies', '[355 chars]s']}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Send copies', 'kind': 'checkbox', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[0]/glyphs', 'target': {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/p[0]/glyphs', 'glyph': 0}]}, 'fingerprint': '8a0ee0974e2a367fd06db05ad9daad63838ffd2c0388a4d7a1bb8a985fa8adef'}, 'options': ['Send copies']}
+
++ []
+- [{'context': '',
+-   'key': 'v3_1',
+-   'kind': 'checkbox',
+-   'label': 'Send copies',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '8a0ee0974e2a367fd06db05ad9daad63838ffd2c0388a4d7a1bb8a985fa8adef',
+-               'part': 'word/document.xml',
+-               'slot': 'b/p[0]/glyphs',
+-               'target': {'boxes': [{'glyph': 0,
+-                                     'kind': 'glyph',
+-                                     'part': 'word/document.xml',
+-                                     'slot': 'b/p[0]/glyphs'}],
+-                          'type': 'checkboxes'}},
+-   'options': ['Send copies']}]
+
+======================================================================
+FAIL: test_linked_checkbox_is_unassigned_and_historical_write_refuses (documents.test_hyperlink_destinations.HyperlinkDestinations.test_linked_checkbox_is_unassigned_and_historical_write_refuses) (position='table')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 182, in test_linked_checkbox_is_unassigned_and_historical_write_refuses
+    self.assertEqual(info['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Send copies', '[393 chars]s']}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Send copies', 'kind': 'checkbox', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'target': {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}]}, 'fingerprint': '8a0ee0974e2a367fd06db05ad9daad63838ffd2c0388a4d7a1bb8a985fa8adef'}, 'options': ['Send copies']}
+
+Diff is 673 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_separate_blank_in_link_bearing_block_control_still_fills (documents.test_hyperlink_destinations.HyperlinkDestinations.test_separate_blank_in_link_bearing_block_control_still_fills)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls/rebuild/documents/test_hyperlink_destinations.py", line 195, in test_separate_blank_in_link_bearing_block_control_still_fills
+    self.assertEqual(info['fields'][0]['locator']['target']['type'], 'span')
+AssertionError: 'sdt_text' != 'span'
+- sdt_text
++ span
+
+
+----------------------------------------------------------------------
+Ran 14 tests in 1.919s
+
+FAILED (failures=16)

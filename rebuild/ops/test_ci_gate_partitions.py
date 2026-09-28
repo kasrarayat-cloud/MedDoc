@@ -42,12 +42,25 @@ class CIGatePartitions(unittest.TestCase):
         self.assertEqual(support[0][2:-1], ['documents.tests', 'documents.test_tab_form',
             'documents.test_sdk_sandbox', 'documents.test_sdk_service', 'documents.test_layout',
             'documents.test_unmapped_areas', 'documents.test_multicolumn_and_mixed',
-            'documents.test_word_v3', 'documents.test_signing_areas', 'documents.test_question_boxes'])
+            'documents.test_word_v3', 'documents.test_signing_areas', 'documents.test_question_boxes',
+            'documents.test_composite_kind', 'documents.test_hyperlink_destinations'])
         self.assertEqual(support[0][-1], '-v')
         self.assertEqual(support[1], ['-m', 'unittest', 'discover', '-s', 'ops', '-p', 'test_*.py', '-v'])
 
+    def test_core_shards_keep_checks_and_use_the_same_full_discovery_label(self):
+        for shard in (1, 2):
+            code, commands = self.invoke(f'python-core-{shard}')
+            self.assertEqual(code, 0)
+            self.assertEqual(commands[:2], [['manage.py', 'check'], ['manage.py', 'makemigrations', '--check', '--dry-run']])
+            self.assertEqual(commands[2], ['manage.py', 'test', 'core.tests', '--verbosity', '2',
+                '--testrunner', 'ops.ci_test_runner.CoreShardRunner', '--core-shard', str(shard),
+                '--core-shard-manifest', f'.runtime/core-shard-{shard}.json'])
+            self.assertEqual(len(commands), 3)
+
     def test_each_failing_stage_stops_without_success_or_later_commands(self):
         for mode, stages in [('python-core', ['check', 'makemigrations', 'core.tests']),
+                             ('python-core-1', ['check', 'makemigrations', 'core.tests']),
+                             ('python-core-2', ['check', 'makemigrations', 'core.tests']),
                              ('python-support', ['documents.tests', 'discover'])]:
             for index, stage in enumerate(stages):
                 with self.subTest(mode=mode, stage=stage):
@@ -66,10 +79,16 @@ class CIGatePartitions(unittest.TestCase):
             self.assertIn(required, aggregate)
         command = 'test "$QUILLMD_PYTHON_RESULT" = success'
         self.assertIn('run: ' + command, aggregate)
+        self.assertIn('pattern: fresh-core-*-manifest', aggregate)
+        self.assertIn('merge-multiple: true', aggregate)
+        self.assertIn("run: python3 rebuild/ops/ci_test_shards.py --source-sha '${{ github.sha }}' core-manifests/core-shard-1.json core-manifests/core-shard-2.json", aggregate)
+        self.assertIn('if-no-files-found: error', workflow)
+        self.assertIn('include-hidden-files: true', workflow)
+        self.assertLess(aggregate.index('run: ' + command), aggregate.index('actions/download-artifact'))
         for result in ['success', 'failure', 'cancelled', 'skipped', '']:
             with self.subTest(result=result):
                 check = subprocess.run(['bash', '-c', command], env={'QUILLMD_PYTHON_RESULT': result})
                 self.assertEqual(check.returncode == 0, result == 'success')
         self.assertIn('fail-fast: false', workflow)
-        self.assertIn('lane: [core, support]', workflow)
+        self.assertIn('lane: [core-1, core-2, support]', workflow)
         self.assertIn('timeout-minutes: 20', workflow.split('\n  python:\n', 1)[0])

@@ -85,19 +85,27 @@ represent44 declared lineages; the offline-supported development subset is33 fil
 not a proven independent40. The bounded investigation added **one** independently authored licensed blank
 DOCX lineage, currently unallocated. No corpus was replaced or rescored.
 
-The source-capped conditional DEV project can contribute at most8 cases, subject to internal original/rights/
-independence checks that continue without owner file relay. If the new licensed item is assigned to
-qualification, eligible inventory is4/20 across2sources and DEV still has at most8 conditional additions.
-If assigned to DEV, there is1 admitted addition and at most9 including the8 conditional cases, while
-qualification has3/20 from1source. These are alternative allocations, not jointly available counts.
-The ten-addition DEV premise also assumes all30 original declared groups are independently cleared;
-current offline-supported originals offer at most25 groups. Even the optimistic25+9 is only34/40.
+The bounded original-only investigation found seven additional offline-supported blank files, representing
+five conservative independent lineages, plus one unresolved embedded-component rights case. They share an
+existing development source. Its original eight supported files already occupy seven declared lineages;
+with the eight-per-source cap, the five additions increase a possible cohort by at most **one**.
+
+Current supported originals therefore offer a conditional ceiling of **26/40**, or **27/40** if the one
+new-source licensed lead is assigned to development: at least14 or13 additional eligible development
+lineages remain missing. These are upper bounds, not certified cohort counts. If all30 original groups
+later clear rights and independence, the corresponding ceilings are31/40 or32/40. Earlier additive
+25+9 planning was too loose because it did not apply the source cap jointly; the earlier evidence remains.
+
+If the new-source lead is assigned to qualification, eligible inventory is4/20 across2sources; if assigned
+to development, qualification has3/20 from1source. It cannot count in both. No allocation, corpus freeze or
+candidate qualification attempt has been made. See `corpus-eight-development-adjudication-20260928.md`
+for the sealed original-only adjudication and exact joint counts.
 
 Applicable rights/lineage evidence or genuinely new authorized source material must fill the remaining gaps.
 Clinic-supplied blank originals with explicit reuse/adaptation authority can contribute. Cosmetic variants,
 relabeling frozen unseen cases, and moving a source between DEV and qualification do not qualify.
-See `corpus-independent-renewal-final-20260928.md` for exact joint bounds, audit seals and remaining internal
-checks. The original60 and every first pass remain unchanged. The preserved frozenN20 has three legacy
+See that adjudication and the preserved `corpus-independent-renewal-final-20260928.md` for the inventory
+history, audit seals and remaining checks. The original60 and every first pass remain unchanged. The preserved frozenN20 has three legacy
 `.doc` refusals; it is not replaced or admitted for a doomed attempt. No new acquisition spending is requested.
 
 ## Human dictation acceptance detail (same pending request)

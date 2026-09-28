@@ -785,6 +785,29 @@ def is_hint_run(r) -> bool:
     return (lum >= 0.35 and not (rr > 150 and gg < 90 and bb < 90)) or bluish
 
 
+def hyperlink_run(run) -> bool:
+    return run is not None and any(node.tag == q("w:hyperlink") for node in run.iterancestors())
+
+
+def hyperlink_control(control) -> bool:
+    return hyperlink_run(control) or control.find(".//" + q("w:hyperlink")) is not None
+
+
+def hyperlink_write(pieces, start, end) -> bool:
+    """Whether replace_range would replace link text or insert inside its run parent.
+
+    Link text and its relationship are fixed source content. Inserting after the
+    last run of a hyperlink still inserts *inside* that hyperlink with addnext.
+    An ordinary run after it gives a separate safe insertion anchor.
+    """
+    if start < end:
+        return any(pc.start < end and pc.end > start and hyperlink_run(pc.run) for pc in pieces)
+    if any(pc.start < start < pc.end and hyperlink_run(pc.run) for pc in pieces):
+        return True
+    before = [pc for pc in pieces if pc.end <= start and pc.run is not None]
+    return bool(before and hyperlink_run(before[-1].run))
+
+
 def is_blank_text(txt: str) -> bool:
     t = txt.strip()
     return not t or set(t) <= set("_ \t.   ") or bool(PLACEHOLDER_TEXT.match(t))
@@ -1335,6 +1358,10 @@ class Detector:
             if typ in ("docPartObj", "docPartList", "citation", "bibliography", "equation", "picture", "group", "checkbox"):
                 continue
             content = slot.el.find(q("w:sdtContent"))
+            if content is not None and content.find(".//" + q("w:hyperlink")) is not None:
+                self.notes.append("A content control containing a fixed hyperlink was read by its parts. Location: "
+                                  + slot.id)
+                continue
             if content is not None and wraps_structure(content):
                 # A control that wraps other controls, fields, tables or drawings is a container, not an
                 # answer: writing into it would replace what it holds. Its contents are read by the other rules.
@@ -1402,6 +1429,11 @@ class Detector:
                 continue
             txt = self.ptext(s.el)[0]
             if BOX not in txt and CHECKED not in txt:
+                continue
+            if (any(hyperlink_run(piece.run) for piece, _, _ in glyph_boxes(s.el))
+                    or any(hyperlink_control(node) for node in checkbox_nodes(s.el))):
+                self.notes.append("A checkbox inside a fixed hyperlink was kept unchanged. Location: " + s.id)
+                self.claimed.add(id(s.el))
                 continue
             if self.region_hidden(box_region(s.el)):
                 # ⚠️ Its boxes cannot all be seen: no question is read from it (round 3 F1).
@@ -1558,6 +1590,7 @@ class Detector:
             problem = issue
         raw_question, label = self.text(question.el).strip(), self.text(label_slot.el).strip()
         context = " > ".join(x for x in (context, raw_question if subsection else "") if x)
+        write_context = " > ".join(x for x in (context, label) if x)
         if len(group["units"]) == 1:
             # A checkbox keeps its printed option as label; its question still
             # governs that option, including a local subject or subsection.
@@ -1570,8 +1603,37 @@ class Detector:
             return {"problem": "Nested option grid at " + table.id + ": " + problem
                     + " Printed source: " + source + " Options: " + self.text(table.el, own=False)}
         return {"label": label, "context": context, "cardinality": raw_question,
+                "write_context": write_context,
                 "source_slots": paragraphs + [slot for slot in before if slot.kind == "p"
                     and not self.text(slot.el).strip()], "option_paras": grid_paras}
+
+    def nested_write_in(self, slot, context):
+        """A separate explicit trailing blank never supplies a checkbox decision."""
+        text, pieces = self.ptext(slot.el)
+        spans = self.blank_spans(text, pieces)
+        if not spans:
+            return
+        problem = "Its source does not prove one separate trailing blank."
+        if len(spans) == 1:
+            start, end, shape = spans[0]
+            boxes = [i for i, char in enumerate(text) if char in (BOX, CHECKED)]
+            if (len(boxes) == 1 and not text[:boxes[0]].strip() and boxes[0] < start
+                    and not text[end:].strip() and "\x00" not in text
+                    and not any(node.tag in (q("w:drawing"), q("w:pict"), q("w:object"))
+                                for node in slot.el.iter())
+                    and (shape == "utab" or (shape == "blank" and set(text[start:end]) == {"_"}))):
+                label = text[boxes[0] + 1:start].strip()
+                if label and len(label) <= MAX_MAPPING_LABEL and len(context) <= MAX_MAPPING_CONTEXT:
+                    if not any(self.question_box_signing(value) for value in (label, context)):
+                        self.add(Area("text", label, slot,
+                            {"type": "span", "start": start, "end": end, "shape": shape},
+                            context=context, complete_source=True))
+                        return
+                    problem = "The complete source contains signing/consent instructions."
+                elif len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT:
+                    problem = "The complete label or context exceeds limits; nothing was shortened."
+        self.notes.append("Unassigned write-in beside a nested option at " + slot.id + ". " + problem
+                          + " Printed text: " + text + " Governing context: " + context)
 
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
@@ -1647,9 +1709,7 @@ class Detector:
                 for source_slot in nested["source_slots"]:
                     self.claimed.add(id(source_slot.el))
                 for option_para in nested["option_paras"]:
-                    if self.blank_spans(*self.ptext(option_para.el)):
-                        self.notes.append("Unassigned write-in beside a nested option at " + option_para.id
-                                          + ". Review this separate answer area. Printed text: " + self.text(option_para.el))
+                    self.nested_write_in(option_para, nested["write_context"])
             self.add(area)
             for p in g["paras"]:
                 self.claimed.add(id(p.el))
@@ -2208,7 +2268,8 @@ class Detector:
         """Every visible run in the cell is guidance ink (blue/grey prompt text meant to be overwritten)."""
         runs = [r for r in c.el.iter(R) if (r.findtext(T) or "").strip()]
         if not runs or c.el.find(".//" + q("w:tbl")) is not None or c.el.find(".//" + SDT) is not None or \
-                c.el.find(".//" + FLDCHAR) is not None or BOX in self.cell_text(c):
+                c.el.find(".//" + FLDCHAR) is not None or c.el.find(".//" + q("w:hyperlink")) is not None \
+                or BOX in self.cell_text(c):
             return False
         return all(is_hint_run(r) for r in runs)
 
@@ -2383,7 +2444,20 @@ class Detector:
                     lstrip = len(seg) - len(seg.lstrip())
                     spans.append((hint_start + lstrip, hint_end - (len(seg) - len(seg.rstrip())), "hint"))
                 hint_start = None
-        return merge_spans(spans)
+        kept = []
+        for start, end, kind in merge_spans(spans):
+            if hyperlink_write(pieces, start, end):
+                owner = next((ancestor for pc in pieces if pc.run is not None
+                              for ancestor in pc.run.iterancestors() if ancestor.tag == q("w:p")), None)
+                slot = self.index.by_el.get(id(owner)) if owner is not None else None
+                note = "Answer-like text inside a fixed hyperlink was kept unchanged; review the original."
+                if slot is not None:
+                    note += " Location: " + slot.id
+                if note not in self.notes:
+                    self.notes.append(note)
+            else:
+                kept.append((start, end, kind))
+        return kept
 
     def rule_paragraph_fields(self):
         pending, pending_last = None, None     # a multi-line answer area and its last line
@@ -2486,6 +2560,9 @@ class Detector:
             return 0
         prev_end = 0
         for n, (s, e, kind) in enumerate(blanks):
+            if hyperlink_write(pieces, s, s if kind == "after_label" else e):
+                self.notes.append("An answer insertion inside a fixed hyperlink was left unassigned at " + slot.id)
+                continue
             seg = text[prev_end:s]
             seg = re.split(r"[\x00" + BOX + CHECKED + "]", seg)[-1]
             seg = re.split(r"(?<=[.;!?])\s+(?=[A-Z(])", seg.strip())[-1]
@@ -2934,6 +3011,9 @@ def replace_range(p, start, end, answer, *, plain=True):
     text, pieces = paragraph_text(p)
     if not (0 <= start <= end <= len(text)):
         fail("A stored mapping position no longer matches the form.", "mapping_mismatch")
+    if hyperlink_write(pieces, start, end):
+        fail("This mapping would change a fixed hyperlink. Review the original and choose a separate answer area.",
+             "protected_hyperlink")
     if any(pc.kind == "obj" and pc.start < end and pc.end > start for pc in pieces):
         fail("A stored mapping position overlaps a form control.", "mapping_mismatch")
     if start < end:
@@ -3101,6 +3181,8 @@ def set_glyph(p, n, ticked):
     if n >= len(boxes):
         fail("A stored checkbox position no longer matches the form.", "mapping_mismatch")
     pc, k, ch = boxes[n]
+    if hyperlink_run(pc.run):
+        fail("This mapping would change a checkbox inside a fixed hyperlink.", "protected_hyperlink")
     if (ch == CHECKED) == bool(ticked):
         return False
     original = (pc.node.text or "")[k] if pc.kind == "t" else ""
@@ -3130,8 +3212,47 @@ def tick_glyph(p, n):
     return set_glyph(p, n, True)
 
 
+def pin_glyph(p, n):
+    """Isolate an original glyph leaf so later disjoint run splits cannot rename it."""
+    boxes = glyph_boxes(p)
+    if not 0 <= n < len(boxes):
+        fail("A stored checkbox position no longer matches the form.", "mapping_mismatch")
+    piece, offset, _ = boxes[n]
+    if hyperlink_run(piece.run):
+        fail("This mapping would change a checkbox inside a fixed hyperlink.", "protected_hyperlink")
+    if piece.kind == "t":
+        position = piece.start + offset
+        _split_at(p, position + 1)
+        _split_at(p, position)
+        piece, _, _ = glyph_boxes(p)[n]
+    return piece.node
+
+
+def pinned_glyph_state(node):
+    """Read a retained physical leaf, never its ordinal among newly inserted text."""
+    p = next(node.iterancestors(q("w:p")), None)
+    if p is None:
+        return None
+    found = [ch == CHECKED for piece, _, ch in glyph_boxes(p) if piece.node is node]
+    return found[0] if len(found) == 1 else None
+
+
+def element_identity_path(root, node):
+    """Namespace-independent path to a retained leaf after all structural edits."""
+    path = []
+    while node is not root:
+        parent = node.getparent()
+        if parent is None:
+            fail("An original checkbox is no longer in its document part.", "mapping_mismatch")
+        path.append((node.tag, list(parent.findall(node.tag)).index(node)))
+        node = parent
+    return list(reversed(path))
+
+
 def set_sdt_checkbox(sdt, ticked):
     """A checkbox content control: its checked state and the glyph its state names (checkedState/uncheckedState)."""
+    if hyperlink_control(sdt):
+        fail("This mapping would change a fixed hyperlink in a checkbox control.", "protected_hyperlink")
     pr = sdt.find(q("w:sdtPr"))
     cb = pr.find(q("w14:checkbox")) if pr is not None else None
     if cb is None:
@@ -3296,6 +3417,9 @@ def wraps_structure(content) -> bool:
 
 def write_sdt_text(sdt, answer):
     content_now = sdt.find(q("w:sdtContent"))
+    if hyperlink_control(sdt):
+        fail("This mapping would change a fixed hyperlink in a content control. Review the original answer area.",
+             "protected_hyperlink")
     if content_now is not None and wraps_structure(content_now):
         fail("This content control contains other form parts and cannot take a text answer.", "unsupported_layout")
     pr = sdt.find(q("w:sdtPr"))
@@ -3330,6 +3454,9 @@ def write_sdt_text(sdt, answer):
 
 
 def write_cell(tc, answer, replace=False, whole=False):
+    if whole and tc.find(".//" + q("w:hyperlink")) is not None:
+        fail("This mapping would remove a fixed hyperlink from its cell. Review the original answer area.",
+             "protected_hyperlink")
     paras = tc.findall(q("w:p"))
     if not paras:
         paras = [etree.SubElement(tc, q("w:p"))]
@@ -3420,6 +3547,7 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
     protected.rule_protected_signing_areas()
     protected_slots = {area.slot.id for area in protected.areas if area.protection} | protected.protected_regions
     ops = []                                   # (paragraph_or_element, sort_position, callable)
+    glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
 
     def resolve(part, path, fp):
         slot = index.by_id.get("%s#%s" % (part, path))
@@ -3512,7 +3640,10 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                     elif box["kind"] == "ff":
                         ops.append((slot.el, -1, lambda el=slot.el, w=want: set_ff_checkbox(el, w), box["part"]))
                     elif box["kind"] == "glyph":
-                        ops.append((slot.el, -1, lambda el=slot.el, n=box["glyph"], w=want: set_glyph(el, n, w), box["part"]))
+                        key = box_key(box)
+                        if key in glyph_writes and glyph_writes[key][2] != want:
+                            fail("Two answers request different states for one printed checkbox.", "mapping_mismatch")
+                        glyph_writes[key] = (slot.el, box["glyph"], want, box["part"])
                     elif box["kind"] == "cell":
                         ops.append((slot.el, -1, lambda tc=slot.el, w=want: set_cell_box(tc, w), box["part"]))
                     elif box["kind"] == "cell_text" and want:
@@ -3534,16 +3665,29 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                 ops.append((anchor.el, 0, lambda f=field, a=answer: write_table_rows(index, f, a), part))
             else:
                 fail("This answer area cannot be filled automatically.", "unsupported_layout")
-    if protected.floating_initials and ops:
+    if protected.floating_initials and (ops or glyph_writes):
         fail(FLOATING_INITIALS_REFUSAL, "unqualified_floating_initials")
+    # Checkbox state edits preserve source offsets. Resolve them before text can
+    # insert new checkbox-looking characters, then retain the actual leaf nodes.
+    changed = set()
+    for p, n, want, part in glyph_writes.values():
+        set_glyph(p, n, want)
+        changed.add(part)
+    pins = {key: (p, pin_glyph(p, n), want, part)
+            for key, (p, n, want, part) in glyph_writes.items()}
     # position edits inside one element run from the end backwards; ticks (position -1) last
     ops.sort(key=lambda op: (id(op[0]), -op[1] if op[1] >= 0 else float("inf")))
-    changed = set()
     for _, _, apply, part in ops:
         apply()
         changed.add(part)
+    glyph_readback = {}
+    for key, (p, node, want, part) in pins.items():
+        if (p.getroottree().getroot() is not package.tree(part)
+                or next(node.iterancestors(q("w:p")), None) is not p):
+            fail("An answer changed or removed an original printed checkbox.", "mapping_mismatch")
+        glyph_readback[key] = {"part": part, "path": element_identity_path(package.tree(part), node)}
     out = package.write({part: package.tree(part) for part in changed})
-    verify_options(out, fields, answers)
+    verify_options(out, fields, answers, glyph_readback=glyph_readback)
     return out
 
 
@@ -3683,8 +3827,8 @@ def displayed_words(slot, target):
 
 def option_states(index, field):
     """Per option of a choice, multi_choice or checkbox field: True when the form shows it chosen (ticked, marked or
-    displayed), False when not, None when it cannot be read. ONE reader for the blank form's printed state and for
-    the check of every export."""
+    displayed), False when not, None when it cannot be read. Glyph ordinals name the original source layout;
+    export verification uses retained physical leaves after text insertions can add new box characters."""
     target = field["locator"]["target"]
     kind = target["type"]
     printed = printed_options(field)
@@ -3749,7 +3893,7 @@ def annotate_printed(index, field):
             field[name] = positions
 
 
-def verify_options(data, fields, answers):
+def verify_options(data, fields, answers, *, glyph_readback):
     """⚠️ READ BACK EVERY ANSWERED OPTION FIELD FROM THE WRITTEN PACKAGE: the ticked (or shown) options must be
     exactly the chosen ones, or the export is refused. Belt and braces against any future disagreement between the
     reviewed answer and what a writer did."""
@@ -3773,6 +3917,19 @@ def verify_options(data, fields, answers):
                     displayed_words(slot, target) == str(printed_options(field)[min(chosen)]).strip()
             else:
                 states = option_states(index, field)
+                if target["type"] == "checkboxes":
+                    for i, box in enumerate(target["boxes"]):
+                        if box["kind"] != "glyph":
+                            continue
+                        ref = glyph_readback[box_key(box)]
+                        node = index.package.tree(ref["part"])
+                        for tag, position in ref["path"]:
+                            children = node.findall(tag)
+                            if not 0 <= position < len(children):
+                                node = None
+                                break
+                            node = children[position]
+                        states[i] = pinned_glyph_state(node) if node is not None else None
                 ok = bool(states) and all(state is (i in chosen) for i, state in enumerate(states))
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             ok = False                  # what cannot be read back is not exported
