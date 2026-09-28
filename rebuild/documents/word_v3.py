@@ -944,7 +944,9 @@ class Detector:
         texts = [c for c in cells if self.cell_text(c) and not is_blank_text(self.cell_text(c))]
         kind = "label"
         cells = sorted(cells, key=lambda c: c.info["col"])
-        if any(self.is_empty_cell(c) or BOX in self.cell_text(c) or "\x00" in self.cell_objects(c) for c in cells):
+        # A native checkbox (BOX in the cell's objects, though its printed text omits it) is an answer too.
+        if any(self.is_empty_cell(c) or BOX in self.cell_text(c) or "\x00" in self.cell_objects(c)
+               or BOX in self.cell_objects(c) or CHECKED in self.cell_objects(c) for c in cells):
             # a data row starts with its label (or an answer); a row that starts empty and carries text only in
             # cells spanning the answer columns is a sub-header ('| | | Yes/No/NA | |')
             first = cells[0] if cells else None
@@ -1040,6 +1042,16 @@ class Detector:
         objs = self.cell_objects(c)
         return BOX not in txt and CHECKED not in txt and "\x00" not in objs
 
+    def prints_answer_blank(self, c) -> bool:
+        """The cell is a value cell: it prints a drawn answer blank (digit-entry boxes, an underscore rule, an
+        underlined gap). Leader dots after a printed label are not a blank here."""
+        key = ("drawn", id(c.el))
+        if key not in self._grid:
+            self._grid[key] = any(kind in ("segmented", "utab") or kind == "blank" and "_" in printed[start:end]
+                                  for x in c.children if x.kind == "p" for printed, pieces in [self.ptext(x.el)]
+                                  for start, end, kind in self.blank_spans(printed, pieces))
+        return self._grid[key]
+
     def row_identity(self, tbl_slot, row, col, *, complete=False) -> str:
         """The leftmost label of the row (the item the row is about)."""
         for c in sorted(self.grid(tbl_slot).get(row, []), key=lambda c: c.info["col"]):
@@ -1049,15 +1061,16 @@ class Detector:
                 return clean_label(self.cell_text(c), limit=None if complete else 300)
         return ""
 
-    def row_label(self, tbl_slot, row, col, printed=False, *, complete=False) -> str:
-        """The row's label; `printed` reads it as an option (option_text: no list-marker strip)."""
+    def row_label(self, tbl_slot, row, col, printed=False, *, complete=False, values=True) -> str:
+        """The row's label; `printed` reads it as an option (option_text: no list-marker strip). With
+        values=False a value cell (one printing its own answer blank) is never the label."""
         read = option_text if printed else lambda text: clean_label(text, limit=None if complete else 300)
         rows = self.grid(tbl_slot)
         best = ""
         for c in sorted(rows.get(row, []), key=lambda c: c.info["col"]):
             if c.info["col"] >= col:
                 break
-            if self.is_label_cell(c, complete=complete):
+            if self.is_label_cell(c, complete=complete) and (values or not self.prints_answer_blank(c)):
                 best = read(self.cell_text(c))
         if not best:
             # a vertically merged label cell continues from the row above
@@ -2806,7 +2819,8 @@ class Detector:
                             self.claimed.update(id(node) for node in c.el.iter())
                             self.protected_regions.add(c.id)
                             continue
-                    if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c) or guidance):
+                    instructed = bool(txt) and not placeholder and not guidance and self.instructed_answer_cell(tslot, r, c)
+                    if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c) or guidance or instructed):
                         continue
                     label = self.row_label(tslot, r, c.info["col"])
                     header = clean_label(self.column_header(tslot, c.info["col"], r))
@@ -2818,8 +2832,8 @@ class Detector:
                     name = label if label and (not header or header == label) else \
                         ("%s — %s" % (label, header) if label and header else (header or below))
                     target = {"type": "cell_replace"} if txt else {"type": "cell"}
-                    if guidance:
-                        target = {"type": "cell_append"}
+                    if guidance or instructed:
+                        target = {"type": "cell_append"}  # the printed instruction stays; the answer goes below it
                     slash = []
                     for h in [header] + self.column_headers_all(tslot, c.info["col"], r):
                         parts = [x.strip() for x in re.split(r"\s*/\s*|\s+or\s+", option_text(h))] if h else []
@@ -2831,6 +2845,23 @@ class Detector:
                                       options=slash))
                         continue
                     self.add(Area(self.kind_for(name), clean_label(name), c, target, context=self.context_for(c)))
+
+    INSTRUCTED = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)\b",
+                            re.I)
+
+    def instructed_answer_cell(self, table, row, cell):
+        """A plain cell of a data row whose printed text asks for the answer to be written in it ('If palpable,
+        describe here', 'Note if ... present.'), under a printed column header and beside the row's own label.
+        Its answer is appended below the instruction; the instruction never names another row's cell."""
+        text = self.cell_text(cell)
+        if len(text) > 200 or not self.INSTRUCTED.match(text) or not self.cell_is_plain(cell) \
+                or self.row_kind(table, row) != "data":
+            return False
+        for paragraph in (x for x in cell.children if x.kind == "p"):
+            printed, pieces = self.ptext(paragraph.el)
+            if BOX in printed or CHECKED in printed or "\x00" in printed or self.blank_spans(printed, pieces):
+                return False
+        return bool(self.column_header(table, cell.info["col"], row)) and bool(self.row_label(table, row, cell.info["col"]))
 
     def question_box_style_chain(self, name, kind):
         chain, seen = [], set()
@@ -3485,8 +3516,10 @@ class Detector:
                     label = ""
                 if not label and cell is not None and label_p is None:
                     label_p = None
-                    label = self.row_label(cell.parent, cell.info["row"], cell.info["col"]) or \
-                        clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                    # Under a printed column header, a value cell to the left ('▯▯▯/▯▯▯ Systolic diastolic') is a
+                    # sibling answer, never this blank's question: the header names it (refutation 2026-09-28 B1).
+                    header = clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                    label = self.row_label(cell.parent, cell.info["row"], cell.info["col"], values=not header) or header
                 if not label and spans[0][2] in ("angle", "bracket", "token"):
                     label = clean_label(text[spans[0][0]:spans[0][1]].strip("{}[]<> "))
                 label = label or "Answer"

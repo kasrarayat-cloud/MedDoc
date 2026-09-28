@@ -647,13 +647,34 @@ class WholeFormDestinations(unittest.TestCase):
         fields = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}
         rate, breaths = fields['b/tbl[0]/tr[1]/tc[1]/p[0]'], fields['b/tbl[0]/tr[1]/tc[2]/p[0]']
         self.assertEqual((rate['label'], breaths['label']), ('Heart Rate', 'Respiratory Rate'))
-        for field in (rate, breaths):
-            self.assertNotIn('▯', field['context']); self.assertNotIn('beats/min', field['context'])
+        self.assertIn('Heart Rate', rate['context']); self.assertIn('Respiratory Rate', breaths['context'])
         # A value routed by its label reaches the column that prints that label.
         out = w.fill(raw, list(fields.values()), {rate['key']: '072', breaths['key']: '16'})
         index = w.SlotIndex(w.open_package(out))
         self.assertIn('072', w.text_of(index.by_id['word/document.xml#b/tbl[0]/tr[1]/tc[1]'].el))
         self.assertIn('16', w.text_of(index.by_id['word/document.xml#b/tbl[0]/tr[1]/tc[2]'].el))
+        # A column without a printed header keeps the value cell beside it as context and label source.
+        doc = Document(); table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = 'Weight ▯▯▯ kg'; table.cell(0, 1).text = '▯▯▯'
+        [left, right] = [f for f in w.inspect(data(doc))['fields']]
+        self.assertEqual((left['label'], right['label']), ('Weight', 'Weight ▯▯▯ kg'))
+        # Leader dots after a printed question are not an answer blank: that question still names the value.
+        doc = Document(); table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = 'Measure'; table.cell(0, 1).text = 'Value'
+        table.cell(1, 0).text = 'Heart rate ..........'; table.cell(1, 1).text = '▯▯▯'
+        [value] = [f for f in w.inspect(data(doc))['fields'] if f['locator']['slot'].startswith('b/tbl[0]/tr[1]/tc[1]')]
+        self.assertTrue(value['label'].startswith('Heart rate'))
+
+    def test_only_an_instruction_in_a_data_row_is_an_append_destination(self):
+        doc = Document(); table = doc.add_table(rows=3, cols=3)
+        for r, cells in enumerate((('Item', 'Dose', 'Notes'), ('Section A', 'Printed dose', 'Describe any findings below'),
+                                   ('Aspirin', '81 mg', ''))):
+            for c, text in enumerate(cells):
+                table.cell(r, c).text = text
+        fields = {f['locator']['slot']: f for f in w.inspect(data(doc))['fields']}
+        self.assertNotIn('b/tbl[0]/tr[1]/tc[2]', fields)  # an instruction in a label row, not an answer cell
+        self.assertNotIn('b/tbl[0]/tr[2]/tc[1]', fields)  # printed content, not an instruction
+        self.assertEqual(fields['b/tbl[0]/tr[2]/tc[2]']['locator']['target']['type'], 'cell')
 
     def test_an_instruction_in_an_answer_column_belongs_to_its_own_row_never_the_next(self):
         doc = coded_form(['12b.\tLiver', '', '\tNo\tYes', 'Palpable\t1 ☐\t2 ☐', ''], SUMMARY, marked='Physical examination')
@@ -668,6 +689,8 @@ class WholeFormDestinations(unittest.TestCase):
         self.assertEqual((own['kind'], own['locator']['target']['type']), ('long_text', 'cell_append'))
         self.assertEqual([s['text'] for s in own['source_instructions']], [instruction])
         answer = 'Liver edge palpable 2 cm below the costal margin.'
-        out = w.fill(raw, list(fields.values()), {own['key']: answer})
+        proposal, _, _ = layout_source.prepare(raw)  # the form also carries coded proposals: export through layout
+        own = next(f for f in proposal['fields'] if f['locator']['slot'] == 'b/tbl[0]/tr[1]/tc[1]')
+        _, out, _ = layout_source.prepare(raw, mapping=proposal['fields'], answers={own['key']: answer})
         cell = w.SlotIndex(w.open_package(out)).by_id['word/document.xml#b/tbl[0]/tr[1]/tc[1]'].el
         self.assertEqual([w.text_of(p) for p in cell.findall(w.q('w:p'))], [instruction, answer])
