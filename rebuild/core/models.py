@@ -243,15 +243,25 @@ class TemplateVersion(Entity):
     created_by=models.ForeignKey(User,on_delete=models.PROTECT)
     # Contract v3 Word mappings only ('' for every legacy, tab, PDF and qualified WM mapping). Kept OUT of
     # `document_backend`, whose non-emptiness is how every page recognises the qualified WM form.
-    contract=models.CharField(max_length=12,blank=True,default='')
+    # The database defaults (db_default) exist for the previous release (dedac162, core 0001-0018): its INSERT omits
+    # these columns, and an image rollback onto this schema must still upload and edit mappings (MIG-1). Its versions
+    # are legacy mappings; one carrying v3 fields is refused by mapping_v3_fields_record_v3_contract below.
+    contract=models.CharField(max_length=12,blank=True,default='',db_default='')
     # The clinician's corrections that made THIS version from the previous one (v3 only):
     # {'base_version', 'removed', 'added', 'kind_changed', 'renamed'}. Automatic fields stay as the engine found them.
-    corrections=models.JSONField(default=dict,blank=True)
-    assistance=models.JSONField(default=dict,blank=True)
+    corrections=models.JSONField(default=dict,blank=True,db_default={})
+    assistance=models.JSONField(default=dict,blank=True,db_default={})
     # Unknown on all historical mappings; absence is never proof of independent
     # fields. This immutable version can carry a separately qualified rule manifest.
     generation_constraints=models.JSONField(null=True,blank=True,default=None)
-    class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique'),
+            # Fields carrying a contract v3 locator make a v3 mapping, whoever writes the row. Without this, a writer that
+            # knows no contract (the previous release's mapping edit after an image rollback, whose INSERT gets the
+            # '' default) would record a v3 mapping as a legacy one, and a never-confirmed automatic mapping would
+            # then start documents with no confirmation gate. Versions are immutable, so this is checked at INSERT.
+            models.CheckConstraint(condition=models.Q(contract='v3')|~models.Q(fields__contains=[{'locator':{'contract':'v3'}}]),
+                                   name='mapping_v3_fields_record_v3_contract')]
     @property
     def confirmed(self):
         """The clinician's confirmation of this mapping version, or None. Mapping versions are immutable rows (a

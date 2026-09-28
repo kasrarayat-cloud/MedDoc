@@ -68,7 +68,8 @@ FUNCTION_SHA256 = {
     'quillmd_batch_guard': '46ea1e09a3598d289b5df9b114a4a4b8e74a314591a9abb6253510da78960c4f',
     'quillmd_batch_job_guard': '7c5d4fd727d326316f13c2d6b6b562fffe1144ff5cac18a016a0777d3d3608f5',
     'quillmd_batch_part_guard': '96683f9a1eec23b40f2f13b52198870c7405b1434c14daea6fb25b8a743536fb',
-    'quillmd_encounter_guard': 'a3ecc20a637f6b1dc483eb4810d278b3d0db609f5ecc42f97ac85326eadd206d',
+    # 0031: the 0003 body plus the confirmation gate (an unconfirmed contract v3 mapping starts no document).
+    'quillmd_encounter_guard': 'd8274d4e4bcb4fb8d9c37f47aea861814a047d17e6e2c3f8e4dab8e3c96d4102',
     'quillmd_hold_instruction': '0ed096f1eecb07b7e81fdc6cd81409ffddb96caa840cb90376129472990ae2bb',
     'quillmd_job_financial_guard': 'bbc4d75781636526a07bdbb1d4e705eb642a57c81776161b192dad88c1b8dd26',
     'quillmd_livemode_guard': '231e4fd6d5f23b0b38d9b4353add5b26cb31b62c571ccb0987e06705cf6b32cf',
