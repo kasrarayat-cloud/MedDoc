@@ -1,0 +1,353 @@
+{
+  "source_before": {
+    "source_policy.py": "2b5e15eb6272b1f185088d92ca7152817d3b0ba9bae8ae0ad2584f6cdfb208de",
+    "test_source_policy.py": "96f57389ed57ea912fcf2651501fdd0c1b6cffd5b3a3f081542f4703e6dde6a7",
+    "word_v3.py": "8e2189ff6d0cf67fd28d7e0e51d7e691b30c3ae3b4886efb191af377632e2f21"
+  },
+  "source_after": {
+    "source_policy.py": "2b5e15eb6272b1f185088d92ca7152817d3b0ba9bae8ae0ad2584f6cdfb208de",
+    "test_source_policy.py": "96f57389ed57ea912fcf2651501fdd0c1b6cffd5b3a3f081542f4703e6dde6a7",
+    "word_v3.py": "8e2189ff6d0cf67fd28d7e0e51d7e691b30c3ae3b4886efb191af377632e2f21"
+  },
+  "cases": [
+    {
+      "case": "explicit For the patient:",
+      "expected": {
+        "patient": true,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": true,
+        "attestation": false,
+        "policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "4cf20bc0c6cb668c4570e734634bbe216608a1e266c927850c6be49e0257e852",
+            "text": "For the patient:"
+          }
+        },
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": true
+    },
+    {
+      "case": "explicit To be completed by the patient:",
+      "expected": {
+        "patient": true,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": true,
+        "attestation": false,
+        "policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "2843cd0185de1cf12e6a3202d5e06363aca0252036c706d1388b87306e26bc1d",
+            "text": "To be completed by the patient:"
+          }
+        },
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": true
+    },
+    {
+      "case": "explicit Completed by patient:",
+      "expected": {
+        "patient": true,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": true,
+        "attestation": false,
+        "policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "850065fa3ed7bca051136ea8c1e614ac5f13b629abd6e3fd5162ef09b3b29775",
+            "text": "Completed by patient:"
+          }
+        },
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": true
+    },
+    {
+      "case": "patient fact does not assign role",
+      "expected": {
+        "patient": false,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": false,
+        "attestation": false,
+        "policy": null,
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": true
+    },
+    {
+      "case": "role boundary",
+      "expected": {
+        "patient": false,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": false,
+        "attestation": false,
+        "policy": null,
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": true
+    },
+    {
+      "case": "heading boundary",
+      "expected": {
+        "patient": false,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": false,
+        "attestation": false,
+        "policy": null,
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": true
+    },
+    {
+      "case": "distinct section boundary",
+      "expected": {
+        "patient": false,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": false,
+        "attestation": false,
+        "policy": null,
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": true
+    },
+    {
+      "case": "role paragraph itself ends section",
+      "expected": {
+        "patient": false,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": true,
+        "attestation": false,
+        "policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "ab67bfaf028e0e518069b9fe15b96e1fbd992f0669b1d79cab41c41416977222",
+            "text": "For the patient:"
+          }
+        },
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": false
+    },
+    {
+      "case": "ordinary example is not a new role",
+      "expected": {
+        "patient": true,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": false,
+        "attestation": false,
+        "policy": null,
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null
+      },
+      "matched": false
+    },
+    {
+      "case": "signature protected independently",
+      "expected": {
+        "patient": true,
+        "attestation": false,
+        "fill": "protected_signing_area"
+      },
+      "observed": {
+        "patient": true,
+        "attestation": false,
+        "policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "4cf20bc0c6cb668c4570e734634bbe216608a1e266c927850c6be49e0257e852",
+            "text": "For the patient:"
+          }
+        },
+        "kind": "signature",
+        "label": "Patient signature",
+        "write_protected": null,
+        "fill": "invalid_answer"
+      },
+      "matched": false
+    },
+    {
+      "case": "full attestation source",
+      "expected": {
+        "patient": false,
+        "attestation": true,
+        "fill": null
+      },
+      "observed": {
+        "patient": false,
+        "attestation": true,
+        "policy": {
+          "attestation": "document_review",
+          "attestation_source": {
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]",
+            "fingerprint": "8592ab88a5aae8a61361eac1891b0d0a1c55c51161a745988797f5f145800b24",
+            "text": "Please confirm that the patient has had sight of this report and/or had an opportunity to add their comments, if appropriate or necessary."
+          }
+        },
+        "kind": "long_text",
+        "label": "Please confirm that the patient has had sight of this report and/or had an opportunity to add their comments, if appropriate or necessary.",
+        "write_protected": null
+      },
+      "matched": true
+    },
+    {
+      "case": "clinician review of symptom report",
+      "expected": {
+        "patient": false,
+        "attestation": false,
+        "fill": null
+      },
+      "observed": {
+        "patient": false,
+        "attestation": true,
+        "policy": {
+          "attestation": "document_review",
+          "attestation_source": {
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]",
+            "fingerprint": "35570b1ddb6bbc873b29fc77fa67e8f5c8579ef869204d30300783bb348b5912",
+            "text": "Confirm the patient report of chest pain was reviewed by the clinician."
+          }
+        },
+        "kind": "text",
+        "label": "Confirm the patient report of chest pain was reviewed by the clinician.",
+        "write_protected": null
+      },
+      "matched": false
+    },
+    {
+      "case": "unchanged source accepted",
+      "expected": {
+        "patient": true,
+        "attestation": false,
+        "fill": "accepted"
+      },
+      "observed": {
+        "patient": true,
+        "attestation": false,
+        "policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "4cf20bc0c6cb668c4570e734634bbe216608a1e266c927850c6be49e0257e852",
+            "text": "For the patient:"
+          }
+        },
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null,
+        "fill": "accepted"
+      },
+      "matched": true
+    },
+    {
+      "case": "changed source refused",
+      "expected": {
+        "patient": true,
+        "attestation": false,
+        "fill": "mapping_mismatch"
+      },
+      "observed": {
+        "patient": true,
+        "attestation": false,
+        "policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "4cf20bc0c6cb668c4570e734634bbe216608a1e266c927850c6be49e0257e852",
+            "text": "For the patient:"
+          }
+        },
+        "kind": "text",
+        "label": "What progress was observed?",
+        "write_protected": null,
+        "fill": "mapping_mismatch"
+      },
+      "matched": true
+    },
+    {
+      "case": "changed attestation refused",
+      "expected": {
+        "patient": false,
+        "attestation": true,
+        "fill": "mapping_mismatch"
+      },
+      "observed": {
+        "patient": false,
+        "attestation": true,
+        "policy": {
+          "attestation": "document_review",
+          "attestation_source": {
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]",
+            "fingerprint": "8592ab88a5aae8a61361eac1891b0d0a1c55c51161a745988797f5f145800b24",
+            "text": "Please confirm that the patient has had sight of this report and/or had an opportunity to add their comments, if appropriate or necessary."
+          }
+        },
+        "kind": "long_text",
+        "label": "Please confirm that the patient has had sight of this report and/or had an opportunity to add their comments, if appropriate or necessary.",
+        "write_protected": null,
+        "fill": "mapping_mismatch"
+      },
+      "matched": true
+    }
+  ]
+}

@@ -30,8 +30,10 @@ from lxml import etree
 
 if __package__:
     from .mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_CONTEXT
+    from . import source_policy
 else:  # isolated worker imports directly before closing its filesystem
     from mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_CONTEXT
+    import source_policy
 
 W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
@@ -3020,6 +3022,7 @@ def inspect(data: bytes) -> dict:
     fields = [area_to_field(i + 1, a) for i, a in enumerate(areas)]
     for field in fields:
         annotate_printed(detector.index, field)
+    source_policy.annotate(detector, fields)
     return {"contract": CONTRACT, "fields": fields, "notes": notes}
 
 
@@ -3716,6 +3719,12 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
         if answer is None or answer == "" or answer == []:
             continue
         target = loc.get("target") or {}
+        if "answer_policy" in field:
+            current_policy = {k: v for k, v in field.items() if k != "answer_policy"}
+            source_policy.annotate(protected, [current_policy])
+            if current_policy.get("answer_policy") != field["answer_policy"]:
+                fail("The printed authorship or review requirement has changed. Review the mapping again.",
+                     "mapping_mismatch")
         destinations = [loc] + list(loc.get("extra", [])) + list(target.get("copies", [])) + list(target.get("boxes", []))
         if target.get("type") == "paragraph_options":
             destinations.extend({"part": anchor.get("part"), "slot": path}

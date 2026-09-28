@@ -1,0 +1,25 @@
+{
+  "source_parent": "dd6b4a7a82df30909dd949a652211a52d3cf9491",
+  "source_sha256": {
+    "rebuild/documents/word_v3.py": "8e2189ff6d0cf67fd28d7e0e51d7e691b30c3ae3b4886efb191af377632e2f21",
+    "rebuild/documents/source_policy.py": "ccc90bc70f7bdd8c92e8867e675f9f33bcaf242f9d9cb7ee5b4d4d872f5d1044",
+    "rebuild/documents/test_source_policy.py": "890bc81fc68823b5b8f20daed907af1128a13c30cd118efda51ddf037907e994"
+  },
+  "artifacts_sha256": {
+    "REPORT.md": "aa1d03ed4ab292094a9c2254eccfdb06f6580fd21e2bcd05693b5e920bd4ece7",
+    "review-01-results.json": "711fd3c0033e7684112b3207166307ac79a84aad85493dd0c8a929fd94e46c00",
+    "review-02-sandbox-results.json": "615d174a4cced842e0dec1a52aa4f629d06843ea103746bc0b25bf73ddd87237",
+    "review-03-repaired-results.json": "169244fa6b749fed244b6fa4c284eb6f63db4a712c821b985c65a1b619d417e1",
+    "review-04-repaired-sandbox.json": "c834c3509156c48feb612f4abcd16332b10c4a6f933e0ddb89a2e373ecdcd042",
+    "review-CLOSURE.md": "c64068b3f1b5b9048b981482f6aa447fe44023d58aa7b873a172456d570a4f80",
+    "review-REPORT.md": "30dc784d5323e3a5434397d0aee2dc480e7eaf213409b11ea6ebfb5550021507",
+    "review-closure-manifest.json": "ed727db5e81ecbde66bb08466366d503a06645417a10836cc94626381d5337c0",
+    "review-manifest.json": "35949a565c3364306feed3599d90d2ec826d5581b66c900b27e1073d69caccc1",
+    "review-probe.py": "c1e247b479b35b765ad00c67df3c817937f03db7f1e0be293886f878ded4fead",
+    "review-sandbox_probe.py": "f4e48092decab5de4fbf52e09a5310a7d480c9625dea665710c1a980cffcee00",
+    "source-policy-after.json": "169244fa6b749fed244b6fa4c284eb6f63db4a712c821b985c65a1b619d417e1",
+    "source-policy-confirmed.json": "711fd3c0033e7684112b3207166307ac79a84aad85493dd0c8a929fd94e46c00",
+    "source-policy-final-engine.log": "c7fd4e56834eb08ec63d0f3cf3b403b1d7caa0d7fbf4c4a652d466108ac90ad6"
+  },
+  "classification": "synthetic component and authorized DEV D30; no full workflow qualification"
+}

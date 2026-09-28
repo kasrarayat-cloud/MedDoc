@@ -1,0 +1,95 @@
+[
+  {
+    "case": "positive",
+    "returncode": 0,
+    "stderr": "",
+    "sandbox": "landlock+seccomp",
+    "error": null,
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "What progress was observed?",
+        "answer_policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "4cf20bc0c6cb668c4570e734634bbe216608a1e266c927850c6be49e0257e852",
+            "text": "For the patient:"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "case": "section",
+    "returncode": 0,
+    "stderr": "",
+    "sandbox": "landlock+seccomp",
+    "error": null,
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "What progress was observed?",
+        "answer_policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "ab67bfaf028e0e518069b9fe15b96e1fbd992f0669b1d79cab41c41416977222",
+            "text": "For the patient:"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "case": "example",
+    "returncode": 0,
+    "stderr": "",
+    "sandbox": "landlock+seccomp",
+    "error": null,
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "For the patient",
+        "answer_policy": {
+          "source_author": "patient",
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[0]",
+            "fingerprint": "4cf20bc0c6cb668c4570e734634bbe216608a1e266c927850c6be49e0257e852",
+            "text": "For the patient:"
+          }
+        }
+      },
+      {
+        "key": "v3_2",
+        "label": "What progress was observed?",
+        "answer_policy": null
+      }
+    ]
+  },
+  {
+    "case": "symptom",
+    "returncode": 0,
+    "stderr": "",
+    "sandbox": "landlock+seccomp",
+    "error": null,
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "Confirm the patient report of chest pain was reviewed by the clinician.",
+        "answer_policy": {
+          "attestation": "document_review",
+          "attestation_source": {
+            "part": "word/document.xml",
+            "slot": "b/tbl[0]/tr[0]/tc[0]",
+            "fingerprint": "35570b1ddb6bbc873b29fc77fa67e8f5c8579ef869204d30300783bb348b5912",
+            "text": "Confirm the patient report of chest pain was reviewed by the clinician."
+          }
+        }
+      }
+    ]
+  }
+]
