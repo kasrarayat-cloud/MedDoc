@@ -192,6 +192,59 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
                     self.assertNotEqual(encounter.status, 'finalized')
                     self.assertFalse(encounter.export_path)
 
+    def assert_worker_holds(self, version, target, selected, notes):
+        """Generated through enqueue and the worker with the provider patched, and a
+        stored supported copy held on review, save and finalize."""
+        self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+        encounter = Encounter.objects.latest('created_at')
+        quote = self.client.get(f'/encounters/{encounter.pk}/').context['usage_quote']
+        body = relation_body(notes, version.fields, {target['key']: [selected]})
+        with patch('anthropic.Anthropic') as provider:
+            provider.return_value.messages.create.side_effect = lambda **wire: sdk_response(body)
+            self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': quote})
+            self.assertTrue(run_one())
+        self.assertEqual(Job.objects.get(encounter=encounter).state, 'succeeded')
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.answers[target['key']]['status'], encounter.answers[target['key']]['text']),
+                         ('conflict', ''))
+        start = notes.index(selected)
+        encounter.answers = {**encounter.answers, target['key']: {'status': 'supported', 'text': selected,
+            'reviewed': True, 'evidence': [{'quote': selected, 'start': start, 'end': start + len(selected)}]}}
+        encounter.save()
+        self.assertContains(self.client.get(f'/encounters/{encounter.pk}/'), 'data-held-candidate')
+        for save in (False, True):
+            if save:
+                self.client.post(f'/encounters/{encounter.pk}/save/', {'revision': encounter.revision,
+                    'answer_' + target['key']: selected, 'reviewed_' + target['key']: 'on'})
+                encounter.refresh_from_db()
+            self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'})
+            encounter.refresh_from_db()
+            self.assertNotEqual(encounter.status, 'finalized')
+            self.assertFalse(encounter.export_path)
+
+    def test_refuted_round_two_opposites_are_held_through_the_worker(self):
+        # R2-1..R2-7 with the refuters' inputs: the D31 question and every other unit
+        # declared "independent" by the simulated provider.
+        label = 'Please confirm that this patient is subject to Multi-Agency Public Protection Arrangements (MAPPA):'
+        full = 'The patient is subject to Multi-Agency Public Protection Arrangements (MAPPA).'
+        forms = {}
+        for key, question in (('d31', label), ('risk', 'Risk to self:'), ('allergy', 'Allergies:')):
+            source = ordinary_input_form(Path(self.directory.name) / (key + '-round-two.docx'), [question])
+            template, version = self.uploaded(data=source, name='Synthetic round two ' + key)
+            self.confirm(template, version)
+            forms[key] = (version, next(f for f in version.fields if g.question_key(f['label']) == g.question_key(question)))
+        for key, selected, other in (
+                ('d31', 'The patient is on MAPPA.', 'The patient is not on MAPPA.'),
+                ('d31', full, 'Subject to MAPPA. None.'),
+                ('d31', full, 'The patient was not subject to MAPPA as of this week.'),
+                ('d31', 'The patient is subject to MAPPA.', 'The patient is not subject to MAPPA arrangements.'),
+                ('d31', full, 'MAPPA status: none.'),
+                ('risk', 'The patient is not suicidal.', 'She reports suicidal ideation with a plan.'),
+                ('allergy', 'The patient is allergic to penicillin.', 'The patient is non allergic to penicillin.')):
+            with self.subTest(selected=selected, other=other):
+                version, target = forms[key]
+                self.assert_worker_holds(version, target, selected, selected + ' ' + other)
+
     def test_forced_historical_wrong_side_cannot_pass_review_or_stale_save_or_finalize(self):
         source = ordinary_input_form(Path(self.directory.name) / 'wrong-side.docx', ['Right knee'])
         template, version = self.uploaded(data=source, name='Historical side guard'); self.confirm(template, version)
