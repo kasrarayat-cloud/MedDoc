@@ -49,3 +49,16 @@ delta. No full suite, release admission or live price verification was performed
 
 Runtime:
 `/opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/cost-scanner-2023-review-20260928/`.
+
+## Closure — frozen06fae1c6
+
+Independently replayed the same unchanged input and two byte-identical mutated
+source files against `06fae1c66a3fb327871e90106410209bcc924274`. Both previous
+false greens now refuse with `history charge is not on the final priced execution
+path`; the unchanged positive remains accepted at $0.10956. The deliberately
+broken source still computes $0.10502, proving the scanner now rejects that loss
+rather than changing the witness. **NOTHING FURTHER FOUND** in this bounded
+closure. First outputs remain unchanged.
+
+Scanner SHA256 `15e346a4836a34d3bec526885ae911f11dde6390f483c9eedd24798241fe77ee`.
+[Closure results](cost-scanner-independent-refutation-20260928/closure-06fa/results.json).
