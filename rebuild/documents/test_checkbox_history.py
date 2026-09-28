@@ -544,10 +544,7 @@ class SelectionLimitRefutations(unittest.TestCase):
                 self.assertNeverTwo(data(form(instruction=instruction)), 'Treatments received')
         with self.subTest(owner='1 treatment received'):
             raw = data(form(question='1 treatment received'))
-            for field in self.fields(raw, '1 treatment received'):
-                self.assertEqual(field['kind'], 'choice')
-                with self.assertRaises(w.V3Failure):
-                    w.fill(raw, [field], {field['key']: field['options'][:2]})
+            self.assertOneChoice(raw, '1 treatment received', 'Hydrotherapy', [False, False, True])
         above = Document(); above.add_paragraph('In the list below, tick one only.'); above.add_heading('Clinical history', 1)
         native_list(above, 'Treatments received', ('Physiotherapy', 'Occupational therapy', 'Hydrotherapy'))
         below = Document(); below.add_heading('Clinical history', 1)
@@ -708,6 +705,19 @@ class SelectionLimitRefutations(unittest.TestCase):
                 label = 'Tests completed' if 'option' in name else 'Treatments received'
                 self.assertMulti(raw, label)
         self.assertEqual(glyph.text, 'Sex (tick one): ☐ Male ☐ Female')
+        # A label paragraph directly above a separate question's own native boxes owns its tick-one.
+        doc = Document(); doc.add_heading('Application', 1); doc.add_paragraph('Type of application (please tick one):')
+        for i, option in enumerate(('Conditional', 'Absolute')):
+            p = doc.add_paragraph(); ff_field(p, 'checkbox', name='T%d' % i); p.add_run(' ' + option)
+        doc.add_heading('Clinical history', 1); native_list(doc, 'Treatments received', treatments)
+        raw = data(doc)
+        self.assertMulti(raw, 'Treatments received')
+        self.assertOneChoice(raw, 'Type of application', 'Absolute', [False, True])
+        # One-answer and singular-box phrases printed elsewhere in the form may govern the list.
+        for sentence in ('Use the box that best describes the treatment.', 'One answer only.'):
+            with self.subTest(elsewhere=sentence):
+                doc = Document(); doc.add_paragraph(sentence); doc.add_heading('Clinical history', 1)
+                self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
         # A one-only sentence owned by a separate question stops being owned when it names a wider reach.
         doc = Document(); doc.add_heading('Clinical history', 1)
         boxed_question(doc, 'Please tick one box for each question in this section:', ('Yes', 'No'))

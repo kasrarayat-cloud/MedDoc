@@ -2230,7 +2230,7 @@ class Detector:
                                  r"both|many|all|any|each|every)\b|\d|[/&+,;()]", rest, re.I)):
                 return {"problem": unresolved}
             one = True
-        if (one and many or re.search(r"\b(?:up to|at most|at least|(?:no|not) more than|between|maximum|minimum)\b", scope, re.I)
+        if (one and many or re.search(r"\b(?:up to|at most|at least|no more than|between|maximum|minimum)\b", scope, re.I)
                 or re.search(r"\bexactly\b", scope, re.I) and not one):
             return {"problem": "The native-checkbox history has conflicting or unrepresented selection limits."}
         single = bool(re.search(r"\b(?:single|current|currently|latest|last|most recent|primary|main|sole)\b", scope, re.I))
