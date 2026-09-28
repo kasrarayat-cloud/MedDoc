@@ -161,3 +161,19 @@ empty-draft-only execution adapter, while general clinical/files/backup/provider
 reconciliation and restore admission remain developer-owned work. The adapter
 also needs the already requested retention policy and independent custody;
 its existence does not grant policy authority or enable deletion.
+
+
+## Bounded corpus metadata continuation, 2026-09-28
+
+Two predeclared metadata searches preserved all old corpus/holdout hashes and
+acquired no originals. The first found10 official clinical DOCX leads whose
+applicable rights remain unresolved/restrictive for the intended use. A separate
+Gold Coast route verified that publisher's own CC BY4.0 terms and exceptions,
+but found no eligible clinical DOCX within its two-query/six-landing-page bound.
+No new source or independent lineage is admitted. This does not claim that those
+publishers are exhausted. Exact blank-original permissions and independent
+source material remain the same consolidated corpus request; no acquisition
+spending or altered denominator is proposed. Shared durable reports are
+`corpus-metadata-renewal/004-REPORT.md` and
+`corpus-goldcoast-20260928-word-review/009-REPORT.md` beneath
+`rebuild/.runtime/v1-full-release-20260928/`.
