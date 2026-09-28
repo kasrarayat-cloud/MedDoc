@@ -35,12 +35,13 @@ def side_warnings(field, selected):
 
 
 _PATIENT_REPORT = re.compile(r'^(?:the\s+)?patient\s+(?:reports?|reported|says?|said|states?|stated|writes?|wrote)\b', re.I)
-_REVIEWED = re.compile(r'^(?:the\s+)?patient\s+(?:(?:has|had)\s+)?(?:read|reviewed|seen)\b[^.!?]*\breport\b', re.I)
+_REPORT_OBJECT = r'\s+(?:(?:the|this|that|their|his|her)\s+)?(?:(?:entire|complete)\s+)?report\s*\.$'
+_REVIEWED = re.compile(r'^(?:the\s+)?patient\s+(?:(?:has|had)\s+)?(?:read|reviewed|seen)' + _REPORT_OBJECT, re.I)
 _REPORTED_REVIEW = re.compile(r'^(?:the\s+)?patient\s+(?:reports?|reported|states?|stated|says?|said)\s+'
     r'(?:having|that\s+(?:(?:he|she|they)\s+(?:has|have|had)|I\s+(?:have|had)))\s+'
-    r'(?:read|reviewed|seen)\b[^.!?]*\breport\b', re.I)
+    r'(?:read|reviewed|seen)' + _REPORT_OBJECT, re.I)
 _OPPORTUNITY = re.compile(r'^(?:the\s+)?patient\s+(?:(?:has|had)\s+)?(?:had|was\s+given)\s+(?:an?\s+)?opportunity\s+'
-                          r'to\s+(?:add\s+)?comments?\b[^.!?]*\breport\b', re.I)
+                          r'to\s+(?:add\s+)?comments?\s+(?:on|about)' + _REPORT_OBJECT, re.I)
 _QUALIFIED_REVIEW = re.compile(r'\b(?:not|never|no|denies?|uncertain|unsure|possibly|maybe|might|may|could|would|will|if|unless|but)\b|\?', re.I)
 
 
@@ -110,11 +111,15 @@ def temporal_warnings(field, selected):
     """
     required = temporal_scopes(str(field.get('context') or '') + ' ' + str(field.get('label') or ''))
     if not required or not selected: return []
-    offered = [scope for unit in selected for scope in temporal_scopes(unit['quote'])]
-    if any(not any(direction == actual and event & actual_event for actual, actual_event in offered)
-           or any(direction != actual and event & actual_event for actual, actual_event in offered)
-           for direction, event in required): return list(selected)
-    return []
+    warnings = []
+    for unit in selected:
+        offered = temporal_scopes(unit['quote'])
+        if (any(not any(direction == actual and event & actual_event for actual, actual_event in offered)
+                for direction, event in required) or
+                any(not any(direction == actual and event & actual_event for direction, event in required)
+                    for actual, actual_event in offered)):
+            warnings.append(unit)
+    return warnings
 
 
 _QUESTION_WORDS = frozenset('a an the do does is are you your patient any have has there status'.split())
@@ -148,6 +153,11 @@ def predicate_polarity(field, unit):
     predicate = match['predicate'].strip().casefold()
     if _UNCERTAIN_PREDICATE.search(predicate): return None
     question = str(field['label']).casefold()
+    if not any(match[name] for name in ('does', 'copula', 'has', 'denies', 'reports')):
+        # A bare verb can name an action question or its agent noun (smoker),
+        # but noun overlap cannot assert a condition ("patient toes" → Toes).
+        if not re.match(r'^(?:do|does)\b', question) and not re.fullmatch(r'[a-z]+er[?:]?', question.strip()):
+            return None
     if re.search(r'\b(?:not|no|non|without|never)\b', question): return None
     wanted = [word_roots(w) for w in re.findall('[a-z]+', question) if w not in _QUESTION_WORDS]
     actual = [word_roots(w) for w in predicate.split()]
@@ -171,6 +181,9 @@ def option_warnings(field, all_units, selected, option_texts):
     from documents.word_v3 import printed_options
     from . import generation as g
     labels = [g.without_closing_stop(o).casefold() for o in printed_options(field)]
+    if field.get('kind') == 'checkbox' and selected:
+        if any(predicate_polarity(field, unit) is not True for unit in selected): return list(selected)
+        return [unit for unit in all_units if predicate_polarity(field, unit) is False]
     pairs = ({'yes', 'no'}, {'true', 'false'}, {'present', 'absent'})
     if len(labels) != 2 or set(labels) not in pairs or not selected: return []
     chosen = [g.without_closing_stop(o).casefold() for o in option_texts]

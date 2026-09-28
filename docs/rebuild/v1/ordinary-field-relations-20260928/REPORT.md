@@ -82,11 +82,26 @@ The bounded repair adds two reusable checks:
   is held. Current headache sensation remains useful for its ordinary question,
   and an explicit pre-headache statement is a separate useful positive.
 
-This is bounded entailment, not a universal clinical ontology. In particular,
-the older syntax reader still holds the short positive `The patient smokes.`;
-`The patient does smoke.` supplies the tested affirmative predicate. The first
-failed positive remains in `semantic-repair-first.log` and
-`semantic-repair-second.log`; it was not reclassified as an unsafe source.
+This is bounded entailment, not a universal clinical ontology. The older syntax
+reader initially held the required short positive `The patient smokes.`. Its
+first failure remains in `semantic-repair-first.log` and
+`semantic-repair-second.log`; it was not reclassified as an unsafe source or
+replaced by emphatic wording. The pinned parser treated the patient and verb as
+a noun compound. A bounded syntax repair now recognizes one regularly inflected
+verb after an already-established explicit patient actor using the pinned model's
+verified verb lexicon. Noun fragments, foreign actors, qualifications and extra
+clauses gain no fallback. The exact original smoking sentence now completes
+authenticated review and export as Yes without an answer correction.
+
+Independent refutation of c003 demonstrated three additional families, confirmed
+by the root agent: single affirmative checkboxes discarded explicit negative
+source; one pre-event statement incorrectly supplied temporal scope to another
+selected statement; and review of only a report title became report review.
+First results are retained. The subsequent repair requires affirmative checkbox
+entailment, checks temporal scope separately for each complete source unit, and
+requires the report itself as the direct reviewed object. Focused positive
+controls retain affirmative checkbox facts, multiple correctly timed statements,
+complete report review, and explicit patient-authored review statements.
 
 ## Batch and financial boundary
 

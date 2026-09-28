@@ -6,6 +6,7 @@ retained between calls. Callers must still apply all source and clinical guards.
 import hashlib
 import importlib.metadata
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from threading import Lock
@@ -17,6 +18,38 @@ MAX_CHARACTERS = 1000
 MAX_TOKENS = 128
 MAX_UNITS = 64
 _lock = Lock()
+
+
+@lru_cache(maxsize=1)
+def _verbs():
+    """The already pinned model's finite verb lexicon, never a downloaded list."""
+    if _parser() is None: return frozenset()
+    package = importlib.metadata.distribution(MODEL)
+    path = Path(package.locate_file(f'{MODEL}/{MODEL}-{MODEL_VERSION}/lemmatizer/lookups/lookups.bin'))
+    raw = path.read_bytes()
+    manifest = json.loads(Path(__file__).with_name('v3_syntax_model.json').read_text())
+    if hashlib.sha256(raw).hexdigest() != manifest['lemmatizer/lookups/lookups.bin']: return frozenset()
+    from spacy.lookups import Lookups
+    return frozenset(Lookups().from_bytes(raw).get_table('lemma_index')['verb'])
+
+
+def _bare_patient_clause(text, subject_span):
+    """Resolve the parser's noun-compound ambiguity for one explicit finite verb.
+
+    The source must be exactly an already-established patient actor and one
+    regularly inflected verb, with no object, qualifier, quote or second clause.
+    The pinned lexicon rules out noun fragments such as medications/diabetes.
+    Source bytes, offsets and all clinical/context checks remain unchanged.
+    """
+    match = re.fullmatch(r'(?:(?:The|the)\s+)?(?P<actor>[Pp]atient)\s+(?P<verb>[a-z]+)\.', text)
+    if match is None or subject_span != match.span('actor'): return False
+    word = match['verb']; candidates = {word[:-1]} if word.endswith('s') else set()
+    if word.endswith('es'): candidates.add(word[:-2])
+    if word.endswith('ies'): candidates.add(word[:-3] + 'y')
+    def inflect(base):
+        if base.endswith('y') and len(base) > 1 and base[-2] not in 'aeiou': return base[:-1] + 'ies'
+        return base + ('es' if base.endswith(('s', 'x', 'z', 'ch', 'sh', 'o')) else 's')
+    return any(base in _verbs() and inflect(base) == word for base in candidates)
 
 
 @lru_cache(maxsize=1)
@@ -100,8 +133,9 @@ def complete_ids(units, *, subject_spans=None):
             for unit, doc in zip(candidates, parser.pipe((u['quote'] for u in candidates), batch_size=16)):
                 if subject_spans is not None and unit['id'] not in subject_spans:
                     continue
-                if _complete(doc, None if subject_spans is None else subject_spans[unit['id']]):
+                span = None if subject_spans is None else subject_spans[unit['id']]
+                if _complete(doc, span) or _bare_patient_clause(unit['quote'], span):
                     result.add(unit['id'])
             return result
-    except (ValueError, TypeError, RuntimeError):
+    except (ValueError, TypeError, RuntimeError, OSError, KeyError, importlib.metadata.PackageNotFoundError):
         return set()

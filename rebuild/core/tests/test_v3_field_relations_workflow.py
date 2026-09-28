@@ -64,7 +64,7 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
             captured.append(wire)
             payload = json.loads(wire['messages'][0]['content'])
             self.assertEqual(payload['catalogue'], version.fields)
-            choices = {target['key']: [target['key'] + ':1']} if target['kind'] == 'choice' else {}
+            choices = {target['key']: [target['key'] + (':1' if expected == 'No' else ':0')]} if target['kind'] == 'choice' else {}
             return sdk_response(relation_body(notes, version.fields, {target['key']: [notes]}, choices=choices))
         with patch('anthropic.Anthropic') as provider:
             provider.return_value.messages.create.side_effect = respond
@@ -140,7 +140,8 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
     def test_same_side_ordinary_sentence_and_predicate_choice_export_unchanged(self):
         for label, note, expected in (
             ('Right knee', 'The patient has right knee pain.', None),
-            ('Smoker', 'The patient does not smoke.', 'No')):
+            ('Smoker', 'The patient does not smoke.', 'No'),
+            ('Smoker', 'The patient smokes.', 'Yes')):
             with self.subTest(label=label):
                 source = ordinary_input_form(Path(self.directory.name) / (label + '.docx'), [label])
                 self.walk(source, note, target_label=label, expected=expected)

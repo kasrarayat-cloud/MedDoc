@@ -91,9 +91,9 @@ class OrdinaryFieldRelations(SimpleTestCase):
         self.assert_stored_clear(notes, fields, answers)
 
     def test_wrong_binary_polarity_and_an_omitted_opposite_predicate_cannot_be_model_permissions(self):
-        for label, yes, no in (('Smoker', 'The patient does smoke.', 'The patient does not smoke.'),
+        for label, yes, no in (('Smoker', 'The patient smokes.', 'The patient does not smoke.'),
                                ('Pain', 'The patient has pain.', 'The patient has no pain.'),
-                               ('Do you smoke?', 'The patient does smoke.', 'The patient does not smoke.')):
+                               ('Do you smoke?', 'The patient smokes.', 'The patient does not smoke.')):
             fields = [field('predicate', label, 'choice', ['Yes', 'No'])]
             for notes, option, status in ((yes, 'predicate:0', 'supported'), (no, 'predicate:1', 'supported'),
                                           (yes, 'predicate:1', 'conflict'), (no, 'predicate:0', 'conflict')):
@@ -128,6 +128,28 @@ class OrdinaryFieldRelations(SimpleTestCase):
                               ('The patient reports nausea after treatment.', 'conflict'),
                               ('The patient reports nausea.', 'conflict')):
             self.assertEqual(offered(notes, [target], {'symptoms': [notes]})['symptoms']['status'], status)
+        first = 'The patient reports nausea before treatment.'
+        for second in ('The patient reports chest pain today.', 'The patient reports dizziness after surgery.'):
+            notes = first + ' ' + second
+            self.assertEqual(offered(notes, [target], {'symptoms': [first, second]})['symptoms']['status'], 'conflict')
+        second = 'The patient reports dizziness before treatment.'
+        self.assertEqual(offered(first + ' ' + second, [target], {'symptoms': [first, second]})['symptoms']['status'], 'supported')
+
+    def test_affirmative_checkbox_cannot_discard_an_explicit_negative(self):
+        for label, notes in (('Consent obtained', 'The patient did not consent to the procedure.'),
+                             ('Diabetes', 'The patient has no diabetes.'),
+                             ('Smoker', 'The patient does not smoke.')):
+            fields = [field('f', label, 'checkbox', [label])]
+            with self.subTest(label=label):
+                self.assertEqual(offered(notes, fields, {'f': [notes]}, choices={'f': ['f:0']})['f']['status'], 'conflict')
+                old = {'status': 'supported', 'text': 'checked', 'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}
+                self.assertEqual(g.governed_decisions(notes, fields, {'f': old}), [label])
+        for label, notes in (('Diabetes', 'The patient has diabetes.'), ('Smoker', 'The patient smokes.'),
+                             ('Consent obtained', 'Consent obtained: yes.')):
+            fields = [field('f', label, 'checkbox', [label])]
+            answers = offered(notes, fields, {'f': [notes]}, choices={'f': ['f:0']})
+            self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', 'checked'))
+            self.assert_stored_clear(notes, fields, answers)
 
     def test_qualifier_cannot_disappear_into_a_fixed_option(self):
         first, last = 'The patient does not smoke.', 'The patient stopped yesterday.'
@@ -177,6 +199,9 @@ class OrdinaryFieldRelations(SimpleTestCase):
                                 ('The patient had the procedure.', 'conflict')):
             with self.subTest(notes=notes):
                 self.assertEqual(offered(notes, [target], {'comments': [notes]})['comments']['status'], expected)
+        for notes in ('The patient reviewed only the title of the report.',
+                      'The patient read the report summary.', 'The patient reviewed part of the report.'):
+            self.assertEqual(offered(notes, [target], {'comments': [notes]})['comments']['status'], 'conflict')
         both = {**target['answer_policy'], 'source_author': 'patient', 'source': source}
         target['answer_policy'] = both
         notes = 'The patient has reviewed the report.'
