@@ -1901,36 +1901,97 @@ class Detector:
             return "", "A cell to the left of the source prints text that is not a usable row label.", group
         return "", "", group
 
-    # A number printed in a header option, in any legend form: '2 = Abnormal', '(2)', '2)', '1. Normal', 'Normal (1.)',
-    # and a decimal '1.0 Normal' (read whole, so it never equals a code '1'). Never part of a word ('12b').
-    HEADER_NUMBER = re.compile(r"(?<![\w.])[(\[]?(\d{1,3}(?:\.\d+)?)\.?[)\]]?(?![\w.])")
-    # A legend printed in the governing text (a title, lead or heading): '(codes: 1 = Abnormal, 2 = Normal)'.
-    LEGEND_PAIR = re.compile(r"(?<![\w.])(\d{1,3})\s*=\s*([^\W\d_]+(?:[ '\u2019/-]+[^\W\d_]+)*)")
-    # ... or as a numbered list of two or more of the row's codes: '(1) Abnormal (2) Normal', '1. Abnormal 2. Normal'.
-    LEGEND_LIST = re.compile(r"(?<![\w.])(?:\((\d{1,3})\)|(\d{1,3})\s*[.:)\-\u2013])\s*([^\W\d_]+(?:[ '\u2019/-]+[^\W\d_]+)*)")
+    # A number printed in a header option, in any legend form: '2 = Abnormal', '(2)', '2)', '1. Normal', '1.Normal',
+    # '1)Normal', 'Normal (1.)', and a decimal '1.0 Normal' (read whole, so it never equals a code '1'). Never part of a
+    # word ('12b').
+    HEADER_NUMBER = re.compile(r"(?<![\w.])[(\[]?(\d{1,3}(?:\.\d+)?)(?:[.)\]:=\-\u2013]|(?![\w.]))")
+    # In governing text (a title, lead, heading or row label): a number, the printed joiners between a code and its
+    # meaning (spaces, brackets, '=', ':', '.', a dash, an arrow - never ',' ';' or '|', which end an entry), and a
+    # run of words.
+    LEGEND_NUMBER = re.compile(r"(?<![\w.])\d{1,3}(?:\.\d+)?(?!\w)")
+    LEGEND_JOIN = r"[\s.:=()\[\]\-\u2013\u2014>\u2192\u21d2]*"
+    LEGEND_WORDS = r"[^\W\d_]+(?:[ '\u2019/-]+[^\W\d_]+)*"
+    LEGEND_ARROW = re.compile(r"=|->|=>|\u2192|\u21d2")
+
+    @staticmethod
+    def legend_words(text):
+        """A printed meaning as its words: case, punctuation and 'and'/'or' at either end dropped ('Non-tender' is
+        'non tender'; 'Not palpable' never equals 'palpable')."""
+        words = re.findall(r"[^\W\d_]+", text.lower())
+        while words and words[0] in ("and", "or"):
+            words = words[1:]
+        while words and words[-1] in ("and", "or"):
+            words = words[:-1]
+        return " ".join(words)
+
+    def legend_entries(self, segment, meanings, codes):
+        """(code, meaning) for every legend entry printed in one piece of governing text, or None when a number is
+        printed next to an option's words in a form whose direction cannot be read.
+
+        An entry is a number printed with '=' or an arrow ('1 = Normal', 'Abnormal = 1', '1 → Normal'), or a number
+        printed next to words that contain an option ('1 Abnormal', '(1) Normal', '[1] Normal', 'Normal (1)',
+        '1.Normal'), or one of two or more numbered items whose numbers are all the row's codes ('(1) Absent
+        (2) Present'). Its meaning is the words on the side the legend prints them: the operator's side, else the
+        one side naming an option, else the side the first entry of the same text used (refutation R3-2, R4-4)."""
+        involves = lambda words: bool(words) and any(m and (" %s " % m) in (" %s " % words) for m in meanings)
+        found = []
+        for match in self.LEGEND_NUMBER.finditer(segment):
+            # A legend entry is short: the words on each side are read within 120 characters, so a long printed
+            # text costs linear time (refutation R4-6).
+            following, preceding = segment[match.end():match.end() + 120], segment[max(0, match.start() - 120):match.start()]
+            joined_after = re.match(self.LEGEND_JOIN, following).group()
+            joined_before = re.search(self.LEGEND_JOIN + "$", preceding).group()
+            after = re.match(self.LEGEND_WORDS, following[len(joined_after):])
+            before = re.search(self.LEGEND_WORDS + "$", preceding[:len(preceding) - len(joined_before)])
+            after = self.legend_words(after.group()) if after else ""
+            before = self.legend_words(before.group()) if before else ""
+            listed = bool(after) and bool(re.fullmatch(r"\s*[.):\-\u2013]\s*", joined_after)
+                                          or joined_before.endswith("(") and joined_after.startswith(")"))
+            found.append((match.group(), after, before, bool(self.LEGEND_ARROW.search(joined_after)),
+                          bool(self.LEGEND_ARROW.search(joined_before)), listed))
+        numbered = [code for code, _, _, _, _, listed in found if listed]
+        numbered_legend = len(numbered) >= 2 and all(code in codes for code in numbered)
+        entries, direction = [], None
+        for code, after, before, operator_after, operator_before, listed in found:
+            if operator_after and operator_before:
+                return None
+            if operator_after or operator_before:
+                side = "after" if operator_after else "before"
+            else:
+                sides = [name for name, words in (("after", after), ("before", before)) if involves(words)]
+                if not sides and listed and numbered_legend:
+                    sides = ["after"]
+                if not sides:
+                    continue
+                side = sides[0] if len(sides) == 1 else direction
+                if side is None:
+                    return None
+            direction = direction or side
+            entries.append((code, after if side == "after" else before))
+        return entries
 
     def legend_conflict(self, options, row, governing=""):
-        """A printed header whose options also print numbers ('2 = Abnormal', '1. Normal') is a code legend. It
-        agrees with a row only when each option prints exactly the code printed before the box under it; otherwise
-        which box means which option is not certain (refutation F4, R3-2). A legend printed in the governing text
-        ('codes: 1 = Abnormal, 2 = Normal') must name, for each code it prints, the option printed over that code's
-        box. A header and governing text that print no number never conflict."""
+        """A printed header whose options also print numbers ('2 = Abnormal', '1.Normal') is a code legend. It agrees
+        with a row only when each option prints exactly the code printed before the box under it; otherwise which
+        box means which option is not certain (refutation F4, R3-2, R4-4). A legend printed in the governing text
+        ('codes: 1 = Abnormal, 2 = Normal', 'Abnormal (1)', '[1] Abnormal') must name, for each code it prints,
+        exactly the option printed over that code's box: its words equal the option's, so 'Not palpable' never
+        agrees with 'Palpable' (R4-5). A legend whose direction cannot be read refuses the row. A header and
+        governing text that print no legend never conflict."""
         codes = re.findall(r"(\d{1,3})\s*[☐☒]", self.ptext(row.el)[0])
         printed = [self.HEADER_NUMBER.findall(option) for option in options]
         if any(printed) and (len(codes) != len(options) or any(found != [code] for found, code in zip(printed, codes))):
             return True
-        words = lambda text: " %s " % " ".join(re.findall(r"[^\W\d_]+", text.lower()))
-        pairs = self.LEGEND_PAIR.findall(governing)
+        meanings = [self.legend_words(option) for option in options]
+        # Each printed piece (heading, title, lead, row label) is read alone: a number in one never pairs with the
+        # words of another.
         for segment in re.split(r" > | \| ", governing):
-            listed = [(a or b, meaning) for a, b, meaning in self.LEGEND_LIST.findall(segment)]
-            if len(listed) >= 2 and all(code in codes for code, _ in listed):
-                pairs.extend(listed)
-        for code, meaning in pairs:
-            if code not in codes or len(codes) != len(options):
+            entries = self.legend_entries(segment, meanings, codes)
+            if entries is None:
                 return True
-            option, meaning = words(options[codes.index(code)]), words(meaning)
-            if meaning not in option and option not in meaning:
-                return True
+            for code, meaning in entries:
+                if code not in codes or len(codes) != len(options) or meanings[codes.index(code)] != meaning:
+                    return True
         return False
 
     def coded_kind(self, label, options, context):

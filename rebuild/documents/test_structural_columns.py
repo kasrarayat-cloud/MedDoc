@@ -1666,6 +1666,22 @@ class LegendsInEveryPrintedForm(unittest.TestCase):
                 found, _ = self.candidates([title, (header, self.STOPS), ('Edge\t1 ☐\t2 ☐', self.STOPS)])
                 self.assertEqual(found, [])
 
+    def test_a_legend_that_agrees_in_any_printed_form_keeps_its_options(self):
+        # Positive controls: the same printed forms naming each code's own option are read.
+        for title in ('12b. Liver (Normal = 1, Abnormal = 2)', '12b. Liver (codes: 1 Normal, 2 Abnormal)',
+                      '12b. Liver [1] Normal [2] Abnormal', '12b. Liver (Normal (1), Abnormal (2))',
+                      '12b. Liver (1 → Normal, 2 → Abnormal)', '12b. Liver (codes: 1 = Normal and 2 = Abnormal)'):
+            titled = [title, ('\tNormal\tAbnormal', self.STOPS), ('Palpable\t1 ☐\t2 ☐', self.STOPS), '',
+                      ('Tender\t1 ☐\t2 ☐', self.STOPS)]
+            for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
+                with self.subTest(title=title, rows=name):
+                    self.assertEqual(self.candidates(cell)[0][:1], [('Palpable', ['Normal', 'Abnormal'])])
+        found, _ = self.candidates(['12b. Liver (codes: 1 = Palpable, 2 = Not palpable)', ('\tPalpable\tNot palpable', self.STOPS),
+                                    ('Edge\t1 ☐\t2 ☐', self.STOPS)])
+        self.assertEqual(found, [('Edge', ['Palpable', 'Not palpable'])])
+        found, _ = self.candidates(['12b. Liver', ('\t1.Normal\t2.Abnormal', self.STOPS), ('Edge\t1 ☐\t2 ☐', self.STOPS)])
+        self.assertEqual(found, [('Edge', ['1.Normal', '2.Abnormal'])])
+
 
 class AnswerLinesBesideCodedRows(unittest.TestCase):
     """R4-6, R4-10: a left cell's answer line is read as the engine reads one, in linear time."""
