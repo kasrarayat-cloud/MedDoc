@@ -1,0 +1,17 @@
+test_invalid_empty_or_duplicate_discovery_refuses (ops.test_ci_test_shards.CoreShardContracts.test_invalid_empty_or_duplicate_discovery_refuses) ... ok
+test_manifest_file_must_be_fresh (ops.test_ci_test_shards.CoreShardContracts.test_manifest_file_must_be_fresh) ... ok
+test_manifest_mutations_missing_duplicate_foreign_source_and_universe_refuse (ops.test_ci_test_shards.CoreShardContracts.test_manifest_mutations_missing_duplicate_foreign_source_and_universe_refuse) ... ok
+test_plan_is_deterministic_complete_disjoint_balanced_and_whole_class (ops.test_ci_test_shards.CoreShardContracts.test_plan_is_deterministic_complete_disjoint_balanced_and_whole_class) ... ok
+test_runner_discovery_errors_and_duplicate_tests_refuse_before_manifest (ops.test_ci_test_shards.CoreShardContracts.test_runner_discovery_errors_and_duplicate_tests_refuse_before_manifest) ... ok
+test_runner_rejects_filters_parallelism_labels_and_missing_identity (ops.test_ci_test_shards.CoreShardContracts.test_runner_rejects_filters_parallelism_labels_and_missing_identity) ... ok
+test_runner_uses_full_real_discovery_then_preserves_order_and_once_only_ids (ops.test_ci_test_shards.CoreShardContracts.test_runner_uses_full_real_discovery_then_preserves_order_and_once_only_ids) ... ok
+test_core_shards_keep_checks_and_use_the_same_full_discovery_label (ops.test_ci_gate_partitions.CIGatePartitions.test_core_shards_keep_checks_and_use_the_same_full_discovery_label) ... ok
+test_each_failing_stage_stops_without_success_or_later_commands (ops.test_ci_gate_partitions.CIGatePartitions.test_each_failing_stage_stops_without_success_or_later_commands) ... ok
+test_partitions_exactly_cover_legacy_python_gate (ops.test_ci_gate_partitions.CIGatePartitions.test_partitions_exactly_cover_legacy_python_gate) ... ok
+test_required_aggregate_runs_always_and_accepts_only_success (ops.test_ci_gate_partitions.CIGatePartitions.test_required_aggregate_runs_always_and_accepts_only_success) ... ok
+test_unknown_mode_refuses_without_any_suite (ops.test_ci_gate_partitions.CIGatePartitions.test_unknown_mode_refuses_without_any_suite) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 1.271s
+
+OK
