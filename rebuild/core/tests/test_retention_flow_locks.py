@@ -594,3 +594,200 @@ class DispositionAgainstClinicianRequests(ExecutionFixture, TransactionTestCase)
         job = m.Job.objects.get(encounter=row, kind='transcription')
         self.assertTrue(private_path(job.input_path).is_file())
         self.assertEqual(self.orphaned_recordings(), [])
+
+
+from datetime import timedelta  # noqa: E402
+
+from core.models import Invitation, Membership, Usage  # noqa: E402
+from core.security import digest, token  # noqa: E402
+from core.tests.test_recording_limit import EXPENSIVE_ENV  # noqa: E402
+
+
+def paused_after_account_lock(action, paused, resume):
+    """Run `action` on its thread's connection, stopping right after the first row lock it takes on an account
+    (core_user, FOR UPDATE or FOR NO KEY UPDATE) until `resume` is set."""
+    def wrapper(execute, sql, params, many, context):
+        result = execute(sql, params, many, context)
+        if not paused.is_set() and 'FROM "core_user"' in sql and sql.rstrip().endswith(' UPDATE'):
+            paused.set()
+            resume.wait(30)
+        return result
+
+    def run():
+        with connection.execute_wrapper(wrapper):
+            return action()
+    return run
+
+
+def finished_or_blocked(thread, timeout=15):
+    """'finished' once the thread ends, 'blocked' once any other backend waits for a lock, else 'timeout'."""
+    deadline = time.monotonic() + timeout
+    with connection.cursor() as cursor:
+        while time.monotonic() < deadline:
+            if not thread.is_alive():
+                return 'finished'
+            cursor.execute('SELECT count(*) FROM pg_locks WHERE NOT granted AND pid<>pg_backend_pid()')
+            if cursor.fetchone()[0]:
+                return 'blocked'
+            time.sleep(.02)
+    return 'timeout'
+
+
+@override_settings(**LOCKED)
+class InvitationAcceptanceAgainstTheSamePayersRequests(LockFlowFixture, TransactionTestCase):
+    """RF-R1. Reproduce (the finding's input): an existing verified clinician U (funded promotional wallet, department
+    D) holds a department invitation to D2 from D2's owner, and accepts it in a second tab while one of U's own
+    requests runs: (a) a 2 s voice upload paused inside reserve() after its 'usage.reserve' audit (wallets locked,
+    preservation lock held); (b) the acceptance paused in welcome_credit right after its account row lock, while U
+    requests a generation; (c) the same, against the worker's settlement of U's running job.
+    RED on 6035d2fa (and bf8f7b78): welcome_credit locked the account FOR UPDATE and then the promotional wallet, the
+    reverse of U's requests, which lock the wallets and take FOR KEY SHARE on the account at commit (the deferred
+    foreign-key checks of their job, reservation, usage and audit rows). (a) the acceptance is the deadlock victim
+    (500, no membership); (b) the generation is (500: generate_view let the DatabaseError through, nothing queued);
+    (c) settle() raises it, which run_one turns into a provider-completed job sent to reconciliation."""
+
+    def setUp(self):
+        super().setUp()
+        owner, _, self.department2 = self.other[:3]
+        Membership.objects.filter(user=owner, department=self.department2).update(role='owner')
+        self.raw = token()
+        self.invitation = Invitation.objects.create(
+            email=self.user.email, department=self.department2, role='clinician', invited_by=owner,
+            token_hash=digest(self.raw), expires_at=timezone.now() + timedelta(days=1))
+
+    def accept(self, client):
+        return lambda: client.post(f'/invite/{self.raw}/', {})
+
+    def assert_accepted(self, outcome):
+        self.assertNotIn('error', outcome, outcome.get('error'))
+        self.assertEqual(outcome['value'].status_code, 302, getattr(outcome['value'], 'exc_info', None))
+        self.assertEqual(outcome['value']['Location'], '/login/')
+        self.assertTrue(Membership.objects.filter(user=self.user, department=self.department2, active=True).exists())
+        self.invitation.refresh_from_db()
+        self.assertIsNotNone(self.invitation.accepted_at)
+
+    def test_positive_control_the_acceptance_alone_is_recorded(self):
+        self.assert_accepted({'value': self.accept(self.doctor())()})
+
+    def test_a_voice_upload_holding_the_wallets_and_the_acceptance_serialize(self):
+        draft = self.draft()
+        doctor, second_tab = self.doctor(), self.doctor()
+        real = billing.audit
+        paused, resume = threading.Event(), threading.Event()
+
+        def audit(actor, action, *args, **kwargs):
+            row = real(actor, action, *args, **kwargs)
+            if action == 'usage.reserve' and not paused.is_set():
+                paused.set()
+                resume.wait(30)
+            return row
+        with patch.dict(os.environ, STANDARD_ENV), patch('core.billing.audit', side_effect=audit):
+            quote = doctor.get(f'/encounters/{draft.pk}/').context['usage_quote']
+            uploading, uploaded = in_thread(lambda: doctor.post(f'/encounters/{draft.pk}/voice/', {
+                'audio': self.recording('rfr1-a'), 'consent': 'on', 'usage_quote': quote}))
+            try:
+                self.assertTrue(paused.wait(15), 'the upload never reached reserve()')
+                accepting, accepted = in_thread(self.accept(second_tab))
+                blocked = wait_for_blocked_backend()
+            finally:
+                resume.set()
+            self.finish(uploading, accepting)
+        self.assertTrue(blocked, 'the acceptance never waited for the upload')
+        self.assert_accepted(accepted)
+        self.assertNotIn('error', uploaded, uploaded.get('error'))
+        self.assertEqual(uploaded['value'].status_code, 302)
+        queued = Job.objects.get(encounter=draft, kind='transcription')
+        self.assertEqual(queued.state, 'queued')
+        self.assertTrue(Reservation.objects.filter(job=queued, state='held').exists())
+        self.assertEqual(self.orphaned_recordings(), [])
+
+    def race_with_paused_acceptance(self, request):
+        """The acceptance holds the account row lock (paused); `request` runs meanwhile; then the acceptance resumes."""
+        paused, resume = threading.Event(), threading.Event()
+        accepting, accepted = in_thread(paused_after_account_lock(self.accept(self.doctor()), paused, resume))
+        try:
+            self.assertTrue(paused.wait(15), 'the acceptance never locked the account')
+            running, ran = in_thread(request)
+            state = finished_or_blocked(running)
+        finally:
+            resume.set()
+        self.finish(accepting, running)
+        self.assertIn(state, ('finished', 'blocked'), 'the request neither finished nor waited')
+        self.assert_accepted(accepted)
+        self.assertNotIn('error', ran, ran.get('error'))
+        return ran['value']
+
+    def test_a_generation_and_the_acceptance_holding_the_account_serialize(self):
+        draft = self.draft()
+        Encounter.objects.filter(pk=draft.pk).update(notes='Symptoms: no chest pain')
+        doctor = self.doctor()
+        quote = doctor.get(f'/encounters/{draft.pk}/').context['usage_quote']
+        response = self.race_with_paused_acceptance(lambda: doctor.post(f'/encounters/{draft.pk}/generate/', {
+            'usage_quote': quote, 'revision': '0'}))
+        self.assertEqual(response.status_code, 302, getattr(response, 'exc_info', None))
+        self.assertEqual(response['Location'], f'/encounters/{draft.pk}/')
+        job = Job.objects.get(encounter=draft, kind='generation')
+        self.assertEqual(job.state, 'queued')
+        self.assertTrue(Reservation.objects.filter(job=job, state='held').exists())
+        self.assertContains(doctor.get(response['Location']), 'Generation queued')
+
+    def test_the_workers_settlement_and_the_acceptance_holding_the_account_serialize(self):
+        job = Job.objects.create(encounter=self.encounter, user=self.user, request_key='rfr1-settle')
+        reserve(job, Decimal('0.2'))
+        Job.objects.filter(pk=job.pk).update(state='running')
+        units = {'input_tokens': 100, 'output_tokens': 0, 'cached_input_tokens': 0, 'cache_creation_tokens': 0}
+        usage = self.race_with_paused_acceptance(lambda: billing.settle(
+            Job.objects.get(pk=job.pk), Decimal('0.1'), units, {'input_per_million': '1000'}, 'anthropic:synthetic',
+            'req_rfr1', provider_resource_id='msg_rfr1'))
+        self.assertEqual(Usage.objects.get(job=job).pk, usage.pk)
+        self.assertEqual(usage.charged_cost, Decimal('0.15'))
+        self.assertFalse(Reservation.objects.filter(job=job, state='held').exists())
+
+
+@override_settings(**LOCKED)
+class QueueRequestsRefuseADatabaseFailureCleanly(LockFlowFixture, TransactionTestCase):
+    """RF-R1, the victim half. Reproduce: a generation request, or the approval of an over-limit recording, whose
+    enqueue transaction is aborted by the database (a deadlock victim's OperationalError). RED on 6035d2fa:
+    generate_view and voice_approve caught only ValidationError, so the clinician got a 500. enqueue is one transaction,
+    so nothing was queued, held, sent or charged: say so. An approved recording stays with its approval (the reaper
+    removes it once the approval window ends), so the doctor can approve it again."""
+
+    def test_a_generation_aborted_by_the_database_is_a_handled_refusal(self):
+        from django.db import OperationalError
+        draft = self.draft()
+        Encounter.objects.filter(pk=draft.pk).update(notes='Symptoms: no chest pain')
+        doctor = self.doctor()
+        quote = doctor.get(f'/encounters/{draft.pk}/').context['usage_quote']
+        with patch('core.views.enqueue', side_effect=OperationalError('synthetic deadlock detected')):
+            response = doctor.post(f'/encounters/{draft.pk}/generate/', {'usage_quote': quote, 'revision': '0'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], f'/encounters/{draft.pk}/')
+        self.assertFalse(Job.objects.filter(encounter=draft).exists())
+        self.assertContains(doctor.get(response['Location']), 'Nothing was sent or charged')
+        # Positive control: the same request is queued when the database accepts it.
+        queued = doctor.post(f'/encounters/{draft.pk}/generate/', {'usage_quote': quote, 'revision': '0'})
+        self.assertEqual(queued.status_code, 302)
+        self.assertEqual(Job.objects.get(encounter=draft).state, 'queued')
+
+    def test_an_approval_aborted_by_the_database_is_a_handled_refusal_and_can_be_approved_again(self):
+        from django.db import OperationalError
+        draft = self.draft()
+        doctor = self.doctor()
+        with patch.dict(os.environ, EXPENSIVE_ENV):
+            quote = doctor.get(f'/encounters/{draft.pk}/').context['usage_quote']
+            over = doctor.post(f'/encounters/{draft.pk}/voice/', {
+                'audio': self.recording('rfr1-approve'), 'consent': 'on', 'usage_quote': quote})
+            self.assertEqual(over.status_code, 409)
+            approval = {'approval': over.context['approval'], 'decision': 'approve'}
+            with patch('core.views.enqueue', side_effect=OperationalError('synthetic deadlock detected')):
+                response = doctor.post(f'/encounters/{draft.pk}/voice/approve/', approval)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response['Location'], f'/encounters/{draft.pk}/')
+            self.assertFalse(Job.objects.filter(encounter=draft).exists())
+            self.assertContains(doctor.get(response['Location']), 'Nothing was sent or charged')
+            # The quoted recording is still the approval's (not a stray): approving again queues it.
+            again = doctor.post(f'/encounters/{draft.pk}/voice/approve/', approval)
+        self.assertEqual(again.status_code, 302)
+        job = Job.objects.get(encounter=draft, kind='transcription')
+        self.assertTrue(private_path(job.input_path).is_file())
+        self.assertEqual(self.orphaned_recordings(), [])
