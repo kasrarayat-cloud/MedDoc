@@ -1553,6 +1553,10 @@ class Detector:
             problem = issue
         raw_question, label = self.text(question.el).strip(), self.text(label_slot.el).strip()
         context = " > ".join(x for x in (context, raw_question if subsection else "") if x)
+        if len(group["units"]) == 1:
+            # A checkbox keeps its printed option as label; its question still
+            # governs that option, including a local subject or subsection.
+            context = " > ".join(x for x in (context, label) if x)
         if (len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT
                 or self.question_box_signing(source)):
             problem = "The complete question exceeds limits or contains signing/consent instructions."

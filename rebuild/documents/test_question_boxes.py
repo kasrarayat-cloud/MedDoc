@@ -587,3 +587,21 @@ class NestedCheckboxOwnership(unittest.TestCase):
         write_in = w.inspect(data(self.form(write_in=True)))
         self.assertTrue(any('Unassigned write-in' in note and 'Other' in note and '/tc[1]/p[0]' in note
                             for note in write_in['notes']))
+
+    def test_single_nested_option_keeps_its_complete_question_and_subsection(self):
+        for subsection in (False, True):
+            with self.subTest(subsection=subsection):
+                doc = Document()
+                doc.add_paragraph('Current visit', style='Heading 1')
+                outer = doc.add_table(rows=1, cols=1).cell(0, 0)
+                outer.text = 'Which finding concerns the donor? Tick all that apply.'
+                if subsection: outer.add_paragraph('During exertion:')
+                outer.add_paragraph()
+                outer.add_table(rows=1, cols=1).cell(0, 0).text = '☐ Other'
+                result = w.inspect(data(doc))
+                group = next(f for f in result['fields'] if f['kind'] == 'checkbox')
+                self.assertEqual(group['label'], 'Other')
+                self.assertIn(outer.paragraphs[0].text, group['context'])
+                self.assertIn('Current visit', group['context'])
+                if subsection: self.assertIn('During exertion:', group['context'])
+                self.assertEqual(group['options'], ['Other'])
