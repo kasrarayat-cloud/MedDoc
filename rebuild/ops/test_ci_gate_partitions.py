@@ -43,10 +43,18 @@ class CIGatePartitions(unittest.TestCase):
             'documents.test_sdk_sandbox', 'documents.test_sdk_service', 'documents.test_layout',
             'documents.test_unmapped_areas', 'documents.test_multicolumn_and_mixed',
             'documents.test_word_v3', 'documents.test_signing_areas', 'documents.test_question_boxes',
-            'documents.test_composite_kind', 'documents.test_hyperlink_destinations', 'documents.test_document_relations',
+            'documents.test_composite_kind', 'documents.test_hyperlink_destinations', 'documents.test_document_relations', 'documents.test_paragraph_list_boxes',
             'documents.test_source_policy', 'documents.test_layout_verification', 'documents.test_layout_containment', 'documents.test_guidance_preservation'])
         self.assertEqual(support[0][-1], '-v')
         self.assertEqual(support[1], ['-m', 'unittest', 'discover', '-s', 'ops', '-p', 'test_*.py', '-v'])
+
+    def test_every_document_test_module_is_explicitly_named_once(self):
+        code, calls = self.invoke('python-support')
+        self.assertEqual(code, 0)
+        modules = calls[0][2:-1]
+        expected = {'documents.' + path.stem for path in (ROOT/'rebuild/documents').glob('test*.py')}
+        self.assertEqual(set(modules), expected)
+        self.assertEqual(len(modules), len(set(modules)))
 
     def test_core_shards_keep_checks_and_use_the_same_full_discovery_label(self):
         for shard in (1, 2):
