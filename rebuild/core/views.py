@@ -1857,7 +1857,12 @@ def checkout(request):
         if payer=='personal':wallet=Wallet.objects.get(user=request.user,kind='paid')
         else:
             organization_id=payer.split(':',1)[1]
-            if not Membership.objects.select_for_update().filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
+            # FOR NO KEY UPDATE (the global lock order, core.retention): this join also locks the owner's account and
+            # department rows, held while the Payment row's commit-time check waits for the organization's paid wallet,
+            # which a request in that department holds before its own commit takes FOR KEY SHARE on the department.
+            # FOR UPDATE refused that: the top-up was a deadlock victim (RF-R1's class). Suspension, demotion and
+            # membership changes still wait for this check.
+            if not Membership.objects.select_for_update(no_key=True).filter(user=request.user,user__is_active=True,user__verified_at__isnull=False,active=True,role='owner',department__organization_id=organization_id).exists():raise PermissionDenied
             wallet,_=Wallet.objects.get_or_create(organization_id=organization_id,kind='paid')
         # Real data mode never spends a balance sandbox payments funded (reserve() refuses it), so live money is never
         # taken into one: refused before any Payment row or Stripe call. The payer is told what to do, and nothing that

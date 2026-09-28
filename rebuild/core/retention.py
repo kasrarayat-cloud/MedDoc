@@ -40,8 +40,10 @@ SCOPES={'organization':Organization,'department':Department,'patient':Patient,'e
 # held while waiting for a later level (LOCK_KEY or a money row) must not conflict with FOR KEY SHARE: such a row is
 # locked FOR NO KEY UPDATE, never FOR UPDATE. create_hold's scope row (RF-2); welcome_credit's account row and the
 # clinic acceptance's, held while it locks the promotional wallet that the account's own requests hold before their
-# commit-time FOR KEY SHARE on that account (RF-R1); the department a payer change updates, whose trigger then waits
-# for LOCK_KEY (RF-R2).
+# commit-time FOR KEY SHARE on that account (RF-R1); an organization top-up's owner-membership check, whose join also
+# locks the owner's account and department while its payment waits for the organization's wallet (RF-R1's class); the
+# department a payer change updates, whose trigger then waits for LOCK_KEY (RF-R2). A bare select_for_update() over a
+# join locks every joined row: name the rows with of=, or use no_key=True.
 
 
 def lock_preservation():
