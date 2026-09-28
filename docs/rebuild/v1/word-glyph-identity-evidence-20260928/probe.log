@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-proof-20260928/probe.py", line 5, in <module>
+    from documents.test_word_v3 import sdt,ff_field
+ImportError: cannot import name 'sdt' from 'documents.test_word_v3' (/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_word_v3.py). Did you mean: '_sdt'?

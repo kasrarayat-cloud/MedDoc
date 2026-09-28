@@ -1,0 +1,9 @@
+{
+  "pages": 4,
+  "pdf": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-nested-diagnosis-20260928/render-output/D03-q10-glyph.pdf",
+  "pdf_sha256": "b76cc53ee875c26d13c66ad6d36d220d26cecdf02c79a617a87e590918410edf",
+  "png": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-proof-20260928/D03-q10-glyph-page-2.png",
+  "png_sha256": "8ba6128c771e759573ef8a9d4c1f92edf3236eb1f1ebf42ab95e19d67d19c6a2",
+  "preceding_workflow_png_sha256": "8ba6128c771e759573ef8a9d4c1f92edf3236eb1f1ebf42ab95e19d67d19c6a2",
+  "affected_render_identical": true
+}

@@ -1,0 +1,50 @@
+{
+  "runtime": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-nested-diagnosis-20260928",
+  "files": [
+    {
+      "path": "D03-http-glyph/missing.docx",
+      "bytes": 26036,
+      "sha256": "fdfca49601684ebac5183e4c54fed81442b1e00d29835dfa1c2f3a1516eb887a"
+    },
+    {
+      "path": "D03-http-glyph/missing.json",
+      "bytes": 5126,
+      "sha256": "a475be72dccbc6c3a5b891f85a496835a1d25078862682aa1b76246f2f29293a"
+    },
+    {
+      "path": "D03-http-glyph/ordinary.docx",
+      "bytes": 26098,
+      "sha256": "33cdae91b521a07fa8f886d78629268a1ad5e2070a56fd72dcb154f594dfd2cf"
+    },
+    {
+      "path": "D03-http-glyph/ordinary.json",
+      "bytes": 6039,
+      "sha256": "c1e389073ef994630ae0b576adff2ff6050c91ba3fdc3dd76b0ab12c3ee1a71c"
+    },
+    {
+      "path": "D03-http-glyph/original.docx",
+      "bytes": 29510,
+      "sha256": "29dfcdd8a5daef213e30e03e5062fa9193a31a53651c880acc498006c1d506ff"
+    },
+    {
+      "path": "D03-http-glyph/uploaded-map.json",
+      "bytes": 66182,
+      "sha256": "1c97385fa05985c4e724c431008f7bce206e8993ae8c586d168682ba9800c8d7"
+    },
+    {
+      "path": "d03_glyph_workflow.py",
+      "bytes": 2439,
+      "sha256": "c0d2f1e0b105c09127499f516f5702a3928a903628cfe3b73ea32a7052f92e97"
+    },
+    {
+      "path": "render-input/D03-q10-glyph.docx",
+      "bytes": 26098,
+      "sha256": "33cdae91b521a07fa8f886d78629268a1ad5e2070a56fd72dcb154f594dfd2cf"
+    },
+    {
+      "path": "render-output/D03-q10-glyph.pdf",
+      "bytes": 148702,
+      "sha256": "b76cc53ee875c26d13c66ad6d36d220d26cecdf02c79a617a87e590918410edf"
+    }
+  ]
+}
