@@ -373,3 +373,119 @@ class JobMoneyLockOrder(LockFlowFixture, TransactionTestCase):
         Job.objects.filter(pk=settled.pk).update(state='failed', error='platform_failure: synthetic')
         cost = self.checked(lambda: absorb_failed_job(settled))
         self.assertEqual(cost.amount, Decimal('0.1'))
+
+
+@override_settings(**LOCKED)
+class HoldCreationAgainstClinicalWrites(LockFlowFixture, TransactionTestCase):
+    """RF-2. Reproduce (the finding's input): the clinician POSTs changed notes at the current revision, paused right
+    after its 'encounter.notes_saved' audit, so e.save() has taken the preservation lock and the transaction is open;
+    the custodian calls retention.create_hold(admin, 'department', E.department_id, 'a'*64, uuid4()); the clinician
+    resumes and commits. RED on bf8f7b78: create_hold locked the department FOR UPDATE and waited for the preservation
+    lock; the clinician's commit-time foreign-key check (FOR KEY SHARE on that department, for its audit rows) waited
+    for the hold: deadlock, the hold is not recorded (a 500 on the page/API). The same shape for an organization hold
+    (audit organization key) and a patient hold (a new encounter's patient key)."""
+
+    def save_notes(self, client):
+        return lambda: client.post(f'/encounters/{self.encounter.pk}/notes/', {
+            'notes': 'Symptoms: SYNTHETIC CORRECTION, no chest pain', 'revision': str(self.encounter.revision)})
+
+    def create_encounter(self, client):
+        return lambda: client.post('/encounters/new/', {
+            'patient': str(self.patient.pk), 'template_version': str(self.encounter.template_version_id), 'notes': '',
+            'service_date': self.encounter.service_date.isoformat(), 'synthetic_only': 'on'})
+
+    def race(self, write, action, hold):
+        paused, resume = threading.Event(), threading.Event()
+        with patch('core.views.audit', side_effect=pause_after(action, paused, resume)):
+            writing, written = in_thread(write)
+            try:
+                self.assertTrue(paused.wait(15), 'the clinical write never reached its audit')
+                holding, held = in_thread(hold)
+                blocked = wait_for_blocked_backend()
+            finally:
+                resume.set()
+            self.finish(writing, holding)
+        self.assertTrue(blocked, 'hold creation never waited for the clinical write')
+        self.assertNotIn('error', written, written.get('error'))
+        self.assertNotIn('error', held, held.get('error'))
+        self.assertEqual(written['value'].status_code, 302)
+        return held['value']
+
+    def direct_hold(self, scope, target):
+        return lambda: retention.create_hold(self.admin, scope, target, 'a' * 64, uuid.uuid4())
+
+    def assert_saved_then_held(self, hold, scope):
+        self.assertIsInstance(hold, RetentionHold)
+        self.assertEqual(hold.scope, scope)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.notes, 'Symptoms: SYNTHETIC CORRECTION, no chest pain')
+        # The save committed first, so the hold has nothing of it to preserve; the next correction is preserved.
+        from core.models import PreservedRecord
+        self.assertFalse(PreservedRecord.objects.exists())
+        response = self.doctor().post(f'/encounters/{self.encounter.pk}/notes/', {
+            'notes': 'Symptoms: SYNTHETIC SECOND CORRECTION', 'revision': str(self.encounter.revision)})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(PreservedRecord.objects.get(source_table='core_encounter').prior_record['notes'],
+                         'Symptoms: SYNTHETIC CORRECTION, no chest pain')
+
+    def test_department_hold_waits_for_an_in_flight_notes_save(self):
+        hold = self.race(self.save_notes(self.doctor()), 'encounter.notes_saved', self.direct_hold('department', self.department.pk))
+        self.assert_saved_then_held(hold, 'department')
+
+    def test_organization_hold_waits_for_an_in_flight_notes_save(self):
+        hold = self.race(self.save_notes(self.doctor()), 'encounter.notes_saved', self.direct_hold('organization', self.organization.pk))
+        self.assert_saved_then_held(hold, 'organization')
+
+    def test_patient_hold_waits_for_an_in_flight_encounter_creation(self):
+        before = set(Encounter.objects.values_list('pk', flat=True))
+        hold = self.race(self.create_encounter(self.doctor()), 'encounter.create', self.direct_hold('patient', self.patient.pk))
+        self.assertEqual(hold.scope, 'patient')
+        created = Encounter.objects.exclude(pk__in=before).get()
+        self.assertEqual(created.patient_id, self.patient.pk)
+
+    def test_document_hold_still_waits_for_the_document_lock(self):
+        """Positive control: an encounter hold was never part of the cycle (the save holds the encounter row, and the
+        hold waits for it before the preservation lock). It must keep serializing the same way."""
+        hold = self.race(self.save_notes(self.doctor()), 'encounter.notes_saved', self.direct_hold('encounter', self.encounter.pk))
+        self.assert_saved_then_held(hold, 'encounter')
+
+    def test_the_retention_page_records_a_department_hold_raced_with_a_notes_save(self):
+        custodian = self.custodian_client()
+        response = self.race(self.save_notes(self.doctor()), 'encounter.notes_saved', lambda: custodian.post('/console/retention/', {
+            'action': 'create', 'scope': 'department', 'target': str(self.department.pk), 'authority_sha256': 'b' * 64,
+            'request_key': str(uuid.uuid4()), 'confirmed': 'on'}))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(RetentionHold.objects.get().department_id, self.department.pk)
+
+    def test_a_database_failure_while_recording_a_hold_is_a_handled_refusal(self):
+        """Reproduce: hold creation or release aborted by the database (a deadlock victim, a lost connection).
+        RED on bf8f7b78: the page and the JSON API caught only ValidationError, so the custodian got a 500. The
+        instruction is one transaction, so nothing was recorded: the custodian is told so and can retry."""
+        from django.db import OperationalError
+        custodian = self.custodian_client()
+        form = {'action': 'create', 'scope': 'department', 'target': str(self.department.pk), 'authority_sha256': 'c' * 64,
+                'request_key': str(uuid.uuid4()), 'confirmed': 'on'}
+        payload = '{"scope":"department","target":"%s","authority_sha256":"%s","request_key":"%s"}' % (
+            self.department.pk, 'c' * 64, uuid.uuid4())
+        with patch('core.retention.create_hold', side_effect=OperationalError('synthetic deadlock detected')):
+            page = custodian.post('/console/retention/', form)
+            api = custodian.post('/console/retention/holds/', payload, content_type='application/json')
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'was not recorded')
+        self.assertEqual(api.status_code, 503)
+        self.assertEqual(api.json(), {'error': 'Preservation instruction not recorded. Nothing changed; retry.'})
+        self.assertFalse(RetentionHold.objects.exists())
+        # Positive control: the same page records the hold when the database accepts it.
+        self.assertEqual(custodian.post('/console/retention/', form).status_code, 302)
+        hold = RetentionHold.objects.get()
+        second = Client(raise_request_exception=False)
+        device = TOTPDevice.objects.create(user=self.second, name='Synthetic second authenticator', confirmed=True)
+        second.force_login(self.second)
+        session = second.session
+        session['otp_device_id'] = device.persistent_id
+        session.save()
+        with patch('core.retention.release_hold', side_effect=OperationalError('synthetic deadlock detected')):
+            released = second.post(f'/console/retention/holds/{hold.pk}/release/', '{"authority_sha256":"%s"}' % ('d' * 64),
+                                   content_type='application/json')
+        self.assertEqual(released.status_code, 503)
+        self.assertFalse(hasattr(RetentionHold.objects.get(), 'release'))
