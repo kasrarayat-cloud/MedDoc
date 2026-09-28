@@ -1,0 +1,18 @@
+{
+  "artifacts": {
+    "SIGNATURE-MESSAGE-REFERENCE.md": "b74350c7245bd2ac0d7dfdb9e8807d7c869ef79f582d04f7b90ad4bc4f0d95bb",
+    "ANCESTRY.md": "332de0d9cbb256bd34b2d9f67804456975baf3280f9f034eb7743be7ee77570e",
+    "D30-WORKFLOW.md": "5936bdd1c18e9c274d1faf7d90f4a8cdb2c898bf16ed707bb3c4641589beef12",
+    "RETENTION-REVIEW.md": "bb87f04c816a5e6c7bc10ea01fca502c0bb58f242926f8ce942699cb97c13321",
+    "ordinary-c003/REVIEW.md": "d777a6027db0be92d9f7ce3a4a14a66aed58dce4bbdf07b432970f6eaaeaf269",
+    "ordinary-c003/focused.log": "1fd4ba9b18aeb853a7f8e28bf952b22ed553214fd4c58c4a6d38929a771d771d",
+    "disposition-migration-20260928T035804Z-51d6c1/union-reversals.json": "60034c6d1a6f0d8de5c9f6fa9a3263cda05f81e544e1ee43dd5a38c8ed466e81",
+    "disposition-migration-20260928T035804Z-51d6c1/result.json": "5e672bec9223d9966adfdcabed7e178b4a00f2fb27a0dee81ce484aa5b6da7e4",
+    "disposition-migration-20260928T035804Z-51d6c1/witness.log": "d6d841e2f47342981e5c7498bd631e0ce5fd04f47099891ac79281fc6eaee55e",
+    "migration-20260928T034129Z-f2d79f/result.json": "5d09dfad9f9f5d5dc0742019387d18b5b72337e090b2f44c5e6190afbf0e54aa",
+    "migration-20260928T034129Z-f2d79f/witness.log": "02b1a0de5c768529aee4bdbc253bb518b869cc406ca707af626325add9b93067"
+  },
+  "private_evidence_root": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/financial-review",
+  "private_workflow_root": "rebuild/.runtime/release-integration",
+  "no_filled_documents_tracked": true
+}
