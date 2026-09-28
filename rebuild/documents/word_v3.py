@@ -3698,11 +3698,7 @@ class Detector:
                         continue
                     label = self.row_label(tslot, r, c.info["col"])
                     if instructed:
-                        # The row's own item (its leftmost label cell) names an instructed cell, never a value printed
-                        # beside it ('500 mg'); a group label merged over several rows is context, never the item.
-                        items = [x for x in sorted(rows[r], key=lambda x: x.info["col"]) if x.info["col"] < c.info["col"]
-                                 and not x.info["vmerge"] and self.is_label_cell(x)]
-                        label = clean_label(self.cell_text(items[0])) if items else label
+                        label = self.instructed_item(tslot, rows, r, c) or label
                     header = clean_label(self.column_header(tslot, c.info["col"], r))
                     below = self.label_below(tslot, c)
                     if placeholder and not label and not header:
@@ -3733,31 +3729,73 @@ class Detector:
     INSTRUCTED_REQUEST = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)"
                                     r"\s+(?:if|whether|any|all)\b", re.I)
     INSTRUCTED_PLACE = re.compile(r"\b(?:here|below|in this (?:box|space|cell|column|section))\b", re.I)
-    # Printed advice to the patient: it names someone else to tell ('... to your doctor', '... to the nurse'), or
-    # the column prints instructions or information rather than answers (refutation R3-5).
-    ADDRESSED = re.compile(r"\b(?:to|with|tell|ask|call|contact|inform)\s+(?:your|the|a|an)\s+(?:doctor|physician|nurse|"
-                           r"pharmacist|gp|provider|care\s+team|team|clinic|carer|caregiver|patient|family)\b|"
-                           r"\byour\s+(?:doctor|physician|nurse|pharmacist|gp|provider|care\s+team)\b", re.I)
+    # Printed advice to the patient, never a request for the clinician's answer: it speaks to its reader as 'you'
+    # ('... at your next appointment', '... when you phone us'), sends its reader to a clinician ('... to the nurse'), or
+    # adds an instruction to act ('Note any dizziness and stop the tablets'). A clinician's request names the patient
+    # or the team in the third person ('Describe discussion with the patient here') and stays a destination. A column
+    # printing content ('Patient information', 'Instructions') holds printed content unless its header records what
+    # was done ('Education provided') (refutation R3-5, R4-9).
+    ADDRESSED = re.compile(r"\b(?:you|your|yours|yourself)\b|\b(?:phone|call|tell|ask|contact|inform|email|text|see|visit)\s+us\b|"
+                           r"\b(?:to|tell|ask|call|phone|contact|inform|see)\s+(?:your|the|a|an)\s+(?:doctor|physician|nurse|"
+                           r"pharmacist|gp|provider|care\s+team|clinic|surgery|midwife|dentist)\b", re.I)
+    ACTION_ADVICE = re.compile(r"\b(?:and|then|or)\s+(?:stop|take|start|continue|avoid|call|phone|contact|tell|inform|seek|go|"
+                               r"attend|return|reduce|increase|keep|rest|drink|eat|do\s+not|don'?t)\b", re.I)
     CONTENT_COLUMN = re.compile(r"\b(?:instructions?|information|advice|guidance|directions?|education)\b", re.I)
+    RECORDED_COLUMN = re.compile(r"\b(?:provided|given|delivered|discussed|documented|completed|received|reviewed|done|"
+                                 r"reinforced|explained)\b", re.I)
 
     def instructed_answer_cell(self, table, row, cell):
         """A plain cell of a data row whose printed text asks for the answer to be written in it ('If palpable,
         describe here', 'Describe any findings below'), under a printed column header and beside the row's own
         label; or 'Note if ... present.'. Its answer is appended below the instruction; the instruction never names
         another row's cell. Printed content ('Note: INR must be checked', 'Detail: bleeding, infection', 'Explain
-        the procedure to the patient') is not a request to write there (refutation F6)."""
+        the procedure to the patient') is not a request to write there (refutation F6). Printed advice to the
+        patient is withdrawn WITH A NOTE, so a clinician's request misread as advice is never lost silently (R4-9)."""
         text = self.cell_text(cell)
+        header = self.column_header(table, cell.info["col"], row)
         if len(text) > 200 or not self.INSTRUCTED.match(text) \
                 or not (self.INSTRUCTED_PLACE.search(text) or self.INSTRUCTED_REQUEST.match(text)) \
-                or self.ADDRESSED.search(text) \
-                or self.CONTENT_COLUMN.search(self.column_header(table, cell.info["col"], row)) \
                 or not self.cell_is_plain(cell) or self.row_kind(table, row) != "data":
             return False
         for paragraph in (x for x in cell.children if x.kind == "p"):
             printed, pieces = self.ptext(paragraph.el)
             if BOX in printed or CHECKED in printed or "\x00" in printed or self.blank_spans(printed, pieces):
                 return False
-        return bool(self.column_header(table, cell.info["col"], row)) and bool(self.row_label(table, row, cell.info["col"]))
+        if not (header and self.row_label(table, row, cell.info["col"])):
+            return False
+        reason = ("it speaks to the patient" if self.ADDRESSED.search(text) else
+                  "it tells the reader to act" if self.ACTION_ADVICE.search(text) else
+                  "its column '%s' prints content" % clean_label(header)[:60]
+                  if self.CONTENT_COLUMN.search(header) and not self.RECORDED_COLUMN.search(header) else "")
+        if reason:
+            self.notes.append("The cell at %s prints the instruction '%s', which reads as printed advice or content "
+                              "(%s), so it was kept as printed text and is not an answer place; map it manually if "
+                              "it asks for the clinician's answer." % (cell.id, clean_label(text)[:120], reason))
+            return False
+        return True
+
+    # A printed value, never an item: a date, a time, a number or a dose ('01/02/2026', '08:30', '500 mg', '2 x 5 ml').
+    MONTH_WORD = re.compile(r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|"
+                            r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|am|pm|x", re.I)
+
+    def value_text(self, text):
+        if not re.search(r"\d", text):
+            return False
+        return all(OPTION_FAMILIES[14].fullmatch(word) or self.MONTH_WORD.fullmatch(word)
+                   for word in re.findall(r"[^\W\d_]+", text))
+
+    def instructed_item(self, table, rows, row, cell):
+        """The item an instructed cell's row is about: the nearest printed label cell to its left that is not a value
+        ('500 mg', '01/02/2026'), not a label merged over several rows, and not in a column that prints a label only
+        on the first row of each group ('Abdomen' over Liver and Spleen); the nearest label otherwise, or "" (then
+        the row's own label is kept) (refutation R3-5, R4-7)."""
+        def grouped(col):
+            return any(is_blank_text(self.cell_text(x)) for other in rows if other != row and self.row_kind(table, other) == "data"
+                       for x in rows[other] if x.info["col"] == col and not x.info["vmerge"])
+        items = [x for x in sorted(rows[row], key=lambda x: -x.info["col"]) if x.info["col"] < cell.info["col"]
+                 and not x.info["vmerge"] and self.is_label_cell(x) and not self.value_text(self.cell_text(x))]
+        own = [x for x in items if not grouped(x.info["col"])]
+        return clean_label(self.cell_text((own or items)[0])) if items else ""
 
     def question_box_style_chain(self, name, kind):
         chain, seen = [], set()
