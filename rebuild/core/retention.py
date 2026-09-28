@@ -36,15 +36,20 @@ SCOPES={'organization':Organization,'department':Department,'patient':Patient,'e
 #
 # Levels may be skipped, never reversed. Billing's job-scoped entry points (reserve, release, settle, absorb_failed_job)
 # take level 3 themselves before any money row, so no caller can reach a wallet lock ahead of a later job.save() (RF-1).
-# Level 5 comes last by construction, and every transaction reaches it holding the locks of levels 3-4, so a row lock
-# held while waiting for a later level (LOCK_KEY or a money row) must not conflict with FOR KEY SHARE: such a row is
-# locked FOR NO KEY UPDATE, never FOR UPDATE. create_hold's scope row (RF-2); welcome_credit's account row and the
-# clinic acceptance's, held while it locks the promotional wallet that the account's own requests hold before their
-# commit-time FOR KEY SHARE on that account (RF-R1); an organization top-up's owner-membership check, whose join also
-# locks the owner's account and department while its payment waits for the organization's wallet, and a held
-# reconciliation charge's row, locked of=('self',) so its select_related department is not (RF-R1's class); the
-# department a payer change updates, whose trigger then waits for LOCK_KEY (RF-R2). A bare select_for_update() over a
-# join locks every joined row: name the rows with of=, or use no_key=True.
+# Level 5 comes last by construction, and a transaction reaches it still holding its locks of levels 1-4. So a row that
+# OTHER transactions point at from rows they insert without locking it first (an account, organization, department or
+# patient: audit, job, usage, payment and membership rows do) is never held FOR UPDATE by a transaction that goes on to
+# wait for a later level (LOCK_KEY or a money row). It is locked FOR NO KEY UPDATE, which does not conflict with FOR
+# KEY SHARE and still excludes concurrent updates and deletion. Encounter, template and job rows keep FOR UPDATE: every
+# row pointing at one is inserted under that row's own lock (jobs, batches, codes and holds under their encounter's;
+# versions under their template's; reservations, ledger entries, usage and platform costs under their job's).
+# The instances: create_hold's scope row (RF-2); welcome_credit's and the clinic acceptance's account row, held while
+# it locks the promotional wallet the account's own requests hold before their commit-time FOR KEY SHARE on it (RF-R1);
+# the organization top-up's owner check, whose join also locks the owner's account and department while its payment
+# waits for the organization's wallet, and a held reconciliation charge, locked of=('self',) so its select_related
+# department is not (RF-R1's class); the department a payer change updates, whose trigger then waits for LOCK_KEY
+# (RF-R2). A bare select_for_update() over a join or beside select_related() locks every joined row: name the rows
+# with of=, or use no_key=True.
 
 
 def lock_preservation():

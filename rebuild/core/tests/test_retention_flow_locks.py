@@ -1026,3 +1026,60 @@ class PendingReconciliationAgainstSettlementInItsDepartment(LockFlowFixture, Tra
         paid.refresh_from_db()
         self.assertEqual(paid.balance, Decimal('5') - settled['value'].charged_cost - row.charge_delta)
         self.assertEqual(Usage.objects.get(job=running).pk, settled['value'].pk)
+
+
+from django.test import TestCase  # noqa: E402
+
+
+@override_settings(**LOCKED)
+class WelcomeCreditEntryPointsNeverHoldTheAccountForUpdate(LockFlowFixture, TestCase):
+    """RF-R1, the rule itself on every entry point that reaches welcome_credit (core.retention: an account row held
+    while this transaction goes on to lock a wallet is FOR NO KEY UPDATE, never FOR UPDATE). The deadlocks are pinned
+    by the race tests above for the two invitation flows; email verification cannot race (an unverified account has no
+    request that holds its wallet), so the lock mode itself is what is pinned there.
+    RED on d41847f6: /verify/<raw>/ locked the account FOR UPDATE before welcome_credit."""
+
+    def account_locks(self, action):
+        """The account-row lock modes the action's SQL takes, in order; the action's own result."""
+        seen = []
+
+        def wrapper(execute, sql, params, many, context):
+            text = sql.rstrip()
+            if 'FROM "core_user"' in text and text.endswith(' UPDATE'):
+                seen.append('FOR NO KEY UPDATE' if text.endswith('FOR NO KEY UPDATE') else 'FOR UPDATE')
+            return execute(sql, params, many, context)
+        with connection.execute_wrapper(wrapper):
+            result = action()
+        return result, seen
+
+    def assert_no_key_only(self, response, seen):
+        self.assertEqual(response.status_code, 302, getattr(response, 'exc_info', None))
+        self.assertTrue(seen, 'the flow never locked the account; the check would be vacuous')
+        self.assertEqual(set(seen), {'FOR NO KEY UPDATE'})
+
+    def test_email_verification(self):
+        from core.models import LedgerEntry, User, Verification
+        user = User.objects.create_user(username='rfr1-verify@synthetic.invalid', email='rfr1-verify@synthetic.invalid')
+        raw = token()
+        Verification.objects.create(user=user, token_hash=digest(raw), expires_at=timezone.now() + timedelta(hours=1))
+        response, seen = self.account_locks(lambda: Client().post(f'/verify/{raw}/'))
+        self.assert_no_key_only(response, seen)
+        self.assertTrue(LedgerEntry.objects.filter(key=f'welcome:{user.pk}').exists())
+
+    def test_department_invitation_for_an_existing_account(self):
+        owner, _, department = self.other[:3]
+        Membership.objects.filter(user=owner, department=department).update(role='owner')
+        raw = token()
+        Invitation.objects.create(email=self.user.email, department=department, role='clinician', invited_by=owner,
+                                  token_hash=digest(raw), expires_at=timezone.now() + timedelta(days=1))
+        response, seen = self.account_locks(lambda: self.doctor().post(f'/invite/{raw}/', {}))
+        self.assert_no_key_only(response, seen)
+        self.assertTrue(Membership.objects.filter(user=self.user, department=department).exists())
+
+    def test_clinic_invitation_for_an_existing_account(self):
+        from core import clinic_invitations
+        _, raw = clinic_invitations.issue(self.admin, self.user.email, 'Synthetic lock-mode clinic', 'Synthetic desk')
+        response, seen = self.account_locks(lambda: self.doctor().post(f'/invite/clinic/{raw}/', {}))
+        self.assert_no_key_only(response, seen)
+        self.assertTrue(Membership.objects.filter(user=self.user, role='owner',
+                                                  department__organization__name='Synthetic lock-mode clinic').exists())
