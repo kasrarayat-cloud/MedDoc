@@ -693,6 +693,8 @@ class SelectionLimitRefutations(unittest.TestCase):
         multi.append(('a glyph question in another section owns its tick-one', native_list(doc, 'Treatments received', treatments)))
         doc = Document(); doc.add_paragraph('You may tick more than one box for each question.'); doc.add_heading('Clinical history', 1)
         multi.append(('open count in the preamble', native_list(doc, 'Treatments received', treatments)))
+        doc = Document(); doc.add_paragraph('Section 1: tick all boxes that apply.'); doc.add_heading('Clinical history', 1)
+        multi.append(('a section number in the preamble', native_list(doc, 'Treatments received', treatments)))
         multi.append(('dated instruction', form(instruction='Record treatments received within 6 weeks of discharge.')))
         multi.append(('clinical option name', form(options=('Fragile X', 'Karyotype', 'Microarray'), question='Tests completed')))
         doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, 'Treatments received', treatments)
@@ -714,10 +716,47 @@ class SelectionLimitRefutations(unittest.TestCase):
         self.assertMulti(raw, 'Treatments received')
         self.assertOneChoice(raw, 'Type of application', 'Absolute', [False, True])
         # One-answer and singular-box phrases printed elsewhere in the form may govern the list.
-        for sentence in ('Use the box that best describes the treatment.', 'One answer only.'):
+        for sentence in ('Use the box that best describes the treatment.', 'One answer only.', '✓ one only.',
+                         'Put X against one.', 'Tick 1.'):
             with self.subTest(elsewhere=sentence):
                 doc = Document(); doc.add_paragraph(sentence); doc.add_heading('Clinical history', 1)
                 self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
+        # A footnote and a positioned frame print away from the list: never owned by the block they sit beside.
+        raw = data(native_list(Document(), 'Treatments received', treatments))
+        out = io.BytesIO()
+        with ZipFile(io.BytesIO(raw)) as a, ZipFile(out, 'w', ZIP_DEFLATED) as b:
+            for name in a.namelist():
+                b.writestr(name, a.read(name))
+            b.writestr('word/footnotes.xml', '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/'
+                       '2006/main"><w:footnote w:id="1"><w:p><w:r><w:t>Tick one box only.</w:t></w:r></w:p></w:footnote>'
+                       '</w:footnotes>')
+        self.assertNeverTwo(out.getvalue(), 'Treatments received')
+        doc = Document(); doc.add_heading('Application', 1); frame = doc.add_paragraph('Tick one only')
+        frame._p.get_or_add_pPr().append(parse_xml(
+            '<w:framePr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            'w:w="2400" w:hAnchor="page" w:vAnchor="page" w:x="8000" w:y="3000"/>'))
+        p = doc.add_paragraph('Type: '); ff_field(p, 'checkbox', name='T0'); p.add_run(' A '); ff_field(p, 'checkbox', name='T1')
+        p.add_run(' B'); doc.add_heading('Clinical history', 1)
+        self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
+        # A glyph question owns its tick-one in a table row or as a label above its option lines; a legend with
+        # sample glyphs does not.
+        doc = Document(); doc.add_heading('Application', 1); row = doc.add_table(rows=1, cols=2).rows[0]
+        row.cells[0].text = 'Type of application (please tick one):'; row.cells[1].text = '☐ Conditional ☐ Absolute'
+        doc.add_heading('Clinical history', 1); self.assertMulti(data(native_list(doc, 'Treatments received', treatments)),
+                                                                 'Treatments received')
+        doc = Document(); doc.add_heading('Application', 1); doc.add_paragraph('Type of application (please tick one):')
+        doc.add_paragraph('☐ Conditional'); doc.add_paragraph('☐ Absolute'); doc.add_heading('Clinical history', 1)
+        self.assertMulti(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
+        doc = Document(); doc.add_paragraph('Mark ☒ one box only, leave the others ☐.'); doc.add_heading('Clinical history', 1)
+        self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
+        # An answer label is not a one-only limit on the question it belongs to.
+        raw = data(inline_question('Symptom(s) (tick all that apply):', ('Pain in only one joint', 'Swelling', 'Fever'), 'ff'))
+        self.assertMulti(raw, 'Symptom(s)')
+        # A standalone tick-one above a separate question and the list is not that question's label.
+        doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Tick one box only.')
+        p = doc.add_paragraph('Escorted: '); ff_field(p, 'checkbox', name='E0'); p.add_run(' Yes ')
+        ff_field(p, 'checkbox', name='E1'); p.add_run(' No')
+        self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
         # A one-only sentence owned by a separate question stops being owned when it names a wider reach.
         doc = Document(); doc.add_heading('Clinical history', 1)
         boxed_question(doc, 'Please tick one box for each question in this section:', ('Yes', 'No'))
