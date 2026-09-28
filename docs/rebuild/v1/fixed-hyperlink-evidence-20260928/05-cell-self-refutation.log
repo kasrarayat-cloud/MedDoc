@@ -1,0 +1,28 @@
+F
+======================================================================
+FAIL: test_link_only_value_cell_is_not_replacement_guidance (documents.test_hyperlink_destinations.HyperlinkDestinations.test_link_only_value_cell_is_not_replacement_guidance)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-fixed-instructions/rebuild/documents/test_hyperlink_destinations.py", line 55, in test_link_only_value_cell_is_not_replacement_guidance
+    self.assertEqual(w.inspect(data(d))['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'Send the comple[290 chars]f'}}] != []
+
+First list contains 1 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'Send the completed form to', 'kind': 'text', 'context': 'Send the completed form to', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[1]', 'target': {'type': 'cell_replace', 'all': True}, 'fingerprint': '1f738facc0aea38be6229ff6338f538aa32c0b6264172a2657cc79574821077f'}}
+
++ []
+- [{'context': 'Send the completed form to',
+-   'key': 'v3_1',
+-   'kind': 'text',
+-   'label': 'Send the completed form to',
+-   'locator': {'contract': 'v3',
+-               'fingerprint': '1f738facc0aea38be6229ff6338f538aa32c0b6264172a2657cc79574821077f',
+-               'part': 'word/document.xml',
+-               'slot': 'b/tbl[0]/tr[0]/tc[1]',
+-               'target': {'all': True, 'type': 'cell_replace'}}}]
+
+----------------------------------------------------------------------
+Ran 1 test in 0.064s
+
+FAILED (failures=1)

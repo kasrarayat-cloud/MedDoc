@@ -785,6 +785,25 @@ def is_hint_run(r) -> bool:
     return (lum >= 0.35 and not (rr > 150 and gg < 90 and bb < 90)) or bluish
 
 
+def hyperlink_run(run) -> bool:
+    return run is not None and any(node.tag == q("w:hyperlink") for node in run.iterancestors())
+
+
+def hyperlink_write(pieces, start, end) -> bool:
+    """Whether replace_range would replace link text or insert inside its run parent.
+
+    Link text and its relationship are fixed source content. Inserting after the
+    last run of a hyperlink still inserts *inside* that hyperlink with addnext.
+    An ordinary run after it gives a separate safe insertion anchor.
+    """
+    if start < end:
+        return any(pc.start < end and pc.end > start and hyperlink_run(pc.run) for pc in pieces)
+    if any(pc.start < start < pc.end and hyperlink_run(pc.run) for pc in pieces):
+        return True
+    before = [pc for pc in pieces if pc.end <= start and pc.run is not None]
+    return bool(before and hyperlink_run(before[-1].run))
+
+
 def is_blank_text(txt: str) -> bool:
     t = txt.strip()
     return not t or set(t) <= set("_ \t.   ") or bool(PLACEHOLDER_TEXT.match(t))
@@ -2236,7 +2255,8 @@ class Detector:
         """Every visible run in the cell is guidance ink (blue/grey prompt text meant to be overwritten)."""
         runs = [r for r in c.el.iter(R) if (r.findtext(T) or "").strip()]
         if not runs or c.el.find(".//" + q("w:tbl")) is not None or c.el.find(".//" + SDT) is not None or \
-                c.el.find(".//" + FLDCHAR) is not None or BOX in self.cell_text(c):
+                c.el.find(".//" + FLDCHAR) is not None or c.el.find(".//" + q("w:hyperlink")) is not None \
+                or BOX in self.cell_text(c):
             return False
         return all(is_hint_run(r) for r in runs)
 
@@ -2411,7 +2431,20 @@ class Detector:
                     lstrip = len(seg) - len(seg.lstrip())
                     spans.append((hint_start + lstrip, hint_end - (len(seg) - len(seg.rstrip())), "hint"))
                 hint_start = None
-        return merge_spans(spans)
+        kept = []
+        for start, end, kind in merge_spans(spans):
+            if hyperlink_write(pieces, start, end):
+                owner = next((ancestor for pc in pieces if pc.run is not None
+                              for ancestor in pc.run.iterancestors() if ancestor.tag == q("w:p")), None)
+                slot = self.index.by_el.get(id(owner)) if owner is not None else None
+                note = "Answer-like text inside a fixed hyperlink was kept unchanged; review the original."
+                if slot is not None:
+                    note += " Location: " + slot.id
+                if note not in self.notes:
+                    self.notes.append(note)
+            else:
+                kept.append((start, end, kind))
+        return kept
 
     def rule_paragraph_fields(self):
         pending, pending_last = None, None     # a multi-line answer area and its last line
@@ -2514,6 +2547,9 @@ class Detector:
             return 0
         prev_end = 0
         for n, (s, e, kind) in enumerate(blanks):
+            if hyperlink_write(pieces, s, s if kind == "after_label" else e):
+                self.notes.append("An answer insertion inside a fixed hyperlink was left unassigned at " + slot.id)
+                continue
             seg = text[prev_end:s]
             seg = re.split(r"[\x00" + BOX + CHECKED + "]", seg)[-1]
             seg = re.split(r"(?<=[.;!?])\s+(?=[A-Z(])", seg.strip())[-1]
@@ -2962,6 +2998,9 @@ def replace_range(p, start, end, answer, *, plain=True):
     text, pieces = paragraph_text(p)
     if not (0 <= start <= end <= len(text)):
         fail("A stored mapping position no longer matches the form.", "mapping_mismatch")
+    if hyperlink_write(pieces, start, end):
+        fail("This mapping would change a fixed hyperlink. Review the original and choose a separate answer area.",
+             "protected_hyperlink")
     if any(pc.kind == "obj" and pc.start < end and pc.end > start for pc in pieces):
         fail("A stored mapping position overlaps a form control.", "mapping_mismatch")
     if start < end:
@@ -3393,6 +3432,9 @@ def write_sdt_text(sdt, answer):
 
 
 def write_cell(tc, answer, replace=False, whole=False):
+    if whole and tc.find(".//" + q("w:hyperlink")) is not None:
+        fail("This mapping would remove a fixed hyperlink from its cell. Review the original answer area.",
+             "protected_hyperlink")
     paras = tc.findall(q("w:p"))
     if not paras:
         paras = [etree.SubElement(tc, q("w:p"))]

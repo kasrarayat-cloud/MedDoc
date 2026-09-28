@@ -1,0 +1,37 @@
+{
+  "identity": "D30",
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "export_sha256": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+  "target": {
+    "key": "v3_7",
+    "kind": "date",
+    "label": "Date of Birth",
+    "context": "Patient’s Details > Date of Birth",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[5]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "a721de24621aaa0de34c26906591bc2742c5c4f24d133dab2753dce6999cd097"
+    }
+  },
+  "notes": "Administrative visit record.",
+  "answer": {
+    "text": "",
+    "status": "missing",
+    "evidence": [],
+    "reviewed": true,
+    "edited_by": null,
+    "accepted_by": null,
+    "reviewed_by": "927fc575-e97a-4fb5-abcf-77f05a05f578",
+    "accepted_suggestion": false
+  },
+  "state": "finalized",
+  "original_download_identical": true,
+  "export_download_identical": true,
+  "all_outside_target_slots_unchanged": true,
+  "automatic_document_success": false,
+  "provider": "mocked-selection; full source-unit validation; no API call"
+}
