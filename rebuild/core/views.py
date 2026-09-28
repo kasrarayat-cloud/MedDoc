@@ -1105,7 +1105,7 @@ def save_answers(request,pk):
             narrative_held=narrative_held if narrative_held is not previous else None
             supported_context=narrative_held['held_candidate']['context'] if narrative_held else None
         else:
-            supported_context=governed_supported(governance,e.notes,previous,field['label'])
+            supported_context=governed_supported(governance,e.notes,previous,field['label'],field_key=field['key'])
         governed_offer=offer_context(governance,e.notes,previous,field['label']) is not None
         # A draft from an earlier release holding a governed answer as `supported` is saved as the page showed it —
         # held — so the clinician's answer is their decision even when it repeats the candidate's words. ⚠️ ONLY WHEN

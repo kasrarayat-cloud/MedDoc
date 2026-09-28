@@ -352,6 +352,12 @@ def configuration():
     if getattr(settings,'V3_GENERATION_BATCHES',False):
         from .generation_batch import CONTRACT
         config['generation_batch_contract']=CONTRACT
+    if getattr(settings,'V3_FIELD_RELATIONS',False):
+        from .v3_field_relations import CONTRACT
+        config['ordinary_field_contract']=CONTRACT
+        config['pricing_version']='configured-v1:'+hashlib.sha256(json.dumps(
+            {'previous':config['pricing_version'],'ordinary_field_contract':CONTRACT},
+            sort_keys=True,separators=(',',':')).encode()).hexdigest()
     return config
 
 
@@ -418,6 +424,9 @@ def rates(config=None):
 def maximum_cost(notes,fields,config=None,*,context_labels=(),requirements=None):
     config=config or configuration()
     if config['mode']!='live': return Decimal('0')
+    if config.get('ordinary_field_contract') and natural_v3(fields):
+        from . import v3_field_relations as ordinary
+        return ordinary.maximum_cost(notes,fields,config,context_labels,requirements or ())
     r=rates(config)
     profile=job_request_profile(config)
     if narrative_contract(fields,config):
@@ -1728,7 +1737,8 @@ def occurrence_index(notes, labels, units=None, parsed_units=None):
     return anywhere, by_label, value_of, {}
 
 
-def judged_context(governance, notes, index, label, evidence, *, history_context=None, answer_text=None):
+def judged_context(governance, notes, index, label, evidence, *, history_context=None, answer_text=None,
+                   ordinary_relation=None, field_key=None):
     """`governed_context` over every occurrence of `evidence` where this question may select it (the ONE reader of
     that, for both validators and the page): each other text's occurrences are summarized once per note, and the
     result memoized (eleventh and twelfth passes: a hundred questions over one repeated line held the row lock).
@@ -1737,7 +1747,8 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
         scope = governance[11]
         warnings = list(scope['corrections'])
         warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence,
-                                          history_context=history_context, answer_text=answer_text)
+                                          history_context=history_context, answer_text=answer_text,
+                                          ordinary_relation=ordinary_relation, field_key=field_key)
         if question_key(label) == 'smoker':
             from .v3_nonsmoker import evidence_needs_review
             if evidence_needs_review(notes, scope['preceding']['named'].get('smoker', ()), evidence):
@@ -1816,15 +1827,18 @@ def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_unit
             # No automatic answer is released when this reader cannot establish its context.
             note_units = [{'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)}]
             corrections = note_units
-        result += ({'units': note_units, 'corrections': corrections,
-                    'preceding': v3_preceding_reading(notes, asked, context, note_units, v3_parsed)},)
+        preceding = v3_preceding_reading(notes, asked, context, note_units, v3_parsed)
+        preceding['catalogue'] = fields
+        result += ({'units': note_units, 'corrections': corrections, 'preceding': preceding},)
     return result
 
 
-def page_context(governance, notes, label, evidence, *, history_context=None, answer_text=None):
+def page_context(governance, notes, label, evidence, *, history_context=None, answer_text=None,
+                 ordinary_relation=None, field_key=None):
     """What the page judges for a stored answer: `evidence` at every occurrence (`governance_for`'s index)."""
     return judged_context(governance, notes, governance[10] if len(governance) > 10 else None, label, evidence,
-                          history_context=history_context, answer_text=answer_text)
+                          history_context=history_context, answer_text=answer_text,
+                          ordinary_relation=ordinary_relation, field_key=field_key)
 
 
 def withheld_note_wide(governance, notes):
@@ -1843,13 +1857,14 @@ def offer_context(governance, notes, answer, label=None):
     return [] if context is None and withheld_note_wide(governance, notes) else context
 
 
-def governed_supported(governance, notes, answer, label=None):
+def governed_supported(governance, notes, answer, label=None, *, field_key=None):
     """The governing lines of a stored answer still `supported` on a governed line, or None. Only generation
     writes `supported` (a clinician's answer is `edited`), so this is a draft from before this rule."""
     if answer.get('status') != 'supported' or not answer.get('evidence'):
         return None
     return page_context(governance, notes, label, answer['evidence'],
-                        history_context=answer.get('history_context'), answer_text=answer.get('text'))
+                        history_context=answer.get('history_context'), answer_text=answer.get('text'),
+                        ordinary_relation=answer.get('ordinary_relation'), field_key=field_key)
 
 
 def own_evidence(answer, notes, per_sentence=True):
@@ -1914,7 +1929,7 @@ def as_currently_governed(governance, notes, answer, word_form=False):
     if (answer.get('held_candidate') and answer.get('status') == 'edited' and not is_empty(answer.get('text'))
             and not word_form):
         return {**answer, 'held_candidate': {**answer['held_candidate'], 'reason': HELD_REASON_EDITED}}
-    context = governed_supported(governance, notes, answer, label)
+    context = governed_supported(governance, notes, answer, label, field_key=answer.get('key'))
     if context is not None:
         return held_for_decision(answer, [answer.get('text', '')], answer['evidence'], context, word_form, prefilled=True)
     context = offer_context(governance, notes, answer, label)
@@ -1958,7 +1973,7 @@ def governed_decisions(notes, fields, answers, context_labels=()):
         answers = {key: answer for key, answer in answers.items() if not wm_narrative.has_unit_evidence(answer)}
     for field in fields:
         answer = answers.get(field['key']) or {}
-        if governed_supported(governance, notes, answer, field['label']) is not None:
+        if governed_supported(governance, notes, answer, field['label'], field_key=field['key']) is not None:
             found.append(field['label'])
         elif answer.get('accepted_suggestion') and offer_context(governance, notes, answer, field['label']) is not None:
             found.append(field['label'])
@@ -2742,7 +2757,8 @@ def v3_scope_selection(reading, label, evidence):
     return {'before': before, 'after': after, 'complete': complete}
 
 
-def v3_preceding_warnings(reading, label, evidence, *, history_context=None, answer_text=None):
+def v3_preceding_warnings(reading, label, evidence, *, history_context=None, answer_text=None,
+                         ordinary_relation=None, field_key=None):
     """The same paragraph/source-block context on generation, page, save and finalize."""
     if not reading: return []
     label = question_key(label)
@@ -2754,9 +2770,12 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
     scoped = v3_scope_selection(reading, label, evidence)
     from .v3_history_context import read as history_read
     history = history_read(reading, label, evidence, history_context, text=answer_text)
+    from .v3_field_relations import read as ordinary_read
+    ordinary = ordinary_read(reading, label, evidence, ordinary_relation, text=answer_text, field_key=field_key)
     # Only generic neighbour holds can be discharged. All other warnings below
     # still see the entire source and retain their existing vetoes.
     scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
+    scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
     complete = set()
     if label in reading['general']:
         for group in reading['groups']:
@@ -2764,9 +2783,16 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
                 if all(u['id'] in selected for u in group):
                     complete.update(u['id'] for u in group)
     warnings = {unit['id']: unit for unit in reading['units']
-                if unit['id'] in reading['conditional_unsafe'] or unit['id'] in reading['coupled'].get(label, ()) or (label in reading['ambiguous_subjects']
+                if unit['id'] in reading['conditional_unsafe'] or (not ordinary['self_reference'] and unit['id'] in reading['coupled'].get(label, ())) or (label in reading['ambiguous_subjects']
                     and reading['subjects'][unit['id']] == label)}
+    matches = reading['named'].get(label, ())
+    if len(matches) == 1:
+        from .v3_destination import side_warnings
+        warnings.update((unit['id'], unit) for unit in side_warnings(matches[0], selected.values()))
     warnings.update((unit['id'], unit) for unit in history['warnings'])
+    warnings.update((unit['id'], unit) for unit in ordinary['warnings'])
+    if len(matches) > 1 and selected and not ordinary['valid']:
+        warnings.update(selected)
     starts = [unit['start'] for unit in reading['units']]
     for kind, start, end in reading['inherited_causes']:
         index = bisect.bisect_right(starts, start) - 1
@@ -2813,7 +2839,7 @@ def nearby_entry(notes, unit, near, after):
 
 
 def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered_duplicate_holds=False,finite=FINITE_STATEMENT,
-                            v3=False,history_records=None):
+                            v3=False,history_records=None,ordinary_records=None,catalogue=None):
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
     # ⚠️ EACH UNIT IS READ ONCE PER VALIDATION, NOT ONCE PER QUESTION (R7): `tab_source_value` tries every label on every
@@ -2824,6 +2850,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         # line, over every occurrence. Read per sentence here, a correction line was exempted as 'its own answer' that
         # finalization then refused ('Plan: rest. Allergies: none.' / 'Allergies: correction, penicillin.').
         governance=governance_for(notes,fields,context_labels,v3_units=units,v3_parsed=parsed_units)
+        if catalogue is not None: governance[11]['preceding']['catalogue'] = catalogue
         index=governance[10]
         inherited=bool(governance[11]['preceding']['inherited_causes'])
     else:
@@ -2913,6 +2940,13 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         evidence=[]; texts=[]; guarded=False; nearby={}
         choices=[by_id[value] for value in item.unit_ids] if isinstance(item,UnitSelection) else item.quotes
         history_context = (history_records or {}).get(item.key)
+        ordinary_relation = (ordinary_records or {}).get(item.key)
+        from .v3_field_relations import read as ordinary_read
+        ordinary = ordinary_read(governance[11]['preceding'], label,
+            [{k: choice[k] for k in ('quote', 'start', 'end')} for choice in sorted(choices, key=lambda u:u['start'])],
+            ordinary_relation, field_key=item.key) if v3 and ordinary_relation is not None else {
+                'ids': set(), 'warnings': [], 'valid': False, 'self_reference': False}
+        if ordinary['warnings']: guarded = True
         history = {'ids': set(), 'warnings': []}
         if v3 and history_context is not None:
             from .v3_history_context import read as history_read
@@ -2921,7 +2955,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 history_context)
             if history['warnings']: guarded = True
         if v3 and choices and (label in governance[11]['preceding']['ambiguous_subjects']
-                              or label in governance[11]['preceding']['coupled']):
+                              or (label in governance[11]['preceding']['coupled'] and not ordinary['self_reference'])):
             guarded = True
         scoped = v3_scope_selection(governance[11]['preceding'], label,
                     [choice if isinstance(choice,dict) else allowed[choice][0] for choice in choices if isinstance(choice,dict) or choice in allowed]) if v3 else {}
@@ -2936,6 +2970,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 scoped = {name: ids - unowned for name, ids in scoped.items()}
         if v3:
             scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
+            scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
         if v3 and (item.key in complete_paragraphs or scoped['complete'] or history['ids']):
             choices=sorted(choices, key=lambda unit: unit['start'] if isinstance(unit,dict) else allowed[unit][0]['start'])
         for choice in choices:
@@ -3008,20 +3043,22 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                     used[quote]=item.key
             # Identical wording at two source positions can be two separate instructions (take a tablet,
             # wait, take a tablet). Whole-paragraph adoption retains each occurrence in source order.
-            if value and (value not in texts or unit['id'] in history['ids'] or unit['id'] in complete_paragraphs.get(item.key, ())
+            if value and (value not in texts or unit['id'] in history['ids'] or unit['id'] in ordinary['ids'] or unit['id'] in complete_paragraphs.get(item.key, ())
                           or (v3 and label in governance[11]['preceding']['general']
                               and unit['id'] in scoped['complete'])): texts.append(value)
         conflict=item.conflict or len(explicit)>1 or injection or (inherited and bool(texts)) or guarded
         if len(explicit)>1:
             evidence=[{k:unit[k] for k in ('quote','start','end')} for unit in explicit.values()]
         own=evidence
-        governed=judged_context(governance,notes,index,field['label'],own,history_context=history_context)   # the RAW label
+        governed=judged_context(governance,notes,index,field['label'],own,history_context=history_context,
+                               ordinary_relation=ordinary_relation,field_key=item.key)   # the RAW label
         if (inherited or injection) and texts:
             evidence=[{'quote':notes,'start':0,'end':len(notes)}]
         status='conflict' if conflict else 'supported' if texts else 'missing'
         answer={'text':'\n'.join(texts) if status=='supported' else '',
                 'status':status,'evidence':evidence,'reviewed':False}
         if history_context is not None: answer['history_context'] = history_context
+        if ordinary_relation is not None: answer['ordinary_relation'] = ordinary_relation
         if texts and (evidence is not own or any(entry['quote']==notes for entry in own)):
             # The whole note stands in `evidence`, or its own unit IS the whole note (tenth pass: a one-sentence note's
             # ready answer, cleared, was judged fail-closed as if its evidence were the substituted span).
@@ -3048,7 +3085,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
     return output
 
 
-def validate_selections(notes,fields,selections,*,context_labels=(),evidence_contract=None,history_records=None):
+def validate_selections(notes,fields,selections,*,context_labels=(),evidence_contract=None,history_records=None,
+                        ordinary_records=None,catalogue=None):
     known={f['key'] for f in fields}
     if {f.key for f in selections.fields}!=known or len(selections.fields)!=len(known): raise ValidationError('Provider returned missing, duplicated or unknown fields.')
     if evidence_contract != 'legacy' and tab_evidence_contract(fields):
@@ -3057,7 +3095,8 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
         # ⚠️ A v3 form's labels are the form's own words (row — column): a label that ends in a number is not a
         # numbered-slot group the provider was told about, so a repeated statement there is HELD, never a failed job.
         return validate_tab_selections(notes,fields,selections,context_labels=context_labels,numbered_duplicate_holds=True,
-                                       finite=FINITE_STATEMENT_V3,v3=True,history_records=history_records)
+                                       finite=FINITE_STATEMENT_V3,v3=True,history_records=history_records,
+                                       ordinary_records=ordinary_records,catalogue=catalogue)
     output={}
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     labels=recognized_labels(fields,context_labels)
@@ -3470,6 +3509,11 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
     labels = recognized_labels(generated, context_labels)
     repeats = collections.Counter(question_key(f['label']) for f in generated)
     lines = LabelledLines(notes, labels)            # each line split once, for every option question (R3-5)
+    relation_reading = None
+    if any(answer.get('ordinary_relation') for answer in answers.values()):
+        units = source_units(notes, generated, context_labels=context_labels)[0]
+        relation_reading = v3_preceding_reading(notes, generated, context_labels, units)
+        relation_reading['catalogue'] = fields
     out = {}
     for field in fields:
         kind = field.get('kind')
@@ -3480,7 +3524,15 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
             continue
         answer = answers[field['key']]
         count = repeats[question_key(field['label'])]
-        if count > 1:
+        relation = None
+        if relation_reading is not None and answer.get('ordinary_relation'):
+            from .v3_field_relations import read as ordinary_read
+            relation = ordinary_read(relation_reading, field['label'],
+                answer.get('own_evidence') or answer.get('evidence') or [], answer['ordinary_relation'],
+                field_key=field['key'])
+        if relation and relation['valid'] and answer.get('status') == 'supported' and not answer.get('held_candidate'):
+            answer = {**answer, 'text': relation['value']}
+        elif count > 1:
             answer = v3_repeated(answer, count)
         elif kind in ('choice', 'multi_choice', 'checkbox'):
             answer = v3_option_answer(field, answer, notes, labels, lines)
@@ -3509,6 +3561,9 @@ def before_the_provider(active):
 
 def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
     config=config or configuration()
+    if config.get('ordinary_field_contract') and natural_v3(fields):
+        from . import v3_field_relations as ordinary
+        return ordinary.generate(notes,fields,config,context_labels=context_labels,requirements=requirements or ())
     if narrative_contract(fields,config):
         return generate_narrative(notes,fields,config,list(requirements or []))
     # Contract v3 only: the provider is asked about the generated kinds, with the others' labels as context labels.
@@ -3596,6 +3651,9 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
     return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
+    if isinstance(result,dict) and result.get('ordinary_field_contract'):
+        from . import v3_field_relations as ordinary
+        return ordinary.validated(result)
     if isinstance(result,dict) and result.get('evidence_contract')==NARRATIVE_CONTRACT:
         return narrative_validated(result)[0]
     if isinstance(result,dict) and 'anthropic_response' in result:

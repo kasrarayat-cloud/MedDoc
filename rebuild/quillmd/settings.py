@@ -128,6 +128,7 @@ WM_NARRATIVE=os.getenv('QUILLMD_WM_NARRATIVE','0')=='1'
 # Prepared only: exact-model context qualification is still a release gate.
 V3_HISTORY_CONTEXT=os.getenv('QUILLMD_V3_HISTORY_CONTEXT','0')=='1'
 V3_GENERATION_BATCHES=os.getenv('QUILLMD_V3_GENERATION_BATCHES','0')=='1'
+V3_FIELD_RELATIONS=os.getenv('QUILLMD_V3_FIELD_RELATIONS','0')=='1'
 # Retained provider-shaped narrative responses, keyed by the sha256 of the notes. Read ONLY in fixture mode, never live.
 AI_REPLAY_DIR=os.getenv('QUILLMD_AI_REPLAY_DIR','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
