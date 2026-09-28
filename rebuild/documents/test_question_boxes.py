@@ -928,6 +928,39 @@ class TabColumnOwnership(unittest.TestCase):
         with self.assertRaises(w.V3Failure):
             self.proposed_fill(raw,result['fields'],{field['key']:field['options']})
 
+    def test_a_refused_tab_column_source_is_held_whole_and_never_re_read_by_a_weaker_rule(self):
+        # CI run 36479289351 (d9fa3249): after the tab-column rule refused a check-all title over one-response rows, the
+        # text-option rule re-read the same cell's title and literal header as a question with printed options, so an
+        # answer would have written a tick into the header line while the row's own boxes stayed empty. A refused
+        # source is held whole: no field of ANY kind may come from its cell, and the refusal stays visible.
+        def refused_cells(doc):
+            raw = data(doc); result = self.proposal(raw)
+            cell = 'b/tbl[0]/tr[0]/tc[0]'
+            inside = [f for f in result['fields'] if f['locator']['slot'].startswith(cell + '/')
+                      or any(b.get('slot', '').startswith(cell + '/') for b in f['locator']['target'].get('boxes', []))]
+            return inside, result['notes'], raw, result['fields']
+        shapes = {'check-all title': self.form(many=True)}
+        for conflict in (False, True):
+            doc = self.form(); doc.paragraphs[0].text = 'Symptoms; tick all that apply.'
+            cell = doc.tables[0].cell(0, 0); cell.paragraphs[1].text = '\tPain\tSwelling'
+            if conflict: cell.paragraphs[0].text = 'Examination; choose one.'
+            shapes['heading check-all' + (' + conflicting title' if conflict else '')] = doc
+        doc = self.form(); doc.paragraphs[0].text = 'Symptoms; select up to 1.'
+        shapes['unrepresented limit'] = doc
+        for name, doc in shapes.items():
+            with self.subTest(shape=name):
+                inside, notes, raw, fields = refused_cells(doc)
+                self.assertEqual(inside, [], [(f['locator']['slot'], f['kind'], f['locator']['target']['type']) for f in inside])
+                self.assertTrue(any(n.startswith('Tab-column options at') or n.startswith('Coded column sequence at')
+                                    for n in notes))
+                with ZipFile(io.BytesIO(raw)) as old, ZipFile(io.BytesIO(self.proposed_fill(raw, fields, {}))) as new:
+                    self.assertEqual({n: old.read(n) for n in old.namelist()}, {n: new.read(n) for n in new.namelist()})
+        # Positive control: the same source with an ordinary title still proposes its row, and nothing from the header.
+        result = self.proposal(data(self.form()))
+        rows = [f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes']
+        self.assertEqual([f['locator']['slot'] for f in rows], ['b/tbl[0]/tr[0]/tc[0]/p[2]'])
+        self.assertFalse([f for f in result['fields'] if f['locator']['slot'] == 'b/tbl[0]/tr[0]/tc[0]/p[1]'])
+
     def test_inherited_stops_clear_override_and_same_indent_are_resolved(self):
         doc=self.form(inherited=True)
         cell=doc.tables[0].cell(0,0)
