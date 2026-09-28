@@ -47,3 +47,6 @@ urlpatterns += [path('invite/clinic/<str:raw>/', clinic_invitations.accept, name
 
 from core import disposition_views
 urlpatterns += [path('console/disposition/',disposition_views.page,name='disposition_review'),path('console/restore-preparation/',disposition_views.restore,name='restore_preparation')]
+
+from core import disposition_execution_views
+urlpatterns += [path('console/disposition-execution/', disposition_execution_views.page, name='disposition_execution')]

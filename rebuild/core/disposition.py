@@ -100,6 +100,18 @@ def graph(request):
     collect('Department',m.Department.objects.filter(pk=request.department_id))
     dept=m.Department.objects.get(pk=request.department_id)
     collect('Organization',m.Organization.objects.filter(pk=dept.organization_id))
+    collect('DispositionPolicyAdmission',m.DispositionPolicyAdmission.objects.filter(department_id=request.department_id))
+    instruction_scope=Q(target_id__in=eids)
+    if request.scope=='patient':
+        # The empty row may already be gone. Its immutable preparation snapshot
+        # retains the patient identity; deletion cannot erase review history.
+        instruction_scope |= Q(source_snapshot__patient_id=str(request.target_id))
+    instructions=collect('DispositionInstruction',m.DispositionInstruction.objects.filter(instruction_scope))
+    instruction_ids=[v['id'] for v in instructions]
+    collect('DispositionApproval',m.DispositionApproval.objects.filter(instruction_id__in=instruction_ids))
+    tombstones=collect('DispositionTombstone',m.DispositionTombstone.objects.filter(Q(target_id__in=eids)|Q(instruction_id__in=instruction_ids)))
+    collect('DispositionCompletion',m.DispositionCompletion.objects.filter(tombstone_id__in=[v['id'] for v in tombstones]))
+    if tombstones:blockers.add('disposed_target')
     holds=collect('RetentionHold',m.RetentionHold.objects.filter(Q(scope='global')|Q(organization_id=dept.organization_id)|Q(department_id=dept.pk)|Q(patient_id__in=patient_ids)|Q(encounter_id__in=eids)))
     releases=collect('RetentionHoldRelease',m.RetentionHoldRelease.objects.filter(hold_id__in=[v['id'] for v in holds]))
     if holds:blockers.add('historical_preservation')
@@ -198,7 +210,7 @@ def prepare_restore(actor,instance_id,backup_sha256):
 
 class RestoreQuarantineMiddleware:
     SAFE = frozenset(('/health/','/login/','/logout/','/mfa/','/preview/sign-in/','/preview/sign-out/',
-                      '/console/disposition/','/console/restore-preparation/'))
+                      '/console/disposition/','/console/restore-preparation/','/console/disposition-execution/'))
     def __init__(self,get_response):self.get_response=get_response
     def __call__(self,request):
         if quarantined() and request.path not in self.SAFE and not request.path.startswith('/static/'):

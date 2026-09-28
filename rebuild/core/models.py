@@ -107,6 +107,43 @@ class RestorePreparation(Entity):
     report_sha256=models.CharField(max_length=64)
     created_by=models.ForeignKey('User',on_delete=models.PROTECT)
 
+class DispositionPolicyAdmission(Entity):
+    """Signed prospective authority; a historical review proposal cannot become this."""
+    policy_id=models.UUIDField(unique=True)
+    department=models.ForeignKey('Department',on_delete=models.PROTECT)
+    envelope=models.JSONField()
+    envelope_sha256=models.CharField(max_length=64,unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionInstruction(Entity):
+    policy=models.ForeignKey(DispositionPolicyAdmission,on_delete=models.PROTECT)
+    department=models.ForeignKey('Department',on_delete=models.PROTECT)
+    target_id=models.UUIDField()
+    snapshot_sha256=models.CharField(max_length=64)
+    source_snapshot=models.JSONField()
+    source_created_at=models.DateTimeField()
+    request_key=models.UUIDField(unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionApproval(Entity):
+    instruction=models.OneToOneField(DispositionInstruction,on_delete=models.PROTECT,related_name='approval')
+    snapshot_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionTombstone(Entity):
+    # Scalar identities deliberately survive removal of an eligible empty draft,
+    # and permit verified independent-journal replay onto an older backup.
+    target_id=models.UUIDField(unique=True)
+    department_id=models.UUIDField()
+    instruction_id=models.UUIDField(unique=True)
+    journal_entry=models.JSONField()
+    entry_sha256=models.CharField(max_length=64,unique=True)
+
+class DispositionCompletion(Entity):
+    tombstone=models.OneToOneField(DispositionTombstone,on_delete=models.PROTECT,related_name='completion')
+    outcome=models.CharField(max_length=24)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
 class ProviderIdentifiers:
     @property
     def legacy_resource_identifier(self):

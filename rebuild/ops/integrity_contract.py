@@ -39,7 +39,7 @@ def assess(rows, context, declared_count):
             continue
         (_, _, actual_function, actual_kind, state, definition, namespace, body, sql_function,
          nargs, language, returns_trigger, security_definer, config, strict, volatility, parallel) = row
-        event = {7:'INSERT', 23: 'INSERT OR UPDATE', 27: 'DELETE OR UPDATE', 19: 'UPDATE', 34: 'TRUNCATE'}[kind]
+        event = {7:'INSERT', 23: 'INSERT OR UPDATE', 27: 'DELETE OR UPDATE', 19: 'UPDATE', 34: 'TRUNCATE', 31: 'INSERT OR DELETE OR UPDATE'}[kind]
         each = 'ROW' if kind & 1 else 'STATEMENT'
         wanted = (f'CREATE TRIGGER {name} BEFORE {event} ON public.{table} '
                   f'FOR EACH {each} EXECUTE FUNCTION {sql_function}()')
@@ -80,6 +80,9 @@ FUNCTION_SHA256 = {
     'quillmd_reconciliation_evidence_guard': 'e25b0f7d604223287b30f2955bc167c34ce889460ac612757d88a93b1f828bdd',
     'quillmd_refuse_truncate': '1f42decb7308aa5ee0a2f5425bd3ca1e8edf244ef3ff5a3faffe0c1dd6b4f447',
     'quillmd_webhook_evidence_guard': '797abc46124f7f810165cd8058731387c10bbad141f840f8fddc5b0b5f732f8c',
+    'quillmd_disposition_reference': 'd8091118ccf9ad4ed1e00604ce628216fb5f5b3b36e47125a5319486f344cd97',
+    'quillmd_disposition_target': '9f3949efe49112a1f02594dcfb53dd71ba8379131829578988840cc6230588c1',
+    'quillmd_execution_instruction': '417bcc1b439787326df46c391db750fbaa5e5d8f65e8ea69c1b26e0a109c3aa1',
 }
 
 GUARDS = (
@@ -146,4 +149,23 @@ GUARDS = (
     ('core_restorepreparation', 'restorepreparation_immutable', 'quillmd_append_only', 27),
     ('core_restorepreparation', 'restorepreparation_insert', 'quillmd_disposition_instruction', 7),
     ('core_restorepreparation', 'restorepreparation_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_codesuggestion', 'code_disposition', 'quillmd_disposition_reference', 23),
+    ('core_dispositionapproval', 'dispositionapproval_immutable', 'quillmd_append_only', 27),
+    ('core_dispositionapproval', 'dispositionapproval_insert', 'quillmd_execution_instruction', 7),
+    ('core_dispositionapproval', 'dispositionapproval_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_dispositioncompletion', 'dispositioncompletion_immutable', 'quillmd_append_only', 27),
+    ('core_dispositioncompletion', 'dispositioncompletion_insert', 'quillmd_execution_instruction', 7),
+    ('core_dispositioncompletion', 'dispositioncompletion_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_dispositioninstruction', 'dispositioninstruction_immutable', 'quillmd_append_only', 27),
+    ('core_dispositioninstruction', 'dispositioninstruction_insert', 'quillmd_execution_instruction', 7),
+    ('core_dispositioninstruction', 'dispositioninstruction_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_dispositionpolicyadmission', 'dispositionpolicyadmission_immutable', 'quillmd_append_only', 27),
+    ('core_dispositionpolicyadmission', 'dispositionpolicyadmission_insert', 'quillmd_execution_instruction', 7),
+    ('core_dispositionpolicyadmission', 'dispositionpolicyadmission_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_dispositiontombstone', 'dispositiontombstone_immutable', 'quillmd_append_only', 27),
+    ('core_dispositiontombstone', 'dispositiontombstone_insert', 'quillmd_execution_instruction', 7),
+    ('core_dispositiontombstone', 'dispositiontombstone_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_encounter', 'encounter_disposition', 'quillmd_disposition_target', 31),
+    ('core_generationbatch', 'batch_disposition', 'quillmd_disposition_reference', 23),
+    ('core_job', 'job_disposition', 'quillmd_disposition_reference', 23),
 )

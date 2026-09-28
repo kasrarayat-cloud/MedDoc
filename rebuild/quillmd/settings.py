@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import json
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 from quillmd import application_profile as _profile
@@ -163,3 +164,13 @@ if _refusals:
 # Preparation cannot release quarantine or grant destruction authority.
 RESTORE_QUARANTINE = os.getenv('QUILLMD_RESTORE_QUARANTINE', '0') != '0'
 RESTORE_INSTANCE_ID = os.getenv('QUILLMD_RESTORE_INSTANCE_ID', '')
+# No keys, schedule or executable authority ship with the product. Tombstones
+# remain enforced when execution is disabled; turning a feature off is no release.
+DISPOSITION_ENABLED = os.getenv('QUILLMD_DISPOSITION_ENABLED', '0') == '1'
+DISPOSITION_NAMESPACE = os.getenv('QUILLMD_DISPOSITION_NAMESPACE', '')
+DISPOSITION_AUTHORITY_KEYS = json.loads(os.getenv('QUILLMD_DISPOSITION_AUTHORITY_KEYS', '{}'))
+DISPOSITION_CHECKPOINT_KEYS = json.loads(os.getenv('QUILLMD_DISPOSITION_CHECKPOINT_KEYS', '{}'))
+DISPOSITION_JOURNAL_KEYS = json.loads(os.getenv('QUILLMD_DISPOSITION_JOURNAL_KEYS', '{}'))
+DISPOSITION_JOURNAL_KEY_ID = os.getenv('QUILLMD_DISPOSITION_JOURNAL_KEY_ID', '')
+DISPOSITION_JOURNAL_PRIVATE_KEY = os.getenv('QUILLMD_DISPOSITION_JOURNAL_PRIVATE_KEY', '')
+DISPOSITION_JOURNAL_PATH = os.getenv('QUILLMD_DISPOSITION_JOURNAL_PATH', '')

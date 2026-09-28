@@ -1,0 +1,21 @@
+{
+  "core_leaf_nodes": [
+    [
+      "core",
+      "0030_empty_draft_disposition"
+    ]
+  ],
+  "model_migration_changes": [],
+  "closed_catalog_matches": true,
+  "prior_guards_preserved": 63,
+  "prior_function_hashes_preserved": 18,
+  "expected_guards": 82,
+  "expected_function_bodies": 21,
+  "execution_default": false,
+  "batch_feature_default": false,
+  "policy_classes_unresolved": 54,
+  "authority_keys_unset": true,
+  "journal_path_unset": true,
+  "network": "denied",
+  "database_connections": 0
+}

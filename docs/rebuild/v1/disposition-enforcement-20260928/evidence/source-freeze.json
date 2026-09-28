@@ -1,0 +1,32 @@
+{
+  "base": "644e28355d82db1844c889ca6ada7efb61157221",
+  "source_files": {
+    "rebuild/.env.example": "961979b0dc9fdf9dea82368e70a18b18779403a0790c581bf63c163f897cb603",
+    "rebuild/core/batch_jobs.py": "5c82d721099a8e3db3354026919bbcd8274042d8f6316c4853189a2ba6bcc71d",
+    "rebuild/core/disposition.py": "a559628a8a445b679d9352720c323e1fc6fcd671f0536ceafb90135cbae5f3e2",
+    "rebuild/core/disposition_catalog.py": "075668728e2a7d0145faea9c478be9486e98cfa35b225dea9c39cec66bb9a30c",
+    "rebuild/core/disposition_execution.py": "31bb65c4d2f14c4f95ba15825c66b66a1405e842add57e3ad75ccce9aae84ea0",
+    "rebuild/core/disposition_execution_views.py": "22b143f180bed06ce2b05e7dfc4ab1aa09cd96ccf5695df5acf7b7803ac154e7",
+    "rebuild/core/disposition_journal.py": "71fb9e11cc28449d770e6bbb5d78f1283585273aa2357e192e3971568593e8cd",
+    "rebuild/core/disposition_policy.py": "fc00df4c14bbdb31cd042e28a5adaf04299ecf85e32c8ee09942f2e40af8a971",
+    "rebuild/core/jobs.py": "8c88c9af2a06e61cfed1a27c61cb22215733f800c7df1315152d883fb6edd1a7",
+    "rebuild/core/migrations/0030_empty_draft_disposition.py": "ac0610f2112577addc1ddd8dca15c69a65a22df5489dceb349e70a76740fa5c7",
+    "rebuild/core/models.py": "bf6cd15862e6ede7e44d9ccb6ebdf4583b550f8192fe72ed08ced832ebc2acbc",
+    "rebuild/core/retention_readiness.py": "a19466c82cd60a103d4d159c29184724e5c304e0af937f675d8d967ebd7cb391",
+    "rebuild/core/security.py": "4942edea280f2d3d29c6696c46a0915380579120ac739075bf22c6080bfa39b7",
+    "rebuild/core/tests/test_disposition_execution.py": "173dd4504124a4ee9e6f31c066ed638ed28a21656aed6833cc428eb56e8f9e4d",
+    "rebuild/core/tests/test_disposition_preparation.py": "919e587a9af947d15133d9d291ea211feb346d828aed909eaf6977778478c6cc",
+    "rebuild/core/tests/test_restore_integrity_contract.py": "efc7b8bfe6608d6a7c9b48ed62db6f436cc674ddbb6455c3de350ba3c357de36",
+    "rebuild/ops/integrity_contract.py": "ce2ec4504ff7b55e183e7b18755560cb6359ec78797c1b7cd4fc7edbe9c1608d",
+    "rebuild/ops/retention/policy.schema.json": "6e691e5d1e60f5231cb35414634ec9a7f4a7ab3462f0e3f3ca01c4ad6d97234e",
+    "rebuild/ops/retention/policy.unset.json": "95e40b0a267134b97f10a04bf1bc4706f63e689813f70d98c638f31db04f1954",
+    "rebuild/ops/test_production_restore_check.py": "22c6da6c351f38e0a7cdc41f531ac5d579f3743f062defe93a981fb7a5e97497",
+    "rebuild/quillmd/settings.py": "c48892a661ff3c3b7a8d2af79dee217b0a8fee3b7258f7b1b23b9098722d2aed",
+    "rebuild/quillmd/urls.py": "2e7c97c3e19e9d9a6372cf66226caad60e569422dd47c133ae533f7936cb0483",
+    "rebuild/templates/disposition_execution.html": "217ba05d4d5b6201265f3b6f8f4df957d24581f47f5fe6ebc4523ab7b647739b",
+    "rebuild/templates/disposition_review.html": "76d7ecca243f8fe280630fb50074092542537b8b82d0b8f943ce70199aca3395"
+  },
+  "source_sha256": "218a5902b968df167d07276174344a46956a9e876de2801679819ae3d8fc79a5",
+  "independent_review": "pending at author freeze",
+  "installed_changes": false
+}

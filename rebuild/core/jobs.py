@@ -222,6 +222,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
                                                       config or generation.configuration(encounter.template_version.fields)):
         return batch_jobs.enqueue(encounter,user,config or generation.configuration(encounter.template_version.fields),expected_revision)
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
+    from .disposition_execution import require_access
+    require_access(e.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
     if expected_revision is not None and e.revision!=expected_revision:
@@ -631,6 +633,8 @@ def run_one():
     with transaction.atomic():
         job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').exclude(kind__in=['mapping','generation_part']).order_by('created_at').first()
         if not job: return False
+        from .disposition_execution import require_access
+        require_access(job.encounter_id)
         try: membership(job.user,job.department)
         except Exception:
             job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.request_key=ended_key(job,'failed'); job.save();release(job); return True

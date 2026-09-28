@@ -168,6 +168,11 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "disposition_policy_admissions",
+        "disposition_instructions",
+        "disposition_approvals",
+        "disposition_tombstones",
+        "disposition_completions",
         "disposition_requests",
         "disposition_plans",
         "disposition_reviews",
@@ -219,6 +224,226 @@
         "terminology_codes"
       ],
       "properties": {
+        "disposition_policy_admissions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_instructions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_approvals": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_tombstones": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "disposition_completions": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
         "disposition_requests": {
           "oneOf": [
             {

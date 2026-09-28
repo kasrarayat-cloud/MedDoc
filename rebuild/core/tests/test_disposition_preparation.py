@@ -126,7 +126,7 @@ class DispositionPreparation(Fixture,TestCase):
         with connection.cursor() as cursor:
             cursor.execute(integrity_contract.CATALOG);rows=cursor.fetchall()
             cursor.execute(integrity_contract.CONTEXT);context=cursor.fetchall()
-        self.assertTrue(integrity_contract.assess(rows,context,63)['passed'])
+        self.assertTrue(integrity_contract.assess(rows,context,82)['passed'])
 
     def test_mfa_csrf_actual_forms_and_scope_errors(self):
         self.client.force_login(self.admin)

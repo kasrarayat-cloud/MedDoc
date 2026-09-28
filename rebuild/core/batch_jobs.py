@@ -39,6 +39,8 @@ def event(batch, kind, *, part=None, details=None):
 def enqueue(encounter, user, config, expected_revision=None):
     from .views import clinician_decided
     e = Encounter.objects.select_for_update().get(pk=encounter.pk)
+    from .disposition_execution import require_access
+    require_access(e.pk)
     membership(user, e.department)
     if e.status == 'finalized' or clinician_decided(e):
         b.refuse('A finalized or clinician-reviewed document cannot be replaced.')
@@ -94,6 +96,8 @@ def enqueue(encounter, user, config, expected_revision=None):
 
 
 def current_plan(batch):
+    from .disposition_execution import require_access
+    require_access(batch.encounter_id)
     plan = batch.plan
     if b.digest(plan) != batch.plan_sha256:
         raise ValidationError('Batch plan integrity failed.')
@@ -218,6 +222,8 @@ def finish(batch_id):
     from .disposition import require_processing
     require_processing()
     batch=GenerationBatch.objects.get(pk=batch_id)
+    from .disposition_execution import require_access
+    require_access(batch.encounter_id)
     parts=list(batch.parts.select_related('job','response').order_by('ordinal'))
     if len(parts)!=len(batch.plan['parts']) or any(p.job.state!='staged' for p in parts):return False
     # Complete clinical validation precedes user-declined billing classification.
@@ -265,6 +271,8 @@ def run_one():
     with transaction.atomic():
         batch=GenerationBatch.objects.select_for_update(skip_locked=True).filter(state__in=['queued','running','validating']).order_by('created_at').first()
         if not batch:return False
+        from .disposition_execution import require_access
+        require_access(batch.encounter_id)
         if batch.parts.filter(job__state='running').exists():return False
         part=batch.parts.select_related('job').filter(job__state='queued').order_by('ordinal').first()
         if part:

@@ -19,6 +19,11 @@ MAX_POLICY_BYTES=65536
 # class: (model label, optional fixed filter, permitted explicitly chosen review anchors,
 #         immutable/protected-for-this-tool). A count is rows/references, never verified files.
 CATALOG={
+ 'disposition_policy_admissions':('core.DispositionPolicyAdmission',{},('created_at',),True),
+ 'disposition_instructions':('core.DispositionInstruction',{},('created_at',),True),
+ 'disposition_approvals':('core.DispositionApproval',{},('created_at',),True),
+ 'disposition_tombstones':('core.DispositionTombstone',{},('created_at',),True),
+ 'disposition_completions':('core.DispositionCompletion',{},('created_at',),True),
  'disposition_requests':('core.DispositionRequest',{},('created_at',),True),
  'disposition_plans':('core.DispositionPlan',{},('created_at',),True),
  'disposition_reviews':('core.DispositionReview',{},('created_at',),True),

@@ -17,6 +17,31 @@
     "downloaded_exports": "unresolved"
   },
   "classes": {
+    "disposition_policy_admissions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_instructions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_approvals": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_tombstones": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_completions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
     "disposition_requests": {
       "mode": "unresolved",
       "anchor": null,
