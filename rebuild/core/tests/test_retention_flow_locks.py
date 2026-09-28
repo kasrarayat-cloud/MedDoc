@@ -162,3 +162,34 @@ class HeldJobResolutionAgainstVoiceUpload(LockFlowFixture, TransactionTestCase):
         promo = Wallet.objects.get(user=self.user, kind='promo')
         self.assertEqual(promo.reserved, sum(Reservation.objects.filter(job=queued, wallet=promo, state='held')
                                               .values_list('amount', flat=True), Decimal(0)))
+
+
+@override_settings(**LOCKED)
+class FailedUploadNeverStrandsItsRecording(LockFlowFixture, TransactionTestCase):
+    """RF-1, second half. Reproduce: the upload's enqueue fails with a database error (the deadlock victim's
+    OperationalError) after the recording was stored. RED on bf8f7b78: the view caught only ValidationError, so the
+    clinician got a 500 and the recording stayed in private storage with no job (the reaper only covers over-limit
+    quotes). enqueue is one transaction, so nothing was queued, held, sent or charged: say so, and remove the upload."""
+
+    def test_a_database_error_while_queuing_is_a_handled_refusal_and_removes_the_upload(self):
+        from django.db import OperationalError
+        draft = self.draft()
+        doctor = self.doctor()
+        with patch.dict(os.environ, STANDARD_ENV):
+            quote = doctor.get(f'/encounters/{draft.pk}/').context['usage_quote']
+            with patch('core.views.enqueue', side_effect=OperationalError('synthetic deadlock detected')):
+                response = doctor.post(f'/encounters/{draft.pk}/voice/', {
+                    'audio': self.recording('rf1-db'), 'consent': 'on', 'usage_quote': quote})
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(self.orphaned_recordings(), [])
+            self.assertFalse(Job.objects.filter(encounter=draft).exists())
+            page = doctor.get(response['Location'])
+            self.assertContains(page, 'Nothing was sent or charged')
+            # Positive control: the same upload without the failure is queued and keeps its recording.
+            quote = page.context['usage_quote']
+            queued = doctor.post(f'/encounters/{draft.pk}/voice/', {
+                'audio': self.recording('rf1-db-ok'), 'consent': 'on', 'usage_quote': quote})
+        self.assertEqual(queued.status_code, 302)
+        job = Job.objects.get(encounter=draft, kind='transcription')
+        self.assertTrue(private_path(job.input_path).is_file())
+        self.assertEqual(self.orphaned_recordings(), [])
