@@ -4,6 +4,27 @@ import django.db.models.deletion
 import uuid
 from django.conf import settings
 from django.db import migrations, models
+from django.db.migrations.exceptions import IrreversibleError
+
+
+def refuse_to_erase_mapping_evidence(apps, schema_editor):
+    """Reverse only: refuse while any v3 mapping evidence exists. Counts only, never an identifier or a name.
+
+    Reversing drops the append-only MappingConfirmation rows and TemplateVersion.contract/corrections; re-applying
+    records every version contract='' with no confirmation, and mapping versions are immutable rows, so nothing can put
+    the contract back. A never-confirmed automatic v3 mapping would then read as a legacy mapping with no confirmation
+    gate. No instruction or evidence may be erased to make rollback easier: a database holding any of it needs a
+    separately reviewed forward migration instead. A database without it (legacy mappings only) still reverses.
+    """
+    alias = schema_editor.connection.alias
+    confirmations = apps.get_model('core', 'MappingConfirmation').objects.using(alias).count()
+    versions = (apps.get_model('core', 'TemplateVersion').objects.using(alias)
+                .exclude(contract='', corrections={}).count())
+    if confirmations or versions:
+        raise IrreversibleError(
+            f'0021_word_v3_mapping_review cannot be reversed: {confirmations} mapping confirmation(s) and {versions} '
+            'mapping version(s) recorded under a mapping contract or with clinician corrections. Reversing drops them, '
+            'and re-applying records every version as a legacy mapping that needs no confirmation. Nothing was changed.')
 
 
 class Migration(migrations.Migration):
@@ -40,4 +61,6 @@ class Migration(migrations.Migration):
             'CREATE TRIGGER mapping_confirmation_append_only BEFORE UPDATE OR DELETE ON core_mappingconfirmation '
             'FOR EACH ROW EXECUTE FUNCTION quillmd_append_only();',
             'DROP TRIGGER mapping_confirmation_append_only ON core_mappingconfirmation;'),
+        # Last, so that on the way back it runs FIRST, before the trigger, the table or either column is dropped.
+        migrations.RunPython(migrations.RunPython.noop, refuse_to_erase_mapping_evidence),
     ]
