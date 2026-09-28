@@ -91,6 +91,31 @@ class QuestionBoxes(unittest.TestCase):
                 fields = w.inspect(data(doc))['fields']
                 self.assertEqual(bool(fields), variant != 'presentation')
 
+    def test_presentation_exclusion_respects_every_ancestor_background(self):
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        for case in ('white', 'dark_cell', 'dark_table', 'dark_style', 'unknown_style', 'dark_grandparent'):
+            with self.subTest(case=case):
+                doc = Document(); outer = doc.add_table(rows=1, cols=1)
+                container = outer.cell(0, 0)
+                if case == 'dark_grandparent': container = container.add_table(rows=1, cols=1).cell(0, 0)
+                inner = container.add_table(rows=1, cols=2); self.layout_borders(inner)
+                for i, text in enumerate(('Regional service', 'Assessment form')):
+                    para = inner.cell(0, 0).paragraphs[0] if not i else inner.cell(0, 0).add_paragraph()
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER; para.add_run(text).bold = True
+                inner.cell(0, 0).add_paragraph()
+                shade = OxmlElement('w:shd'); shade.set(qn('w:fill'), '000000')
+                if case in ('dark_cell', 'dark_grandparent'): outer.cell(0, 0)._tc.get_or_add_tcPr().append(shade)
+                if case == 'dark_table': outer._tbl.tblPr.append(shade)
+                if case == 'dark_style':
+                    style = doc.styles.add_style('Outer Dark', WD_STYLE_TYPE.TABLE)
+                    props = OxmlElement('w:tcPr'); props.append(shade); style.element.append(props); outer.style = style
+                if case == 'unknown_style':
+                    ref = OxmlElement('w:tblStyle'); ref.set(qn('w:val'), 'UnknownOuter'); outer._tbl.tblPr.append(ref)
+                original = data(doc); detector = w.Detector(w.open_package(original))
+                table = [s for s in detector.index.slots if s.kind == 'tbl'][-1]
+                self.assertEqual(detector.presentation_heading_table(table), case == 'white')
+                self.assertEqual(bool(w.inspect(original)['fields']), case != 'white')
+
     def test_merge_continuation_tail_keeps_only_the_owned_upper_answer(self):
         from docx.shared import RGBColor
         for variant in ('tail', 'boxed', 'explicit_blank', 'unmerged_neighbor'):

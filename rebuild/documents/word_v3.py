@@ -2063,13 +2063,8 @@ class Detector:
             return False                # a checkbox its reading does not show (round 3 F1)
         return is_blank_text(txt) and self.is_empty_cell(c) or txt in (BOX, CHECKED)
 
-    def plain_layout_edges(self, table, cell):
-        """Known visible edges on a white background; unknown formatting proves nothing.
-
-        This narrow layout exclusion does not resolve conditional table styles,
-        theme colours, diagonal borders or non-white shading. Missing borders are
-        unknown too: absence of a direct border is not proof of invisible ink.
-        """
+    def plain_layout_properties(self, table, cell):
+        """Resolve the bounded direct/default style set, without assuming a background."""
         cell_props, table_props = cell.el.findall(q("w:tcPr")), table.el.findall(q("w:tblPr"))
         if len(cell_props) > 1 or len(table_props) > 1:
             return None
@@ -2094,11 +2089,37 @@ class Detector:
                 props.extend([style.find(q("w:tcPr")), style.find(q("w:tblPr"))])
         elif refs:
             return None
-        background = self.package.tree(cell.part).find(q("w:background"))
-        if background is not None and (background.get(q("w:color"), "FFFFFF") != "FFFFFF" or
-                                       len(background) or any("theme" in k.lower() for k in background.attrib)):
+        return props
+
+    def plain_layout_edges(self, table, cell):
+        """Known visible edges on a white background; unknown formatting proves nothing.
+
+        This narrow layout exclusion does not resolve conditional table styles,
+        theme colours, diagonal borders or non-white shading. Missing borders are
+        unknown too: absence of a direct border is not proof of invisible ink.
+        """
+        props = self.plain_layout_properties(table, cell)
+        if props is None:
             return None
-        for prop in props:
+        background_props = list(props)
+        ancestor = table.parent
+        while ancestor is not None:
+            if ancestor.kind == "tc":
+                inherited = self.plain_layout_properties(ancestor.parent, ancestor)
+                if inherited is None:
+                    return None
+                background_props.extend(inherited)
+            ancestor = ancestor.parent
+        document = self.package.tree("word/document.xml")
+        backgrounds = document.findall(q("w:background"))
+        if len(backgrounds) > 1:
+            return None
+        if backgrounds:
+            background = backgrounds[0]
+            if background.get(q("w:color"), "FFFFFF") != "FFFFFF" or len(background) or \
+                    any("theme" in k.lower() for k in background.attrib):
+                return None
+        for prop in background_props:
             if prop is None:
                 continue
             for shade in prop.findall(q("w:shd")):

@@ -27,3 +27,9 @@ Ignored evidence is retained at `rebuild/.runtime/d31-layout-20260928/`:
 The original replay checks exact locator differences, all remaining mapping attributes, and exports two synthetic reviewed answers to the real Capacity Issues and index-offence guidance cells. After removing only those two appended paragraphs, whole document XML equals the original. All 32 other package parts match exactly. The original title, labels, continuation cells and valid upper submission-date cell remain unchanged. A previously saved baseline mapping exports identical answer XML. The original package is unchanged.
 
 Independent finished-diff refutation is required before integration. These checks qualify the bounded five-destination correction, not the complete D31 clinical workflow or every visual table layout.
+
+## Independent refutation and ancestry repair
+
+The lead refuted the first frozen source `fa7f15a6`: an inner white-border heading band inside a black outer cell was incorrectly excluded. The defect was reproduced unchanged on a new continuation branch. `plain_layout_properties` now resolves each ancestor cell/table's direct and inherited formatting, and the exclusion declines dark or unresolved ancestry. The main document background is checked even for a header/footer part. This changes only the narrow layout exclusions, not ordinary nested answer detection.
+
+Evidence in `rebuild/.runtime/d31-ancestry-20260928/` retains the exact root probe, baseline and repaired JSON. The repaired root probe still excludes the white-parent positive control but retains answer discovery on black parent/document backgrounds. Synthetic coverage adds dark cell, table, inherited table style, unknown ancestor style and grandparent backgrounds. The original D31 inspection remains exactly equal to the preceding 61-field result. The frozen predecessor and its evidence remain untouched.
