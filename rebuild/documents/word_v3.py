@@ -1845,13 +1845,18 @@ class Detector:
                         issue = "The column header contains an answer area."
         return headers, issue
 
+    # 'Label:' then a printed gap (a tab, or three or more spaces) and more of the line ('Temp:          °C'): the
+    # answer is written in the gap.
+    ANSWER_LINE = re.compile(r"[^\t\x00:;?!]*[^\W\d_][^\t\x00:;?!]*:(?:[ \u00a0]*\t[ \t\u00a0]*|[ \u00a0]{3,})\S")
+
     def answer_cell(self, c) -> bool:
-        """The cell holds an answer place of its own: a box or other control, or a drawn answer blank."""
+        """The cell holds an answer place of its own: a box or other control, a drawn answer blank of any kind (an
+        underscore rule, leader dots or an ellipsis, digit boxes, a bracket, an underlined gap: every blank the
+        engine itself maps as an answer), or a printed answer gap after a label (refutation F2, R3-3)."""
         objects = self.cell_objects(c)
         return BOX in objects or CHECKED in objects or "\x00" in objects or any(
-            kind != "blank" or "_" in printed[start:end]
-            for x in c.children if x.kind == "p" for printed, pieces in [self.ptext(x.el)]
-            for start, end, kind in self.blank_spans(printed, pieces))
+            self.blank_spans(printed, pieces) or self.ANSWER_LINE.search(printed)
+            for x in c.children if x.kind == "p" for printed, pieces in [self.ptext(x.el)])
 
     def printed_row_label(self, cell):
         """(question, issue, group) for the row of `cell`: the row's question printed in its own plain label cell
