@@ -1541,9 +1541,14 @@ class Detector:
             if issue or self.blank_spans(*self.ptext(slot.el)) or any(
                     ch in self.ptext(slot.el)[0] for ch in (BOX, CHECKED, "\x00")):
                 problem = "The complete source or its layout boundary is unresolved."
-        grid_paras = [slot for slot in self.index.slots if slot.kind == "p"
-                      and (owner := self.host_cell(slot)) is not None and owner.parent is table
-                      and self.box_units(slot)]
+        grid_source = [slot for slot in self.index.slots if slot.kind == "p"
+                       and (owner := self.host_cell(slot)) is not None and owner.parent is table]
+        grid_paras = [slot for slot in grid_source if self.box_units(slot)]
+        if any((self.ptext(slot.el)[0].strip() or not self.plain_spacing_paragraph(slot))
+               for slot in grid_source if slot not in grid_paras) or any(
+                slot.kind == "tbl" and slot.parent is not None and slot.parent.parent is table
+                for slot in self.index.slots):
+            problem = "The grid contains separate printed headers, context or answer areas whose ownership is unresolved."
         if {slot.id for slot in grid_paras} != {slot.id for slot in group["paras"]}:
             problem = "The grid contains separate option groups whose ownership is unresolved."
         if any(len(self.box_units(slot)) != 1 for slot in grid_paras):
@@ -1557,9 +1562,10 @@ class Detector:
             # A checkbox keeps its printed option as label; its question still
             # governs that option, including a local subject or subsection.
             context = " > ".join(x for x in (context, label) if x)
-        if (len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT
-                or self.question_box_signing(source)):
-            problem = "The complete question exceeds limits or contains signing/consent instructions."
+        if len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT:
+            problem = "The complete question or context exceeds limits."
+        if any(self.question_box_signing(value) for value in sources + [context]):
+            problem = "The complete source contains signing/consent instructions. Governing context: " + context
         if problem:
             return {"problem": "Nested option grid at " + table.id + ": " + problem
                     + " Printed source: " + source + " Options: " + self.text(table.el, own=False)}

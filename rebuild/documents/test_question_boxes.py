@@ -605,3 +605,23 @@ class NestedCheckboxOwnership(unittest.TestCase):
                 self.assertIn('Current visit', group['context'])
                 if subsection: self.assertIn('During exertion:', group['context'])
                 self.assertEqual(group['options'], ['Other'])
+
+    def test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context(self):
+        for case in ('headers', 'consent', 'signature'):
+            with self.subTest(case=case):
+                doc = Document()
+                if case != 'headers':
+                    doc.add_paragraph('Consent' if case == 'consent' else 'Signed declaration', style='Heading 1')
+                outer = doc.add_table(rows=1, cols=1).cell(0, 0)
+                outer.text = 'Which procedures are authorized? Tick all that apply.'
+                outer.add_paragraph()
+                grid = outer.add_table(rows=2 if case == 'headers' else 1, cols=2)
+                if case == 'headers':
+                    grid.cell(0, 0).text = 'Donor';grid.cell(0, 1).text = 'Recipient'
+                grid.cell(len(grid.rows)-1, 0).text = '☐ Abnormal' if case == 'headers' else '☐ Blood sampling'
+                grid.cell(len(grid.rows)-1, 1).text = '☐ Abnormal' if case == 'headers' else '☐ Tissue storage'
+                result = w.inspect(data(doc))
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+                self.assertTrue(any('Nested option' in note for note in result['notes']))
+                if case == 'headers':
+                    self.assertTrue(any('Donor' in note and 'Recipient' in note for note in result['notes']))
