@@ -799,9 +799,10 @@ def with_part(raw, name, xml):
 
 def d31_shape(label):
     """The D31-shaped synthetic form (as in test_d31_shaped_leave_history_accepts_two_leave_selections) with the
-    page-1 boxed label spelled `label`."""
+    page-1 boxed label spelled `label`; like the real cell, an empty line separates the label from its boxes."""
     doc = Document(); doc.add_heading('Conditional Discharge Proposal', 1)
-    boxed_question(doc, label, ('Conditional', 'Absolute'))
+    cell = boxed_question(doc, label, ('Conditional', 'Absolute')).cell(0, 0)
+    cell.paragraphs[0]._p.addnext(copy.deepcopy(cell.add_paragraph('')._p)); cell._tc.remove(cell.paragraphs[-1]._p)
     doc.add_table(rows=1, cols=2).rows[0].cells[1].text = 'Please see the list at annex B and select accordingly'
     doc.add_table(rows=1, cols=2).rows[0].cells[1].text = 'Responsible Clinician (including employing organisation)'
     doc.add_paragraph(''); doc.add_paragraph('')
@@ -849,7 +850,9 @@ class SelectionLimitRound2(unittest.TestCase):
                          'No more than one box may be ticked.', 'Do not select more than one option.',
                          'Do not select multiple options.', 'No more than one answer per question.',
                          'Never select several options.', 'You cannot tick more than one box.',
-                         "Don't tick more than one box.", 'Don’t tick more than one box.', 'Do not tick more than one.'):
+                         "Don't tick more than one box.", 'Don’t tick more than one box.', 'Do not tick more than one.',
+                         *('No more than one %s per question.' % noun for noun in (
+                             'box', 'answer', 'option', 'response', 'choice', 'category'))):
             for where, build in (('preamble', self.preamble), ('page header', self.header)):
                 with self.subTest(where=where, sentence=sentence):
                     self.assertNeverTwo(data(build(sentence)), 'Treatments received')
@@ -864,7 +867,9 @@ class SelectionLimitRound2(unittest.TestCase):
             self.assertNeverTwo(data(native_list(doc)))
         # Controls: permission for several, and an attribution line in an office text box, stay multiple.
         self.assertMulti(data(self.preamble('You may tick more than one box for each question.')), 'Treatments received')
-        self.assertMulti(data(self.floating('Checked by: ____________')), 'Community leave taken')
+        for office in ('Checked by: ____________', 'Marked by: ____________', 'Page X of Y'):
+            with self.subTest(office=office):
+                self.assertMulti(data(self.floating(office)), 'Community leave taken')
 
     # F2: a scale key or a warning after "tick one" is not a range.
     def test_f2_tick_one_followed_by_a_scale_key_or_a_warning_stays_one_choice(self):
@@ -948,11 +953,14 @@ class SelectionLimitRound2(unittest.TestCase):
         for sentence in ('Please answer each question by ticking one box in the column provided.',
                          'Please tick one box only for each question, in the column on the right.',
                          'For every question tick only one box in the answer column.',
-                         'Please tick one box only (see table of codes on page 4).'):
+                         'Please tick one box only (see table of codes on page 4).',
+                         'Tick one box per row in the table below, and one box only for every other question.'):
             for where, build in (('preamble', self.preamble), ('page header', self.header)):
                 with self.subTest(where=where, sentence=sentence):
                     self.assertNeverTwo(data(build(sentence)), 'Treatments received')
-        for sentence in ('Tick one box per row in the table below.', 'In the table below, tick one box per row.'):
+        for sentence in ('Tick one box per row in the table below.', 'In the table below, tick one box per row.',
+                         'In the grid below, tick one box per row.', 'Mark one box in each row of the grid.',
+                         'Select only one box per row.', 'Tick one box only in each row of the table.'):
             with self.subTest(row_only=sentence):
                 self.assertMulti(data(self.preamble(sentence)), 'Treatments received')
 
@@ -988,7 +996,9 @@ class SelectionLimitRound2(unittest.TestCase):
                       'Type of discharge applied for (please tick one of the following):',
                       'Type of discharge applied for (please tick one - see page 3):',
                       'Type of discharge applied for (tick one, see notes):',
-                      'Type of discharge applied for (tick one - see overleaf):',
+                      'Type of discharge applied for (tick one – see overleaf):',
+                      'Type of discharge applied for (tick one — see page 2):', 'Type of discharge applied for (tick 1):',
+                      'Type of discharge applied for (s41) (please tick one):',
                       *('Type of discharge applied for (please %s one):' % verb for verb in (
                           'check', 'choose', 'select', 'mark', 'circle', 'pick', 'indicate', 'cross')),
                       *('Type of discharge applied for (tick one %s):' % noun for noun in (
@@ -1022,10 +1032,19 @@ class SelectionLimitRound2(unittest.TestCase):
 
     # F8: wording that permits several boxes is not a one-answer limit; the singular wording still is.
     def test_f8_plural_box_wording_elsewhere_keeps_the_history_multiple(self):
-        for sentence in ('Please tick the appropriate box(es).', 'Tick the relevant box or boxes.', 'Tick the relevant box/boxes.'):
+        for sentence in ('Please tick the appropriate box(es).', 'Tick the relevant box or boxes.', 'Tick the relevant box/boxes.',
+                         *('Tick the relevant %s(s).' % n for n in ('answer', 'option', 'response', 'category', 'square')),
+                         *('Tick the relevant %s or %s.' % (n, p) for n, p in (
+                             ('answer', 'answers'), ('option', 'options'), ('response', 'responses'),
+                             ('category', 'categories'), ('square', 'squares'))),
+                         *('Tick the relevant %s/%s.' % (n, p) for n, p in (
+                             ('answer', 'answers'), ('option', 'options'), ('response', 'responses'),
+                             ('category', 'categories'), ('square', 'squares')))):
             with self.subTest(sentence=sentence):
                 self.assertMulti(data(self.preamble(sentence)), 'Treatments received')
-        self.assertNeverTwo(data(self.preamble('Please tick the relevant box.')), 'Treatments received')
+        for sentence in ('Please tick the relevant box.', 'Tick the relevant answer.', 'Tick the relevant option or tick N/A.'):
+            with self.subTest(singular=sentence):
+                self.assertNeverTwo(data(self.preamble(sentence)), 'Treatments received')
 
     # F9: a failing control for every guard the refuter could remove without a failure.
     def test_f9_every_selection_guard_has_a_control(self):

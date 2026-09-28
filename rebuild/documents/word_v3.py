@@ -740,8 +740,8 @@ ONE_LIMIT = re.compile(r"\bonly\s+(?:one|1)\b(?!\s*-)" + _NOT_A_MEASURE +
 # "one, some or all", "one, two or three", "1-3 that apply", "1–3:". Any other continuation ("pick one and give details",
 # "pick 1 / see notes", "indicate one to be reviewed") leaves the one-only reading standing, and so does a scale key or
 # a warning after a comma or a dash ("tick one - 1 = never, 5 = always", "tick one, all others blank", "tick one -
-# two ticks void the answer"): a comma needs a complete "X or Y" count, and a dash range needs an upper bound that
-# ends the phrase ("1-3:", "1-3 that apply") or, printed unspaced, names the answers ("1-3 boxes").
+# two ticks void the answer"): a comma needs a complete "X or Y" count, and a dash range needs a numeral upper bound
+# that ends the phrase ("1-3:", "1-3 that apply") or, printed unspaced, names the answers ("1-3 boxes").
 _COUNT_WORD = r"(?:two|three|four|five|six|seven|eight|nine|ten)"
 _MANY_WORD = r"(?:more|some|all|any|several|many|multiple|both|" + _COUNT_WORD + r")"
 MORE_THAN_ONE_AFTER = re.compile(
@@ -749,7 +749,7 @@ MORE_THAN_ONE_AFTER = re.compile(
     r"|\s*(?:\bor\b|\band\b|\bto\b|\bnor\b)\s*(?:" + _MANY_WORD + r"|\d)"
     r"|\s*/\s*" + _MANY_WORD + r"\b"
     r"|\s*,\s*(?:some|" + _COUNT_WORD + r")\s*,?\s*(?:or|and)\s+" + _MANY_WORD + r"\b"
-    r"|\s*[-–—]\s*(?:" + _COUNT_WORD + r"|\d{1,2})\b(?=\s*(?:$|[):.;,]|(?:that|which|of)\b))"
+    r"|\s*[-–—]\s*\d{1,2}\b(?=\s*(?:$|[):.;,]|(?:that|which|of)\b))"
     r"|[-–]\d{1,2}\b(?=\s+(?:boxes|options|answers|items|responses|categories|choices)\b)", re.I)
 # An open count ("one or more", "1+", "more than one", "one, some or all") is never a limit.
 OPEN_COUNT = re.compile(r"\b(?:one|1)\s*(?:or\s+more\b|\+)|\bmore\s+than\s+(?:one|1)\b|\bone\s*,\s*some\s+or\s+all\b"
@@ -849,8 +849,7 @@ SELECTION_ACT = re.compile(r"\b(?:tick(?:s|ed|ing)?|check(?:s|ed|ing)?|mark(?:s|
 SELECTION_LIMIT = re.compile(r"\b(?:one|single|sole|two|three|four|five|six|seven|eight|nine|ten|only|either|neither|"
                              r"exclusive(?:ly)?)\b|" + NUMERAL_QUANTITY, re.I)
 # Wording that allows several boxes ("the appropriate box(es)", "box or boxes", "box/boxes") is not one answer.
-_NOT_PLURAL = (r"(?!\s*\(e?s\)|\s*/\s*(?:boxes|answers|options|responses|choices|categories|squares)\b"
-               r"|\s+or\s+(?:more|several|boxes|answers|options|responses|choices|categories|squares)\b)")
+_NOT_PLURAL = r"(?!\s*\(e?s\)|(?:\s*/\s*|\s+or\s+)(?:boxes|answers|options|responses|categories|squares)\b)"
 ONE_ANSWER = re.compile(r"\b(?:(?:only\s+)?(?:one|1)|a\s+single|single)\s+(?:box|answer|option|response|choice|category|"
                         r"square)s?\b(?:\s+only\b)?"
                         r"|\b(?:appropriate|relevant|correct|applicable|right|best|suitable|matching|corresponding)\s+"
@@ -860,20 +859,16 @@ ONE_ANSWER = re.compile(r"\b(?:(?:only\s+)?(?:one|1)|a\s+single|single)\s+(?:box
 # A negated count is a limit, never an open count: "do not tick more than one box", "no more than one answer",
 # "never select multiple options".
 NEGATED_MANY = re.compile(r"(?:\b(?:no|not|never|cannot)\b|n[’']t\b)[^.;!?]*?"
-                          r"(?:\bmore\s+than\s+(?:one|1|a\s+single)\b|\b(?:multiple|several)\b)", re.I)
-ANSWER_NOUN = re.compile(r"\b(?:box|boxes|answers?|options?|responses?|choices?|categor(?:y|ies)|squares?)\b", re.I)
+                          r"(?:\bmore\s+than\s+(?:one|1)\b|\b(?:multiple|several)\b)", re.I)
+ANSWER_NOUN = re.compile(r"\b(?:box|answer|option|response|choice|categor)", re.I)
 # Only a complete one-box-per-row rule for a table or grid is about a table ("Tick one box per row in the table
 # below."); any other sentence that mentions a column or a table ("tick one box in the column provided", "see table of
 # codes") is still a limit.
-TABLE_ROWS = re.compile(r"(?:in\s+the\s+(?:table|grid|matrix)(?:\s+(?:below|above))?\s*,\s*)?(?:please\s+)?"
-                        r"(?:check|tick|choose|select|mark|circle|pick|indicate|cross)\s+(?:only\s+)?(?:one|1)"
-                        r"(?:\s+(?:box|answer|option|response|cell))?(?:\s+only)?"
-                        r"\s+(?:per|in\s+each|for\s+each|on\s+each|in\s+every|for\s+every)\s+row"
-                        r"(?:\s+(?:of|in)\s+the\s+(?:table|grid|matrix)(?:\s+(?:below|above))?)?", re.I)
+TABLE_ROWS = re.compile(r"(?:in\s+the\s+(?:table|grid)\s+below\s*,\s*)?(?:tick|mark|select)\s+(?:only\s+)?one\s+box"
+                        r"(?:\s+only)?\s+(?:per|in\s+each)\s+row(?:\s+(?:of|in)\s+the\s+(?:table|grid)(?:\s+below)?)?", re.I)
 # Selection wording in floating text (a text box or a positioned frame), whose printed place beside a list is
 # unknown: any selection command there may govern it. "Checked by:" names who checked; it is not a command.
-SELECTION_ATTRIBUTION = re.compile(r"\b(?:checked|ticked|marked|selected|chosen|picked|crossed|indicated|circled)\s+by\b",
-                                   re.I)
+SELECTION_ATTRIBUTION = re.compile(r"\b(?:checked|marked)\s+by\b", re.I)
 
 
 def limited_selection(sentence):
@@ -894,7 +889,7 @@ def floating_selection(sentence):
 LABEL_ONE = re.compile(r"(?:please\s+)?(?:(?:check|tick|choose|select|mark|circle|pick|indicate|cross)\s+"
                        r"(?:(?:only|just|exactly)\s+)?(?:one|1|a\s+single)"
                        r"(?:\s+(?:option|answer|response|item|box|category|choice))?(?:\s+only)?(?:\s+of\s+the\s+following)?"
-                       r"|(?:only\s+)?(?:one|1)(?:\s+(?:option|answer|response|item|box|category|choice))?\s+only"
+                       r"|one(?:\s+(?:option|answer|response|item|box|category|choice))?\s+only"
                        r"|only\s+one(?:\s+(?:option|answer|response|item|box|category|choice))?)"
                        r"(?:\s*[-–—,]\s*see\s+(?:page\s+\d{1,3}|notes|overleaf))?", re.I)
 
@@ -902,9 +897,10 @@ LABEL_ONE = re.compile(r"(?:please\s+)?(?:(?:check|tick|choose|select|mark|circl
 def label_instruction(sentence):
     """The label of a separate question whose only selection wording is a complete one-only command printed inside
     it ("Type of discharge applied for (please tick one):", "Sex (tick one):", "Smoking status (tick one)", "Type -
-    please tick one"), or None. The name before the command is not itself a limit, and nothing after the label is. A standalone command ("Tick one box only."), a notice ("Please note: only one box may be
-    ticked.") and a command that says more ("tick one box for leave and one for treatment", "tick one box only
-    throughout this form") are not part of any one question's label."""
+    please tick one"), or None. The name before the command is not itself a limit, and nothing after the label is.
+    A standalone command ("Tick one box only."), a notice ("Please note: only one box may be ticked.") and a command
+    that says more ("tick one box for leave and one for treatment", "tick one box only throughout this form") are
+    not part of any one question's label; neither is a label with any other selection wording in it."""
     m = re.fullmatch(r"\s*([^:?]*[^:?\s])\s*(?:[:?](.*))?", sentence or "", re.S)
     if not m or limited_selection(m.group(2) or ""):
         return None
@@ -915,7 +911,7 @@ def label_instruction(sentence):
     if dash:
         commands.append(name[dash.end():])
         name = name[:dash.start()]
-    commands = [c.strip() for c in commands if history_selection(c) or limited_selection(c)]
+    commands = [c.strip() for c in commands if history_selection(c)]
     if (commands and all(LABEL_ONE.fullmatch(re.sub(r"[.!:;]+$", "", c).strip()) for c in commands)
             and re.search(r"[^\W\d_]{2,}", name) and not limited_selection(name)):
         return label
@@ -2135,12 +2131,12 @@ class Detector:
 
     @staticmethod
     def next_printed(p):
-        """The next paragraph, table or block control printed after `p` in its container; after the last one in a
-        table cell, the next cell of its row."""
+        """The next paragraph, table or block control printed after `p` in its container (text or a box); after the
+        last one in a table cell, the next cell of its row."""
         node = p.getnext()
         while node is not None:
-            if node.tag in (q("w:p"), q("w:tbl"), q("w:sdt")) and (text_of(node, own=False).strip()
-                                                                  or checkbox_nodes(node, own=False)):
+            if node.tag in (q("w:p"), q("w:tbl"), q("w:sdt")) and any(
+                    paragraph_text(para)[0].strip() for para in node.iter(q("w:p"))):
                 return node
             node = node.getnext()
         cell = p.getparent()
@@ -2172,12 +2168,11 @@ class Detector:
 
     def limited_selection_elsewhere(self, sources):
         """Limited selection guidance outside this list's own source that no separate question owns: (where,
-        sentence), or None. Its reach cannot be read, so it may govern this list."""
+        sentence), or None. Its reach cannot be read, so it may govern this list. (A body label directly above the
+        list's own lines is part of its source and read there, never here.)"""
         own = {id(s.el) for s in sources}
         for pid, owner, sentence, where in self.selection_guidance():
-            if pid in own:
-                continue
-            if owner is not None and not any(owner is s.el for s in sources):
+            if pid in own or owner is not None:
                 continue
             return where, sentence
         return None
@@ -2426,9 +2421,8 @@ class Detector:
                     extra.append(s)
             hint = ([question] + ([nested["cardinality"]] if nested else [])
                     + [self.text(p.el) for p in g["paras"][:1]])
-            pieces = [question or ""] + ([nested["cardinality"]] if nested else [])
-            printed = " ".join(pieces)
-            if len(units) > 1 and one_only(pieces, pieces) and CHECK_ALL.search(printed):
+            printed = " ".join([question or ""] + ([nested["cardinality"]] if nested else []))
+            if len(units) > 1 and one_only(printed, printed) and CHECK_ALL.search(printed):
                 # "Tick all that apply and indicate one as the main symptom": one
                 # answer and several at once. Neither is guessed: never narrowed
                 # to one choice, never widened past the one-only wording.
