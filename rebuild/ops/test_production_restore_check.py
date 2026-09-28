@@ -32,10 +32,10 @@ def activated():
 
 def migration_bodies():
     bodies = {}
-    for path in (Path(__file__).resolve().parents[1] / 'core/migrations').glob('*.py'):
+    for path in sorted((Path(__file__).resolve().parents[1] / 'core/migrations').glob('*.py')):
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                for name, body in re.findall(r'CREATE FUNCTION (quillmd_\w+)\(\) RETURNS trigger\s+LANGUAGE plpgsql AS \$\$(.*?)\$\$', node.value, re.S):
+                for name, body in re.findall(r'CREATE (?:OR REPLACE )?FUNCTION (quillmd_\w+)\(\) RETURNS trigger\s+LANGUAGE plpgsql AS \$\$(.*?)\$\$', node.value, re.S):
                     bodies[name] = body
     return bodies
 

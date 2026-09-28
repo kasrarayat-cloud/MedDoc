@@ -233,6 +233,33 @@ class Preservation(Fixture,TestCase):
         with self.assertRaises(DatabaseError),transaction.atomic():
             with connection.cursor() as cursor:cursor.execute('TRUNCATE core_encounter CASCADE')
 
+    def test_released_hold_keeps_patient_scope_but_allows_ordinary_corrections(self):
+        hold=self.hold();path=self.file();relative=str(path.relative_to(settings.MEDIA_ROOT))
+        old=timezone.now()-timedelta(hours=2)
+        with patch('django.utils.timezone.now',return_value=old):
+            AuditEvent.objects.create(action='voice.over_limit_quoted',target=str(self.encounter.pk),department=self.scope[2],details={'path':relative})
+        retention.release_hold(self.second,hold.pk,'b'*64)
+        from core.models import Patient
+        other=Patient.objects.create(department=self.scope[2],display_name='SYNTHETIC SECOND',reference='second',created_by=self.scope[0])
+        with self.assertRaises(DatabaseError),transaction.atomic():
+            Encounter.objects.filter(pk=self.encounter.pk).update(patient=other)
+        Encounter.objects.filter(pk=self.encounter.pk).update(notes='SYNTHETIC CORRECTED AFTER RELEASE')
+        self.assertFalse(PreservedRecord.objects.filter(source_id=self.encounter.pk).exists())
+        self.assertEqual(reap_abandoned_voice_uploads(),0);self.assertTrue(path.exists())
+
+    def test_descendant_holds_protect_ancestor_identity_after_release(self):
+        from core.models import Patient,Department,Template
+        hold=self.hold('encounter',self.encounter.pk)
+        # A patient's name is part of a held encounter's clinical context.
+        Patient.objects.filter(pk=self.scope[3].pk).update(display_name='SYNTHETIC CORRECTED NAME')
+        self.assertEqual(PreservedRecord.objects.get(source_id=self.scope[3].pk).hold_ids,[str(hold.pk)])
+        retention.release_hold(self.second,hold.pk,'b'*64)
+        for model,pk,changes in [(Patient,self.scope[3].pk,{'department_id':self.other[2].pk}),
+                                 (Department,self.scope[2].pk,{'organization_id':self.other[1].pk}),
+                                 (Template,self.scope[4].pk,{'department_id':self.other[2].pk})]:
+            with self.subTest(model=model.__name__),self.assertRaises(DatabaseError),transaction.atomic():
+                model.objects.filter(pk=pk).update(**changes)
+
     def test_release_does_not_remove_prior_record_evidence_and_reverse_refuses_it(self):
         hold=self.hold();Encounter.objects.filter(pk=self.encounter.pk).update(notes='SYNTHETIC LATER')
         retention.release_hold(self.second,hold.pk,'b'*64)
@@ -240,9 +267,10 @@ class Preservation(Fixture,TestCase):
         Encounter.objects.filter(pk=self.encounter.pk).update(notes='SYNTHETIC LATER AGAIN')
         self.assertEqual(list(PreservedRecord.objects.values()),before)
         import importlib
-        reverse=importlib.import_module('core.migrations.0025_preservation_guards').REVERSE
-        with self.assertRaises(DatabaseError),transaction.atomic():
-            with connection.cursor() as cursor:cursor.execute(reverse)
+        for name in ('0025_preservation_guards','0026_preservation_scope_identity'):
+            reverse=importlib.import_module('core.migrations.'+name).REVERSE
+            with self.subTest(migration=name),self.assertRaises(DatabaseError),transaction.atomic():
+                with connection.cursor() as cursor:cursor.execute(reverse)
         self.assertEqual(list(PreservedRecord.objects.values()),before)
 
 
