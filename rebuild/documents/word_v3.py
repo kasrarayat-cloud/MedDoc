@@ -1017,6 +1017,11 @@ def option_text(text: str) -> str:
     return re.sub(r"\s+", " ", text.replace("\t", " ")).strip().strip(" :–—-_*").strip()[:300]
 
 
+def gap_width(space: str) -> int:
+    """How wide a run of printed whitespace is, a tab counted as eight spaces: which box a word is printed against."""
+    return 8 * space.count("\t") + len(space) - space.count("\t")
+
+
 def is_hint_run(r) -> bool:
     """Author guidance ink: a light, grey or blue colour (not black/auto), the convention for text to overwrite."""
     rpr = r.find(q("w:rPr")) if r is not None else None
@@ -2050,7 +2055,6 @@ class Detector:
     # A response code as forms print it: '1', '(1)', '1.', '#1', '1a', '1=', '1:', '1 -', 'a)', 'a', 'I', 'iv'.
     CODE_TOKEN = r"(?:#\s?)?[(\[]?(?:\d{1,3}[a-z]?|[a-z]|[ivx]{1,4})[)\].:=]?(?:\s?[-\u2013=:])?"
     CODE_BEFORE = re.compile(r"(?:^|\s)" + CODE_TOKEN + r"\s*$", re.I)
-    CODE_AFTER = re.compile(r"^\s*" + CODE_TOKEN + r"(?:\s|$)", re.I)
     CODE_BARE = re.compile(r"\s*" + CODE_TOKEN + r"\s*", re.I)
 
     def response_code_row(self, slot):
@@ -2064,12 +2068,23 @@ class Detector:
             return False
         segments = [text[marks[i - 1] + 1 if i else 0:mark] for i, mark in enumerate(marks)]
         before = [bool(self.CODE_BEFORE.search(segment)) for segment in segments]
-        trailing = bool(self.CODE_AFTER.match(text[marks[-1] + 1:]))
-        # A code printed before every box; or a bare code between two boxes (the previous box's option or the
-        # next box's code) unless the whole row reads box-then-number: nothing coded before the first box
-        # and a number after the last one.
-        bare = any(self.CODE_BARE.fullmatch(segment) for segment in segments[1:])
-        return all(before) or (bare and (before[0] or not trailing))
+        if all(before):
+            return True  # a code printed before every box
+        bare = [segment for segment in segments[1:] if self.CODE_BARE.fullmatch(segment)]
+        if not bare:
+            return False
+        # A bare code between two boxes is the previous box's option or the next box's code. It is the previous
+        # box's option only when the whole row reads box-then-option: nothing coded before the first box, an option
+        # (a number or a word) printed after the last box, every bare code printed against the box before it, and
+        # the first box's own option starting its sequence ('☐ 0', '☐ 1', '☐ I', '☐ A'). 'Stage: ☐ I ... ☐ IV ☐
+        # Unknown' is read; 'Shape ☐ 2 ☐ Other' (the first box's code missing) is a coded row (refutation R3-4).
+        if before[0] or not text[marks[-1] + 1:].strip():
+            return True
+        if any(gap_width(s[:len(s) - len(s.lstrip())]) > gap_width(s[len(s.rstrip()):]) for s in bare):
+            return True
+        first = segments[1]
+        return bool(self.CODE_BARE.fullmatch(first)) and \
+            re.sub(r"[#\s()\[\].:=\-\u2013]", "", first).lower() not in ("0", "1", "a", "i")
 
     def coded_column_parts(self, slot):
         if not self.coded_choice_paragraph(slot):
@@ -2828,10 +2843,8 @@ class Detector:
         between_families = [self.option_families(o) for o in between if o]
         if (tail_families - {-1}) & set().union(*between_families) or (-1 in tail_families and any(between_families)):
             return "(the word before the first box is one of the same printed options)"
-        def width(space):
-            return 8 * space.count("\t") + len(space) - space.count("\t")
         for raw in (u[1] for u in units[:-1]):
-            if raw.strip() and width(raw[:len(raw) - len(raw.lstrip())]) > width(raw[len(raw.rstrip()):]):
+            if raw.strip() and gap_width(raw[:len(raw) - len(raw.lstrip())]) > gap_width(raw[len(raw.rstrip()):]):
                 return "(a word is printed against the box after it)"
         # After the question's colon, a word right before the first box is the question's own only when every word
         # between the boxes is an option of one printed family that it is not ('PMH: Diabetes ☐ Yes ☐ No').
