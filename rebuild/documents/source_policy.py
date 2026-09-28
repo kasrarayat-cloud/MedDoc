@@ -31,6 +31,8 @@ def annotate(detector, fields):
                 current = source(root, text)
             elif (role and re.search(r'\b(?:clinicians?|doctors?|physicians?|nurses?|supervisors?|parents?|guardians?|'
                                       r'carers?|caregivers?|witnesses?|employers?|managers?|representatives?)\b', role[1], re.I)) or \
+                    (role and (re.fullmatch(r'[A-Z][A-Z /&-]{1,20}', role[1]) or
+                               re.match(r'^(?:to be )?completed by\b', text, re.I))) or \
                     detector.is_heading(root.el):
                 current = None
         roles[root.id] = current
@@ -48,7 +50,7 @@ def annotate(detector, fields):
             policy = {'source_author': 'patient', 'source': roles[root.id]}
         # A simple paired table's left-hand source is explicit. Do not infer
         # attestation authority from a model-edited label or a remote header.
-        if slot.kind == 'tc' and loc.get('target', {}).get('type') == 'cell':
+        if slot.kind == 'tc' and loc.get('target', {}).get('type') in ('cell', 'cell_append'):
             row = sorted(detector.grid(slot.parent).get(slot.info['row'], []), key=lambda c: c.info['col'])
             position = next((i for i, c in enumerate(row) if c is slot), None)
             if position and position > 0:

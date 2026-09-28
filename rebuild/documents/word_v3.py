@@ -2282,7 +2282,7 @@ class Detector:
                         ("%s — %s" % (label, header) if label and header else (header or below))
                     target = {"type": "cell_replace"} if txt else {"type": "cell"}
                     if guidance:
-                        target["all"] = True
+                        target = {"type": "cell_append"}
                     slash = []
                     for h in [header] + self.column_headers_all(tslot, c.info["col"], r):
                         parts = [x.strip() for x in re.split(r"\s*/\s*|\s+or\s+", option_text(h))] if h else []
@@ -2628,7 +2628,7 @@ class Detector:
         return self.cell_twips(tslot, c) < 400
 
     def is_guidance_cell(self, c) -> bool:
-        """Every visible run in the cell is guidance ink (blue/grey prompt text meant to be overwritten)."""
+        """Every visible run uses hint ink; colour does not establish that text is disposable."""
         runs = [r for r in c.el.iter(R) if (r.findtext(T) or "").strip()]
         if not runs or c.el.find(".//" + q("w:tbl")) is not None or c.el.find(".//" + SDT) is not None or \
                 c.el.find(".//" + FLDCHAR) is not None or c.el.find(".//" + q("w:hyperlink")) is not None \
@@ -2721,7 +2721,7 @@ class Detector:
                       and c.info["vmerge"] != "continue"), None)
         if right is None or self.row_label(cell.parent, cell.info["row"], right.info["col"]) != clean_label(self.text(slot.el)):
             return False
-        return any(a.slot is right and a.target.get("type") in ("cell", "cell_replace") for a in self.areas)
+        return any(a.slot is right and a.target.get("type") in ("cell", "cell_replace", "cell_append") for a in self.areas)
 
     def rule_lines_below_label(self):
         containers = [s for s in self.index.slots if s.kind in ("tc", "txbx")]
@@ -3249,6 +3249,20 @@ def area_to_field(n: int, area: Area) -> dict:
     return field
 
 
+MAX_SOURCE_INSTRUCTION_CHARS = 20000
+
+
+def cell_instruction_source(index, field):
+    loc = field.get("locator") or {}
+    slot = index.by_id.get(str(loc.get("part")) + "#" + str(loc.get("slot")))
+    if slot is None or slot.kind != "tc":
+        fail("The preserved cell instructions no longer identify an answer area.", "mapping_mismatch")
+    text = "\n".join(text_of(p) for p in slot.el.findall(q("w:p"))).strip()
+    if not text or len(text) > MAX_SOURCE_INSTRUCTION_CHARS:
+        fail("The complete answer-cell instructions exceed the supported metadata bound.", "mapping_limit")
+    return [{"part": slot.part, "slot": slot.path, "fingerprint": fingerprint(slot.el), "text": text}]
+
+
 def inspect(data: bytes) -> dict:
     package = open_package(data)
     detector = Detector(package)
@@ -3258,6 +3272,8 @@ def inspect(data: bytes) -> dict:
     fields = [area_to_field(i + 1, a) for i, a in enumerate(areas)]
     for field in fields:
         annotate_printed(detector.index, field)
+        if field["locator"]["target"]["type"] == "cell_append":
+            field["source_instructions"] = cell_instruction_source(detector.index, field)
     source_policy.annotate(detector, fields)
     return {"contract": CONTRACT, "fields": fields, "notes": notes,
             "layout_pending": len(detector.layout_candidates)}
@@ -3844,7 +3860,7 @@ def write_sdt_text(sdt, answer):
     return True
 
 
-def write_cell(tc, answer, replace=False, whole=False):
+def write_cell(tc, answer, replace=False, whole=False, append=False):
     if whole and tc.find(".//" + q("w:hyperlink")) is not None:
         fail("This mapping would remove a fixed hyperlink from its cell. Review the original answer area.",
              "protected_hyperlink")
@@ -3852,11 +3868,15 @@ def write_cell(tc, answer, replace=False, whole=False):
     if not paras:
         paras = [etree.SubElement(tc, q("w:p"))]
     p0 = paras[0]
-    if whole:                                  # guidance text the form says to overwrite: every paragraph
-        for extra in paras[1:]:
-            tc.remove(extra)
-        text = paragraph_text(p0)[0]
-        replace_range(p0, 0, len(text), answer)
+    if whole or append:
+        # Colour identifies a possible prompt, never authority to delete it.
+        # Old all=True mappings retain their identity but preserve source too.
+        if wraps_structure(tc):
+            fail("The instruction cell contains another form structure.", "unsupported_layout")
+        paragraph = etree.SubElement(tc, q("w:p"))
+        source_run = next(p0.iter(R), None)
+        props = source_run.find(q("w:rPr")) if source_run is not None else None
+        paragraph.append(_new_run(_answer_rpr(props), answer))
         _unclip_row(tc)
         return True
     text, pieces = paragraph_text(p0)
@@ -3962,6 +3982,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if answer is None or answer == "" or answer == []:
             continue
         target = loc.get("target") or {}
+        if target.get("type") == "cell_append":
+            if field.get("source_instructions") != cell_instruction_source(index, field):
+                fail("The complete printed answer-cell instructions changed. Review the mapping again.", "mapping_mismatch")
         if "answer_policy" in field:
             current_policy = {k: v for k, v in field.items() if k != "answer_policy"}
             source_policy.annotate(protected, [current_policy])
@@ -4020,12 +4043,12 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 if target.get("shape") == "after_label":
                     e0 = s0
                 ops.append((anchor.el, s0, lambda el=anchor.el, s0=s0, e0=e0, a=str(answer): replace_range(el, s0, e0, a), part))
-            elif kind in ("cell", "cell_replace"):
+            elif kind in ("cell", "cell_replace", "cell_append"):
                 value = str(answer)
                 if field["kind"] == "choice" and target.get("write") == "option_text":
                     value = printed_options(field)[_options_chosen(field, answer)[0]]
-                ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"), whole=bool(target.get("all")):
-                            write_cell(el, v, rep, whole), part))
+                ops.append((anchor.el, 0, lambda el=anchor.el, v=value, rep=(kind == "cell_replace"), whole=bool(target.get("all")), append=(kind == "cell_append"):
+                            write_cell(el, v, rep, whole, append), part))
             elif kind == "paragraph":
                 paras = [anchor] + [resolve(x["part"], x["slot"], x["fingerprint"]) for x in loc.get("extra", [])]
                 lines = str(answer).replace("\r\n", "\n").split("\n")
@@ -4242,17 +4265,34 @@ def displayed_option(index, field):
         nth = entries[:at].count(entries[at])
         hits = [i for i, word in enumerate(printed) if word == entries[at]]
         return hits[nth] if nth < len(hits) else None
-    shown = displayed_words(slot, target)
+    shown = displayed_words(slot, target, field["locator"].get("fingerprint"))
     return next((i for i, word in enumerate(printed) if str(word).strip() == shown), None) if shown else None
 
 
-def displayed_words(slot, target):
+def appended_cell_value(cell, source_fingerprint):
+    """Read only an appended paragraph whose complete preceding cell is unchanged."""
+    if not source_fingerprint or wraps_structure(cell):
+        return None
+    paragraphs = cell.findall(q("w:p"))
+    if len(paragraphs) < 2:
+        return None
+    # Retain all in-scope namespaces: deepcopy drops unused ancestor bindings,
+    # whereas the stored fingerprint covers their canonical representation.
+    original = etree.fromstring(etree.tostring(cell))
+    original.remove(original.findall(q("w:p"))[-1])
+    return text_of(paragraphs[-1]).strip() if fingerprint(original) == source_fingerprint else None
+
+
+def displayed_words(slot, target, source_fingerprint=None):
     """The words a dropdown content control (placeholder excluded) or an option-text cell shows."""
     if target["type"] == "sdt_choice":
         if sdt_info(slot.el)["placeholder"]:
             return ""
         content = slot.el.find(q("w:sdtContent"))
         return text_of(content).strip() if content is not None else ""
+    if target.get("type") == "cell_append" or target.get("type") == "cell_replace" and target.get("all"):
+        value = appended_cell_value(slot.el, source_fingerprint)
+        return value if value is not None else text_of(slot.el).strip()
     return text_of(slot.el).strip()
 
 
@@ -4332,6 +4372,10 @@ def constrained_placeholder(sdt):
 def constrained_option_states(index, field):
     """Unlike an empty placeholder, an unrecognised displayed value is unknown."""
     target = field["locator"]["target"]
+    if target.get("type") == "cell_append" or target.get("type") == "cell_replace" and target.get("all"):
+        # Preserved ink can contain a real existing option. A newly appended
+        # word does not make the old visible value cease to count.
+        return [None] * len(printed_options(field))
     if target["type"] in DISPLAYED or target.get("write") == "option_text":
         loc = field["locator"]
         slot = index.by_id.get("%s#%s" % (loc["part"], loc["slot"]))
@@ -4351,7 +4395,7 @@ def constrained_option_states(index, field):
             return [i == matches[0] for i in range(len(printed))] if len(matches) == 1 else [None] * len(printed)
         try:
             position = displayed_option(index, field)
-            if position is None and (target["type"] == "ff_dropdown" or displayed_words(slot, target)):
+            if position is None and (target["type"] == "ff_dropdown" or displayed_words(slot, target, loc.get("fingerprint"))):
                 return [None] * len(printed_options(field))
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             return [None] * len(printed_options(field))
@@ -4404,6 +4448,10 @@ def constrained_scalar_value(original, final, field, written):
         if content is None or wraps_structure(content) or placeholder is None:
             return None
         value = "" if placeholder else text_of(content)
+    elif kind == "cell_append" or kind == "cell_replace" and target.get("all"):
+        # The old cell remains visible and may contain an existing answer.
+        # Colour and a successful append cannot prove a unique scalar value.
+        return None
     elif kind in ("cell", "cell_replace", "paragraph"):
         anchors = [after]
         if kind == "paragraph":
@@ -4526,7 +4574,7 @@ def verify_options(data, fields, answers, *, glyph_readback):
                 loc = field["locator"]
                 slot = index.by_id.get("%s#%s" % (loc["part"], loc["slot"]))
                 ok = slot is not None and len(chosen) == 1 and \
-                    displayed_words(slot, target) == str(printed_options(field)[min(chosen)]).strip()
+                    displayed_words(slot, target, loc.get("fingerprint")) == str(printed_options(field)[min(chosen)]).strip()
             else:
                 states = option_states(index, field)
                 if target["type"] == "checkboxes":

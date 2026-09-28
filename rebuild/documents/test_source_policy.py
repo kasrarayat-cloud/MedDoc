@@ -87,3 +87,12 @@ class SourcePolicy(unittest.TestCase):
                 self.assertEqual(field['answer_policy']['attestation_source']['text'], question)
         doc = Document(); pair(doc, 'Confirm the patient reports that the application of cream was reviewed by the clinician.')
         self.assertNotIn('answer_policy', w.inspect(data(doc))['fields'][0])
+
+    def test_explicit_acronym_or_named_completion_role_ends_patient_authorship(self):
+        for role in ('For the RC:', 'For RC:', 'For QA:', 'To be completed by Alex:', 'Completed by the reviewer:'):
+            with self.subTest(role=role):
+                doc = Document(); doc.add_paragraph('For the patient:'); pair(doc, 'What would you like to say?')
+                doc.add_paragraph(role); pair(doc, 'What was confirmed?')
+                fields = [f for f in w.inspect(data(doc))['fields'] if f['locator']['target']['type'] == 'cell']
+                self.assertIn('answer_policy', fields[0])
+                self.assertNotIn('answer_policy', fields[1])
