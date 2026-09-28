@@ -24,6 +24,49 @@ def form():
 
 
 class GuidancePreservation(unittest.TestCase):
+    def test_linked_guidance_is_kept_beside_its_answer_and_relationship(self):
+        from .test_document_relations import link
+        doc = Document(); table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = 'Please confirm the patient category and management level:'
+        p = table.cell(0, 1).paragraphs[0]
+        p.add_run('See the published guidance. ').font.color.rgb = RGBColor.from_string('0070C0')
+        link(p)
+        for r in p._p.findall('.//' + w.R):
+            props = r.find(w.q('w:rPr'))
+            if props is None: props = etree.SubElement(r, w.q('w:rPr'))
+            color = etree.SubElement(props, w.q('w:color')); color.set(w.q('w:val'), '0070C0')
+        original = data(doc); fields = w.inspect(original)['fields']
+        field = next(f for f in fields if f['locator']['slot'] == 'b/tbl[0]/tr[0]/tc[1]')
+        before = w.open_package(original)
+        final = w.fill(original, fields, {field['key']: 'The patient has category two management.'})
+        after = w.open_package(final)
+        self.assertEqual(before.zip.read('word/_rels/document.xml.rels'), after.zip.read('word/_rels/document.xml.rels'))
+        before_p = w.SlotIndex(before).by_id['word/document.xml#b/tbl[0]/tr[0]/tc[1]'].el.find(w.q('w:p'))
+        after_p = w.SlotIndex(after).by_id['word/document.xml#b/tbl[0]/tr[0]/tc[1]'].el.find(w.q('w:p'))
+        self.assertEqual(etree.tostring(before_p), etree.tostring(after_p))
+        self.assertIn('Published guidance', field['source_instructions'][0]['text'])
+
+    def test_reference_examples_are_not_an_answer_column(self):
+        for title in ('The following are examples of common accommodations.',
+                      'Examples of treatment plans for reference', 'For reference: possible conditions'):
+            doc = Document(); table = doc.add_table(rows=2, cols=1)
+            table.cell(0, 0).text = title
+            table.cell(1, 0).paragraphs[0].add_run('Attend scheduled appointments at [specify clinic].').font.color.rgb = RGBColor.from_string('0070C0')
+            original = data(doc)
+            self.assertEqual(w.inspect(original)['fields'], [], title)
+            anchor = w.SlotIndex(w.open_package(original)).by_id['word/document.xml#b/tbl[0]/tr[1]/tc[0]']
+            old = w.area_to_field(1, w.Area('text', title, anchor, {'type': 'cell_replace', 'all': True}))
+            with self.assertRaises(w.V3Failure):
+                w.fill(original, [old], {old['key']: 'The patient must attend weekly.'})
+
+    def test_request_for_examples_still_has_an_answer_destination(self):
+        doc = Document(); table = doc.add_table(rows=2, cols=1)
+        table.cell(0, 0).text = 'Please give examples of symptoms experienced:'
+        table.cell(1, 0).paragraphs[0].add_run('Describe the frequency and duration.').font.color.rgb = RGBColor.from_string('0070C0')
+        fields = w.inspect(data(doc))['fields']
+        self.assertEqual(len(fields), 1)
+        self.assertEqual(fields[0]['locator']['slot'], 'b/tbl[0]/tr[1]/tc[0]')
+
     def test_repeated_header_instructions_all_reach_the_mapping(self):
         from docx.shared import Inches
         doc = Document(); doc.settings.odd_and_even_pages_header_footer = True

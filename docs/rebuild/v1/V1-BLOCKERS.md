@@ -4,6 +4,52 @@ Last updated 2026-09-28. One list. Each row is a demonstrated blocker to "real p
 with its evidence and what clears it. **E** = engineering in this programme; **O** = owner action;
 **L** = legal representative / counsel; **V** = outside vendor. Items are closed only with evidence.
 
+## Current integrated continuation — 2026-09-28 05:20 UTC
+
+The release is being assembled in `v1/release-integration`, currently `b7c5e23e`
+with a pending linked-guidance repair. It contains the preserved PR1288 ancestry,
+PR1290 hyperlink fixes, reviewed batch constraints, ordinary-source/attestation
+repairs, the distinct bounded 20k ordinary response profile, complete cell
+instruction preservation, repeated-header identity fixes, the first trusted
+layout component and the disabled empty-draft disposition adapter. Original
+branches, first failures, manifests and prior CI remain preserved. No combined
+candidate CI or activation is claimed yet. Installed code remains `dedac162`.
+
+Doctor workflow evidence is narrower than Word acceptance: D30 missing and long
+answers, and D31 missing/ordinary/long patient comments, reach mocked worker →
+unchanged review → finalization → authenticated download with account isolation.
+D31 original/missing/ordinary/long render to 9/9/9/12 pages. Every page was viewed;
+missing pixels match, the full ordinary and 5,556-character long answers occur
+once, and removing each added answer restores the exact original body text.
+This is LibreOffice/PDF evidence, not native Word or a real model result.
+D30's unchanged twelve ordinary facts now pass their actual mocked worker,
+unchanged review, finalization and authenticated export. All12 rendered pages
+were inspected; every full answer occurs once and the original body is retained. D30 still has an unqualified accommodation destination; original-only
+inspection establishes a free-text box, not an exclusive selection. D31 remains
+incomplete with a hyperlink-guidance omission and extra destinations. D10's new
+component has a manual missing/six-row application witness, but 126 mapped areas
+against 198 independently expected and the complete-rule generation refusal keep
+that whole document unqualified. Separate-branch evidence is not union evidence.
+
+The expected failure for the plain sentence “The patient smokes.” exposed a
+required ordinary-note defect and has been repaired, with its original failure
+retained. It was not relabelled or removed to make a test total pass.
+
+Retention has advanced beyond readiness counts: the disabled candidate adapter
+handles only an exactly empty, unreviewed revision-zero draft, under a signed
+prospective policy, independent journal checkpoint and two verified custodians.
+It records intent before deletion and retains immutable tombstones/history.
+The actual 0029→0030 upgrade preserved all old columns in 43 tables, 31 seeded
+rows, financial/audit projections and two old authenticated exports. All 63 old
+guards/18 functions remain; new totals are 82/21. This does not implement general
+clinical/file/backup/provider deletion or establish independent journal custody,
+freshness and recovery admission. Those engineering and external gaps remain.
+
+Sonnet 5 endpoint metadata/token counts and request preparation remain separate
+from used/served evidence. No real Sonnet 5 generation or served-worker cutover
+has occurred. The single external request remains unapproved; no new provider
+call, token count, payment, purchase, merge or deployment was made.
+
 ## Product
 
 | id | blocker | evidence | clears when | who |
@@ -28,7 +74,7 @@ with its evidence and what clears it. **E** = engineering in this programme; **O
 | B-L3 | Deepgram BAA (Enterprise only per its pricing page) and the price effect of `mip_opt_out` | vendor pages; refuter R5 | BAA signed; opt-out enforced account-wide; price confirmed | L + O |
 | B-L4 | Backup storage under a BAA | Backblaze's BAA wording names covered entities; QuillMD is a business associate | use AWS Backup/S3 under the AWS BAA (proposal), or Backblaze confirms a subcontractor BAA | O |
 | B-L5 | Email vendor | Resend offers no BAA | account email stays PHI-free (enforced by test) **or** move to Amazon SES under the AWS BAA | E (enforced) / O (choice) |
-| B-L6 | Retention/deletion controls, breach procedures and downstream agreements | policy remains unset; preservation holds, second-administrator release, prior-row/file protection, MFA administration and exact archived restore checks implemented/reviewed locally; no disposition/tombstone/general purge workflow | counsel/owner supply schedule, start events, hold authority and procedures; engineering still completes disposition/tombstone/deletion workflow and backup/downstream reconciliation; hold-preservation slice has28 independent bounded controls passing; readiness counts do not close this gate. See `retention-deletion-readiness.md`. | L + E |
+| B-L6 | Retention/deletion controls, breach procedures and downstream agreements | policy remains unset; preservation holds, second-administrator release, prior-row/file protection, MFA administration and exact archived restore checks implemented/reviewed locally; disabled empty-draft disposition/tombstone adapter prepared; general clinical/file/backup/provider deletion and restore admission unfinished | counsel/owner supply schedule, start events, hold authority and procedures; engineering still completes disposition/tombstone/deletion workflow and backup/downstream reconciliation; hold-preservation slice has28 independent bounded controls passing; readiness counts do not close this gate. See `retention-deletion-readiness.md`. | L + E |
 
 ## Operations on the production target
 

@@ -2269,6 +2269,16 @@ class Detector:
                                                  or BRACKET.fullmatch(txt))
                     guidance = bool(txt) and not placeholder and self.is_guidance_cell(c) and \
                         bool(self.row_label(tslot, r, c.info["col"]) or self.column_header(tslot, c.info["col"], r))
+                    if guidance and not self.row_label(tslot, r, c.info["col"]):
+                        heading = self.column_header(tslot, c.info["col"], r)
+                        if re.match(r"(?:the following (?:are|is) (?:an? )?(?:examples?|illustrations?)\b|(?:for (?:reference|information|illustration)\b)|"
+                                    r"examples?\b.*\bfor (?:reference|information|illustration)\b)", heading, re.I):
+                            # A stated reference list has no answer destination merely
+                            # because its fixed text uses the form's guidance colour.
+                            # Bracketed example values inside it are printed examples too.
+                            self.claimed.update(id(node) for node in c.el.iter())
+                            self.protected_regions.add(c.id)
+                            continue
                     if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c) or guidance):
                         continue
                     label = self.row_label(tslot, r, c.info["col"])
@@ -2631,7 +2641,7 @@ class Detector:
         """Every visible run uses hint ink; colour does not establish that text is disposable."""
         runs = [r for r in c.el.iter(R) if (r.findtext(T) or "").strip()]
         if not runs or c.el.find(".//" + q("w:tbl")) is not None or c.el.find(".//" + SDT) is not None or \
-                c.el.find(".//" + FLDCHAR) is not None or c.el.find(".//" + q("w:hyperlink")) is not None \
+                c.el.find(".//" + FLDCHAR) is not None \
                 or BOX in self.cell_text(c):
             return False
         return all(is_hint_run(r) for r in runs)
@@ -3972,7 +3982,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     protected = Detector(package)
     protected.rule_protected_signing_areas()
     protected.rule_question_boxes()
-    protected_slots = {area.slot.id for area in protected.areas if area.protection} | protected.protected_regions
+    protected_slots = ({area.slot.id for area in protected.areas if area.protection}
+                       | protected.protected_regions | source_detector.protected_regions)
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None

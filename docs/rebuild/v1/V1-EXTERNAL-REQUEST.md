@@ -67,7 +67,8 @@ Configuration and restart use the deployment gate and approved credential proced
 ## 4. Required human work and precise access gap
 
 - Authorized native Microsoft Word desktop access for final qualified outputs and their controls. The current
-  connected-document query found **no Word sessions**; both registered remote devices were **offline**.
+  connected-document query found **no Word sessions**. The earlier two-device offline observation is
+  historical; no callable remote-device tool is currently available to recheck it.
   The VPS/repository is accessible. This is a desktop gap, not a missing project/VPS session.
 - Independent security review of the actual production target/candidate and retest of serious findings.
 - Counsel's retention/deletion schedule, breach-notification procedure and downstream agreement requirements.
@@ -136,3 +137,27 @@ reviewed on the local candidate. This does not close retention: disposition appr
 purge and external/backup reconciliation remain engineering work, alongside counsel's schedule. Ordinary-note
 usefulness and full-document completeness also remain engineering/qualification gates. Buying hosting or
 signing agreements does not close those gates. Updated local repairs are not installed.
+
+
+## 2026-09-28 continuation reconciliation
+
+The 05:20 UTC continuation adds no paid requests or activation. The latest
+read-only installed financial receipt is 2026-09-28 03:28:35 UTC: 29 terminal
+jobs, 27 settled reservations, 26 receipts, zero active or unknown jobs. Two
+historical paid receipt gaps and one simulated absence remain separately
+identified; none has been converted into a new invoice or retry authority.
+The proposed $40 provider total and separate ≤$5 Stripe payment plus fee above
+remain the only pending financial request. No new approval is inferred.
+
+The additional 20k ordinary response profile is separately identified; historical
+8k/16k request bytes, model identities, receipts and the 1.5× retail multiplier
+remain unchanged. Before eligible paid verification, the actual frozen candidate,
+served worker, exact rates, request bounds and all reservations must be reconciled.
+A prepared profile or a mocked worker is not evidence of served Sonnet 5.
+
+Engineering continues on whole-document mapping, ordinary-note usefulness and
+combined candidate qualification. Retention now includes a disabled, reviewed
+empty-draft-only execution adapter, while general clinical/files/backup/provider
+reconciliation and restore admission remain developer-owned work. The adapter
+also needs the already requested retention policy and independent custody;
+its existence does not grant policy authority or enable deletion.
