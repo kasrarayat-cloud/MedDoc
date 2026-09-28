@@ -3881,7 +3881,10 @@ def constrained_placeholder(sdt):
     Wordprocessing.ShowingPlaceholder / OnOffType reference. Presence alone
     must not erase a control whose explicit on/off value is false.
     """
-    pr = sdt.find(q("w:sdtPr"))
+    properties = sdt.findall(q("w:sdtPr"))
+    if len(properties) > 1:
+        return None
+    pr = properties[0] if properties else None
     flags = pr.findall(q("w:showingPlcHdr")) if pr is not None else []
     if not flags:
         return False
@@ -3905,7 +3908,8 @@ def constrained_option_states(index, field):
             return [None] * len(printed_options(field))
         if target["type"] == "sdt_choice":
             printed = printed_options(field)
-            content = slot.el.find(q("w:sdtContent"))
+            contents = slot.el.findall(q("w:sdtContent"))
+            content = contents[0] if len(contents) == 1 else None
             placeholder = constrained_placeholder(slot.el)
             if content is None or wraps_structure(content) or placeholder is None:
                 return [None] * len(printed)
@@ -3949,8 +3953,8 @@ def constrained_scalar_value(original, final, field, written):
                any(fc.get(q("w:fldCharType")) == "begin" for fc in node.iter(FLDCHAR)) or
                wraps_structure(node) and node.find(FLDCHAR) is None for node in between):
             return None
-        separators = [i for i, node in enumerate(between) if any(
-            fc.get(q("w:fldCharType")) == "separate" for fc in node.iter(FLDCHAR))]
+        separators = [i for i, node in enumerate(between) for fc in node.iter(FLDCHAR)
+                      if fc.get(q("w:fldCharType")) == "separate"]
         # No/duplicate separator is an unresolved result boundary, not an
         # empty value. Visible XML text before the separator is ambiguous too,
         # including text a writer could retain while adding a missing marker.
@@ -3963,7 +3967,8 @@ def constrained_scalar_value(original, final, field, written):
         if not value.strip() and default is not None and (default.get(q("w:val")) or "").strip():
             return None
     elif kind == "sdt_text":
-        content = after.el.find(q("w:sdtContent"))
+        contents = after.el.findall(q("w:sdtContent"))
+        content = contents[0] if len(contents) == 1 else None
         placeholder = constrained_placeholder(after.el)
         if content is None or wraps_structure(content) or placeholder is None:
             return None

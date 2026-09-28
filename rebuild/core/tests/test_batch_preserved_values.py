@@ -255,3 +255,39 @@ class PreservedConstraintValues(SimpleTestCase):
                 # result area by adding a separator. Explicit text still holds.
                 with self.assertRaisesMessage(ValidationError, 'unreadable'):
                     b.check_answers(version, self.answers(version, '3', '2'))
+
+    def test_duplicate_sdt_content_or_properties_are_unreadable(self):
+        for kind in ('scalar', 'choice'):
+            for component in ('content', 'properties'):
+                with self.subTest(kind=kind, component=component):
+                    doc = Document(); doc.add_paragraph('Priorities must be unique.')
+                    for index, value in enumerate(('1', '2')):
+                        control = _sdt('dropdown' if kind == 'choice' else 'rich', options=['1', '2', '3'], placeholder=value)
+                        pr = control.find(qn('w:sdtPr'))
+                        for marker in pr.findall(qn('w:showingPlcHdr')):pr.remove(marker)
+                        if kind == 'scalar':pr.append(OxmlElement('w:date'))
+                        if index == 0 and component == 'content':
+                            extra = OxmlElement('w:sdtContent'); r = OxmlElement('w:r'); t = OxmlElement('w:t')
+                            t.text = '1'; r.append(t); extra.append(r)
+                            next(control.find(qn('w:sdtContent')).iter(qn('w:t'))).text = ''
+                            control.append(extra)
+                        if index == 0 and component == 'properties':
+                            pr.append(OxmlElement('w:showingPlcHdr'))
+                            extra = OxmlElement('w:sdtPr'); marker = OxmlElement('w:showingPlcHdr')
+                            marker.set(qn('w:val'), '0'); extra.append(marker); control.insert(1, extra)
+                        doc.add_paragraph(f'Priority {index}: ')._p.append(control)
+                    data, version = self.fixture(doc)
+                    answers = self.answers(version, '', '1')
+                    with self.assertRaisesMessage(ValidationError, 'unreadable'):b.check_answers(version, answers)
+                    # XML provenance only: no native Word rendering assertion
+                    # is made about this malformed multiple-body control.
+                    self.assertEqual(self.values(data, version, answers)[1:], ['Priority 0: 1', 'Priority 1: 1'])
+
+    def test_legacy_separator_count_counts_elements_in_the_same_run(self):
+        doc = Document(); doc.add_paragraph('Priorities must be unique.')
+        p = doc.add_paragraph('Priority A: '); legacy(p, '1')
+        separator = next(n for n in p._p.iter(qn('w:fldChar')) if n.get(qn('w:fldCharType')) == 'separate')
+        extra = OxmlElement('w:fldChar'); extra.set(qn('w:fldCharType'), 'separate'); separator.getparent().append(extra)
+        legacy(doc.add_paragraph('Priority B: '), '2')
+        _, version = self.fixture(doc)
+        with self.assertRaisesMessage(ValidationError, 'unreadable'):b.check_answers(version, self.answers(version))
