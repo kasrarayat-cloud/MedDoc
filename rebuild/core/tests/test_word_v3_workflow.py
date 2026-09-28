@@ -622,9 +622,10 @@ class V3Export(V3EncounterFixture, TestCase):
         stale = TemplateVersion.objects.create(template=self.template, number=2, fields=fields, contract="v3",
                                                corrections={"base_version": 1}, created_by=self.user)
         MappingConfirmation.objects.create(version=stale, confirmed_by=self.user)
-        Encounter.objects.all().delete()
+        # Clinical rows are never cleared to set up a case: the disposition trigger refuses deleting an encounter
+        # without an approved instruction. The new encounter is the one on the stale mapping version.
         self.assertEqual(self.new_encounter(stale).status_code, 302)
-        self.encounter = Encounter.objects.get()
+        self.encounter = Encounter.objects.get(template_version=stale)
         self.version = stale
         self.assertEqual(self.save(self.FULL).status_code, 302)
         response = self.finalize()
