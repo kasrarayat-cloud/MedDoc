@@ -178,6 +178,8 @@ class NestedCheckboxWorkflow(V3Fixture, TestCase):
     target_slot = 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs'
     question = 'Which symptoms occur? Tick all that apply.'
     wanted_options = ['Tightness', 'Nausea']
+    kind = 'multi_choice'
+    widget = 'data-v3-options'
 
     def source(self):
         from documents.test_question_boxes import NestedCheckboxOwnership
@@ -190,7 +192,7 @@ class NestedCheckboxWorkflow(V3Fixture, TestCase):
         original = self.source()
         template, version = self.uploaded(data=original, name='SYNTHETIC nested choice ownership')
         target = next(f for f in version.fields if f['locator']['slot'] == self.target_slot)
-        self.assertEqual((target['label'], target['kind']), (self.question, 'multi_choice'))
+        self.assertEqual((target['label'], target['kind']), (self.question, self.kind))
         self.assertEqual(b''.join(self.client.get(f'/templates/{template.pk}/original/').streaming_content), original)
         self.assertContains(self.client.get(f'/templates/{template.pk}/'), self.question)
         self.confirm(template, version)
@@ -210,7 +212,7 @@ class NestedCheckboxWorkflow(V3Fixture, TestCase):
             self.assertEqual(Job.objects.get(encounter=encounter).state, 'succeeded')
             usage = Usage.objects.get(job__encounter=encounter)
             self.assertTrue(usage.simulated);self.assertEqual(usage.charged_cost, 0)
-            self.assertContains(self.client.get(f'/encounters/{encounter.pk}/'), 'data-v3-options')
+            self.assertContains(self.client.get(f'/encounters/{encounter.pk}/'), self.widget)
             payload = {'revision': encounter.revision}
             for field in version.fields:
                 payload['answer_' + field['key']] = self.wanted_options if mode == 'ordinary' and field is target else ''
@@ -321,9 +323,13 @@ class NestedWriteInWorkflow(V3Fixture, TestCase):
 
 
 class TabColumnWorkflow(NestedCheckboxWorkflow):
+    # A coded row records one response: the end-to-end route runs on an ordinary title (one choice per row). A
+    # check-all title over such rows is held on upload (below; CI run 36479289351 found its header re-read).
     target_slot = 'b/tbl[0]/tr[0]/tc[0]/p[2]'
     question = 'Finding'
-    wanted_options = ['Normal', 'Abnormal']
+    wanted_options = ['Abnormal']
+    kind = 'choice'
+    widget = 'data-v3-choice'
 
     def setUp(self):
         super().setUp()
@@ -335,4 +341,12 @@ class TabColumnWorkflow(NestedCheckboxWorkflow):
 
     def source(self):
         from documents.test_question_boxes import TabColumnOwnership
-        return data(TabColumnOwnership().form(many=True))
+        return data(TabColumnOwnership().form())
+
+    def test_a_check_all_title_over_one_response_rows_is_held_on_upload(self):
+        from documents.test_question_boxes import TabColumnOwnership
+        template, version = self.uploaded(data=data(TabColumnOwnership().form(many=True)), name='SYNTHETIC held tab columns')
+        cell = 'b/tbl[0]/tr[0]/tc[0]'
+        inside = [f for f in version.fields if f['locator']['slot'].startswith(cell + '/')
+                  or any(b.get('slot', '').startswith(cell + '/') for b in f['locator']['target'].get('boxes', []))]
+        self.assertEqual(inside, [])
