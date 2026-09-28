@@ -489,3 +489,105 @@ class HoldCreationAgainstClinicalWrites(LockFlowFixture, TransactionTestCase):
                                    content_type='application/json')
         self.assertEqual(released.status_code, 503)
         self.assertFalse(hasattr(RetentionHold.objects.get(), 'release'))
+
+
+from core import disposition_execution as x, models as m  # noqa: E402
+from core.tests.test_disposition_execution import ExecutionFixture  # noqa: E402
+
+
+@override_settings(**ISOLATED)
+class DispositionAgainstClinicianRequests(ExecutionFixture, TransactionTestCase):
+    """RF-3. Reproduce (the finding's input): a prospective policy is admitted and an exact empty draft (older than
+    minimum_age_seconds=60) is prepared and approved by two distinct custodians. The clinician GETs the draft (a view
+    is allowed), then POSTs a 2 s WAV to it; right after store_upload returns, x.execute(admin, instruction,
+    checkpoint) commits on another connection. RED on bf8f7b78: enqueue's unscoped Encounter select_for_update().get()
+    raises Encounter.DoesNotExist, an unhandled 500, and the recording outlives the draft whose disposal was ordered."""
+
+    def setUp(self):
+        self.setup_execution()
+
+    def orphaned_recordings(self):
+        return LockFlowFixture.orphaned_recordings(self)
+
+    def disposed_during(self, name, instruction):
+        """Patch views.<name> so the approved disposition commits, on its own connection, right after it returns."""
+        real = getattr(views, name)
+        executed = {}
+
+        def racing(*args, **kwargs):
+            result = real(*args, **kwargs)
+            thread, outcome = in_thread(lambda: x.execute(self.admin, instruction.pk, self.genesis))
+            thread.join(30)
+            executed.update(outcome)
+            return result
+        return patch(f'core.views.{name}', side_effect=racing), executed
+
+    def clinician(self):
+        client = Client(raise_request_exception=False)
+        client.force_login(self.scope[0])
+        return client
+
+    def assert_disposed(self, executed, row):
+        self.assertNotIn('error', executed, executed.get('error'))
+        self.assertEqual(executed['value'].outcome, 'empty_draft_deleted')
+        self.assertFalse(m.Encounter.objects.filter(pk=row.pk).exists())
+        self.assertFalse(m.Job.objects.filter(encounter_id=row.pk).exists())
+
+    def test_a_recording_uploaded_while_the_draft_is_disposed_is_refused_and_removed(self):
+        row, instruction = self.approved()
+        doctor = self.clinician()
+        with patch.dict(os.environ, STANDARD_ENV):
+            page = doctor.get(f'/encounters/{row.pk}/')
+            self.assertEqual(page.status_code, 200)
+            quote = page.context.get('usage_quote')
+            racing, executed = self.disposed_during('store_upload', instruction)
+            with racing:
+                response = doctor.post(f'/encounters/{row.pk}/voice/', {
+                    'audio': SimpleUploadedFile('rf3.wav', wav_bytes(seconds=2, tag='rf3'), content_type='audio/wav'),
+                    'consent': 'on', **({'usage_quote': quote} if quote else {})})
+        self.assert_disposed(executed, row)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.orphaned_recordings(), [])
+        followed = doctor.get(response['Location'])
+        self.assertEqual(followed.status_code, 200)
+        self.assertContains(followed, 'no longer available')
+
+    def test_a_generation_requested_while_the_draft_is_disposed_is_refused(self):
+        """generate_view reaches the same lookup (the finding, from reading)."""
+        row, instruction = self.approved()
+        doctor = self.clinician()
+        racing, executed = self.disposed_during('usage_quote', instruction)
+        with racing:
+            response = doctor.post(f'/encounters/{row.pk}/generate/', {})
+        self.assert_disposed(executed, row)
+        self.assertEqual(response.status_code, 302)
+        self.assertContains(doctor.get(response['Location']), 'no longer available')
+
+    def test_queueing_on_a_document_disposed_after_it_was_read_is_a_refusal_not_a_crash(self):
+        """The two enqueue doors lock the row the caller read earlier; a disposed row is a refusal (ValidationError),
+        never Encounter.DoesNotExist."""
+        from django.core.exceptions import ValidationError
+        from core import batch_jobs
+        from core.jobs import enqueue
+        row, instruction = self.approved()
+        stale = m.Encounter.objects.get(pk=row.pk)
+        x.execute(self.admin, instruction.pk, self.genesis)
+        for name, door in (('jobs.enqueue', lambda: enqueue(stale, self.scope[0])),
+                           ('batch_jobs.enqueue', lambda: batch_jobs.enqueue(stale, self.scope[0], {}))):
+            with self.subTest(door=name), self.assertRaisesMessage(ValidationError, 'no longer available'):
+                door()
+        self.assertFalse(m.Job.objects.exists())
+
+    def test_positive_control_an_undisposed_draft_still_queues_its_recording(self):
+        row = self.empty()
+        doctor = self.clinician()
+        with patch.dict(os.environ, STANDARD_ENV):
+            quote = doctor.get(f'/encounters/{row.pk}/').context.get('usage_quote')
+            response = doctor.post(f'/encounters/{row.pk}/voice/', {
+                'audio': SimpleUploadedFile('rf3-ok.wav', wav_bytes(seconds=2, tag='rf3-ok'), content_type='audio/wav'),
+                'consent': 'on', **({'usage_quote': quote} if quote else {})})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], f'/encounters/{row.pk}/')
+        job = m.Job.objects.get(encounter=row, kind='transcription')
+        self.assertTrue(private_path(job.input_path).is_file())
+        self.assertEqual(self.orphaned_recordings(), [])
