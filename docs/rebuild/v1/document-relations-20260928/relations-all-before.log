@@ -1,0 +1,113 @@
+test_conditional_guidance_list_is_not_a_choice (documents.test_document_relations.DocumentRelations.test_conditional_guidance_list_is_not_a_choice) ... FAIL
+test_fixed_link_introductions_are_not_answer_fields (documents.test_document_relations.DocumentRelations.test_fixed_link_introductions_are_not_answer_fields) ... 
+  test_fixed_link_introductions_are_not_answer_fields (documents.test_document_relations.DocumentRelations.test_fixed_link_introductions_are_not_answer_fields) (introduction='For questions please contact:') ... FAIL
+  test_fixed_link_introductions_are_not_answer_fields (documents.test_document_relations.DocumentRelations.test_fixed_link_introductions_are_not_answer_fields) (introduction='Please refer to the application forms at:') ... FAIL
+test_heading_with_an_explicit_blank_still_has_an_answer (documents.test_document_relations.DocumentRelations.test_heading_with_an_explicit_blank_still_has_an_answer) ... ok
+test_other_box_does_not_cross_an_intervening_boundary (documents.test_document_relations.DocumentRelations.test_other_box_does_not_cross_an_intervening_boundary) ... ok
+test_other_box_has_full_question_without_guessing_list_cardinality (documents.test_document_relations.DocumentRelations.test_other_box_has_full_question_without_guessing_list_cardinality) ... ERROR
+test_previous_question_has_complete_local_source (documents.test_document_relations.DocumentRelations.test_previous_question_has_complete_local_source) ... ERROR
+test_reference_does_not_cross_boundaries_or_borrow_an_answer (documents.test_document_relations.DocumentRelations.test_reference_does_not_cross_boundaries_or_borrow_an_answer) ... ok
+test_section_heading_does_not_add_a_phantom_answer (documents.test_document_relations.DocumentRelations.test_section_heading_does_not_add_a_phantom_answer) ... FAIL
+test_third_party_author_area_is_visible_and_cannot_be_forged_writable (documents.test_document_relations.DocumentRelations.test_third_party_author_area_is_visible_and_cannot_be_forged_writable) ... FAIL
+
+======================================================================
+ERROR: test_other_box_has_full_question_without_guessing_list_cardinality (documents.test_document_relations.DocumentRelations.test_other_box_has_full_question_without_guessing_list_cardinality)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-document-relations/rebuild/documents/test_document_relations.py", line 98, in test_other_box_has_full_question_without_guessing_list_cardinality
+    field = next(f for f in fields if f['locator']['target']['type'] == 'cell')
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+StopIteration
+
+======================================================================
+ERROR: test_previous_question_has_complete_local_source (documents.test_document_relations.DocumentRelations.test_previous_question_has_complete_local_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-document-relations/rebuild/documents/test_document_relations.py", line 41, in test_previous_question_has_complete_local_source
+    answer = next(f for f in fields if f['label'] == follow)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+StopIteration
+
+======================================================================
+FAIL: test_conditional_guidance_list_is_not_a_choice (documents.test_document_relations.DocumentRelations.test_conditional_guidance_list_is_not_a_choice)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-document-relations/rebuild/documents/test_document_relations.py", line 80, in test_conditional_guidance_list_is_not_a_choice
+    self.assertEqual(w.inspect(data(doc))['fields'], [])
+AssertionError: Lists differ: [{'key': 'v3_1', 'label': 'If you need any[831 chars]a'}}] != []
+
+First list contains 2 additional elements.
+First extra element 0:
+{'key': 'v3_1', 'label': 'If you need any of the following', 'kind': 'choice', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/p[1]', 'target': {'type': 'paragraph_options', 'paragraphs': ['b/p[1]', 'b/p[2]']}, 'fingerprint': '83fcfafd1ef33fa7ac21002c4eff36f3e45fe30ddcd441c06f864ef6baa5429d', 'extra': [{'part': 'word/document.xml', 'slot': 'b/p[2]', 'fingerprint': '3fa158d19de7c9c4d6f8aa6e6dc70443c93df86b27e32beee7c9d5b88e937366'}]}, 'options': ['Change of conditions', 'Request supporting evidence']}
+
+Diff is 1231 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_fixed_link_introductions_are_not_answer_fields (documents.test_document_relations.DocumentRelations.test_fixed_link_introductions_are_not_answer_fields) (introduction='For questions please contact:')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-document-relations/rebuild/documents/test_document_relations.py", line 72, in test_fixed_link_introductions_are_not_answer_fields
+    self.assertEqual([f['label'] for f in fields], ['Patient contact'])
+AssertionError: Lists differ: ['For questions please contact', 'Patient contact'] != ['Patient contact']
+
+First differing element 0:
+'For questions please contact'
+'Patient contact'
+
+First list contains 1 additional elements.
+First extra element 1:
+'Patient contact'
+
+- ['For questions please contact', 'Patient contact']
++ ['Patient contact']
+
+======================================================================
+FAIL: test_fixed_link_introductions_are_not_answer_fields (documents.test_document_relations.DocumentRelations.test_fixed_link_introductions_are_not_answer_fields) (introduction='Please refer to the application forms at:')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-document-relations/rebuild/documents/test_document_relations.py", line 72, in test_fixed_link_introductions_are_not_answer_fields
+    self.assertEqual([f['label'] for f in fields], ['Patient contact'])
+AssertionError: Lists differ: ['Please refer to the application forms at', 'Patient contact'] != ['Patient contact']
+
+First differing element 0:
+'Please refer to the application forms at'
+'Patient contact'
+
+First list contains 1 additional elements.
+First extra element 1:
+'Patient contact'
+
+- ['Please refer to the application forms at', 'Patient contact']
++ ['Patient contact']
+
+======================================================================
+FAIL: test_section_heading_does_not_add_a_phantom_answer (documents.test_document_relations.DocumentRelations.test_section_heading_does_not_add_a_phantom_answer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-document-relations/rebuild/documents/test_document_relations.py", line 85, in test_section_heading_does_not_add_a_phantom_answer
+    self.assertEqual([f['label'] for f in w.inspect(data(doc))['fields']], ['What would you like recorded?'])
+AssertionError: Lists differ: ['Annex: Patient comments', 'What would you like recorded?'] != ['What would you like recorded?']
+
+First differing element 0:
+'Annex: Patient comments'
+'What would you like recorded?'
+
+First list contains 1 additional elements.
+First extra element 1:
+'What would you like recorded?'
+
+- ['Annex: Patient comments', 'What would you like recorded?']
++ ['What would you like recorded?']
+
+======================================================================
+FAIL: test_third_party_author_area_is_visible_and_cannot_be_forged_writable (documents.test_document_relations.DocumentRelations.test_third_party_author_area_is_visible_and_cannot_be_forged_writable)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-document-relations/rebuild/documents/test_document_relations.py", line 123, in test_third_party_author_area_is_visible_and_cannot_be_forged_writable
+    self.assertEqual(len(fields), 1)
+AssertionError: 0 != 1
+
+----------------------------------------------------------------------
+Ran 9 tests in 1.565s
+
+FAILED (failures=5, errors=2)

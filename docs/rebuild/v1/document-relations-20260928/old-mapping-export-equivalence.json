@@ -1,0 +1,27 @@
+{
+  "source": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "results": [
+    {
+      "mode": "missing",
+      "old_mapping_field_count": 62,
+      "answer_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "export_sha256": "a85392744688bbf1f58c73a86351216f9e1f2eef6cd7a650db9658d97a774df7",
+      "export_byte_identical": true
+    },
+    {
+      "mode": "ordinary",
+      "old_mapping_field_count": 62,
+      "answer_sha256": "977e1668fb5711a432e74bc258acc122c674d9c534fe6b5dbb20cf0fc93f0168",
+      "export_sha256": "40f273e93ec5de81072abc28e81cab8275aaf270de5a3af6512f1e90c2e45345",
+      "export_byte_identical": true
+    },
+    {
+      "mode": "long",
+      "old_mapping_field_count": 62,
+      "answer_sha256": "8af579198386df94dead4b0dd974d8c90162d8a5ce287ade8fcddde4e803fff6",
+      "export_sha256": "2ed2f38da5234a24f1c76251448fa3ec67c64cf97f87efd76fe9d225f35f973a",
+      "export_byte_identical": true
+    }
+  ],
+  "scope": "deterministic population only; not workflow, provider, rendering or native Word"
+}

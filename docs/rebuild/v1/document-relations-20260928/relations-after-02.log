@@ -1,0 +1,14 @@
+test_conditional_guidance_list_is_not_a_choice (documents.test_document_relations.DocumentRelations.test_conditional_guidance_list_is_not_a_choice) ... ok
+test_fixed_link_introductions_are_not_answer_fields (documents.test_document_relations.DocumentRelations.test_fixed_link_introductions_are_not_answer_fields) ... ok
+test_heading_with_an_explicit_blank_still_has_an_answer (documents.test_document_relations.DocumentRelations.test_heading_with_an_explicit_blank_still_has_an_answer) ... ok
+test_other_box_does_not_cross_an_intervening_boundary (documents.test_document_relations.DocumentRelations.test_other_box_does_not_cross_an_intervening_boundary) ... ok
+test_other_box_has_full_question_without_guessing_list_cardinality (documents.test_document_relations.DocumentRelations.test_other_box_has_full_question_without_guessing_list_cardinality) ... ok
+test_previous_question_has_complete_local_source (documents.test_document_relations.DocumentRelations.test_previous_question_has_complete_local_source) ... ok
+test_reference_does_not_cross_boundaries_or_borrow_an_answer (documents.test_document_relations.DocumentRelations.test_reference_does_not_cross_boundaries_or_borrow_an_answer) ... ok
+test_section_heading_does_not_add_a_phantom_answer (documents.test_document_relations.DocumentRelations.test_section_heading_does_not_add_a_phantom_answer) ... ok
+test_third_party_author_area_is_visible_and_cannot_be_forged_writable (documents.test_document_relations.DocumentRelations.test_third_party_author_area_is_visible_and_cannot_be_forged_writable) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 2.177s
+
+OK
