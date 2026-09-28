@@ -25,3 +25,37 @@ Fixed normalized AST identities (not learned from inspected source during scanne
 | core/v3_field_relations.py |636dcb8f16a6a07f9bcec54141f9ba7a91bc1e3af4add2b35e241be4f39aeff3|
 
 NOTHING FOUND in the bounded financial/compiler/caller review. This does not qualify model clinical semantics, D10, or a production release. Final integration must preserve these reviewed sources or obtain a new bounded review and run the scanner on the actual union. The scanner commit is separate from the c14 source ancestor for explicit integration.
+
+## 17f0aefe integration addendum — source and disposition guards
+
+Root reviewed the finished normalized module deltas against28744cc7 before
+changing either fixed scanner identity. In `v3_field_relations`, only `read`
+changed: it calls the bounded literal syntax/temporal reader and returns its
+syntax IDs. Compiler, profile, request construction, pricing, SDK send,
+reservation and response-binding functions are AST-identical. The new helper
+has no network, pricing or provider dependency. `generation.py` only carries
+these syntax IDs into the existing source-preservation checks; its pricing/send
+dispatch is unchanged.
+
+The four changed batch functions (`enqueue`, `current_plan`, `finish`, `run_one`)
+add only `require_access` calls for disposition suppression. This read-only
+admission check can refuse a tombstoned encounter; it does not create a request,
+retry, alter a wire, lower a quote or change settlement. Empty-draft execution
+refuses any job/batch/financial history. Existing actual migration/history and
+37 integrated workflow checks cover the additive disposition boundary.
+
+Reviewed replacement normalized identities:
+
+- `core/v3_field_relations.py`: `97d38fede19ea9b169f2625962fd8bd4b958b3f8b32231d1b4121611952b6309`.
+- `core/batch_jobs.py`: `e65e011858028e27b1e35c3aeef00e0ce4182dee209c02552b923f964088595c`.
+
+The generation-batch compiler identity remains unchanged. This is a scoped
+finished-diff financial review, not a blind refresh or a new paid authority.
+The actual integrated scanner/profile run is retained as `cost-union-17f0-01`
+and must pass before these identities are cited as verified.
+
+The integrated `cost-union-17f0-01` run passed17 scanner/profile methods in
+19.367 seconds, no skips, with all source hashes unchanged. Price/wire/history,
+global-dependency, bypass/alias/dispatch and changed-module negative controls
+passed. This reuses unchanged historical request evidence; it sends no provider
+request and changes no historical profile, receipt, charge or reservation.

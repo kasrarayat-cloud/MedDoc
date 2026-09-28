@@ -971,12 +971,13 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # undercharging replacement of Decimal. These fixed identities accompany reviewed
 # offline compiler/price witnesses; they are never learned from inspected source.
 # Any semantic module change fails until its dependency/price proof is reviewed.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': '9173e760118b7346d83032f6ccad5cc48518ef6be2ee0e9e4fb1fd5a86682ff5', 'core/batch_jobs.py': '94e727600ce8386b6751c3de250019a561f1d4cdc0e8a57d5717a35d0cfd6c5a'}
+BATCH_PRICED_MODULES = {'core/generation_batch.py': '9173e760118b7346d83032f6ccad5cc48518ef6be2ee0e9e4fb1fd5a86682ff5', 'core/batch_jobs.py': 'e65e011858028e27b1e35c3aeef00e0ce4182dee209c02552b923f964088595c'}
 
 # Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
 # quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
-# independent exact-wire/price/reservation witness and negative controls.
-ORDINARY_PRICED_SHA256 = '636dcb8f16a6a07f9bcec54141f9ba7a91bc1e3af4add2b35e241be4f39aeff3'
+# independent exact-wire/price/reservation witness and negative controls. The
+# 17f0aefe addendum reviews source-reader and disposition-denial-only deltas.
+ORDINARY_PRICED_SHA256 = '97d38fede19ea9b169f2625962fd8bd4b958b3f8b32231d1b4121611952b6309'
 
 
 def ordinary_module_proof(where):
