@@ -1,0 +1,34 @@
+{
+  "base": "36d23068ba38683aa3d01aa3ac4921a83711b4e7",
+  "frozen_source_commit": "952c7e2100e451882c1fd837980ab0212dc4f586",
+  "source_sha256": {
+    "rebuild/core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "rebuild/core/tests/test_generation_batch.py": "f495cf440009e0ebe1971275e10c310b6069d27ff5b94f54774082c0589d0793",
+    "rebuild/core/tests/test_batch_preserved_values.py": "529ab6b49ba67360d95fd6b99eacc8fce8b1e0f44df1eb5b3a629f015bb70ddb",
+    "rebuild/documents/engine.py": "c1e1313df1a37476c7d05e8a461f4feca1f00204f3ab5e8041b434fd89eab8ae",
+    "rebuild/documents/service.py": "e8b17bce53fed735faed7452f33e8d8dc1838bce98b934c63d9705be5dfef8a6",
+    "rebuild/documents/word_v3.py": "169ca5dc7a55500857e1ab6684292a3ef8244bebfa0b1559967744a1f7978035"
+  },
+  "evidence_sha256": {
+    "original-independent-probe.py": "046615950e7b2f20b7bdbf2697d8b7cefc4524a7742e5fec5b73e6aa1438e20c",
+    "original-independent-results.json": "b4c42d0d72ce7c01e6878d1b0195cba8acb10c6eb6431cf878fbe7154fd96a5b",
+    "original-independent-report.md": "80042a09487cb5be29c5c07ae2238c8d7fe73d0ea3e4243d174c0ad100280c62",
+    "01-focused.log": "11a522d7e16276167108760410106c0d98eb90e9b82552c8fbeb67e5ec0f4441",
+    "02-affected-first.log": "e35bcea9fe8d00a275b8921a2d377f961ce1b18f5115ab62e921aaf4f1afc190",
+    "03-focused-affected.log": "d481a6b72c764e7dfad71474b98cfc2e23228de01a7093f3ed3128a04bd3033f",
+    "04-original-repaired.json": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "05-original-repaired.json": "340ec2284d6734058f3ab67ccebfdbc34a8e8a8b6c5e5d44bfeb79662235b0d3",
+    "06-original-red.log": "c736b6d9d947bce5edd55bed5fbeb406caf061385cf5ae634c94e33c8091f289",
+    "replay_original.py": "4229bdf20e09f2469dc8aeb71231cf1d55fb68d80c03216310ca9a6af3495b88",
+    "replay_original_complete.py": "5c53582c07068d4945aabd02fcce3a9cfbfc7f11375fe0d21aa7791015455826"
+  },
+  "results": "35 tests:34 passes,1 known opposite-side expected failure; original2 baseline regression tests fail; repaired original103field cases both refuse",
+  "unqualified": "Independent finished-diff review pending; provider/Word broad qualification and automatic rule producer remain separate",
+  "zero_calls": [
+    "database",
+    "provider",
+    "token_count",
+    "payment"
+  ],
+  "default_off": true
+}

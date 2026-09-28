@@ -1,0 +1,28 @@
+test_preserved_native_scalar_duplicate_refuses_and_explicit_change_succeeds (preserved_value_regressions.PreservedConstraintValues.test_preserved_native_scalar_duplicate_refuses_and_explicit_change_succeeds) ... FAIL
+test_unknown_displayed_dropdown_is_unreadable_and_explicit_change_succeeds (preserved_value_regressions.PreservedConstraintValues.test_unknown_displayed_dropdown_is_unreadable_and_explicit_change_succeeds) ... FAIL
+
+======================================================================
+FAIL: test_preserved_native_scalar_duplicate_refuses_and_explicit_change_succeeds (preserved_value_regressions.PreservedConstraintValues.test_preserved_native_scalar_duplicate_refuses_and_explicit_change_succeeds)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-preserved-values/rebuild/core/tests/test_batch_preserved_values.py", line 80, in test_preserved_native_scalar_duplicate_refuses_and_explicit_change_succeeds
+    with self.assertRaisesMessage(ValidationError, 'priority'): b.check_answers(version, bad)
+  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+    next(self.gen)
+AssertionError: ValidationError not raised
+
+======================================================================
+FAIL: test_unknown_displayed_dropdown_is_unreadable_and_explicit_change_succeeds (preserved_value_regressions.PreservedConstraintValues.test_unknown_displayed_dropdown_is_unreadable_and_explicit_change_succeeds)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-preserved-values/rebuild/core/tests/test_batch_preserved_values.py", line 91, in test_unknown_displayed_dropdown_is_unreadable_and_explicit_change_succeeds
+    with self.assertRaisesMessage(ValidationError, 'unreadable'): b.check_answers(version, self.answers(version))
+  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+    next(self.gen)
+AssertionError: ValidationError not raised
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.622s
+
+FAILED (failures=2)
+BASELINE MODULE: /opt/meddoc-pro/.worktrees/v1-batch-effective-constraints/rebuild/core/generation_batch.py

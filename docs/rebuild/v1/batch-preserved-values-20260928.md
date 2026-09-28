@@ -30,3 +30,5 @@ No rule inference, clinical keyword exception, manifest weakening, capacity/pric
 All test connections were prohibited by the fixture, with managed/synthetic environment and dummy DB port1. The document-service checks exercised the actual bounded subprocess sandbox. No filled DOCX is retained or tracked; test packages stay in memory or temporary directories managed by the tests.
 
 Private logs and replay adapters: `rebuild/.runtime/batch-preserved-values/`. Finished-diff independent refutation is required before integration. Source remains frozen during that review.
+
+Frozen source `952c7e2100e451882c1fd837980ab0212dc4f586`; [retained evidence and source hashes](batch-preserved-values-20260928/manifest.json). Evidence copies preserve original failures, the replay-adapter failure, and the successful finite results separately.
