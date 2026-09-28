@@ -35,14 +35,65 @@ def side_warnings(field, selected):
 
 
 _PATIENT_REPORT = re.compile(r'^(?:the\s+)?patient\s+(?:reports?|reported|says?|said|states?|stated|writes?|wrote)\b', re.I)
-_REPORT_OBJECT = r'\s+(?:(?:the|this|that|their|his|her)\s+)?(?:(?:entire|complete)\s+)?report\s*\.$'
-_REVIEWED = re.compile(r'^(?:the\s+)?patient\s+(?:(?:has|had)\s+)?(?:read|reviewed|seen)' + _REPORT_OBJECT, re.I)
-_REPORTED_REVIEW = re.compile(r'^(?:the\s+)?patient\s+(?:reports?|reported|states?|stated|says?|said)\s+'
-    r'(?:having|that\s+(?:(?:he|she|they)\s+(?:has|have|had)|I\s+(?:have|had)))\s+'
-    r'(?:read|reviewed|seen)' + _REPORT_OBJECT, re.I)
-_OPPORTUNITY = re.compile(r'^(?:the\s+)?patient\s+(?:(?:has|had)\s+)?(?:had|was\s+given)\s+(?:an?\s+)?opportunity\s+'
-                          r'to\s+(?:add\s+)?comments?\s+(?:on|about)' + _REPORT_OBJECT, re.I)
+_DOCUMENT = r'(?:(?:the|this|that|their|his|her)\s+)?(?:(?:entire|complete)\s+)?(?P<object>report|form|document|application)'
+_REVIEW_ACTION = r'(?:(?:has|had)\s+)?(?:read|reviewed|seen|had\s+sight\s+of)'
+_COMMENT_ACTION = r'(?:(?:has|had)\s+)?(?:had|was\s+given)\s+(?:an?\s+)?opportunity\s+to\s+(?:add\s+(?:(?:their|his|her|my)\s+)?)?comments?'
+_REVIEW_CLAUSE = re.compile(_REVIEW_ACTION + r'\s+' + _DOCUMENT, re.I)
+_COMMENT_CLAUSE = re.compile(_COMMENT_ACTION + r'(?:\s+(?:on|about)\s+' + _DOCUMENT + r')?', re.I)
 _QUALIFIED_REVIEW = re.compile(r'\b(?:not|never|no|denies?|uncertain|unsure|possibly|maybe|might|may|could|would|will|if|unless|but)\b|\?', re.I)
+
+
+def review_requirements(source):
+    """Read the printed object's identity and its literal AND/OR requirement.
+
+    The anchored question, never the editable display label, sets the obligation.
+    Unrecognized clauses stay held instead of falling back to a generic OR.
+    """
+    text = re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', source)).strip().rstrip('.?')
+    text = re.sub(r'^please\s+', '', text, flags=re.I)
+    prefix = re.match(r'confirm\s+(?:that\s+)?(?:the\s+)?patient\s+', text, re.I)
+    if not prefix: return None
+    body = text[prefix.end():]
+    body = re.sub(r',\s*if appropriate or necessary$', '', body, flags=re.I)
+    pieces = re.split(r'\s+(and/or|and|or)\s+', body, flags=re.I)
+    if len(pieces) not in (1, 3): return None
+    claims = []; objects = set()
+    for part in pieces[::2]:
+        match = _REVIEW_CLAUSE.fullmatch(part)
+        kind = 'review'
+        if match is None: match = _COMMENT_CLAUSE.fullmatch(part); kind = 'opportunity'
+        if match is None: return None
+        claims.append(kind)
+        if match['object']: objects.add(match['object'].casefold())
+    if len(objects) != 1 or len(set(claims)) != len(claims): return None
+    return objects.pop(), set(claims), len(pieces) == 3 and pieces[1].casefold() == 'and'
+
+
+def review_claims(text, required_object):
+    """Only complete assertions by the same explicit patient establish events.
+
+    A second coordinated comment clause can inherit the first clause's document.
+    No title, summary, partial object, future or negative qualifier is discarded.
+    """
+    if _QUALIFIED_REVIEW.search(text) or not text.endswith('.'): return None
+    prefix = re.match(r'^(?:the\s+)?patient\s+', text, re.I)
+    if not prefix: return None
+    body = text[prefix.end():-1]
+    reported = re.match(r'(?:reports?|reported|states?|stated|says?|said)\s+'
+        r'(?:having|that\s+(?:(?:he|she|they)\s+(?:has|have|had)|I\s+(?:have|had)))\s+', body, re.I)
+    if reported: body = body[reported.end():]
+    pieces = re.split(r'\s+and\s+', body, flags=re.I)
+    if len(pieces) > 2: return None
+    claims = set(); inherited = None
+    for part in pieces:
+        match = _REVIEW_CLAUSE.fullmatch(part)
+        kind = 'review'
+        if match is None: match = _COMMENT_CLAUSE.fullmatch(part); kind = 'opportunity'
+        if match is None or kind in claims: return None
+        actual_object = (match['object'] or inherited or '').casefold()
+        if actual_object != required_object: return None
+        inherited = actual_object; claims.add(kind)
+    return claims
 
 
 def explicit_patient_report(text):
@@ -72,14 +123,20 @@ def policy_warnings(field, selected):
              policy.get('source_author', 'patient') == 'patient' and
              policy.get('attestation', 'document_review') == 'document_review')
     if not valid: return list(selected)
-    warnings = []
+    requirements = review_requirements(policy['attestation_source']['text']) if 'attestation' in policy else None
+    if 'attestation' in policy and requirements is None: return list(selected)
+    warnings = []; supplied = set()
     for unit in selected:
         text = unicodedata.normalize('NFKC', unit['quote']).strip()
-        if ('source_author' in policy and not _PATIENT_REPORT.search(text) or
-                'attestation' in policy and (not (_REVIEWED.search(text) or _OPPORTUNITY.search(text) or _REPORTED_REVIEW.search(text))
-                                             or _QUALIFIED_REVIEW.search(text))):
-            warnings.append(unit)
+        if 'source_author' in policy and not _PATIENT_REPORT.search(text): warnings.append(unit)
+        if requirements:
+            claims = review_claims(text, requirements[0])
+            if not claims or not claims & requirements[1]: warnings.append(unit)
+            else: supplied.update(claims)
+    if requirements and (not requirements[1] & supplied or requirements[2] and not requirements[1] <= supplied):
+        return list(selected)
     return warnings
+
 
 
 _TEMPORAL = re.compile(r'\b(before|after|prior\s+to|following|preceding)\s+'

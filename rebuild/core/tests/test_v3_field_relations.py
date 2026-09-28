@@ -193,7 +193,7 @@ class OrdinaryFieldRelations(SimpleTestCase):
                     self.assertEqual(g.governed_decisions(notes, [target], {'comments': old}), ['Additional comments'])
         target['answer_policy'] = {'attestation': 'document_review', 'attestation_source': {**source, 'text': 'Confirm patient reviewed report.'}}
         for notes, expected in (('The patient has reviewed the report.', 'supported'),
-                                ('The patient was given an opportunity to comment on the report.', 'supported'),
+                                ('The patient was given an opportunity to comment on the report.', 'conflict'),
                                 ('The patient has not reviewed the report.', 'conflict'),
                                 ('The patient will review the report.', 'conflict'),
                                 ('The patient had the procedure.', 'conflict')):
@@ -210,6 +210,48 @@ class OrdinaryFieldRelations(SimpleTestCase):
         self.assertEqual(offered(notes, [target], {'comments': [notes]})['comments']['status'], 'supported')
         target['answer_policy'] = {'attestation': 'document_review', 'source': source}
         self.assertEqual(offered(notes, [target], {'comments': [notes]})['comments']['status'], 'conflict')
+
+    def test_document_review_uses_exact_printed_object_and_conjunction(self):
+        source = {'part': 'word/document.xml', 'slot': 'b/p[0]', 'fingerprint': 'a' * 64}
+        target = field('f', 'Additional comments')
+        instructions = (
+            ('Please confirm that the patient has had sight of this report and/or had an opportunity to add their comments, if appropriate or necessary.', 'report', False),
+            ('Please confirm that the patient has had sight of this application and had an opportunity to add their comments', 'application', True),
+            ('Confirm patient reviewed the form and had an opportunity to comment on the form.', 'form', True),
+            ('Confirm patient reviewed the document or had an opportunity to comment on the document.', 'document', False),
+        )
+        for instruction, obj, both in instructions:
+            target['answer_policy'] = {'attestation': 'document_review', 'attestation_source': {**source, 'text': instruction}}
+            coordinated = f'The patient has read the {obj} and had an opportunity to add comments about the {obj}.'
+            # The first report sentence is the unchanged predeclared D30 positive.
+            review = f'The patient has read the {obj}.'
+            opportunity = f'The patient was given an opportunity to comment on the {obj}.'
+            cases = [(coordinated, 'supported'), (review, 'conflict' if both else 'supported'),
+                     (opportunity, 'conflict' if both else 'supported'),
+                     (f'The patient has read the {obj} and had an opportunity to add their comments.', 'supported'),
+                     (f'The patient reviewed only the title of the {obj}.', 'conflict'),
+                     (f'The patient read part of the {obj} and had an opportunity to comment on the {obj}.', 'conflict'),
+                     (f'The patient has not read the {obj} and had an opportunity to comment on the {obj}.', 'conflict'),
+                     (f'The patient will read the {obj} and have an opportunity to comment on the {obj}.', 'conflict'),
+                     (f'The patient has read the {obj} and the clinician had an opportunity to comment on the {obj}.', 'conflict'),
+                     ('The patient has read the letter and had an opportunity to comment on the letter.', 'conflict')]
+            for notes, expected in cases:
+                with self.subTest(instruction=instruction, notes=notes):
+                    answers = offered(notes, [target], {'f': [notes]})
+                    self.assertEqual(answers['f']['status'], expected)
+                    if expected == 'supported': self.assert_stored_clear(notes, [target], answers)
+                    else:
+                        old = {'text': notes, 'status': 'supported', 'reviewed': True,
+                               'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}
+                        self.assertEqual(g.governed_decisions(notes, [target], {'f': old}), ['Additional comments'])
+            notes = review + ' ' + opportunity
+            answers = offered(notes, [target], {'f': [review, opportunity]})
+            self.assertEqual(answers['f']['status'], 'supported')
+            self.assert_stored_clear(notes, [target], answers)
+        # Unknown conditional obligations cannot be replaced by the simple rule.
+        target['answer_policy']['attestation_source']['text'] = 'Confirm patient reviewed the report unless sharing it is inappropriate.'
+        notes = 'The patient has read the report.'
+        self.assertEqual(offered(notes, [target], {'f': [notes]})['f']['status'], 'conflict')
 
     def test_correction_subject_omission_contradiction_and_consent_guards_survive(self):
         first = 'The patient reports intermittent buzzing.'
