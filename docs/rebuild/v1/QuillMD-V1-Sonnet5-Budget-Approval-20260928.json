@@ -1,0 +1,44 @@
+{
+  "record_version": 1,
+  "authority_id": "quillmd-v1-sonnet5-staged-40-call_9fkOp2kqbQ28e17HqXgHFlzk",
+  "recorded_at_utc": "2026-09-28T22:59:06Z",
+  "recorded_at_is_reply_timestamp": false,
+  "source": "Direct user reply to the budget question in this conversation",
+  "source_question_item_id": "[\"request_user_input_async\",\"call_9fkOp2kqbQ28e17HqXgHFlzk\",0]",
+  "question_verbatim": "Do you approve the report’s one-time synthetic Sonnet 5 testing budget: up to $40 total ($5 model check, then up to $25 mapping and $10 notes only if that check succeeds)? This excludes live Stripe payments, AWS purchases and real patient data. The report explicitly lists this spending as unapproved.",
+  "owner_answer_verbatim": "Approve the staged $40 maximum",
+  "approval_status": "approved",
+  "project": "QuillMD",
+  "purpose": "One private synthetic-only Sonnet 5 verification, mapping and ordinary-note qualification campaign",
+  "currency": "USD",
+  "total_provider_cost_ceiling": 40,
+  "stages": [
+    {"id": "model_check", "provider_cost_ceiling": 5, "prerequisite": "Applicable execution, accounting and private-test readiness checks pass"},
+    {"id": "mapping", "provider_cost_ceiling": 25, "prerequisite": "model_check succeeded with recorded evidence"},
+    {"id": "ordinary_notes", "provider_cost_ceiling": 10, "prerequisite": "model_check succeeded with recorded evidence"}
+  ],
+  "scope": {
+    "single_campaign": true,
+    "synthetic_only": true,
+    "caps_are_cumulative_across_sessions_retries_and_workers": true,
+    "unused_stage_budget_is_not_automatically_transferable": true,
+    "routine_same_scope_repairs_do_not_require_repeat_budget_approval": true,
+    "new_stage_is_not_a_new_total_allowance": true
+  },
+  "excluded": ["Live Stripe payments", "AWS purchases", "New subscriptions", "Contract acceptance", "Real patient data", "Public launch", "Any spending above the approved stage or total ceilings"],
+  "accounting_requirements": [
+    "Bind server-side execution to this existing authority rather than create duplicate allowances",
+    "Reconcile previous attempts and unknown outcomes before admitting another request",
+    "Count uncertain outcomes at maximum reserved exposure until reconciled",
+    "Preserve all reservations, usage, receipts, historical charges and failures",
+    "Do not automatically refill or reset this campaign when a session or assistant changes"
+  ],
+  "execution_state_at_recording": {
+    "desktop_record_and_handoff_only": true,
+    "provider_inference_calls_started_by_this_desktop_turn": 0,
+    "vps_controls_updated_by_this_desktop_turn": false,
+    "server_spend_or_remaining_balance": null,
+    "server_spend_note": "Not freshly verified; reconcile the actual server ledger before execution",
+    "remote_terminal_check": "No app terminal session attached to this thread"
+  }
+}

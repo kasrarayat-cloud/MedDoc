@@ -32,6 +32,15 @@ engineering decisions an assistant can accept for the company.
 
 ## 2. Bounded synthetic verification spending, only after a frozen eligible candidate
 
+> **Status 2026-09-28 23:00Z — APPROVED by the owner, staged, provider cost:** "Approve the staged $40 maximum"
+> (authority `quillmd-v1-sonnet5-staged-40-call_9fkOp2kqbQ28e17HqXgHFlzk`). $5 model check first; up to $25 mapping
+> and $10 notes only after it succeeds. One campaign; caps cumulative across sessions, retries and workers; no
+> transfer between stages. The separate live Stripe payment (≤ $5) is **not** approved. Record:
+> `docs/foundation/mutations/20260928-quillmd-v1-sonnet5-staged-campaign.md` and
+> `QuillMD-V1-Sonnet5-Budget-Approval-20260928.json`. The text below is the request as it was made and is kept
+> unchanged. **Still external:** a campaign credential the QA runner can use without any session reading
+> `rebuild/.env` (see the declaration); until it exists, no request can be sent.
+
 The old Stage 1 grant names a different revision/model and cannot fund this work. Metadata retrieval and
 eight native token-count requests were free (four tokenizer comparisons, three expanded mapping-output sizing probes and one compact-output sizing probe); no generation validation has run. The earlier proposed caps are
 retained as a single **unapproved** request:
