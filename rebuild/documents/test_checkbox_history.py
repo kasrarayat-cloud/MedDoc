@@ -777,3 +777,211 @@ class SelectionLimitRefutations(unittest.TestCase):
                 self.assertMulti(data(inline_question(question, options, 'ff')), 'Symptom(s)')
         raw = data(inline_question('Do you have more than one type of headache?', ('No', 'Yes - describe the worst'), 'ff'))
         self.assertOneChoice(raw, 'Do you have more than one type', 'No', [True, False])
+
+
+def yes_no(doc, label='Escorted: ', tail=None):
+    """A separate Yes/No question that owns its native boxes; `tail` is printed after a line break in its paragraph."""
+    p = doc.add_paragraph(label); ff_field(p, 'checkbox', name='E0'); p.add_run(' Yes ')
+    ff_field(p, 'checkbox', name='E1'); p.add_run(' No')
+    if tail is not None:
+        p.add_run().add_break(); p.add_run(tail)
+    return p
+
+
+def with_part(raw, name, xml):
+    out = io.BytesIO()
+    with ZipFile(io.BytesIO(raw)) as a, ZipFile(out, 'w', ZIP_DEFLATED) as b:
+        for item in a.namelist():
+            b.writestr(item, a.read(item))
+        b.writestr(name, xml)
+    return out.getvalue()
+
+
+def d31_shape(label):
+    """The D31-shaped synthetic form (as in test_d31_shaped_leave_history_accepts_two_leave_selections) with the
+    page-1 boxed label spelled `label`."""
+    doc = Document(); doc.add_heading('Conditional Discharge Proposal', 1)
+    boxed_question(doc, label, ('Conditional', 'Absolute'))
+    doc.add_table(rows=1, cols=2).rows[0].cells[1].text = 'Please see the list at annex B and select accordingly'
+    doc.add_table(rows=1, cols=2).rows[0].cells[1].text = 'Responsible Clinician (including employing organisation)'
+    doc.add_paragraph(''); doc.add_paragraph('')
+    rows = (('Compassionate (day)', 'Compassionate (overnight)'), ('Medical (day)', 'Medical (overnight)'),
+            ('Long Term Escorted Leave of Absence',))
+    for n, row in enumerate(rows):
+        p = doc.add_paragraph('Community leave taken:\t' if n == 0 else '')
+        for k, option in enumerate(row):
+            ff_field(p, 'checkbox', name='Leave%d%d' % (n, k))
+            p.add_run(' ' + option + ('    \t        \t' if k == 0 and len(row) > 1 else ''))
+        doc.add_paragraph('')
+    doc.add_table(rows=1, cols=2).rows[0].cells[1].text = 'Leave taken within the hospital grounds; leave to attend Court;'
+    return doc
+
+
+TREATMENTS = ('Physiotherapy', 'Occupational therapy', 'Hydrotherapy')
+
+
+class SelectionLimitRound2(unittest.TestCase):
+    """Refuter inputs F1-F9 against 233ac9a1 (the native-checkbox history and the ordinary one-only reading)."""
+    fields, ticks = SelectionLimitRefutations.fields, SelectionLimitRefutations.ticks
+    assertNeverTwo = SelectionLimitRefutations.assertNeverTwo
+    assertOneChoice = SelectionLimitRefutations.assertOneChoice
+    assertMulti = SelectionLimitRefutations.assertMulti
+
+    @staticmethod
+    def preamble(sentence, question='Treatments received', options=TREATMENTS):
+        doc = Document(); doc.add_paragraph(sentence); doc.add_heading('Clinical history', 1)
+        return native_list(doc, question, options)
+
+    @staticmethod
+    def header(sentence, question='Treatments received', options=TREATMENTS):
+        doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, question, options)
+        doc.sections[0].header.paragraphs[0].text = sentence
+        return doc
+
+    @staticmethod
+    def floating(sentence):
+        doc = Document(); doc.add_heading('Leave', 1)._p.append(parse_xml(TEXTBOX % sentence))
+        return native_list(doc)
+
+    # F1: a negated "more than one" is a limit, and floating selection wording is never skipped.
+    def test_f1_negated_open_counts_and_floating_selection_wording_never_grant_two(self):
+        for sentence in ('Please do not tick more than one box for each question.', 'Never tick more than 1 box per question.',
+                         'No more than one box may be ticked.', 'Do not select more than one option.',
+                         'Do not select multiple options.'):
+            for where, build in (('preamble', self.preamble), ('page header', self.header)):
+                with self.subTest(where=where, sentence=sentence):
+                    self.assertNeverTwo(data(build(sentence)), 'Treatments received')
+        for sentence in ('Do not tick more than one box.', 'Choose the leave type that applies.'):
+            with self.subTest(text_box=sentence):
+                self.assertNeverTwo(data(self.floating(sentence)))
+        # Controls: permission for several, and an attribution line in an office text box, stay multiple.
+        self.assertMulti(data(self.preamble('You may tick more than one box for each question.')), 'Treatments received')
+        self.assertMulti(data(self.floating('Checked by: ____________')), 'Community leave taken')
+
+    # F2: a scale key or a warning after "tick one" is not a range.
+    def test_f2_tick_one_followed_by_a_scale_key_or_a_warning_stays_one_choice(self):
+        scale, symptoms = ('1', '2', '3', '4', '5'), ('Pain', 'Swelling', 'Fever')
+        for question, options, chosen, expected in (
+                ('How strongly does each apply? Tick one – 1 (never) to 5 (always):', scale, '4',
+                 [False, False, False, True, False]),
+                ('How much do these statements apply to you? Circle one - 1 = not at all, 5 = completely:', scale, '4',
+                 [False, False, False, True, False]),
+                ('Pain score(s) (tick one, 1 = mild, 5 = worst):', scale, '4', [False, False, False, True, False]),
+                ('Symptom(s) (tick one, all others must be left blank):', symptoms, 'Swelling', [False, True, False]),
+                ('Main symptom(s) - tick one — two ticks will void the answer:', symptoms, 'Swelling', [False, True, False])):
+            for control in ('glyph', 'ff'):
+                with self.subTest(question=question, control=control):
+                    self.assertOneChoice(data(inline_question(question, options, control)), question.split(' ')[0],
+                                         chosen, expected)
+
+    # F3: a note, or an instruction on a line of its own, is not a separate question's label.
+    def test_f3_a_standalone_instruction_is_not_owned_by_the_question_below_it(self):
+        cases = []
+        for note in ('Please note: only one box may be ticked.', 'Note: tick one box only.', 'Instructions: tick one box only.',
+                     'NB: tick one box only.', 'Important: please tick only one box.', 'Guidance: one answer only.',
+                     'Leave type - tick one', 'Leave type (tick one):'):
+            for question, options in (('Community leave taken', LEAVE), ('Treatments received', TREATMENTS)):
+                doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph(note); yes_no(doc)
+                cases.append((note + ' / ' + question, question, native_list(doc, question, options)))
+        doc = Document(); doc.add_heading('Leave', 1); yes_no(doc, tail='Leave type (tick one box only):')
+        cases.append(('after a line break', 'Community leave taken', native_list(doc)))
+        doc = Document(); doc.add_heading('Leave', 1)
+        p = doc.add_paragraph('Leave type (tick one box only):'); p.add_run().add_break(); p.add_run('Escorted: ')
+        ff_field(p, 'checkbox', name='E0'); p.add_run(' Yes '); ff_field(p, 'checkbox', name='E1'); p.add_run(' No')
+        cases.append(('before a line break', 'Community leave taken', native_list(doc)))
+        doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Community leave: only one box may be ticked.')
+        boxed_question(doc, 'Escorted?', ('Yes', 'No')); doc.add_paragraph('')
+        cases.append(('above a boxed question', 'Community leave taken', native_list(doc)))
+        for name, label, doc in cases:
+            with self.subTest(case=name):
+                self.assertNeverTwo(data(doc), label)
+
+    # F4: a form-wide one-box rule that also says where the boxes are printed still limits.
+    def test_f4_form_wide_one_box_rules_naming_a_column_or_table_still_limit(self):
+        for sentence in ('Please answer each question by ticking one box in the column provided.',
+                         'Please tick one box only for each question, in the column on the right.',
+                         'For every question tick only one box in the answer column.',
+                         'Please tick one box only (see table of codes on page 4).'):
+            for where, build in (('preamble', self.preamble), ('page header', self.header)):
+                with self.subTest(where=where, sentence=sentence):
+                    self.assertNeverTwo(data(build(sentence)), 'Treatments received')
+        for sentence in ('Tick one box per row in the table below.', 'In the table below, tick one box per row.'):
+            with self.subTest(row_only=sentence):
+                self.assertMulti(data(self.preamble(sentence)), 'Treatments received')
+
+    # F5: a label that covers both parts, or names the list's subject, is not owned by the Yes/No question.
+    def test_f5_a_label_reaching_both_parts_governs_the_list(self):
+        for label in ('Leave and treatment (tick one box for leave and one for treatment):',
+                      'Leave and treatment (tick one box only in both parts):',
+                      'Escort and treatment (tick one box only in these two lines):',
+                      'Escorted (tick one box only throughout this form):'):
+            with self.subTest(label=label):
+                doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph(label); yes_no(doc)
+                self.assertNeverTwo(data(native_list(doc, 'Treatments received', TREATMENTS)), 'Treatments received')
+
+    # F6: a singular "the answer/response/category that best ..." directly above the list.
+    def test_f6_singular_best_answer_phrases_above_the_list_never_grant_two(self):
+        for instruction in ('Record the answer that best describes the leave taken.', 'Enter the response that best fits.',
+                            'Use the category which best matches the leave.'):
+            with self.subTest(instruction=instruction):
+                self.assertNeverTwo(data(form('Community leave taken', LEAVE, instruction=instruction)))
+
+    # F7: D31's A15 stays multiple whatever the spelling of the separate boxed question's own tick-one label.
+    def test_f7_d31_label_spellings_keep_the_leave_history_multiple(self):
+        chosen = ['Compassionate (day)', 'Compassionate (overnight)']
+        for label in ('Type of discharge applied for (please tick one):', 'Type of discharge applied for (please tick one)',
+                      'Type of discharge applied for - please tick one',
+                      'Type of discharge applied for (please tick one of the following):',
+                      'Type of discharge applied for (please tick one - see page 3):'):
+            with self.subTest(label=label):
+                raw = data(d31_shape(label))
+                leave = self.fields(raw, 'Community leave taken')[0]
+                discharge = self.fields(raw, 'Type of discharge')[0]
+                self.assertEqual((leave['kind'], discharge['kind']), ('multi_choice', 'choice'))
+                self.assertEqual(self.ticks(raw, leave, chosen), [o in chosen for o in leave['options']])
+                with self.assertRaises(w.V3Failure):
+                    w.fill(raw, [discharge], {discharge['key']: discharge['options']})
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        row = doc.add_table(rows=1, cols=2).rows[0]; row.cells[0].text = 'Smoking status (tick one)'
+        cell = row.cells[1].paragraphs[0]
+        for i, option in enumerate(('Never', 'Ex', 'Current')):
+            ff_field(cell, 'checkbox', name='S%d' % i); cell.add_run(' ' + option + ' ')
+        doc.add_paragraph(''); raw = data(native_list(doc, 'Treatments received', TREATMENTS))
+        self.assertMulti(raw, 'Treatments received')
+
+    # F8: wording that permits several boxes is not a one-answer limit; the singular wording still is.
+    def test_f8_plural_box_wording_elsewhere_keeps_the_history_multiple(self):
+        for sentence in ('Please tick the appropriate box(es).', 'Tick the relevant box or boxes.', 'Tick the relevant box/boxes.'):
+            with self.subTest(sentence=sentence):
+                self.assertMulti(data(self.preamble(sentence)), 'Treatments received')
+        self.assertNeverTwo(data(self.preamble('Please tick the relevant box.')), 'Treatments received')
+
+    # F9: a failing control for every guard the refuter could remove without a failure.
+    def test_f9_every_selection_guard_has_a_control(self):
+        raw = data(native_list(Document(), 'Treatments received', TREATMENTS))
+        self.assertNeverTwo(with_part(raw, 'word/endnotes.xml', '<w:endnotes xmlns:w="http://schemas.openxmlformats.org/'
+                                      'wordprocessingml/2006/main"><w:endnote w:id="1"><w:p><w:r><w:t>Tick one box only.'
+                                      '</w:t></w:r></w:p></w:endnote></w:endnotes>'), 'Treatments received')
+        for control in ('glyph', 'ff'):
+            with self.subTest(at_most=control):
+                self.assertOneChoice(data(inline_question('Treatment(s) - at most one:', ('Physiotherapy', 'Hydrotherapy',
+                                     'Literacy'), control)), 'Treatment(s)', 'Hydrotherapy', [False, True, False])
+        doc = form(table_before='Tick whichever applies.')
+        SelectionLimitRound2.assertUnresolved(self, data(doc))
+        for options in (('Under 7 days', '7 to 14 days', 'Over 14 days'), ('Less than a week', 'More than a week'),
+                        ('Fewer than three', 'Greater than three'), ('At least weekly', 'At most monthly'),
+                        ('Up to a week', 'Between one and two weeks', 'Within a month'), ('Above target', 'Below target')):
+            with self.subTest(options=options):
+                doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, 'Leave taken', options)
+                self.assertOneChoice(data(doc), 'Leave taken', options[1], [o == options[1] for o in options])
+        for question, options in (('Level of care received', ('Independent', 'Supervised', 'Assisted')),
+                                  ('Duration of therapy received', ('Short course', 'Standard course', 'Extended course')),
+                                  ('Length of treatment received', ('Short course', 'Standard course', 'Extended course')),
+                                  ('Frequency of sessions attended', ('Daily', 'Weekly', 'Monthly')),
+                                  ('Amount of leave taken', ('Little', 'Some', 'Extensive'))):
+            with self.subTest(question=question):
+                doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, question, options)
+                self.assertOneChoice(data(doc), question, options[1], [False, True, False])
+
+    def assertUnresolved(self, raw, note='selection'):
+        CheckboxHistory.assertUnresolved(self, raw, note)
