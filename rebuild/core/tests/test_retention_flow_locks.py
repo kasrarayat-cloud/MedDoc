@@ -741,6 +741,7 @@ class InvitationAcceptanceAgainstTheSamePayersRequests(LockFlowFixture, Transact
             'usage_quote': quote, 'revision': '0'}))
         self.assertEqual(response.status_code, 302, getattr(response, 'exc_info', None))
         self.assertEqual(response['Location'], f'/encounters/{draft.pk}/')
+        self.assertTrue(Job.objects.filter(encounter=draft, kind='generation').exists(), 'the generation was not queued')
         job = Job.objects.get(encounter=draft, kind='generation')
         self.assertEqual(job.state, 'queued')
         self.assertTrue(Reservation.objects.filter(job=job, state='held').exists())
