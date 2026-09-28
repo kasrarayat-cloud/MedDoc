@@ -1601,6 +1601,27 @@ class WordsBeforeBoxesWhateverTheVocabulary(unittest.TestCase):
                     result = w.inspect(data(coded_form([line], control=control, heading=None)))
                     self.assertEqual(box_fields(result)[:1], [(label, options)])
 
+    def test_a_closed_answer_set_a_negation_pair_or_a_count_after_the_boxes_keeps_the_row_readable(self):
+        # Positive controls: a companion or an 'Other ____' write-in after the last box is read when the after-box
+        # words are provably the whole answer set.
+        for line, label, options in (('Marital status ☐ Single ☐ Married ☐ Other ____', 'Marital status',
+                                      ['Single', 'Married', 'Other']),
+                                     ('Diabetes ☐ Type 1 ☐ Type 2 ☐ Other ____', 'Diabetes', ['Type 1', 'Type 2', 'Other']),
+                                     ('Sex ☐ Male ☐ Female ☐ Other', 'Sex', ['Male', 'Female', 'Other']),
+                                     ('Taking Metformin ☐ Yes ☐ No ☐ Not known', 'Taking Metformin', ['Yes', 'No', 'Not known']),
+                                     ('Airway: Mallampati ☐ I ☐ II ☐ III ☐ Not assessed', 'Airway: Mallampati',
+                                      ['I', 'II', 'III', 'Not assessed']),
+                                     ('No known allergies ☐ Yes ☐ No', 'No known allergies', ['Yes', 'No'])):
+            with self.subTest(line=line):
+                result = w.inspect(data(coded_form([line], control='ff', heading=None)))
+                self.assertEqual(box_fields(result)[:1], [(label, options)])
+        # ... and held without that proof, or when the word before the first box belongs to the set.
+        held_before_boxes(self, ('Race: White ☐ Black ☐ Asian ☐ Other ____', 'DNR status Full code ☐ DNR ☐ Comfort care ☐ Hospice',
+                                 'Exam: Equal ☐ Unequal ☐ Not assessed', 'Pain level: None ☐ Mild ☐ Moderate ☐ Severe',
+                                 'Hearing: Normal ☐ Impaired ☐ Deaf', 'Oedema: Pitting ☐ Non-pitting ☐ None',
+                                 'Consent: Given ☐ Declined ☐ Not applicable', 'Frequency: Once ☐ Daily ☐ Weekly ☐ Other ____',
+                                 'Sex Male ☐ Female ☐ Other', 'Allergies\tYes ☐\tNo ☐\tUnknown'), controls=('ff',))
+
 
 class CodesGluedToTheQuestion(unittest.TestCase):
     """R4-3: a code printed against the question with no space ('Score:0 ☐') is still a code before its box."""

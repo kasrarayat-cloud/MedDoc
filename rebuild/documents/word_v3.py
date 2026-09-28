@@ -952,7 +952,8 @@ YESNO = re.compile(r"^(?:y|n|yes|no|n/?a|nd|unk|unknown|not known|not applicable
 MAX_LABEL_WORDS = 18
 # Printed options that answer one question together. A word printed right before a row's first box that shares a
 # family with the words between its boxes ('Allergies: Yes ☐ No ☐ NKDA') is that box's option, never part of
-# the question (refutation R3-1). COMPANION words join any family ('N/A ☐ Yes ☐ No').
+# the question (refutation R3-1). COMPANION words join any family ('N/A ☐ Yes ☐ No'). Vocabulary only ever ADDS a
+# reason to hold a row; the one exception is a CLOSED family (below), whose members a form cannot extend.
 OPTION_FAMILIES = tuple(re.compile(r"(?:%s)\.?" % f, re.I) for f in (
     r"y|n|yes|no",
     r"normal|abnormal|abn|wnl|nl|high|low",
@@ -963,16 +964,28 @@ OPTION_FAMILIES = tuple(re.compile(r"(?:%s)\.?" % f, re.I) for f in (
     r"male|female|m|f",
     r"pass|fail|true|false",
     r"(?:strongly )?(?:agree|disagree)|neutral",
-    r"always|often|usually|sometimes|rarely|never|daily|weekly|monthly|yearly",
+    r"always|often|usually|sometimes|rarely|never|daily|weekly|monthly|yearly|as needed|as required|when needed|"
+    r"when required|prn|once|twice|stat|hourly|nightly|occasional(?:ly)?|frequent(?:ly)?|constant(?:ly)?|"
+    r"intermittent(?:ly)?|continuous(?:ly)?|(?:once|twice) (?:a day|daily|weekly)|every day",
     r"current(?: smoker)?|former(?: smoker)?|never(?: smoker)?|ex-?smoker|non-?smoker",
     r"regular|irregular",
     r"increased|decreased|unchanged|improved|worse|better|same",
     r"active|inactive|resolved|ongoing|acute|chronic",
+    r"mm|cm|m|in|inches|ft|kg|g|lbs?|oz|\u00b0\s?[CF]|bpm|mm\s?hg|%|mg|mcg|ml|l|units?|years?|yrs?|months?|weeks?|days?|"
+    r"hours?|hrs?|minutes?|mins?|seconds?|secs?|times?",
+    r"single|married|divorced|widowed|separated|partnered|cohabiting|civil partnership|domestic partner",
 ))
+# Families a form never extends with a word of its own: after-box options all of one of them are the question's whole
+# answer set, so a word before the first box that is not a member is the question's (yes/no, normal/abnormal,
+# present/absent, positive/negative, sides, sexes, pass/fail, agreement, smoking status, regularity, marital status).
+CLOSED_FAMILIES = frozenset({0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 15})
 UNIT_TAIL = re.compile(r"\(?\s*(?:mm|cm|m|in|inches|ft|kg|g|lbs?|oz|\u00b0\s?[CF]|bpm|mm\s?hg|%|mg|mcg|ml|l|units?|years?|yrs?|"
                        r"months?|weeks?|days?|hours?|hrs?|minutes?|mins?|times?)\.?\s*\)?", re.I)
 COMPANION_OPTION = re.compile(r"(?:n/?a|nd|unk|unknown|not known|not applicable|not done|done|other|unsure|"
-                              r"don'?t know|dk|not assessed|not examined)\.?", re.I)
+                              r"don'?t know|dk|not assessed|not examined|not tested|not recorded|not stated|nkda|nka|nil|"
+                              r"none|declined|refused|unable to assess)\.?", re.I)
+# A word and its printed negation ('Equal' / 'Unequal', 'Tender' / 'Non-tender', 'Palpable' / 'Not palpable').
+NEGATION_PREFIX = ("un", "in", "im", "il", "ir", "non", "non-", "non ", "not ", "a", "ab", "dis")
 
 
 @dataclass
@@ -2893,12 +2906,55 @@ class Detector:
         found = {n for n, family in enumerate(OPTION_FAMILIES) if family.fullmatch(word)}
         return found | ({-1} if COMPANION_OPTION.fullmatch(word) else set())
 
+    @staticmethod
+    def option_shape(text):
+        """A printed option's form: numbers as '9', letter runs as 'a', punctuation kept ('0.5 mg' and '1 mg' are
+        '9 a'; 'A+' and 'O+' are 'a+')."""
+        shape = re.sub(r"[^\W\d_]+", "a", re.sub(r"\d+(?:[.,]\d+)?", "9", option_text(text).lower().rstrip(".,;")))
+        return " ".join(shape.split())
+
+    @staticmethod
+    def negation_pair(a, b):
+        """One printed option is the other's negation ('Equal' / 'Unequal', 'Tender' / 'Non-tender')."""
+        a, b = " ".join(option_text(a).lower().split()), " ".join(option_text(b).lower().split())
+        return bool(a and b) and any(b == prefix + a or a == prefix + b for prefix in NEGATION_PREFIX)
+
+    @staticmethod
+    def option_sequence(options):
+        """Two or more options counting from the start, each after the same printed word or none: '1', '2', '3';
+        'I', 'II', 'III'; 'A', 'B'; 'Type 1', 'Type 2'."""
+        romans = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"]
+        parts = [option_text(o).lower().rsplit(" ", 1) if " " in option_text(o) else ["", option_text(o).lower()]
+                 for o in options]
+        if len(parts) < 2 or len({lead for lead, _ in parts}) != 1:
+            return False
+        items = [item for _, item in parts]
+        for sequence in ([str(n) for n in range(0, 21)], [str(n) for n in range(1, 21)], romans, list("abcdefghij")):
+            if items == sequence[:len(items)]:
+                return True
+        return False
+
     def words_before_boxes(self, units, options):
         """Why a row of boxes may print each box's word BEFORE it ('Smoker: Yes ☐ No ☐ (tick one)'), or "".
 
-        Read after-box, each box would take the next box's word. The after-box reading is kept only when the row
-        cannot be read the other way: nothing but the question before the first box, no word printed against the
-        next box, and something other than a bare instruction after the last one (refutation F3, R3-1)."""
+        Read after-box, each box would take the next box's word. A row is read after-box when nothing but the question
+        is printed before its first box, or when the words printed right before the first box (after the question's
+        colon, or the whole text before it) have no mark of being an option. The marks are layout and printed form,
+        never the absence of a word from a list (refutation F3, R3-1, R4-1, R4-2, R4-8):
+
+        - held always: that word shares an option family, or is the negation, of an after-box word ('Allergies Yes ☐
+          No'); a word is printed against the box after it (a gap); the words before the first box have the printed
+          form of the words between the boxes ('Dose 0.5 mg ☐ 1 mg ☐', 'Blood type A+ ☐ O+ ☐', '... every day smoker
+          ☐ Former smoker ☐'); or the text after the last box is a write-in or an instruction of its own ('Discussed
+          with ____', 'If yes, list ____', 'Exact: ____'), so the last box has no word after it;
+        - held unless the after-box words are provably the question's whole answer set (a closed family such as
+          yes/no, a negation pair, a counted sequence): the word before the first box is itself an option word or
+          starts a new capitalised phrase ('Urine protein Negative ☐', 'DNR status Full code ☐'); or the text after
+          the last box is a companion ('Unknown', 'Not done') or an 'Other ____' write-in, which a form may print with
+          no box of its own.
+
+        A row with none of these marks is read after-box: read the other way, its last printed option would have no
+        box at all."""
         between, last = options[:-1], options[-1]
         if clean_label(units[0][2]) and all(between) and not last:
             return "and nothing after the last one"
@@ -2911,32 +2967,64 @@ class Detector:
         head = units[0][2].rstrip()
         # The question ends at its colon, a printed gap or its own answer blank ('Date: ____ Yes ☐ No ☐ N/A'): only
         # what follows is the word printed right before the first box.
-        cut = [m.end() for m in re.finditer(r"[:?]|\t| {2,}|_+|\.{2,}|…+|[\u25af\x00" + BOX + CHECKED + "]+", head)]
+        cuts = list(re.finditer(r"[:?]|\t| {2,}|_+|\.{2,}|…+|[\u25af\x00" + BOX + CHECKED + "]+", head))
+        blank_cut = bool(cuts) and not re.fullmatch(r"[:?]|\t| {2,}", cuts[-1].group())
         # A bracketed selection instruction or a bracket drawn around the box ('Sex: (choose one) [☐] M') is not an
         # option word; a bracketed word ('Smoker: (Yes) ☐ (No) ☐ N/A') still is.
         tail = re.sub(r"\(([^()]*)\)", lambda m: " " if any(rx.search(m.group(1)) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE))
                       or re.search(r"\b(?:choose|select|tick|check|circle|mark|pick)\b", m.group(1), re.I) else m.group(0),
-                      head[cut[-1]:] if cut else head)
+                      head[cuts[-1].end():] if cuts else head)
         tail = re.sub(r"[\[\]]", " ", tail)
-        if (not re.search(r"[^\W\d_]", tail) or re.match(r"\s*(?:if|when|where|how|what|which|since)\b", tail, re.I)
-                or UNIT_TAIL.fullmatch(re.sub(r"[^\w\s\u00b0%/]", " ", tail).strip())):
-            return ""  # the question, its own answer blank or the blank's unit ends right before the first box
+        # The question, a condition or question clause of its own ('Do you smoke? If yes ☐ ...'), or the unit of its
+        # own answer blank ('Weight ____ kg ☐ measured ☐ stated') ends right before the first box. After the question's
+        # colon a unit or a 'When ...' phrase is an option ('Dose unit: mg ☐ mcg ☐', 'When required ☐ Daily ☐').
+        if (not re.search(r"[^\W\d_]", tail) or re.match(r"\s*(?:if|where|how|what|which)\b", tail, re.I)
+                or blank_cut and UNIT_TAIL.fullmatch(re.sub(r"[^\w\s\u00b0%/]", " ", tail).strip())):
+            return ""
         words = option_text(tail).split()
-        suffixes = [" ".join(words[-k:]) for k in (1, 2, 3) if k <= len(words)]
-        tail_families = set().union(*(self.option_families(x) for x in suffixes))
-        between_families = [self.option_families(o) for o in between if o]
-        if (tail_families - {-1}) & set().union(*between_families) or (-1 in tail_families and any(between_families)):
+        grams = lambda chosen: [" ".join(chosen[:k]) for k in (1, 2, 3) if k <= len(chosen)]
+        families = lambda texts: set().union(*(self.option_families(x) for x in texts)) if texts else set()
+        ending = families([" ".join(words[-k:]) for k in (1, 2, 3) if k <= len(words)])
+        # After the question's colon the tail starts at its first word ('Tobacco: Current every day smoker ☐').
+        near = ending | (families(grams(words)) if cuts else set())
+        anywhere = families([" ".join(words[i:j]) for i in range(len(words)) for j in range(i + 1, min(len(words), i + 3) + 1)])
+        own_last = re.split(r"\t{2,}| {4,}", units[-1][1])[0]
+        own_last = own_last if re.search(r"\S", own_last) else units[-1][1]
+        write_in = bool(re.search(r"_{2,}|\.{3,}|…|[\u25af\x00]|[^\W\d_]\s*:|\?", own_last)
+                        or re.match(r"\s*(?:if|specify|please|comments?|list|describe|explain|details?)\b", own_last, re.I)
+                        or any(rx.search(own_last) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE)))
+        other_write_in = write_in and set(re.findall(r"[^\W\d_]+", own_last.lower())) <= {"other", "specify", "please",
+                                                                                         "state", "describe", "details"} \
+            and "other" in own_last.lower()
+        after = [o for o in between if o] + ([last] if last and not write_in else [])
+        after_families = [self.option_families(o) for o in after]
+        core = [(o, f - {-1}) for o, f in zip(after, after_families) if f != {-1}]
+        if (near - {-1}) & set().union(*after_families) or (-1 in ending and any(f - {-1} for f in after_families)) \
+                or any(self.negation_pair(words[-1], o) or self.negation_pair(" ".join(words[-2:]), o) for o in after):
             return "(the word before the first box is one of the same printed options)"
         for raw in (u[1] for u in units[:-1]):
             if raw.strip() and gap_width(raw[:len(raw) - len(raw.lstrip())]) > gap_width(raw[len(raw.rstrip()):]):
                 return "(a word is printed against the box after it)"
-        # After the question's colon, a short word right before the first box (an option is one to three words) is the
-        # question's own only when every word between the boxes is an option of one printed family that it is not
-        # ('PMH: Diabetes ☐ Yes ☐ No'). A longer run continues the question's own sentence (D03).
-        shared = set.intersection(*between_families) if between_families and all(between_families) else set()
-        if cut and len(words) <= 3 and not shared - tail_families:
-            return "(a word printed after the question's colon may be the first box's option)"
-        return ""
+        shapes = {self.option_shape(o) for o in between if o}
+        if len(shapes) == 1 and re.search(r"[9+%/<>=#\u00b0]", next(iter(shapes))) and \
+                any(self.option_shape(" ".join(words[-k:])) in shapes for k in (1, 2, 3) if k <= len(words)):
+            return "(the words before the first box have the printed form of the options between the boxes)"
+        ends = {option_text(o).lower().split()[-1] for o in between if len(option_text(o).split()) > 1}
+        if len(words) > 1 and ends == {words[-1].lower()} and all(len(option_text(o).split()) > 1 for o in between if o):
+            return "(the words before the first box have the printed form of the options between the boxes)"
+        if write_in and not other_write_in:
+            return "(the text after the last box is a write-in of its own, so the last box's word is printed before it)"
+        titled = any(re.fullmatch(r"[a-z][\w'\-]*", a) and re.fullmatch(r"[A-Z][a-z]+(?:[-'][A-Za-z]+)*", b)
+                     for a, b in zip(words, words[1:]))
+        weak = bool(ending) or titled or -1 in self.option_families(last) or other_write_in
+        if not weak:
+            return ""
+        closed = set.intersection(*(f for _, f in core)) & CLOSED_FAMILIES if core and all(f for _, f in core) else set()
+        paired = bool(core) and all(any(self.negation_pair(o, x) for x, _ in core) for o, _ in core)
+        counted = self.option_sequence([o for o, _ in core])
+        if (closed - anywhere) or paired or counted:
+            return ""
+        return "(the words right before the first box may be the first box's option)"
 
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
