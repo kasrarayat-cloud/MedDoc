@@ -1,0 +1,2 @@
+targets ['v3_1', 'v3_2']
+{'v3_1': 'supported', 'v3_2': 'supported', 'v3_3': 'conflict', 'v3_4': 'conflict', 'v3_5': 'supported', 'v3_6': 'supported', 'v3_7': 'supported', 'v3_8': 'supported', 'v3_9': 'supported', 'v3_10': 'missing', 'v3_11': 'missing'}
