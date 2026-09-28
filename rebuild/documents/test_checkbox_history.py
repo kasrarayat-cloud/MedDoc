@@ -1549,3 +1549,252 @@ class SelectionCardinalityRules(unittest.TestCase):
             fields = [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'checkboxes']
             self.assertFalse(fields)
             self.assertTrue(any('selection' in n or 'source is unresolved' in n for n in w.inspect(raw)['notes']))
+
+
+def box_table(doc, header, rows, columns=1, *, label='Medication'):
+    """A table: a header row ('Medication' | `header` ...), then one labelled row per item with a printed box under
+    every answer column. `header` may be a list of column headers."""
+    headers = list(header) if isinstance(header, (list, tuple)) else [header] * columns
+    table = doc.add_table(rows=1 + len(rows), cols=1 + len(headers))
+    table.cell(0, 0).text = label
+    for k, text in enumerate(headers):
+        table.cell(0, 1 + k).text = text
+    for r, name in enumerate(rows):
+        table.cell(1 + r, 0).text = name
+        for k in range(len(headers)):
+            table.cell(1 + r, 1 + k).text = '☐'
+    return table
+
+
+ALLERGIES = ('Penicillin', 'Latex', 'Nuts')
+MEDICATIONS = ('Warfarin', 'Metformin', 'Aspirin')
+
+
+class SelectionCardinalityRound4(unittest.TestCase):
+    """Refuter inputs R4-F1..F14 against 2ea8755a. A question accepts several answers only with a complete positive
+    command in its own label or its own adjacent instruction (or a verified native-checkbox history relation) and no
+    one-only or limited-count language in its reachable scope; everything else keeps one choice or is held."""
+    fields, ticks = SelectionLimitRefutations.fields, SelectionLimitRefutations.ticks
+    assertNeverTwo = SelectionLimitRefutations.assertNeverTwo
+    assertOneChoice = SelectionLimitRefutations.assertOneChoice
+    assertMulti = SelectionLimitRefutations.assertMulti
+    assertNotTwo = SelectionCardinalityRound3.assertNotTwo
+    grid_fields = SelectionCardinalityRound3.grid_fields
+
+    def assertHeld(self, raw, label, note):
+        self.assertFalse(self.fields(raw, label))
+        self.assertTrue(any(note in n for n in w.inspect(raw)['notes']), w.inspect(raw)['notes'])
+
+    # R4-F1: a count phrase inside a question is not a complete all-that-apply command.
+    def test_r4_f1_a_count_phrase_in_a_question_keeps_one_choice(self):
+        for question, options in (
+                ('Is the headache on one or both sides?', ('One side', 'Both sides', 'Varies')),
+                ('Pain in one or more joints?', ('One joint', 'Two to four joints', 'Five or more joints')),
+                ('Falls in the last year (at least one?):', ('None', 'Once', 'Twice or more')),
+                ('Oedema grade (1+ to 3+):', ('Mild', 'Moderate', 'Severe')),
+                ('Stage of pressure ulcer (any number of sites):', ('Stage 1', 'Stage 2', 'Stage 3'))):
+            for control in ('glyph', 'ff'):
+                with self.subTest(question=question, control=control):
+                    self.assertOneChoice(data(inline_question(question, options, control)), question.split(' ')[0],
+                                         options[1], [False, True, False])
+
+    # R4-F2: each statement row of a rating grid is one choice, whatever words the statement contains.
+    def test_r4_f2_a_rating_grid_row_is_one_choice_whatever_its_statement_says(self):
+        headers = ('Never', 'Monthly', 'Weekly', 'Daily or Almost Daily')
+        statements = ('missed one or more doses of your medication?', 'had at least one alcoholic drink?', 'felt dizzy?')
+        doc = Document(); doc.add_heading('Wellbeing', 1)
+        rating_grid(doc, 'In the past 30 days, how often have you…', headers, statements)
+        raw = data(doc); fields = self.grid_fields(raw, 0)
+        self.assertEqual([f['label'] for f in fields], [w.clean_label(s) for s in statements])
+        for field in fields:
+            with self.subTest(row=field['label']):
+                self.assertEqual((field['kind'], field['options']), ('choice', list(headers)))
+                with self.assertRaises(w.V3Failure):
+                    w.fill(raw, [field], {field['key']: ['Never', 'Daily or Almost Daily']})
+
+    # R4-F3: a coded response row records one code; a title or heading never grants several codes.
+    def test_r4_f3_title_or_heading_wording_never_grants_several_codes(self):
+        from .test_question_boxes import TabColumnOwnership
+        tab = TabColumnOwnership()
+        cases = []
+        for control in ('glyph', 'ff'):
+            for title in ('Examination (at least one finding)', 'Examination of one or both eyes',
+                          'Examination; tick all that apply.'):
+                doc = tab.form(control=control, count=3); doc.tables[0].cell(0, 0).paragraphs[0].text = title
+                cases.append(('title %s, %s' % (title, control), doc))
+            doc = tab.form(control=control, count=3); doc.paragraphs[0].text = 'Symptoms; tick all that apply.'
+            cases.append(('heading command, %s' % control, doc))
+        for name, doc in cases:
+            with self.subTest(case=name):
+                raw = data(doc); result = tab.proposal(raw)
+                fields = [f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes']
+                for field in fields:
+                    self.assertEqual(field['kind'], 'choice')
+                    with self.assertRaises(w.V3Failure):
+                        tab.proposed_fill(raw, result['fields'], {field['key']: ['Normal', 'Abnormal']})
+                if not fields:
+                    self.assertTrue(any('Tab-column' in n or 'coded' in n for n in result['notes']))
+
+    # R4-F4: a printed range or bound that describes the answers' own values is a scale key: one choice.
+    def test_r4_f4_a_value_range_or_scale_key_keeps_one_choice(self):
+        scale = ('1 Never', '2 Rarely', '3 Sometimes', '4 Often', '5 Always')
+        for question, options in (('Number of doses received (up to 3):', ('One', 'Two', 'Three')),
+                                  ('Number of pregnancies (maximum of 3):', ('One', 'Two', 'Three')),
+                                  ('How often do you feel anxious? (circle 1-5)', scale),
+                                  ('How often do you feel anxious? (tick 1–5)', scale),
+                                  ('Pain score (circle 1-3):', ('1 - mild', '2 - moderate', '3 - severe'))):
+            for control in ('glyph', 'ff'):
+                with self.subTest(question=question, control=control):
+                    self.assertOneChoice(data(inline_question(question, options, control)), question.split(' ')[0],
+                                         options[1], [i == 1 for i in range(len(options))])
+
+    # R4-F5: an instruction printed between two questions is owned by neither; it never grants the one below several.
+    def test_r4_f5_an_instruction_between_two_questions_never_grants_the_next_one_several(self):
+        for sentence in ('(Tick all that apply.)', 'For the symptoms question above, tick all that apply.'):
+            for control in ('glyph', 'ff'):
+                for inline in (True, False):
+                    doc = Document(); doc.add_heading('Presentation', 1)
+                    box_question(doc, 'Symptoms:', REASONS, control, inline=inline); doc.add_paragraph(sentence)
+                    box_question(doc, 'Severity:', ('Mild', 'Moderate', 'Severe'), control, inline=inline)
+                    with self.subTest(sentence=sentence, control=control, inline=inline):
+                        raw = data(doc)
+                        self.assertNotTwo(raw, 'Severity')
+                        self.assertNotTwo(raw, 'Symptoms')
+
+    # R4-F6: a grid of independent attributes: the header shape alone never makes each row one exclusive choice.
+    def test_r4_f6_independent_attribute_columns_are_never_one_exclusive_row_choice(self):
+        for headers in (('Diagnosed by a doctor', 'Currently taking medication for it'),
+                        ('Present at time of admission', 'Present at time of discharge'),
+                        ('Affects the left side of body', 'Affects the right side of body')):
+            doc = Document(); doc.add_heading('Medical history', 1)
+            box_table(doc, headers, ('Diabetes', 'Hypertension', 'Asthma'), label='Condition')
+            raw = data(doc)
+            with self.subTest(headers=headers):
+                fields = self.grid_fields(raw, 0)
+                self.assertFalse([f for f in fields if f['kind'] == 'choice' and set(f['options']) == set(headers)])
+                if not fields:
+                    self.assertTrue(any('grid' in n for n in w.inspect(raw)['notes']))
+
+    # R4-F7: one-only or limited-count sentences outside the old word list are limits.
+    def test_r4_f7_one_only_sentences_without_a_selection_verb_are_limits(self):
+        for sentence in ('Only one treatment per admission.', 'A maximum of one treatment is permitted.',
+                         'Each patient may have only one treatment.', 'Only one treatment can apply.',
+                         'Patients are allowed a single treatment.', 'Treatments may not be combined.',
+                         'One treatment per patient.'):
+            with self.subTest(sentence=sentence):
+                self.assertNeverTwo(data(SelectionLimitRound2.preamble(sentence)), 'Treatments received')
+
+    # R4-F8: an explicit all-that-apply history is never narrowed to one by a 'None' option or a single-answer word.
+    def test_r4_f8_an_explicit_all_that_apply_history_is_never_narrowed_to_one(self):
+        raw = data(form(instruction='Tick all that apply.', options=('Physiotherapy', 'Occupational therapy', 'None')))
+        self.assertMulti(raw, 'Treatments received')
+        raw = data(form(question='Main treatments received', instruction='Tick all that apply.'))
+        self.assertHeld(raw, 'Main treatments received', 'conflict')
+
+    # R4-F9: a command printed right after a question's own boxes is owned by those boxes.
+    def test_r4_f9_a_command_after_a_question_own_boxes_is_owned_by_them(self):
+        cases = []
+        doc = Document(); doc.add_heading('Adverse event', 1); row = doc.add_table(rows=1, cols=2).rows[0]
+        row.cells[0].text = 'Serious adverse event?'; row.cells[1].text = '☐ Y ☐ N ☐ NA (choose one)'
+        cases.append(('table row', doc))
+        doc = Document(); doc.add_heading('Adverse event', 1); doc.add_paragraph('Smoker: ☐ Yes ☐ No (tick one)')
+        cases.append(('smoker paragraph', doc))
+        for name, doc in cases:
+            doc.add_heading('Allergies', 1); box_question(doc, 'Allergies (tick all that apply):', ALLERGIES, 'glyph')
+            with self.subTest(case=name):
+                self.assertMulti(data(doc), 'Allergies')
+
+    # R4-F10: ordinary form text about handwriting, labels, contacts or answer words is not selection guidance.
+    def test_r4_f10_ordinary_form_text_is_not_selection_guidance(self):
+        texts = ('Please write in BLOCK CAPITALS, one letter per box.', 'Give details of one emergency contact.',
+                 'Place a single patient label here.', 'Option 2 is for inpatients only.')
+        cases = []
+        for text in texts:
+            doc = Document(); doc.add_paragraph(text); cases.append((text, doc))
+        doc = Document(); doc.add_paragraph('Exclusively breastfed? ☐ Yes ☐ No'); cases.append(('exclusively', doc))
+        doc = Document(); box_question(doc, 'Parent present:', ('Mother', 'Father', 'Neither'), 'glyph', inline=False)
+        cases.append(('neither answer', doc))
+        for name, doc in cases:
+            doc.add_heading('Allergies', 1); box_question(doc, 'Allergies (tick all that apply):', ALLERGIES, 'glyph')
+            doc.add_heading('Clinical history', 1); native_list(doc, 'Treatments received', TREATMENTS)
+            raw = data(doc)
+            with self.subTest(case=name):
+                self.assertMulti(raw, 'Allergies')
+                self.assertMulti(raw, 'Treatments received')
+
+    # R4-F11: a single column of independent per-row flags is never one exclusive choice across the rows.
+    def test_r4_f11_a_column_of_per_row_flags_is_never_one_exclusive_choice(self):
+        for header in ('Continue', 'Mark (X) if continuing', 'Still taking'):
+            doc = Document(); doc.add_heading('Medication reconciliation', 1); box_table(doc, header, MEDICATIONS)
+            raw = data(doc)
+            with self.subTest(header=header):
+                fields = self.grid_fields(raw, 0)
+                self.assertFalse([f for f in fields if f['kind'] != 'checkbox'])
+                if not fields:
+                    self.assertTrue(any('manual mapping' in n for n in w.inspect(raw)['notes']))
+
+    # R4-F12: a limit printed in the question's own source (after its boxes, on its last option line, in its answer
+    # cell) is read with the question: beside its all-that-apply command it is a conflict, held.
+    def test_r4_f12_a_limit_in_the_question_own_source_conflicts_with_its_command(self):
+        cases = []
+        for control in ('glyph', 'ff'):
+            doc = Document(); doc.add_heading('Referral', 1)
+            p = boxes_after(doc.add_paragraph('Reasons for referral (tick all that apply): '), REASONS, control)
+            p.add_run('\t\tOnly one reason may be recorded.'); cases.append(('after the boxes, ' + control, 'Reasons', doc))
+            doc = Document(); doc.add_heading('Referral', 1); doc.add_paragraph('Reasons for referral (tick all that apply):')
+            for i, option in enumerate(REASONS):
+                p = boxes_after(doc.add_paragraph(), (option,), control, prefix='L%d' % i)
+            p.add_run('\t\tOnly one reason may be recorded.'); cases.append(('last option line, ' + control, 'Reasons', doc))
+        doc = Document(); doc.add_heading('History', 1); row = doc.add_table(rows=1, cols=2).rows[0]
+        row.cells[0].text = 'Allergies (tick all that apply)'; boxes_after(row.cells[1].paragraphs[0], ALLERGIES, 'glyph')
+        row.cells[1].add_paragraph('Only one allergy may be recorded.'); cases.append(('answer cell', 'Allergies', doc))
+        for name, label, doc in cases:
+            with self.subTest(case=name):
+                self.assertHeld(data(doc), label, 'conflict')
+
+    # R4-F13: controls for guards the round-3 suite let a refuter remove without a failure.
+    def test_r4_f13_a_continued_list_is_held_with_the_held_list_it_continues(self):
+        # M10: the list this table continues was held; its continuation is held with it, never a crash.
+        doc = Document(); doc.add_paragraph('Tick one box only.'); doc.add_heading('Medication reconciliation', 1)
+        box_table(doc, 'Continue (tick all that apply)', MEDICATIONS); doc.add_paragraph('')
+        more = doc.add_table(rows=3, cols=2)
+        for r, name in enumerate(('Ramipril', 'Simvastatin', 'Amlodipine')):
+            more.cell(r, 0).text = name; more.cell(r, 1).text = '☐'
+        raw = data(doc); result = w.inspect(raw)
+        self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+        self.assertTrue(any('continued' in n for n in result['notes']))
+
+    def test_r4_f13_a_column_header_limit_is_read_with_the_row_question(self):
+        # M29: the column header is the question's own source: 'Tick one box only' over an all-that-apply row.
+        doc = Document(); doc.add_heading('History', 1); table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = 'Question'; table.cell(0, 1).text = 'Tick one box only'
+        table.cell(1, 0).text = 'Allergies (tick all that apply)'; boxes_after(table.cell(1, 1).paragraphs[0], ALLERGIES, 'glyph')
+        self.assertHeld(data(doc), 'Allergies', 'conflict')
+
+    def test_r4_f13_a_negated_command_or_a_counted_answer_never_grants_several(self):
+        # M05: "Do not tick all that apply." is a limit, never a command.
+        self.assertNeverTwo(data(SelectionLimitRound2.preamble('Do not tick all that apply.')), 'Treatments received')
+        # M13: a count of answers beside the command is a count the choices cannot represent.
+        self.assertHeld(data(inline_question('Symptoms – tick all that apply (2 answers):', REASONS, 'glyph')), 'Symptoms',
+                        'cannot represent')
+
+    def test_r4_f13_a_limited_column_list_continued_to_more_rows_never_takes_more_than_its_limit(self):
+        # M35: 'Select up to 3.' over a column list continued to six rows.
+        doc = Document(); doc.add_heading('Medication reconciliation', 1); doc.add_paragraph('Select up to 3.')
+        box_table(doc, 'Continue', MEDICATIONS); doc.add_paragraph('')
+        more = doc.add_table(rows=3, cols=2)
+        for r, name in enumerate(('Ramipril', 'Simvastatin', 'Amlodipine')):
+            more.cell(r, 0).text = name; more.cell(r, 1).text = '☐'
+        raw = data(doc)
+        for field in [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'checkboxes']:
+            with self.assertRaises(w.V3Failure):
+                w.fill(raw, [field], {field['key']: field['options'][:4]})
+
+    # R4-F14: a capped count below the number of answers ('select up to 3' of more) is held, as the rule says.
+    def test_r4_f14_a_capped_count_below_the_answers_is_held(self):
+        doc = Document(); doc.add_heading('Diagnoses', 1)
+        box_table(doc, 'Diagnosed? Select up to 3', ('F10.10 Alcohol use', 'F11.10 Opioid use', 'F12.10 Cannabis use',
+                                                    'F14.10 Cocaine use', 'F15.10 Stimulant use'), label='Diagnosis')
+        raw = data(doc)
+        self.assertFalse([f for f in self.grid_fields(raw, 0)])
+        self.assertTrue(any('up to 3' in n for n in w.inspect(raw)['notes']))
