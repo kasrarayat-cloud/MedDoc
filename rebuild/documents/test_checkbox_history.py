@@ -92,7 +92,33 @@ class CheckboxHistory(unittest.TestCase):
             with self.subTest(instruction=instruction):
                 result = w.inspect(data(form(instruction=instruction)))
                 self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'])
-                self.assertTrue(any('selection limits' in n for n in result['notes']))
+                self.assertTrue(any('selection' in n for n in result['notes']))
+
+    def test_only_one_owner_and_just_one_command_retain_exclusive_selection(self):
+        for args in ({'question': 'Only one treatment received'}, {'instruction': 'Select just one.'}):
+            with self.subTest(args=args):
+                raw = data(form(**args)); field = self.field(raw)
+                self.assertEqual(field['kind'], 'choice')
+                output = w.fill(raw, [field], {field['key']: field['options'][0]})
+                index = w.SlotIndex(w.open_package(output))
+                self.assertEqual([w.box_state(index, b) for b in field['locator']['target']['boxes']], [True, False, False])
+                with self.assertRaises(w.V3Failure):
+                    w.fill(raw, [field], {field['key']: field['options'][:2]})
+
+    def test_unknown_or_negative_selection_instructions_never_grant_multiple(self):
+        for instruction in ('Do not select multiple options.', 'Do not tick all that apply.',
+                            'Select one or more.', 'Never choose several options.'):
+            with self.subTest(instruction=instruction):
+                result = w.inspect(data(form(instruction=instruction)))
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+                self.assertTrue(any('selection' in n for n in result['notes']))
+
+    def test_complete_positive_all_that_apply_command_remains_useful(self):
+        raw = data(form(instruction='Please select all that apply.')); field = self.field(raw)
+        self.assertEqual(field['kind'], 'multi_choice')
+        output = w.fill(raw, [field], {field['key']: field['options'][:2]})
+        index = w.SlotIndex(w.open_package(output))
+        self.assertEqual([w.box_state(index, b) for b in field['locator']['target']['boxes']], [True, True, False])
 
     def test_prior_unrelated_tick_one_table_does_not_own_history(self):
         doc = form(); table = doc.add_table(rows=1, cols=1)

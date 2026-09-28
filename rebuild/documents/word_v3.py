@@ -1900,10 +1900,11 @@ class Detector:
         if owner.parent is not None or owner.part != "word/document.xml":
             return None
         problem = "The complete native-checkbox history source is unresolved."
+        selection_words = r"\b(?:check\w*|tick\w*|choos\w*|select\w*|mark\w*|circl\w*|option\w*|only|one|multiple|several)\b"
         if (len(question) > MAX_MAPPING_LABEL or any(not o for o in options)
                 or len(set(o.casefold() for o in options)) != len(options)
                 or options != [option_text(u[1]) for u in units]
-                or any(CHECK_ONE.search(o) or CHECK_ALL.search(o) for o in options)):
+                or any(re.search(selection_words, o, re.I) for o in options)):
             return {"problem": problem}
         roots = [s for s in self.index.roots if s.part == owner.part]
         first, last = roots.index(owner), roots.index(group["paras"][-1])
@@ -1937,8 +1938,25 @@ class Detector:
                 or any(self.question_box_signing(o) for o in options)
                 or re.search(r"\b(?:above|previous|following)\s+(?:question|answer|section)\b|\bas above\b|\bsame as\b", scope, re.I)):
             return {"problem": problem}
-        one, many = bool(CHECK_ONE.search(scope)), bool(CHECK_ALL.search(scope))
-        if (one and many or re.search(r"\b(?:up to|at most|at least|exactly|no more than|between|maximum|minimum)\b", scope, re.I)):
+        # Only complete positive selection instructions establish cardinality.
+        # Any other selection language (including negated commands) is unknown,
+        # never permission to fall through to independent selections.
+        command = r"(?:please\s+)?(?:check|tick|choose|select|mark|circle)\s+"
+        one, many = False, False
+        for fragment in context.split(" > ") + [question]:
+            if not re.search(selection_words, fragment, re.I):
+                continue
+            if re.fullmatch(command + r"(?:(?:only|just|exactly)\s+)?one(?:\s+(?:option|answer|response|item))?[.!:]?", fragment, re.I):
+                one = True
+            elif re.fullmatch(command + r"all\s+that\s+apply[.!:]?", fragment, re.I):
+                many = True
+            elif fragment == question and re.match(r"^(?:(?:only|just|exactly)\s+)?one\s+", fragment, re.I) \
+                    and not re.search(selection_words, re.sub(r"^(?:(?:only|just|exactly)\s+)?one\s+", "", fragment, flags=re.I), re.I):
+                one = True
+            else:
+                return {"problem": "The native-checkbox history selection instruction is unresolved."}
+        if (one and many or re.search(r"\b(?:up to|at most|at least|no more than|between|maximum|minimum)\b", scope, re.I)
+                or re.search(r"\bexactly\b", scope, re.I) and not one):
             return {"problem": "The native-checkbox history has conflicting or unrepresented selection limits."}
         exclusive = any(YESNO.fullmatch(o) or OPTION_WORD.fullmatch(o) for o in options)
         single = bool(re.search(r"\b(?:single|current|currently|latest|last|most recent|primary|main|sole)\b", scope, re.I))
