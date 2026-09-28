@@ -929,6 +929,13 @@ class SelectionLimitRound2(unittest.TestCase):
         doc = Document(); doc.add_heading('Clinical history', 1); boxed_question(doc, '(tick one):', ('Yes', 'No'))
         doc.add_paragraph('')
         cases.append(('label without a name', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
+        # A notice in a cell beside its row's boxes is not a label either (only a cell holding its own boxes is).
+        doc = Document(); doc.add_heading('Clinical history', 1); row = doc.add_table(rows=1, cols=2).rows[0]
+        row.cells[0].text = 'Note: tick one box only.'; cell = row.cells[1].paragraphs[0]
+        for i, option in enumerate(('Yes', 'No')):
+            ff_field(cell, 'checkbox', name='R%d' % i); cell.add_run(' ' + option + ' ')
+        doc.add_paragraph('')
+        cases.append(('notice beside a row of boxes', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
         # A body notice is not a label even directly above unlabelled box lines; a bracketed command after a colon is.
         doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Note: tick one box only.')
         for i, option in enumerate(('Escorted', 'Unescorted')):
@@ -1006,7 +1013,7 @@ class SelectionLimitRound2(unittest.TestCase):
                       'Type of discharge applied for (tick one — see page 2):', 'Type of discharge applied for (tick 1):',
                       'Type of discharge applied for (s41) (please tick one):',
                       'Type of discharge applied for: (please tick one)', 'Type of discharge applied for: please tick one',
-                      'Type of discharge applied for [please tick one]:',
+                      'Type of discharge applied for [please tick one]:', 'Type of discharge applied for: [please tick one]',
                       *('Type of discharge applied for (please %s one):' % verb for verb in (
                           'check', 'choose', 'select', 'mark', 'circle', 'pick', 'indicate', 'cross')),
                       *('Type of discharge applied for (tick one %s):' % noun for noun in (
@@ -1031,7 +1038,10 @@ class SelectionLimitRound2(unittest.TestCase):
             ff_field(cell, 'checkbox', name='S%d' % i); cell.add_run(' ' + option + ' ')
         doc.add_paragraph(''); raw = data(native_list(doc, 'Treatments received', TREATMENTS))
         self.assertMulti(raw, 'Treatments received')
-        # A bracketed command after a body label's colon is that question's own label.
+        # A glyph question in a table cell owns its own tick-one; so does a bracketed command after a body label's colon.
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        doc.add_table(rows=1, cols=1).cell(0, 0).text = 'Sex (tick one): ☐ Male ☐ Female'; doc.add_paragraph('')
+        self.assertMulti(data(native_list(doc, 'Treatments received', TREATMENTS)), 'Treatments received')
         doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Leave type: (tick one)')
         for i, option in enumerate(('Escorted', 'Unescorted')):
             p = doc.add_paragraph(); ff_field(p, 'checkbox', name='E%d' % i); p.add_run(' ' + option)

@@ -737,11 +737,11 @@ ONE_LIMIT = re.compile(r"\bonly\s+(?:one|1)\b(?!\s*-)" + _NOT_A_MEASURE +
                        r"|\b(?:max(?:imum)?\.?|at\s+most)\s*(?:of\s+)?(?:one|1)\b" + _NOT_A_MEASURE +
                        r"|\bthe\s+(?:one|single)\b(?!\s*-)" + _NOT_A_MEASURE, re.I)
 # A following quantity turns "one" into a range or an open count: "one or more", "one to three", "one/both", "1+",
-# "one, some or all", "one, two or three", "1-3 that apply", "1–3:". Any other continuation ("pick one and give details",
-# "pick 1 / see notes", "indicate one to be reviewed") leaves the one-only reading standing, and so does a scale key or
-# a warning after a comma or a dash ("tick one - 1 = never, 5 = always", "tick one, all others blank", "tick one -
-# two ticks void the answer"): a comma needs a complete "X or Y" count, and a dash range needs a numeral upper bound
-# that ends the phrase ("1-3:", "1-3 that apply") or, printed unspaced, names the answers ("1-3 boxes").
+# "one, some or all", "one, two or three", "1-3 that apply", "1–3:". Any other continuation ("pick one and give
+# details", "pick 1 / see notes", "indicate one to be reviewed") leaves the one-only reading standing, and so does a
+# scale key or a warning after a comma or a dash ("tick one - 1 = never, 5 = always", "tick one, all others blank",
+# "tick one - two ticks void the answer"): a comma needs a complete "X or Y" count, and a dash range needs a numeral
+# upper bound that ends the phrase ("1-3:", "1-3 that apply") or, printed unspaced, names the answers ("1-3 boxes").
 _COUNT_WORD = r"(?:two|three|four|five|six|seven|eight|nine|ten)"
 _MANY_WORD = r"(?:more|some|all|any|several|many|multiple|both|" + _COUNT_WORD + r")"
 MORE_THAN_ONE_AFTER = re.compile(
@@ -898,8 +898,8 @@ def label_instruction(sentence, contained=False):
     """The printed label of a separate question whose only selection wording is a complete one-only command printed
     inside it ("Type of discharge applied for (please tick one):", "Sex [tick one]:", "Smoking status (tick one)",
     "Type - please tick one"), or None. The command may also stand alone after the label's colon when it is
-    bracketed ("Type of discharge applied for: (please tick one)") or, `contained` in the cell or text box that holds
-    the question's own boxes, unbracketed ("Type of discharge applied for: please tick one"). The name before the
+    bracketed ("Type of discharge applied for: (please tick one)") or, `contained` in the table cell that holds the
+    question's own native boxes, unbracketed ("Type of discharge applied for: please tick one"). The name before the
     command is not itself a limit, and nothing after the label is. A standalone command ("Tick one box only."), a body
     notice ("Please note: only one box may be ticked.", "NB: tick one box only.") and a command that says more ("tick
     one box for leave and one for treatment", "tick one box only throughout this form") are not part of any one
@@ -2128,9 +2128,8 @@ class Detector:
         nothing follows the label in `p`, the next printed block when it starts with a box (the label above its own
         option lines, in a boxed cell, or beside the answer cell of its table row). Boxes printed after other text
         answer a separately labelled question ("Leave type (tick one):" above "Escorted: [ ] Yes [ ] No")."""
-        box = p.getparent()
-        contained = box is not None and box.tag in (q("w:tc"), TXBX) and (
-            bool(checkbox_nodes(box, own=False)) or any(c in (BOX, CHECKED) for c in text_of(box)))
+        cell = p.getparent()
+        contained = cell is not None and cell.tag == q("w:tc") and bool(checkbox_nodes(cell, own=False))
         label = label_instruction(sentence, contained)
         # The label starts the paragraph as printed: after a box it is an answer's text, not a question's label.
         start = re.match(r"\s*" + re.escape(label) + r"[.\s]*[:?]?", paragraph_text(p)[0]) if label else None
