@@ -163,3 +163,53 @@ failed cases, receipts, mappings and exports are unchanged.
 Keep source frozen for independent refutation. After closure, the next bounded
 repair is the disjoint checkbox/write-in path on synthetic controls and already
 inspected D03, preserving first failures and qualifying only affected workflows.
+
+## Follow-up: one-option source scope
+
+Source `1bcda7b62624d8293865733e9dbc2b21a7809417`, engine SHA256
+`b3174ffd4027b4bab7a1741a39a361ce2dc455a26f82a403b68f6c3117d461f9`,
+supersedes the preceding source for this additional demonstrated defect.
+The earlier source, outputs and report are retained above.
+
+A one-cell nested grid containing only `☐ Other` after
+`Which finding concerns the donor? Tick all that apply.` returned only checkbox
+Other with empty context. The source question was consumed. The author retained
+this concrete counterexample as `19-single-option-source.docx/.json`, and the two
+new question/subsection controls failed in `20-single-option-red.log`.
+
+The four-line correction keeps the printed checkbox option label while appending
+the complete governing question and subsection to its context, before the existing
+1,000-character nontruncating bound. Five focused methods passed in
+`21-single-option-after.log`, 1.525 seconds. The exact original artifact now keeps
+its complete donor question (`22-single-option-after.json`). All D03 fields and
+warnings remain exactly equal to the reused workflow/render map (`23` evidence).
+Independent finished-source refutation remains pending. No writer or population
+change was made in this correction.
+
+## Independent internal-grid and signing-context findings
+
+Independent reviewer report `word-nested-independent-refutation-20260928.md`
+retains three additional exact artifacts. Root independently confirmed them.
+A grid with Donor/Recipient column headers and two Abnormal boxes lost both headers;
+its synthetic `Abnormal (2)` option wrote Recipient without naming that subject.
+This is introduced context loss on top of a pre-existing flattened baseline.
+Separately, inherited Consent and Signed declaration headings did not reach the
+new signing guard; the existing source route could write Tissue storage. Those
+signing gaps predate this repair, but remain relevant to its new ownership route.
+
+Source `cf481504697c5028f3ae84534bd343792ec91009`, engine SHA256
+`7d2296ea679c7e804bdb8ea88a7a539c01cb7654527f1b0b65dc87f3ee42c2a6`,
+now requires complete internal-grid accounting: outside its option paragraphs,
+only proven plain spacing is allowed. Separate printed headers, marked answer
+areas or deeper grids remain visibly unresolved with all printed source retained.
+This is containment pending proper matrix ownership, not a claim that such common
+layouts can be excluded from required V1 support. Signing protection now checks
+each source paragraph and the complete governing context, which the warning names.
+
+`24-grid-context-red.log` preserves all three new failing controls. Six focused
+methods passed after repair (`25`, then final diagnostic wording `27`). The exact
+three independent DOCX artifacts replay to visible refusal (`28`), while all D03
+fields and warnings remain exactly identical to the successful workflow/render map.
+`26` also records a successful equality check followed by an optional diagnostic
+print's KeyError; its instrument error is explicitly retained, not an app failure.
+Source is frozen for the reviewer's existing 19-case replay before integration.
