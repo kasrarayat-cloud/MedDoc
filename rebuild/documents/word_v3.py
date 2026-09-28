@@ -737,7 +737,7 @@ ONE_LIMIT = re.compile(r"\bonly\s+(?:one|1)\b(?!\s*-)" + _NOT_A_MEASURE +
                        r"|\b(?:max(?:imum)?\.?|at\s+most)\s*(?:of\s+)?(?:one|1)\b" + _NOT_A_MEASURE +
                        r"|\bthe\s+(?:one|single)\b(?!\s*-)" + _NOT_A_MEASURE, re.I)
 # A following quantity turns "one" into a range or an open count: "one or more", "one to three", "one/both", "1+",
-# "one, some or all", "1, 2 or 3", "1-3 that apply", "1–3:". Any other continuation ("pick one and give details",
+# "one, some or all", "one, two or three", "1-3 that apply", "1–3:". Any other continuation ("pick one and give details",
 # "pick 1 / see notes", "indicate one to be reviewed") leaves the one-only reading standing, and so does a scale key or
 # a warning after a comma or a dash ("tick one - 1 = never, 5 = always", "tick one, all others blank", "tick one -
 # two ticks void the answer"): a comma needs a complete "X or Y" count, and a dash range needs an upper bound that
@@ -747,9 +747,9 @@ _MANY_WORD = r"(?:more|some|all|any|several|many|multiple|both|" + _COUNT_WORD +
 MORE_THAN_ONE_AFTER = re.compile(
     r"\s*\+"
     r"|\s*(?:\bor\b|\band\b|\bto\b|\bnor\b)\s*(?:" + _MANY_WORD + r"|\d)"
-    r"|\s*/\s*(?:" + _MANY_WORD + r"|[2-9])\b"
-    r"|\s*,\s*(?:some|several|" + _COUNT_WORD + r"|[2-9])\s*,?\s*(?:or|and)\s+(?:" + _MANY_WORD + r"|\d)"
-    r"|\s*[-–—]\s*(?:" + _COUNT_WORD + r"|\d{1,2})\b(?=\s*(?:$|[).:;,!?]|(?:that|which|of|as|if|from)\b))"
+    r"|\s*/\s*" + _MANY_WORD + r"\b"
+    r"|\s*,\s*(?:some|" + _COUNT_WORD + r")\s*,?\s*(?:or|and)\s+" + _MANY_WORD + r"\b"
+    r"|\s*[-–—]\s*(?:" + _COUNT_WORD + r"|\d{1,2})\b(?=\s*(?:$|[):.;,]|(?:that|which|of)\b))"
     r"|[-–]\d{1,2}\b(?=\s+(?:boxes|options|answers|items|responses|categories|choices)\b)", re.I)
 # An open count ("one or more", "1+", "more than one", "one, some or all") is never a limit.
 OPEN_COUNT = re.compile(r"\b(?:one|1)\s*(?:or\s+more\b|\+)|\bmore\s+than\s+(?:one|1)\b|\bone\s*,\s*some\s+or\s+all\b"
@@ -852,14 +852,14 @@ SELECTION_LIMIT = re.compile(r"\b(?:one|single|sole|two|three|four|five|six|seve
 _NOT_PLURAL = (r"(?!\s*\(e?s\)|\s*/\s*(?:boxes|answers|options|responses|choices|categories|squares)\b"
                r"|\s+or\s+(?:more|several|boxes|answers|options|responses|choices|categories|squares)\b)")
 ONE_ANSWER = re.compile(r"\b(?:(?:only\s+)?(?:one|1)|a\s+single|single)\s+(?:box|answer|option|response|choice|category|"
-                        r"square)s?\b" + _NOT_PLURAL + r"(?:\s+only\b)?"
+                        r"square)s?\b(?:\s+only\b)?"
                         r"|\b(?:appropriate|relevant|correct|applicable|right|best|suitable|matching|corresponding)\s+"
                         r"(?:box|answer|option|response|category|square)\b" + _NOT_PLURAL +
                         r"|\b(?:box|answer|option|response|category|square)\s+(?:that|which)\s+(?:best\s+)?"
                         r"(?:appl|describ|match|fit|correspond)", re.I)
 # A negated count is a limit, never an open count: "do not tick more than one box", "no more than one answer",
 # "never select multiple options".
-NEGATED_MANY = re.compile(r"(?:\b(?:no|not|never|nor|cannot)\b|n[’']t\b)[^.;!?]*?"
+NEGATED_MANY = re.compile(r"(?:\b(?:no|not|never|cannot)\b|n[’']t\b)[^.;!?]*?"
                           r"(?:\bmore\s+than\s+(?:one|1|a\s+single)\b|\b(?:multiple|several)\b)", re.I)
 ANSWER_NOUN = re.compile(r"\b(?:box|boxes|answers?|options?|responses?|choices?|categor(?:y|ies)|squares?)\b", re.I)
 # Only a complete one-box-per-row rule for a table or grid is about a table ("Tick one box per row in the table
@@ -896,8 +896,7 @@ LABEL_ONE = re.compile(r"(?:please\s+)?(?:(?:check|tick|choose|select|mark|circl
                        r"(?:\s+(?:option|answer|response|item|box|category|choice))?(?:\s+only)?(?:\s+of\s+the\s+following)?"
                        r"|(?:only\s+)?(?:one|1)(?:\s+(?:option|answer|response|item|box|category|choice))?\s+only"
                        r"|only\s+one(?:\s+(?:option|answer|response|item|box|category|choice))?)"
-                       r"(?:\s*[-–—,]\s*see\s+(?:page|p\.|notes?|overleaf|annex|appendix|guidance(?:\s+notes)?)"
-                       r"(?:\s+[\w.]{1,6})?)?", re.I)
+                       r"(?:\s*[-–—,]\s*see\s+(?:page\s+\d{1,3}|notes|overleaf))?", re.I)
 
 
 def label_instruction(sentence):
@@ -909,7 +908,7 @@ def label_instruction(sentence):
     m = re.fullmatch(r"\s*([^:?]*[^:?\s])\s*(?:[:?](.*))?", sentence or "", re.S)
     if not m or limited_selection(m.group(2) or ""):
         return None
-    label = m.group(1).rstrip(".")
+    label = m.group(1)
     commands = re.findall(r"\(([^()]*)\)", label)
     name = re.sub(r"\([^()]*\)", " ", label)
     dash = re.search(r"\s[-–—]\s", name)
@@ -2109,7 +2108,7 @@ class Detector:
                     flags = [limited_selection(x) or floating and floating_selection(x) for x in printed]
                     if not any(flags):
                         continue
-                    owner = self.label_owner(p, printed[0]) if flags[0] and not framed else None
+                    owner = None if framed else self.label_owner(p, printed[0])
                     where = ("a text box in " if unit.tag == TXBX else "a positioned frame in " if framed else "") + part
                     for i, sentence in enumerate(printed):
                         if flags[i]:

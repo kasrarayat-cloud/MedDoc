@@ -847,13 +847,21 @@ class SelectionLimitRound2(unittest.TestCase):
     def test_f1_negated_open_counts_and_floating_selection_wording_never_grant_two(self):
         for sentence in ('Please do not tick more than one box for each question.', 'Never tick more than 1 box per question.',
                          'No more than one box may be ticked.', 'Do not select more than one option.',
-                         'Do not select multiple options.', 'No more than one answer per question.'):
+                         'Do not select multiple options.', 'No more than one answer per question.',
+                         'Never select several options.', 'You cannot tick more than one box.',
+                         "Don't tick more than one box.", 'Don’t tick more than one box.', 'Do not tick more than one.'):
             for where, build in (('preamble', self.preamble), ('page header', self.header)):
                 with self.subTest(where=where, sentence=sentence):
                     self.assertNeverTwo(data(build(sentence)), 'Treatments received')
         for sentence in ('Do not tick more than one box.', 'Choose the leave type that applies.'):
             with self.subTest(text_box=sentence):
                 self.assertNeverTwo(data(self.floating(sentence)))
+        doc = Document(); frame = doc.add_paragraph('Choose the leave type that applies.'); doc.add_heading('Leave', 1)
+        frame._p.get_or_add_pPr().append(parse_xml(
+            '<w:framePr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            'w:w="2400" w:hAnchor="page" w:vAnchor="page" w:x="8000" w:y="3000"/>'))
+        with self.subTest(frame='Choose the leave type that applies.'):
+            self.assertNeverTwo(data(native_list(doc)))
         # Controls: permission for several, and an attribution line in an office text box, stay multiple.
         self.assertMulti(data(self.preamble('You may tick more than one box for each question.')), 'Treatments received')
         self.assertMulti(data(self.floating('Checked by: ____________')), 'Community leave taken')
@@ -874,7 +882,12 @@ class SelectionLimitRound2(unittest.TestCase):
                     self.assertOneChoice(data(inline_question(question, options, control)), question.split(' ')[0],
                                          chosen, expected)
         # Controls: a dash range that ends the phrase, or is printed unspaced before the answers, is still a range.
-        for question in ('Symptom(s) - tick 1–3:', 'Symptom(s) - tick 1-3 boxes:'):
+        for question in ('Symptom(s) - tick 1–3:', 'Symptom(s) (tick 1-3):', 'Symptom(s) - tick 1-3 of the following:',
+                         'Symptom(s) - tick 1-3 which apply:', 'Symptom(s) - tick 1-3; see notes:',
+                         'Symptom(s) - tick 1-3, see notes:', 'Symptom(s) - tick 1-3. See notes:',
+                         'Symptom(s) - pick one, two or three:', 'Symptom(s) - tick 1-3 boxes:', 'Symptom(s) - tick 1-3 options:',
+                         'Symptom(s) - tick 1-3 answers:', 'Symptom(s) - tick 1-3 items:', 'Symptom(s) - tick 1-3 responses:',
+                         'Symptom(s) - tick 1-3 categories:', 'Symptom(s) - tick 1-3 choices:'):
             for control in ('glyph', 'ff'):
                 with self.subTest(range=question, control=control):
                     self.assertMulti(data(inline_question(question, symptoms, control)), 'Symptom(s)')
@@ -900,6 +913,17 @@ class SelectionLimitRound2(unittest.TestCase):
         # A question's own tick-one label with a second limit printed after its boxes.
         doc = Document(); doc.add_heading('Leave', 1); yes_no(doc, 'Escorted (tick one): ', tail='Leave type (tick one box only):')
         cases.append(('second limit after the boxes', 'Community leave taken', native_list(doc)))
+        # Only a paragraph's first sentence can be a label; selection wording after the boxes is not a label command;
+        # a label needs a question name.
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        doc.add_paragraph('Sex (tick one): ☐ Male ☐ Female. Tick one box only for every question.')
+        cases.append(('second sentence after a label', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        doc.add_paragraph('Select treatment plan: ☐ Standard ☐ Intensive (only one)')
+        cases.append(('limit after the boxes', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
+        doc = Document(); doc.add_heading('Clinical history', 1); boxed_question(doc, '(tick one):', ('Yes', 'No'))
+        doc.add_paragraph('')
+        cases.append(('label without a name', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
         # A positioned frame prints elsewhere on the page: never the label of the box lines that follow it in the file.
         doc = Document(); doc.add_heading('Leave', 1); frame = doc.add_paragraph('Leave type (tick one only):')
         frame._p.get_or_add_pPr().append(parse_xml(
@@ -962,7 +986,18 @@ class SelectionLimitRound2(unittest.TestCase):
         for label in ('Type of discharge applied for (please tick one):', 'Type of discharge applied for (please tick one)',
                       'Type of discharge applied for - please tick one',
                       'Type of discharge applied for (please tick one of the following):',
-                      'Type of discharge applied for (please tick one - see page 3):'):
+                      'Type of discharge applied for (please tick one - see page 3):',
+                      'Type of discharge applied for (tick one, see notes):',
+                      'Type of discharge applied for (tick one - see overleaf):',
+                      *('Type of discharge applied for (please %s one):' % verb for verb in (
+                          'check', 'choose', 'select', 'mark', 'circle', 'pick', 'indicate', 'cross')),
+                      *('Type of discharge applied for (tick one %s):' % noun for noun in (
+                          'option', 'answer', 'response', 'item', 'box', 'category', 'choice')),
+                      'Type of discharge applied for (tick only one):', 'Type of discharge applied for (tick just one):',
+                      'Type of discharge applied for (tick exactly one):', 'Type of discharge applied for (select a single option):',
+                      'Type of discharge applied for (tick one box only):', 'Type of discharge applied for (one only):',
+                      'Type of discharge applied for (one box only):', 'Type of discharge applied for (only one):',
+                      'Type of discharge applied for (only one box):'):
             with self.subTest(label=label):
                 raw = data(d31_shape(label))
                 leave = self.fields(raw, 'Community leave taken')[0]
