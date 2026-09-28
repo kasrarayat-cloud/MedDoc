@@ -1260,7 +1260,7 @@ class WordsBeforeBoxesWithTextAfter(unittest.TestCase):
             for control in ('glyph', 'ff'):
                 with self.subTest(control=control, line=line):
                     result = w.inspect(data(coded_form([line], control=control, heading=None)))
-                    self.assertEqual(box_fields(result)[0], (label, options))
+                    self.assertEqual(box_fields(result)[:1], [(label, options)])
         raw = data(coded_form(['Allergies: ☐ Yes ☐ No ☐ NKDA'], control='ff', heading=None))
         [field] = [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'checkboxes']
         out = w.fill(raw, [field], {field['key']: 'No'})
