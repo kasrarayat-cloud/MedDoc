@@ -1881,6 +1881,73 @@ class Detector:
         self.notes.append("Unassigned write-in beside a nested option at " + slot.id + ". " + problem
                           + " Printed text: " + text + " Governing context: " + context)
 
+    def native_history_source(self, group, units, options, used_para):
+        """A bounded completed-event list has independent native checkboxes.
+
+        This does not change the default for dropdowns, printed option lists,
+        table grids or arbitrary checkbox questions. Explicit/known exclusive
+        alternatives and single-event wording retain one-choice behavior.
+        """
+        raw = units[0][2] or (self.text(used_para.el) if used_para is not None else "")
+        question = clean_label(raw, limit=None)
+        if not re.search(r"\b(?:taken|received|completed|attended|undergone)\s*$", question, re.I):
+            return None
+        if (len(units) < 2 or len(units) != len(group["units"])
+                or any(u[0]["kind"] not in ("ff", "sdt") for u in units)
+                or any(p.parent is not None or p.part != "word/document.xml" for p in group["paras"])):
+            return None
+        owner = used_para or group["paras"][0]
+        if owner.parent is not None or owner.part != "word/document.xml":
+            return None
+        problem = "The complete native-checkbox history source is unresolved."
+        if (len(question) > MAX_MAPPING_LABEL or any(not o for o in options)
+                or len(set(o.casefold() for o in options)) != len(options)
+                or options != [option_text(u[1]) for u in units]
+                or any(CHECK_ONE.search(o) or CHECK_ALL.search(o) for o in options)):
+            return {"problem": problem}
+        roots = [s for s in self.index.roots if s.part == owner.part]
+        first, last = roots.index(owner), roots.index(group["paras"][-1])
+        sources = roots[first:last + 1]
+        if any(s.kind != "p" for s in sources):
+            return {"problem": problem}
+        instructions = []
+        for prior in reversed(roots[:first]):
+            if prior.kind != "p":
+                break
+            heading, _, issue = self.question_box_paragraph(prior.el)
+            if heading:
+                break
+            text = self.text(prior.el).strip()
+            if issue or self.box_units(prior) or self.blank_spans(*self.ptext(prior.el)):
+                return {"problem": problem}
+            if text:
+                if self.question_box_request(text) or self.list_info(prior.el):
+                    return {"problem": problem}
+                instructions.insert(0, text)
+            elif not self.plain_spacing_paragraph(prior):
+                return {"problem": problem}
+            sources.insert(0, prior)
+        if any(not self.tab_source_visible(s) or any(n.tag in (q("w:sectPr"), q("w:drawing"), q("w:pict"),
+                    q("w:object"), q("w:br")) for n in s.el.iter()) for s in sources):
+            return {"problem": problem}
+        context, issue = self.question_box_context(owner, require_visible=True)
+        context = " > ".join(x for x in (context, *instructions) if x)
+        scope = context + " > " + question
+        if (issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(scope)
+                or any(self.question_box_signing(o) for o in options)
+                or re.search(r"\b(?:above|previous|following)\s+(?:question|answer|section)\b|\bas above\b|\bsame as\b", scope, re.I)):
+            return {"problem": problem}
+        one, many = bool(CHECK_ONE.search(scope)), bool(CHECK_ALL.search(scope))
+        if (one and many or re.search(r"\b(?:up to|at most|at least|exactly|no more than|between|maximum|minimum)\b", scope, re.I)):
+            return {"problem": "The native-checkbox history has conflicting or unrepresented selection limits."}
+        exclusive = any(YESNO.fullmatch(o) or OPTION_WORD.fullmatch(o) for o in options)
+        single = bool(re.search(r"\b(?:single|current|currently|latest|last|most recent|primary|main|sole)\b", scope, re.I))
+        kind = "choice" if one or exclusive or single else "multi_choice"
+        relation = {"relation": "native_checkbox_history", "question": question, "context": context,
+                    "options": options, "cardinality": kind,
+                    "sources": [{"part": s.part, "slot": s.path, "fingerprint": fingerprint(s.el)} for s in sources]}
+        return {"kind": kind, "question": question, "context": context, "relation": relation}
+
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
         for units in self.split_inline_groups(g):
@@ -1950,6 +2017,15 @@ class Detector:
                 area = Area(self.choice_kind(question, options, hint), question or "Choose", anchor, target,
                             context=self.context_for(anchor), options=[o or "(option %d)" % (i + 1) for i, o in enumerate(options)],
                             extra_slots=extra)
+                history = self.native_history_source(g, units, options, used_para)
+                if history:
+                    if history.get("problem"):
+                        self.notes.append(history["problem"] + " Location: " + pslot.id)
+                        for paragraph in g["paras"]:
+                            self.claimed.add(id(paragraph.el))
+                        continue
+                    area.kind, area.label, area.context = history["kind"], history["question"], history["context"]
+                    area.complete_source, area.source_questions = True, [history["relation"]]
             if nested:
                 area.context, area.complete_source = nested["context"], True
                 for source_slot in nested["source_slots"]:
@@ -4298,10 +4374,15 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if not isinstance(relations, list):
             fail("The related question mapping is invalid.", "invalid_mapping")
         for relation in relations:
-            if not isinstance(relation, dict) or relation.get("relation") != "immediate_previous_question":
+            if not isinstance(relation, dict):
                 fail("The related question mapping is invalid.", "invalid_mapping")
-            for name in ("source", "reference"):
-                ref = relation.get(name)
+            if relation.get("relation") == "immediate_previous_question":
+                refs = [relation.get("source"), relation.get("reference")]
+            elif relation.get("relation") == "native_checkbox_history" and isinstance(relation.get("sources"), list):
+                refs = relation["sources"]
+            else:
+                fail("The related question mapping is invalid.", "invalid_mapping")
+            for ref in refs:
                 if not isinstance(ref, dict) or not ref.get("fingerprint"):
                     fail("The related question source is missing.", "invalid_mapping")
                 resolve(ref.get("part"), ref.get("slot"), ref["fingerprint"])
@@ -4309,6 +4390,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             if relation_areas is None:
                 relation_areas = Detector(package).detect()[0]
             if not any(area.slot.id == anchors[0].id and area.target == target and area.source_questions == relations
+                       and (not any(r.get("relation") == "native_checkbox_history" for r in relations)
+                            or area.kind == field.get("kind") and area.options == field.get("options")
+                            and area.label == field.get("label") and area.context == field.get("context"))
                        for area in relation_areas):
                 fail("The related question no longer owns this answer destination. Review the mapping again.",
                      "mapping_mismatch")
