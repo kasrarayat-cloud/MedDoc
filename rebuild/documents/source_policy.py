@@ -56,7 +56,7 @@ def annotate(detector, fields):
                 text = detector.cell_text(previous)
                 label = field.get('label', '')
                 if text.strip(' :') == label.strip(' :') and len(text) <= MAX_MAPPING_CONTEXT and \
-                        re.search(r'\b(?:report|form|document)\b', text, re.I) and re.search(
+                        re.search(r'\b(?:report|form|document|application)\b', text, re.I) and re.search(
                             r'\bconfirm\s+(?:that\s+)?(?:the\s+)?patient\s+(?:(?:has|had)\s+)?'
                             r'(?:read\b|reviewed\b|seen\b|had\s+sight\s+of\b|'
                             r'(?:had|was\s+given)\s+(?:an?\s+)?opportunity\s+to\b)', text, re.I):

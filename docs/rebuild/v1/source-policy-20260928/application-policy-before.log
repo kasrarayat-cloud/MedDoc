@@ -1,0 +1,23 @@
+test_changed_author_source_cannot_keep_its_old_policy_at_export (documents.test_source_policy.SourcePolicy.test_changed_author_source_cannot_keep_its_old_policy_at_export) ... ok
+test_clinician_review_of_symptom_report_is_not_patient_attestation (documents.test_source_policy.SourcePolicy.test_clinician_review_of_symptom_report_is_not_patient_attestation) ... ok
+test_explicit_patient_scope_is_carried_until_the_next_role (documents.test_source_policy.SourcePolicy.test_explicit_patient_scope_is_carried_until_the_next_role) ... ok
+test_explicit_review_attestation_keeps_the_complete_source (documents.test_source_policy.SourcePolicy.test_explicit_review_attestation_keeps_the_complete_source) ... ok
+test_literal_document_objects_keep_the_full_conjunctive_review_instruction (documents.test_source_policy.SourcePolicy.test_literal_document_objects_keep_the_full_conjunctive_review_instruction) ... 
+  test_literal_document_objects_keep_the_full_conjunctive_review_instruction (documents.test_source_policy.SourcePolicy.test_literal_document_objects_keep_the_full_conjunctive_review_instruction) (noun='application') ... ERROR
+test_patient_example_instruction_keeps_patient_scope (documents.test_source_policy.SourcePolicy.test_patient_example_instruction_keeps_patient_scope) ... ok
+test_patient_mentions_and_heading_changes_do_not_imply_patient_authorship (documents.test_source_policy.SourcePolicy.test_patient_mentions_and_heading_changes_do_not_imply_patient_authorship) ... ok
+test_role_on_section_boundary_does_not_leak_into_next_section (documents.test_source_policy.SourcePolicy.test_role_on_section_boundary_does_not_leak_into_next_section) ... ok
+
+======================================================================
+ERROR: test_literal_document_objects_keep_the_full_conjunctive_review_instruction (documents.test_source_policy.SourcePolicy.test_literal_document_objects_keep_the_full_conjunctive_review_instruction) (noun='application')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-document-relations/rebuild/documents/test_source_policy.py", line 86, in test_literal_document_objects_keep_the_full_conjunctive_review_instruction
+    self.assertEqual(field['answer_policy']['attestation'], 'document_review')
+                     ~~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'answer_policy'
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.990s
+
+FAILED (errors=1)

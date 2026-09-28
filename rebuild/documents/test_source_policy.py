@@ -75,3 +75,15 @@ class SourcePolicy(unittest.TestCase):
     def test_clinician_review_of_symptom_report_is_not_patient_attestation(self):
         doc = Document(); pair(doc, 'Confirm the patient report of chest pain was reviewed by the clinician.')
         self.assertNotIn('answer_policy', w.inspect(data(doc))['fields'][0])
+
+    def test_literal_document_objects_keep_the_full_conjunctive_review_instruction(self):
+        for noun in ('report', 'form', 'document', 'application'):
+            with self.subTest(noun=noun):
+                question = ('Please confirm that the patient has had sight of this ' + noun +
+                            ' and had an opportunity to add their comments')
+                doc = Document(); pair(doc, question)
+                field = w.inspect(data(doc))['fields'][0]
+                self.assertEqual(field['answer_policy']['attestation'], 'document_review')
+                self.assertEqual(field['answer_policy']['attestation_source']['text'], question)
+        doc = Document(); pair(doc, 'Confirm the patient reports that the application of cream was reviewed by the clinician.')
+        self.assertNotIn('answer_policy', w.inspect(data(doc))['fields'][0])
