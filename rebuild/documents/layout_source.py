@@ -12,7 +12,7 @@ if __package__:
 else:
     import word_v3 as w
 
-CONTRACT = "word-tab-layout-v1"
+CONTRACT = "word-tab-containment-v2"
 MAX_CANDIDATES = 200
 MAX_ANCHORS = 2400
 
@@ -44,6 +44,8 @@ def safety(package):
                 if node.tag == w.q("w:rFonts"):
                     fonts.update(node.get(w.q("w:" + key)) for key in ("ascii", "hAnsi", "eastAsia", "cs")
                                  if node.get(w.q("w:" + key)))
+                if node.tag in {w.q('w:embedRegular'), w.q('w:embedBold'), w.q('w:embedItalic'), w.q('w:embedBoldItalic')}:
+                    w.fail('Embedded font programs cannot use the pinned layout profile.', 'layout_unsafe_source')
                 # Theme typefaces are included even when an unused script is
                 # present; a profile may conservatively refuse an unknown font.
                 if node.tag.startswith("{http://schemas.openxmlformats.org/drawingml/2006/main}"):
@@ -79,6 +81,36 @@ def segments(paragraph):
                 w.fail("A layout segment is empty.", "layout_unresolved")
             result.append((start, end))
         offset += len(segment) + 1
+    return result
+
+
+def rendered_paragraph(paragraph):
+    """Complete printed paragraph, with native fields retaining typed identity."""
+    text, pieces = w.paragraph_text(paragraph)
+    result = [[]]
+    for piece in pieces:
+        if piece.kind == 'tab':
+            result.append([]); continue
+        if piece.kind == 'obj':
+            if piece.obj == 'ff_checkbox':
+                state = w.ff_checkbox_state(piece.node)
+                if type(state) is not bool: w.fail('Unknown native checkbox state.', 'layout_unresolved')
+                item = {'kind':'ff_checkbox','text':'\ufffc','checked':state}
+            elif piece.obj == 'sdt_checkbox':
+                state = w.sdt_checkbox_state(piece.node)
+                if type(state) is not bool: w.fail('Unknown native checkbox state.', 'layout_unresolved')
+                item = {'kind':'glyph','text':'☒' if state else '☐'}
+            else: w.fail('Unsupported object in visible tab paragraph.', 'layout_unresolved')
+        elif piece.kind in ('t','sym'):
+            item = {'kind':'glyph','text':w.piece_text(piece)}
+        else: w.fail('Wrapped visible tab paragraph is unresolved.', 'layout_unresolved')
+        result[-1].append(item)
+    # Tabs after the complete last segment do not create an answer column.
+    while result and not result[-1]: result.pop()
+    for segment in result:
+        if segment:
+            segment[0]['text'] = segment[0]['text'].lstrip()
+            segment[-1]['text'] = segment[-1]['text'].rstrip()
     return result
 
 
@@ -120,75 +152,24 @@ def prepare(data, *, mapping=None, answers=None):
         actual = w.fill(data, mapping, answers, retained_layout=retained)
         if len(retained) != len(candidates):
             w.fail("The export lost a source layout identity.", "mapping_mismatch")
+        if not any(value not in (None, '', []) for value in answers.values()):
+            actual = data  # Validation above still runs; an empty review need not repack the original ZIP.
         package = w.open_package(actual)
         safety(package)
         paragraph_pairs = [(resolve_path(package, r["header"]), resolve_path(package, r["row"])) for r in retained]
     else:
         paragraph_pairs = [(header.el, row.el) for header, row, _ in candidates]
-    existing_names, existing_ids = set(), set()
-    for part in package.content_parts():
-        for node in package.tree(part).iter(w.q("w:bookmarkStart"), w.q("w:bookmarkEnd")):
-            existing_names.add(node.get(w.q("w:name")))
-            existing_ids.add(node.get(w.q("w:id")))
-    anchors, changed = [], set()
-    next_id = 0
-    actual_sha = digest(actual)
     for description, (header, row) in zip(descriptions, paragraph_pairs):
-        count = len(description["source"]["options"])
-        for role, paragraph in (("header", header), ("row", row)):
-            part = description["source"]["header" if role == "header" else "row"]["part"]
-            spans = segments(paragraph)
-            if len(spans) != count:
-                w.fail("An export changed the complete layout segments.", "layout_unresolved")
-            original = w.paragraph_text(paragraph)[0]
-            expected_text = original
-            points = []
-            for ordinal, (start, end) in enumerate(spans):
-                for edge, offset in (("start", start), ("end", end)):
-                    name = "QMD" + digest(canonical([actual_sha, description["id"], role, ordinal, edge]))[:32]
-                    if name in existing_names:
-                        w.fail("A layout anchor name collides with an existing bookmark.", "layout_unresolved")
-                    existing_names.add(name)
-                    points.append((offset, name, ordinal, edge))
-            for offset, name, ordinal, edge in sorted(points, reverse=True):
-                w._split_at(paragraph, offset)
-                before = next((p.run for p in w.paragraph_text(paragraph)[1] if p.start == offset), None)
-                # Writer omits bookmarks inside smart tags. A boundary before
-                # their first child is exactly the boundary before the wrapper;
-                # retain the original wrapper and all of its layout behavior.
-                while before is not None and before.getparent() is not paragraph:
-                    parent = before.getparent()
-                    if parent.tag != w.q("w:smartTag") or parent.index(before) != 0:
-                        break
-                    before = parent
-                while str(next_id) in existing_ids:
-                    next_id += 1
-                identity = str(next_id); existing_ids.add(identity); next_id += 1
-                begin = w._el("w:bookmarkStart"); begin.set(w.q("w:id"), identity); begin.set(w.q("w:name"), name)
-                end = w._el("w:bookmarkEnd"); end.set(w.q("w:id"), identity)
-                carrier = w._el("w:r")
-                # A default-size invisible glyph can enlarge a smaller source
-                # line. Use the minimum half-point run for instrumentation only;
-                # exact PDF graphics equality remains mandatory afterwards.
-                props = w._el("w:rPr")
-                for tag in ("w:sz", "w:szCs"):
-                    size = w._el(tag); size.set(w.q("w:val"), "1"); props.append(size)
-                carrier.append(props)
-                leaf = w._el("w:t"); leaf.text = "\u2060"; carrier.append(leaf)
-                if before is None:
-                    paragraph.extend([begin, end, carrier])
-                else:
-                    before.addprevious(begin); before.addprevious(end); before.addprevious(carrier)
-                expected_text = expected_text[:offset] + "\u2060" + expected_text[offset:]
-                anchors.append({"name": name, "candidate": description["id"], "role": role,
-                                "ordinal": ordinal, "edge": edge, "offset": offset})
-            after = w.paragraph_text(paragraph)[0]
-            if after != expected_text:
-                w.fail("Instrumentation changed source text.", "layout_unresolved")
-            changed.add(part)
-    if len(anchors) > MAX_ANCHORS:
-        w.fail("The layout witness exceeds its anchor limit.", "layout_limit")
-    instrumented = package.write({part: package.tree(part) for part in changed})
+        model = {'header':rendered_paragraph(header), 'row':rendered_paragraph(row),
+                 'row_dot_leaders':any(n.get(w.q('w:leader')) == 'dot' for n in row.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))}
+        if len(model['header']) != len(description['source']['options']) + 1 or len(model['row']) != len(model['header']):
+            w.fail('A complete printed tab relation changed.', 'layout_unresolved')
+        description['rendered_source'] = model
+    # V2 uses unique original-text alignment. It introduces no annotation glyphs,
+    # run splits or bookmarks; both independently rendered packages stay exact.
+    anchors = []
+    actual_sha = digest(actual)
+    instrumented = actual
     manifest = {"contract": CONTRACT, "source_sha256": digest(data), "document_sha256": actual_sha,
                 "instrumented_sha256": digest(instrumented), "mapping_sha256": digest(canonical(mapping)) if mapping is not None else "",
                 "answers_sha256": digest(canonical(answers)) if mapping is not None else "",

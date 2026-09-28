@@ -97,7 +97,10 @@ def qualify(request, evidence_root):
         profile = {'renderer_image': IMAGE, 'font_files_sha256': digest((rendered / 'fonts.sha256').read_bytes()),
             'font_families_sha256': digest((rendered / 'font-families.txt').read_bytes()),
             'pdf_parser_version': importlib.metadata.version('pypdf'),
+            'font_parser_version': importlib.metadata.version('reportlab'),
             'verifier_sha256': digest((ROOT / 'layout_pdf_worker.py').read_bytes()),
+            'geometry_sha256': digest((ROOT / 'layout_geometry.py').read_bytes()),
+            'ownership_contract': manifest['contract'],
             'qualification': 'Pinned LibreOffice profile only; native Microsoft Word not qualified'}
         profile_sha = digest(canonical(profile))
         if mapping is not None:
@@ -110,7 +113,7 @@ def qualify(request, evidence_root):
                     raise ValueError('Missing, changed or stale source/profile receipt')
         if not proof.get('passed'): raise ValueError('Rendered tab ownership unresolved')
         document = (workspace / 'document.docx').read_bytes()
-        receipt = {'contract': 'word-tab-layout-v1', 'source_sha256': digest(data), 'document_sha256': digest(document),
+        receipt = {'contract': manifest['contract'], 'source_sha256': digest(data), 'document_sha256': digest(document),
             'mapping_sha256': digest(canonical(mapping)) if mapping is not None else '',
             'answers_sha256': digest(canonical(answers)) if answers is not None else '',
             'manifest_sha256': digest(canonical(manifest)), 'proof_sha256': digest(canonical(proof)),

@@ -57,7 +57,8 @@ class LayoutSource(unittest.TestCase):
                 w.fill(self.raw, fields, {field['key']: 'Normal'})
             self.assertEqual(caught.exception.code, 'layout_verification_required')
         self.assertEqual(actual, self.raw)
-        self.assertNotEqual(instrumented, self.raw)
+        self.assertEqual(instrumented, self.raw)
+        self.assertEqual(proposal['manifest']['contract'], 'word-tab-containment-v2')
         with ZipFile(io.BytesIO(self.raw)) as before, ZipFile(io.BytesIO(w.fill(self.raw, [field], {}))) as after:
             self.assertEqual({n: before.read(n) for n in before.namelist()},
                              {n: after.read(n) for n in after.namelist()})
@@ -75,6 +76,13 @@ class LayoutSource(unittest.TestCase):
         final, actual, _ = source.prepare(self.raw, mapping=[field], answers={field['key']: 'Normal'})
         self.assertEqual(final['states'][field['key']], [True, False])
         self.assertEqual(w.option_states(w.SlotIndex(w.open_package(actual)), field), [True, False])
+        # Word's original container can carry metadata that a no-op ZIP rewrite
+        # changes even while every part stays identical.
+        container = io.BytesIO(self.raw)
+        with ZipFile(container, 'a') as archive: archive.comment = b'Original package metadata'
+        raw = container.getvalue()
+        self.assertEqual(w.fill(raw, [field], {field['key']:''}), raw)
+        self.assertEqual(source.prepare(raw, mapping=[field], answers={field['key']:''})[1], raw)
 
     def test_instrumentation_preserves_output_and_all_package_parts(self):
         for control in ('glyph', 'sdt', 'ff'):
@@ -83,7 +91,8 @@ class LayoutSource(unittest.TestCase):
                 prepared, actual, marked = source.prepare(raw)
                 self.assertEqual(actual, raw)
                 names = [a['name'] for a in prepared['manifest']['anchors']]
-                self.assertEqual(len(names), 8); self.assertEqual(len(set(names)), 8)
+                self.assertEqual(names, [])
+                self.assertEqual(marked, raw)
                 with ZipFile(io.BytesIO(raw)) as before, ZipFile(io.BytesIO(marked)) as after:
                     self.assertEqual(before.namelist(), after.namelist())
                     for name in before.namelist():

@@ -10,6 +10,7 @@ from pypdf.generic import IndirectObject, NameObject, StreamObject
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sandbox import isolate
+from layout_geometry import containment, CONTRACT as CONTAINMENT_CONTRACT
 
 MAX_PAGES = 64
 MAX_OBJECTS = 100000
@@ -103,6 +104,13 @@ def verify(workspace):
         left, right = page_record(a), page_record(b)
         if left != right: raise ValueError('Instrumentation changed page graphics, resources, text or geometry')
         page_records.append(left)
+    if manifest.get('contract') == CONTAINMENT_CONTRACT:
+        if manifest.get('anchors') or destinations(original) != destinations(marked):
+            raise ValueError('Changed source destinations in containment contract')
+        result = containment(original.pages, manifest['candidates'])
+        result.update(page_records=page_records, pdf_sha256={name: hashlib.sha256((workspace / name).read_bytes()).hexdigest()
+                      for name in ('document.pdf', 'instrumented.pdf')})
+        return result
     original_destinations, actual = destinations(original), destinations(marked)
     expected = {a['name'] for a in manifest['anchors']}
     if len(expected) != len(manifest['anchors']) or expected & original_destinations.keys():
