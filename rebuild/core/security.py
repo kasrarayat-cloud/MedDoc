@@ -40,6 +40,8 @@ def store_upload(upload,category='originals',max_bytes=15*1024*1024):
     relative=f'{category}/{secrets.token_hex(24)}{suffix}'
     path=private_path(relative)
     path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+    from .retention import begin_private_file
+    begin_private_file(path)
     count=0
     try:
         with path.open('xb') as f:

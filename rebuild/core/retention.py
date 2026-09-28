@@ -16,7 +16,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import DatabaseError, connection, transaction
 from django.db.models import Q
 
-from .models import (Department, Encounter, Organization, Patient, PreservedFile, RetentionHold,
+from .models import (AuditEvent, Department, Encounter, Organization, Patient, PreservedFile, PreservedRecord, RetentionHold,
                      RetentionHoldRelease, User)
 from .security import audit, private_path
 
@@ -89,8 +89,8 @@ def release_hold(actor,hold_id,authority):
     return row
 
 
-def active_holds(*,encounter_id=None,department_id=None):
-    holds=RetentionHold.objects.filter(release__isnull=True)
+def scoped_holds(*,encounter_id=None,department_id=None):
+    holds=RetentionHold.objects.all()
     if encounter_id:
         try:encounter_id=uuid.UUID(str(encounter_id))
         except (ValueError,TypeError,AttributeError):return holds
@@ -105,6 +105,31 @@ def active_holds(*,encounter_id=None,department_id=None):
         return holds.filter(Q(scope='global')|Q(organization_id=org)|Q(department_id=department_id)
                             |Q(patient__department_id=department_id)|Q(encounter__department_id=department_id))
     return holds
+
+
+def active_holds(**scope):
+    return scoped_holds(**scope).filter(release__isnull=True)
+
+
+@transaction.atomic
+def begin_private_file(path):
+    """Record creation intent BEFORE bytes exist, serialized with hold release.
+
+    A later cleanup may exclude only releases already committed at this boundary.
+    This does not trust filesystem times, which copying or touching can change.
+    Unknown older files have no such exemption. Random storage keys are never reused.
+    """
+    root=settings.MEDIA_ROOT.resolve();candidate=Path(path)
+    if not candidate.is_absolute():candidate=root/candidate
+    try:relative=str(candidate.relative_to(root))
+    except ValueError:raise ValidationError('Invalid private creation location.')
+    if private_path(relative)!=candidate or candidate.exists() or candidate.is_symlink():
+        raise ValidationError('Private storage keys cannot be reused.')
+    lock_preservation()
+    if AuditEvent.objects.filter(action='retention.file_creation',target=relative).exists():
+        raise ValidationError('Private storage keys cannot be reused.')
+    audit(None,'retention.file_creation',relative,
+          released_hold_ids=[str(pk) for pk in RetentionHoldRelease.objects.order_by('hold_id').values_list('hold_id',flat=True)])
 
 
 def cleanup_file(path,*,encounter_id=None,department_id=None):
@@ -141,14 +166,31 @@ def _cleanup_file(path,*,encounter_id=None,department_id=None):
         if scope_id:Encounter.objects.select_for_update().filter(pk=scope_id).first()
     lock_preservation()
     if PreservedFile.objects.filter(storage_key=relative).exists():return False
-    hold_ids=list(active_holds(encounter_id=encounter_id,department_id=department_id).order_by('pk').values_list('pk',flat=True))
+    # Release stops future capture; it is not permission to destroy evidence that
+    # existed during the hold. Only our pre-creation ledger can prove a file began
+    # after a release. Missing or ambiguous creation evidence stays conservative.
+    births=list(AuditEvent.objects.filter(action='retention.file_creation',target=relative).values_list('details',flat=True)[:2])
+    exempt=[]
+    if len(births)==1 and isinstance(births[0],dict):
+        candidate_ids=births[0].get('released_hold_ids')
+        if isinstance(candidate_ids,list):
+            try:exempt=[uuid.UUID(value) for value in candidate_ids]
+            except (ValueError,TypeError,AttributeError):exempt=[]
+    hold_ids=set(str(pk) for pk in scoped_holds(encounter_id=encounter_id,department_id=department_id)
+                 .exclude(pk__in=exempt).values_list('pk',flat=True))
+    # A prior immutable row is a durable file reference even when the current row
+    # has changed scope or points at a replacement file.
+    archives=PreservedRecord.objects.filter(
+        Q(prior_record__input_path=relative)|Q(prior_record__result_path=relative)
+        |Q(prior_record__original_path=relative)|Q(prior_record__export_path=relative))
+    for ids in archives.values_list('hold_ids',flat=True):hold_ids.update(ids)
     if hold_ids:
         if validated.is_file():
             digest=hashlib.sha256();size=0
             with validated.open('rb') as stream:
                 for block in iter(lambda:stream.read(1024*1024),b''):
                     digest.update(block);size+=len(block)
-            PreservedFile.objects.create(storage_key=relative,sha256=digest.hexdigest(),byte_count=size,hold_ids=[str(pk) for pk in hold_ids])
+            PreservedFile.objects.create(storage_key=relative,sha256=digest.hexdigest(),byte_count=size,hold_ids=sorted(hold_ids))
         return False
     # An active durable reference is never a transient cleanup candidate.
     from .models import Job,ProviderReceipt,Template

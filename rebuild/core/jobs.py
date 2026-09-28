@@ -1,4 +1,4 @@
-from .retention import cleanup_file
+from .retention import begin_private_file,cleanup_file
 from datetime import timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import hashlib
@@ -484,6 +484,7 @@ def prepare_submission(job):
             relative=f'submissions/{secrets.token_hex(24)}{suffix}'
             destination=private_path(relative)
             destination.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            begin_private_file(destination)
             # Created at 0600 BEFORE ffmpeg opens it: ffmpeg truncates an existing file rather than creating one, so
             # the artifact is never briefly readable at the process umask.
             destination.touch(mode=0o600,exist_ok=False)

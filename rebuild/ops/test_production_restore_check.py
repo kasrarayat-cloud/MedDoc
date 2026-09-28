@@ -63,7 +63,7 @@ class FakeDatabase:
         for name, statement in backup.INVARIANTS.items():
             if text == statement:
                 return [(self.violations.get(name, 0),)]
-        for kind, statement in backup.FILE_QUERIES + [('preserved','SELECT storage_key,sha256 FROM core_preservedfile')]:
+        for kind, statement in restore_check.FILE_QUERIES:
             if text == statement:
                 return [(path, sha) for path, sha, row_kind in self.files if row_kind == kind]
         if text == restore_check.TABLES:
@@ -120,6 +120,19 @@ class RestoreCheckTests(unittest.TestCase):
         report = restore_check.check(FakeDatabase(self.files), self.state, 39)
         self.assertFalse(report['passed'])
         self.assertEqual((report['files']['missing'], report['files']['hash_mismatched']), (1, 1))
+
+    def test_every_archived_path_family_is_a_required_file_and_hash(self):
+        for field in ('input_path','result_path','original_path','export_path'):
+            with self.subTest(field=field):
+                relative='originals/archived-'+field+'.bin'
+                rows=self.files+[(relative,hashlib.sha256(b'SYNTHETIC ARCHIVED').hexdigest(),'archived_'+field)]
+                report=restore_check.check(FakeDatabase(rows),self.state,39)
+                self.assertFalse(report['passed']);self.assertEqual(report['files']['missing'],1)
+                path=self.state/'files'/relative;path.write_bytes(b'SYNTHETIC WRONG')
+                report=restore_check.check(FakeDatabase(rows),self.state,39)
+                self.assertFalse(report['passed']);self.assertEqual(report['files']['hash_mismatched'],1)
+                path.write_bytes(b'SYNTHETIC ARCHIVED')
+                self.assertTrue(restore_check.check(FakeDatabase(rows),self.state,39)['passed'])
 
     def test_a_symlinked_file_counts_as_missing(self):
         target = self.state / 'outside.docx'

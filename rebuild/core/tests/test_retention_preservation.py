@@ -92,6 +92,43 @@ class Preservation(Fixture,TestCase):
         self.assertTrue(retention.cleanup_file(other,encounter_id=self.other[5].pk))
         self.assertFalse(retention.cleanup_file(unknown));self.assertTrue(unknown.exists())
 
+    def test_release_before_first_cleanup_preserves_existing_file(self):
+        path=self.file();hold=self.hold()
+        retention.release_hold(self.second,hold.pk,'b'*64)
+        self.assertFalse(retention.cleanup_file(path,encounter_id=self.encounter.pk))
+        self.assertTrue(path.exists());self.assertEqual(PreservedFile.objects.get().hold_ids,[str(hold.pk)])
+
+    def test_preserved_prior_reference_survives_current_path_and_scope_change(self):
+        path=self.file();relative=str(path.relative_to(settings.MEDIA_ROOT))
+        job=Job.objects.create(encounter=self.encounter,user=self.scope[0],request_key='archived-file',input_path=relative)
+        hold=self.hold();Job.objects.filter(pk=job.pk).update(input_path='audio/replacement.wav')
+        retention.release_hold(self.second,hold.pk,'b'*64)
+        self.assertFalse(retention.cleanup_file(path,encounter_id=self.other[5].pk))
+        self.assertTrue(path.exists());self.assertEqual(PreservedFile.objects.get().hold_ids,[str(hold.pk)])
+
+    def test_creation_ledger_distinguishes_new_files_from_pre_release_and_unknown_files(self):
+        hold=self.hold()
+        early=Path(self.temp.name)/'audio'/(uuid.uuid4().hex+'.wav');early.parent.mkdir(exist_ok=True)
+        retention.begin_private_file(early);early.write_bytes(b'SYNTHETIC DURING HOLD')
+        retention.release_hold(self.second,hold.pk,'b'*64)
+        late=early.with_name(uuid.uuid4().hex+'.wav')
+        retention.begin_private_file(late);late.write_bytes(b'SYNTHETIC AFTER RELEASE')
+        # Timestamps are not provenance and cannot defeat the historical hold.
+        import os;future=(timezone.now()+timedelta(days=1)).timestamp();os.utime(early,(future,future))
+        self.assertFalse(retention.cleanup_file(early,encounter_id=self.encounter.pk))
+        self.assertTrue(retention.cleanup_file(late,encounter_id=self.encounter.pk))
+        unknown=self.file();self.assertFalse(retention.cleanup_file(unknown,encounter_id=self.encounter.pk))
+        with self.assertRaises(ValidationError):retention.begin_private_file(late)
+
+    def test_actual_upload_creation_records_release_boundary(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from core.security import store_upload,private_path
+        hold=self.hold();retention.release_hold(self.second,hold.pk,'b'*64)
+        relative=store_upload(SimpleUploadedFile('synthetic.wav',b'SYNTHETIC AUDIO'),'audio')
+        birth=AuditEvent.objects.get(action='retention.file_creation',target=relative)
+        self.assertEqual(birth.details['released_hold_ids'],[str(hold.pk)])
+        self.assertTrue(retention.cleanup_file(private_path(relative),encounter_id=self.encounter.pk))
+
     def test_reapers_preserve_held_files_and_count_only_real_removals(self):
         self.hold();path=self.file();relative=str(path.relative_to(Path(self.temp.name)))
         event=AuditEvent.objects.create(action='voice.over_limit_quoted',target=str(self.encounter.pk),department=self.scope[2],details={'path':relative})
