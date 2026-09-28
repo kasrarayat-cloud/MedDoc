@@ -125,3 +125,33 @@ the common checkbox-plus-write-in path. Separate population, source context,
 missing/ordinary/long workflow evidence and independent refutation are still
 required for that next slice. No corpus denominator, first-pass result, authority,
 receipt or account setting changed. No live provider request or deployment occurred.
+
+## Independent namespace-alias counterexample and correction
+
+Root's independent pass preserved 36 varied physical-XML controls that passed on
+`2e0dc20e`. It also found an ordinary valid namespace layout that the new verifier
+refused: a local `x:r`/`x:t` alias for the Word namespace, with only `w` declared at
+the root. The retained leaf's XPath used the local alias, while lookup bound only
+root namespaces. The original document and exact reviewer probe/result are retained
+as `local-prefix-original.docx` and `13` evidence. This was a compatibility defect,
+not grounds to exclude ordinary DOCX namespace aliases.
+
+Repaired source `a23fc97b64405721d55979e7bfb53d2285032d81`, engine SHA256
+`e48f3e616246e5c3a3f4518975f5dc9a1f782a2ef9bb75ca65c208e5d779eb10`,
+uses a path of full Clark tags and same-tag child indices derived from each retained
+node after edits. Readback therefore depends on element identity and namespace URI,
+not prefix spelling or declaration scope. No XPath prefix lookup remains.
+
+The new local-alias control failed before repair (`14`) and passes afterward.
+All six focused/readback methods passed in `15`, 1.980 seconds. Replaying the exact
+reviewer's original bytes and saved mappings now produces:
+
+```
+☒ First: literal ☐ text ☒ Last
+```
+
+`16-local-prefix-repaired.json` records exact source/export hashes and confirms
+that the actual original D03 workflow export remains byte-identical. Its existing
+render evidence is therefore reused without another render. Source is frozen for
+root's unchanged bounded independent replay. No additional importer eligibility,
+corpus run or provider request was introduced.

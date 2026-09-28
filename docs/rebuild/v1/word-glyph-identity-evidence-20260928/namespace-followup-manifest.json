@@ -1,0 +1,41 @@
+{
+  "runtime": "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/.runtime/word-writein-proof-20260928",
+  "source_commit": "a23fc97b64405721d55979e7bfb53d2285032d81",
+  "files": [
+    {
+      "path": "13-root-prefix-probe.py",
+      "bytes": 1904,
+      "sha256": "da17e3e8e77cde3868124c2f873e66f5701a9258dae4148c54d2c91c4457fc3c"
+    },
+    {
+      "path": "13-root-prefix-result.json",
+      "bytes": 1379,
+      "sha256": "03921b7b72d0836cd3dcc84be9a170308c9349af1aed48379390b54216cd3282"
+    },
+    {
+      "path": "14-local-prefix-red.log",
+      "bytes": 1827,
+      "sha256": "013644a7c503a5a709d965913323daf05619520e970e21f7b2f7c042c48bcf55"
+    },
+    {
+      "path": "15-local-prefix-final.log",
+      "bytes": 1312,
+      "sha256": "6570a89304dba7cd246516382cffb730900e1124c257b7a93ed0b6bc5c84ce5f"
+    },
+    {
+      "path": "16-local-prefix-repaired.json",
+      "bytes": 372,
+      "sha256": "f889ae1dc33557c75f4156aaa789e5d59a840cd9c8f4d564d973a3d0d7218818"
+    },
+    {
+      "path": "local-prefix-original.docx",
+      "bytes": 36612,
+      "sha256": "2059bd7aaab7cc3a1c265bd92e139b84c149288e08d5d4089af750029e440417"
+    },
+    {
+      "path": "local-prefix-repaired.docx",
+      "bytes": 36743,
+      "sha256": "c2e82e49ca690b725e083645ac211504be0fef706c40117f986a70c866326258"
+    }
+  ]
+}
