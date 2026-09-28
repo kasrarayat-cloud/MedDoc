@@ -168,3 +168,31 @@ legacy id (check with `configuration_status`).
 
 No gate above is closed by this entry. B-W1, B-G1 (useful ordinary notes), B-M1 (served Sonnet 5), the hosting and
 agreement gates and the operational gates stay open. No provider call, payment, purchase, merge or deployment occurred.
+
+## 2026-09-28 evening — final default-path refutation, CI repair, candidate `a0bb3a4b`
+
+Candidate `v1/release-integration` at `a0bb3a4b` (draft PR #1291): **CI run 36487046109, all six jobs green, and
+secrets-scan 36487046181 green**, on the exact head. It adds to `d9fa3249` (whose core-1 failed in CI 36479289351):
+
+- `0f6c758c` — a refused Word column source (tab-pair or coded sequence) now also holds its text-only lines, so its
+  literal header can never be offered as a question of its own words (the CI failure: an answer would have ticked the
+  header line while the row's boxes stayed empty). Two wider first versions were refuted before merge — one by the CI
+  document list (lost per-row explanations), one by the development-set note comparison. Each guard is proved by its
+  own mutant; detection on the 40 development originals is identical to `d9fa3249`, fields and notes.
+- `3a07eb81` — MIG-R-1 and MIG-R-2 from the final default-path refutation (`candidate-adversarial-pass-20260928.md`):
+  the cutover plan no longer allows an image rollback to `dedac162` once real data exists (it is synthetic-only by
+  construction and drops the per-request transcription opt-out), the drain counts queued transcriptions, and
+  `migrate core zero` is named as dropping every MFA enrollment. The lock-order lens found nothing.
+
+Local on `d9fa3249` before the repair: documents 568, ops 1,181 (2 skipped) passed; core 2,366 had the one CI error
+above plus one wall-clock failure in a flag-only WM narrative cost test, which passed alone and in CI core-2.
+
+Word, development set only (`word-eval/v2/candidate-live-20260928.md`): the unchanged v2.1 harness on the candidate
+engine's own detection, without the rendered layout witness, gives 9 / 22 / 9 documents (pass / fail / no ticked
+questions) and 768 / 310 / 54 questions, against the frozen control's exactly reproduced 11 / 20 / 9 and
+774 / 306 / 52. Every change is traced to a cause: the exact option reader (a safety repair), protected signing and
+guidance fields that v1's text answers write into, the structural selection rule, and column candidates that wait for
+the rendered witness. No holdout was opened; this does not move B-W1.
+
+No gate above is closed by this entry. No provider call, token count, payment, purchase, merge to `main` or
+deployment occurred.
