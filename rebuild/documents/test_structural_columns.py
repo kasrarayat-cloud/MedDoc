@@ -510,6 +510,8 @@ class CodedSourceScope(unittest.TestCase):
             'parenthesised codes': ['4.\tThyroid', '\tNormal\tAbnormal\tNot done', 'Finding\t(1) ☐\t(2) ☐\t(3) ☐'],
             'missing code': ['4.\tThyroid', '\tNormal\tAbnormal', 'Size\t1 ☐\t2 ☐', '', 'Shape\t☐\t2 ☐'],
             'duplicate code': ['4.\tThyroid', '\tNormal\tAbnormal', 'Size\t1 ☐\t2 ☐', '', 'Shape\t1 ☐\t1 ☐'],
+            'number after the last box': ['4.\tThyroid', '\tNormal\tAbnormal\tNot done', 'Finding\t1 ☐\t2 ☐\t☐ 3'],
+            'codes before worded boxes': ['4.\tThyroid', 'Result\t(1) ☐ Positive\t(2) ☐ Negative'],
         }
         for control in ('glyph', 'ff'):
             for name, cell in cases.items():
@@ -552,6 +554,26 @@ class CodedSourceScope(unittest.TestCase):
         detector, _, _ = detect(raw)
         self.assertEqual([a.label for _, _, a in detector.layout_candidates], ['Head summary'])
 
+    def test_the_row_question_printed_to_the_left_stays_with_labelled_rows_and_numbers_are_not_questions(self):
+        stops = (2880, 4320)
+        carotid = ['Findings', ('\tAbsent\tPresent', stops), ('Left\t1 ☐\t2 ☐', stops), '', ('Right\t1 ☐\t2 ☐', stops)]
+        detector, _, _ = detect(data(stopped_form([[['Carotid bruit'], carotid]], (2880, 6480))))
+        areas = [a for _, _, a in detector.layout_candidates]
+        self.assertEqual([a.label for a in areas], ['Left', 'Right'])
+        self.assertTrue(all('Carotid bruit' in a.context for a in areas))
+        # The same for one labelled tab pair, which rule_tab_columns owns.
+        detector, _, _ = detect(data(stopped_form([[['Carotid bruit'], carotid[:3]]], (2880, 6480))))
+        self.assertEqual([(a.label, 'column_sequence' in a.target, 'Carotid bruit' in a.context)
+                          for _, _, a in detector.layout_candidates], [('Left', False, True)])
+        # A left cell that prints only an item number is not the row's question, and is not ignored either.
+        lone = ['Findings', '', ('\tNormal\tAbnormal', stops), ('\t1 ☐\t2 ☐', stops)]
+        for offset, number in ((0, '12.'), (20, '12.'), (0, '(12)'), (20, '(12)')):
+            with self.subTest(offset=offset, number=number):
+                cell = lone[:3] + [(lone[3][0], tuple(p + offset for p in stops))]
+                detector, _, notes = detect(data(stopped_form([[[number], cell]], (1440, 7920))))
+                self.assertEqual(detector.layout_candidates, [])
+                self.assertTrue(any('not a usable row label' in n for n in notes))
+
     def test_a_sub_heading_or_group_label_over_several_rows_is_never_scoped_to_one(self):
         pulses = ['13.\tPulses', '\tPresent\tAbsent', 'Right side', 'Radial\t1 ☐\t2 ☐', 'Femoral\t1 ☐\t2 ☐', '',
                   'Left side', 'Radial\t1 ☐\t2 ☐', 'Dorsalis pedis\t1 ☐\t2 ☐']
@@ -567,6 +589,12 @@ class CodedSourceScope(unittest.TestCase):
                 _, coded, notes = detect(data(coded_form(cell)))
                 self.assertEqual([a.label for a in coded], [])
                 self.assertTrue(any(n.startswith('Coded column sequence at ') for n in notes))
+
+    def test_a_single_row_is_named_by_its_lead_prefix_and_text_above_in_printed_order(self):
+        cell = ['11.\tArteries', '\tNormal\tAbnormal', 'Heart palpation\t1 ☐\t2 ☐', '', 'Carotid artery',
+                'Auscultation\tAbsent\tPresent', '(systolic bruit)', 'Left\t1 ☐\t2 ☐']
+        _, coded, _ = detect(data(coded_form(cell)))
+        self.assertEqual([a.label for a in coded], ['Heart palpation', 'Carotid artery Auscultation (systolic bruit) Left'])
 
     def test_a_single_group_label_is_context_for_all_its_rows_or_none(self):
         fields, _ = self.proposal(data(coded_form(LYMPH)))

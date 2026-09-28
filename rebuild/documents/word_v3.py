@@ -1580,6 +1580,27 @@ class Detector:
                         issue = "The column header contains an answer area."
         return headers, issue
 
+    def printed_row_label(self, cell):
+        """The row's question printed in its own label cell to the left of `cell`, or the issue when a cell to
+        the left prints text that is not a usable label. A cell to the right (comments, fixed details) never is."""
+        table, row, col = cell.parent, cell.info["row"], cell.info["col"]
+        label = self.row_label(table, row, col)
+        if label and re.search(r"[^\W\d_]", label):
+            return label, ""
+        printed = any(c.info["col"] < col and c.info["vmerge"] != "continue" and not is_blank_text(self.cell_text(c))
+                      for c in self.grid(table).get(row, []))
+        if label or printed:
+            return "", "A cell to the left of the source prints text that is not a usable row label."
+        return "", ""
+
+    def coded_kind(self, label, options, context):
+        """A coded response row records one code per row. Only a literal instruction widens it; a plural label
+        ('Lesion(s)') or 'apply' is not one."""
+        text = label + " " + context
+        if CHECK_ONE.search(text) or all(YESNO.match((o or "").strip()) for o in options):
+            return "choice"
+        return "multi_choice" if CHECK_ALL.search(text) else "choice"
+
     def rule_tab_columns(self):
         """Complete same-cell title + repeated header/response pairs, never numeric-code guessing."""
         def coded(slot):
@@ -1617,8 +1638,9 @@ class Detector:
                     complete = False
                     problem = "A source title, header or response has hidden or unresolved visibility."
                 headers, header_issue = self.marked_column_headers(cell)
-                issue = header_issue or issue
-                context = " > ".join(x for x in (context, *headers, title) if x)
+                row_question, row_issue = self.printed_row_label(cell)
+                issue = header_issue or row_issue or issue
+                context = " > ".join(x for x in (context, *headers, row_question, title) if x)
                 if issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
                     complete = False
                     problem = "The complete governing context is unresolved, oversized or protected."
@@ -1628,7 +1650,9 @@ class Detector:
                     options = [s.strip() for s in printed[1:]]
                     header_layout, row_layout = self.tab_column_properties(header), self.tab_column_properties(row)
                     summary = bool(item and not item[0] and len(paragraphs) == 3)
-                    if (not item or not (item[0] or summary) or len(item[0] or title) > MAX_MAPPING_LABEL or printed[0].strip()
+                    # A lone unlabelled row: the question printed in its own label cell, else the cell title.
+                    unlabelled = row_question or title
+                    if (not item or not (item[0] or summary) or len(item[0] or unlabelled) > MAX_MAPPING_LABEL or printed[0].strip()
                             or any(char in item[0] for char in (BOX, CHECKED, "\x00", "\n"))
                             or self.blank_spans(*self.ptext(row.el))
                             or len(options) != item[1] or not all(options) or len(set(options)) != len(options)
@@ -1642,7 +1666,7 @@ class Detector:
                         complete = False
                         problem = "Literal headers, complete row labels or effective tab coordinates do not agree."
                         break
-                    label = item[0] or title
+                    label = item[0] or unlabelled
                     if self.question_box_signing(label) or any(self.question_box_signing(o) for o in options):
                         complete = False;problem = "The printed row or options contain signing/consent instructions.";break
                     refs = [unit[0] for unit in self.box_units(row)]
@@ -1653,7 +1677,7 @@ class Detector:
                         complete = False;problem = "The governing cardinality instructions conflict.";break
                     if re.search(r"\bselect up to\b", instructions, re.I):
                         complete = False;problem = "The governing cardinality includes an unrepresented selection limit.";break
-                    kind = self.choice_kind(label, options, context)
+                    kind = self.coded_kind(label, options, context)
                     pending.append((header, row, Area("checkbox" if len(options) == 1 else kind, label, row,
                         {"type": "checkboxes", "boxes": refs}, context=context,
                         options=options, complete_source=True)))
@@ -1693,6 +1717,27 @@ class Detector:
                 return False
             codes.append(match.group(1))
         return len(set(codes)) == len(codes)
+
+    CODE_BEFORE = re.compile(r"(?:^|\s)[(\[]?\d{1,3}[)\].]?\s*$")
+    CODE_AFTER = re.compile(r"^\s*[(\[]?\d{1,3}[)\].]?(?:\s|$)")
+
+    def response_code_row(self, slot):
+        """A row whose boxes are printed after digit codes ('1 ☐ 2 ☐', '(1) ☐', 'Shape ☐ 2 ☐'), in any shape.
+        Reading the text after each box as its option would name a box by the next box's code: such a row
+        is a coded row, and its meanings live in a printed header, never in the codes.
+        Numbers printed after their boxes ('☐ 0 ☐ 1 ☐ 2') are those boxes' own options and stay readable."""
+        text = self.ptext(slot.el)[0]
+        marks = [m.start() for m in re.finditer("[☐☒]", text)]
+        if len(marks) < 2:
+            return False
+        segments = [text[marks[i - 1] + 1 if i else 0:mark] for i, mark in enumerate(marks)]
+        before = [bool(self.CODE_BEFORE.search(segment)) for segment in segments]
+        trailing = bool(self.CODE_AFTER.match(text[marks[-1] + 1:]))
+        # A code printed before every box; or a bare code between two boxes (the previous box's option or the
+        # next box's code) unless the whole row reads box-then-number: nothing coded before the first box
+        # and a number after the last one.
+        bare = any(re.fullmatch(r"\s*[(\[]?\d{1,3}[)\].]?\s*", segment) for segment in segments[1:])
+        return all(before) or (bare and (before[0] or not trailing))
 
     def coded_column_parts(self, slot):
         if not self.coded_choice_paragraph(slot):
@@ -1762,12 +1807,18 @@ class Detector:
                 return [], "A source paragraph has hidden, broken, embedded or unresolved content."
         context, issue = self.question_box_context(cell.parent, require_visible=True)
         headers, header_issue = self.marked_column_headers(cell)
-        context = " > ".join(x for x in (context, *headers,
+        row_question, row_issue = self.printed_row_label(cell)
+        if row_issue:
+            return [], row_issue
+        context = " > ".join(x for x in (context, *headers, row_question,
                              " | ".join(texts[p.id].strip() for p in children if texts[p.id].strip())) if x)
         if issue or header_issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
             return [], "The full source context is oversized, protected or unresolved."
         if CHECK_ONE.search(context) and CHECK_ALL.search(context) or re.search(r"\bselect up to\b", context, re.I):
             return [], "The governing cardinality instructions conflict or carry an unrepresented limit."
+        if CHECK_ALL.search(context):
+            # One response code per row: a check-all instruction over it cannot be honoured or overruled.
+            return [], "A check-all instruction governs coded rows that each record one response."
         titles, groups, current, waiting, previous = [], [], None, [], None
         for p in children:
             text = texts[p.id]
@@ -1824,18 +1875,29 @@ class Detector:
         paras = [p for p in children if texts[p.id].strip()]
         for group in groups:
             header, info = group["para"], group["info"]
+            # Printed text above a row (and a header's lead and prefix, above its first row) may name that row
+            # alone or every row after it until the next such text: when it is followed by several rows its
+            # scope is not printed. A lone group label (one header, no lead) is left to the context for all.
+            marks = [number for number, (_, before) in enumerate(group["rows"]) if before] + [len(group["rows"])]
+            if any(following - mark > 1 for mark, following in zip(marks, marks[1:])):
+                return [], "Printed text above a row is followed by several rows; which of them it names is not printed."
+            # Rows before the first one with text of its own: the lead and prefix are printed over all of them.
+            governed = marks[0] if marks[0] else 1
+            if (group["lead"] or info["prefix"]) and governed > 1 and (group["lead"] or len(groups) > 1):
+                return [], "A printed group label is followed by several rows; which of them it names is not printed."
+            group_text = governed == 1
             for number, (row, before) in enumerate(group["rows"]):
-                sources = (group["lead"] if number == 0 else []) + before
-                pieces = [texts[p.id] for p in sources]
-                if number == 0:
-                    pieces += [info["prefix"]]
-                pieces += [infos[row.id]["label"]]
+                first = number == 0 and group_text
+                sources = (group["lead"] if first else []) + before
+                pieces = ([texts[p.id] for p in group["lead"]] + [info["prefix"]] if first else []) \
+                    + [texts[p.id] for p in before] + [infos[row.id]["label"]]
                 label = re.sub(r"[.·]{3,}$", "", " ".join(" ".join(pieces).split())).strip()
                 start = sources[0] if sources and sources[0].seq < header.seq else header
                 if not label:
                     if len(rows) != 1 or len(titles) != 1:
                         return [], "An answer row has no printed label of its own."
-                    label, start = " ".join(texts[titles[0].id].split()), titles[0]
+                    label = row_question or " ".join(texts[titles[0].id].split())
+                    start = header if row_question else titles[0]
                 if label.lower() in seen:
                     return [], "Two answer rows print the same label; their destinations are ambiguous."
                 seen.add(label.lower())
@@ -1855,7 +1917,7 @@ class Detector:
                             "source": [{"part": p.part, "slot": p.path, "fingerprint": fingerprint(p.el),
                                         "starts": infos[p.id]["starts"] if p.id in infos else roles.get(p.id, [0])}
                                        for p in chain]}
-                area = Area(self.choice_kind(label, info["options"], context), label, row,
+                area = Area(self.coded_kind(label, info["options"], context), label, row,
                             {"type": "checkboxes", "boxes": refs, "column_sequence": relation},
                             context=context, options=list(info["options"]), complete_source=True)
                 pending.append((header, row, area))
@@ -1875,9 +1937,7 @@ class Detector:
             infos = {p.id: self.coded_column_parts(p) for p in rows}
             if any(info is None for info in infos.values()):
                 continue  # rule_checkboxes notes every unresolved coded row
-            # The strict single labelled tab-pair contract of rule_tab_columns stays its sole owner.
-            if len(rows) == 1 and infos[rows[0].id]["label"] and "\t" in self.ptext(rows[0].el)[0]:
-                continue
+            # A cell the tab-pair contract accepted is already a candidate (above); one it refused is read here.
             pending, reason = self.coded_column_source(cell, rows, infos)
             if reason:
                 self.notes.append("Coded column sequence at " + cell.id + ": " + reason + " Printed source: "
@@ -1907,7 +1967,7 @@ class Detector:
             txt = self.ptext(s.el)[0]
             if BOX not in txt and CHECKED not in txt:
                 continue
-            if self.coded_choice_paragraph(s):
+            if self.coded_choice_paragraph(s) or self.response_code_row(s):
                 self.notes.append("Coded checkbox options at " + s.id +
                                   " need their complete printed header and layout; response codes are not option labels. "
                                   "Printed source: " + txt)

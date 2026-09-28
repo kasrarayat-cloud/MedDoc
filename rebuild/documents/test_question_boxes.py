@@ -898,9 +898,21 @@ class TabColumnOwnership(unittest.TestCase):
     def test_unknown_or_conflicting_geometry_and_source_are_visible(self):
         for problem in ('mismatch','unknown_style','cleared','indent','duplicate','missing','intervening','signing'):
             with self.subTest(problem=problem):
-                result=self.proposal(data(self.form(problem=problem,inherited=problem=='cleared')))
-                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
-                self.assertTrue(any('Tab-column' in n and 'Finding' in n for n in result['notes']))
+                raw=data(self.form(problem=problem,inherited=problem=='cleared'))
+                result=self.proposal(raw)
+                boxes=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
+                if problem in ('mismatch','cleared','indent','intervening'):
+                    # Refused by the tab-pair contract, the complete printed source is read as a coded sequence:
+                    # an optional proposal only the rendered witness can confirm (refutation 2026-09-28 B2).
+                    self.assertEqual([(f['label'],f['options']) for f in boxes],[('Finding',['Normal','Abnormal'])])
+                    self.assertTrue(all('column_sequence' in f['locator']['target'] for f in boxes))
+                    inspected=w.inspect(raw)
+                    self.assertFalse([f for f in inspected['fields'] if f['locator']['target']['type']=='checkboxes'])
+                    self.assertTrue(any('Layout verification required for coded-column answer' in n and 'Finding' in n
+                                        for n in inspected['notes']))
+                else:
+                    self.assertFalse(boxes)
+                    self.assertTrue(any('Tab-column' in n and 'Finding' in n for n in result['notes']))
 
     def test_literal_cardinality_is_preserved_and_missing_states_unchanged(self):
         raw=data(self.form(many=True));result=self.proposal(raw)
