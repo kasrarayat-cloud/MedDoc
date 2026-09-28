@@ -964,3 +964,65 @@ class OrganizationTopUpAgainstRequestsInItsDepartment(LockFlowFixture, Transacti
         self.assertEqual((queued.state, queued.payer), ('queued', f'organization:{self.organization.pk}'))
         self.assertTrue(Reservation.objects.filter(job=queued, state='held').exists())
         self.assertEqual(self.orphaned_recordings(), [])
+
+
+@override_settings(**LOCKED)
+class PendingReconciliationAgainstSettlementInItsDepartment(LockFlowFixture, TransactionTestCase):
+    """RF-R1's class, found while repairing it. Reproduce: a settled job J2 in D has a reconciled additional charge held
+    for funds (pending_funds) on its payer's paid wallet W; W is funded; the worker's settlement of another job J1 in D,
+    held on W, is paused after its 'usage.settle' audit; apply_pending_reconciliations(wallet=W) (what a top-up runs
+    after its commit) starts; the settlement resumes.
+    RED on 8983eccc: the reconciliation row was locked with a bare select_for_update().select_related('usage__department'),
+    which also locked D FOR UPDATE, then waited for W; the settlement's commit waited for FOR KEY SHARE on D. The apply
+    is the deadlock victim: caught and audited (usage.reconciliation_apply_failed), the charge stays pending_funds until
+    the payer's next payment, and nothing else retries it."""
+
+    def test_the_pending_charge_is_applied_after_the_settlement(self):
+        from core.billing import apply_pending_reconciliations, reconcile_usage, settle
+        from core.models import AuditEvent, CostReconciliation
+        units = {'input_tokens': 100, 'output_tokens': 0, 'cached_input_tokens': 0, 'cache_creation_tokens': 0}
+        rates = {'input_per_million': '1000'}
+        promo = Wallet.objects.get(user=self.user, kind='promo')
+        paid = Wallet.objects.get(user=self.user, kind='paid')
+        reconciled = Job.objects.create(encounter=self.encounter, user=self.user, request_key='rfr1-reconciled')
+        reserve(reconciled, Decimal('0.2'))
+        usage = settle(reconciled, Decimal('0.1'), units, rates, 'anthropic:synthetic', 'req_rfr1_rec', provider_resource_id='msg_rfr1_rec')
+        Job.objects.filter(pk=reconciled.pk).update(state='succeeded')
+        row = reconcile_usage(usage, Decimal('0.5'), 'synthetic-invoice-rfr1', self.admin)
+        self.assertEqual(row.ledger_status, 'pending_funds')
+        self.assertGreater(row.charge_delta, 0)
+        Wallet.objects.filter(pk=promo.pk).update(balance=Decimal('0'))
+        Wallet.objects.filter(pk=paid.pk).update(balance=Decimal('5'))
+        running = Job.objects.create(encounter=self.encounter, user=self.user, request_key='rfr1-running')
+        reserve(running, Decimal('0.2'))
+        self.assertEqual(list(Reservation.objects.filter(job=running).values_list('wallet_id', flat=True)), [paid.pk])
+        Job.objects.filter(pk=running.pk).update(state='running')
+        paused, resume = threading.Event(), threading.Event()
+        real = billing.audit
+
+        def audit(actor, action, *args, **kwargs):
+            result = real(actor, action, *args, **kwargs)
+            if action == 'usage.settle' and not paused.is_set():
+                paused.set()
+                resume.wait(30)
+            return result
+        with patch('core.billing.audit', side_effect=audit):
+            settling, settled = in_thread(lambda: settle(Job.objects.get(pk=running.pk), Decimal('0.1'), units, rates,
+                                                         'anthropic:synthetic', 'req_rfr1_run', provider_resource_id='msg_rfr1_run'))
+            try:
+                self.assertTrue(paused.wait(15), 'the settlement never reached its audit')
+                applying, applied = in_thread(lambda: apply_pending_reconciliations(actor=self.admin, wallet=paid))
+                blocked = wait_for_blocked_backend()
+            finally:
+                resume.set()
+            self.finish(settling, applying)
+        self.assertTrue(blocked, 'the apply never waited for the settlement')
+        self.assertNotIn('error', settled, settled.get('error'))
+        self.assertNotIn('error', applied, applied.get('error'))
+        failed = list(AuditEvent.objects.filter(action='usage.reconciliation_apply_failed').values_list('details', flat=True))
+        self.assertEqual(failed, [], 'the pending charge was a deadlock victim')
+        self.assertEqual([r.pk for r in applied['value']], [row.pk])
+        self.assertEqual(CostReconciliation.objects.get(pk=row.pk).ledger_status, 'applied')
+        paid.refresh_from_db()
+        self.assertEqual(paid.balance, Decimal('5') - settled['value'].charged_cost - row.charge_delta)
+        self.assertEqual(Usage.objects.get(job=running).pk, settled['value'].pk)
