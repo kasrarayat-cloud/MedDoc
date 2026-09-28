@@ -212,6 +212,13 @@ class HistoryContextContract(SimpleTestCase):
             from core.jobs import NoProviderRequest
             with self.assertRaises(NoProviderRequest): g.generate(case['notes'], case['fields'], flagged)
             provider.assert_not_called()
+        with override_settings(AI_MODEL='claude-sonnet-4-6'), patch('anthropic.Anthropic') as provider:
+            legacy = g.configuration()
+            with self.assertRaisesMessage(ValidationError, 'exact native claude-sonnet-5'):
+                g.maximum_cost(case['notes'], case['fields'], legacy)
+            with self.assertRaisesMessage(NoProviderRequest, 'exact native claude-sonnet-5'):
+                g.generate(case['notes'], case['fields'], legacy)
+            provider.assert_not_called()
 
 
 @override_settings(**dict(LIVE, V3_HISTORY_CONTEXT=True))
@@ -258,6 +265,12 @@ class HistoryContextWorkflow(V3Fixture, TestCase):
                         assisted.append(f['label'])
                         value = '\n'.join(case['original_all_picks'][f['label']])
                         if f['label'] == 'Smoker': value = 'No'
+                        # These are explicit clinician corrections. The mixed
+                        # source clause remains an unresolved automatic oracle;
+                        # do not copy the entire mixed sentence into both fields.
+                        if case['name'] == 'r1-note1':
+                            value = {'Past medical history': 'Hypertension.',
+                                     'Medications': 'Lisinopril 10 mg daily.'}.get(f['label'], value)
                         payload['held_shown_' + f['key']] = '1'
                     payload['answer_' + f['key']] = value
                     payload['reviewed_' + f['key']] = 'on'

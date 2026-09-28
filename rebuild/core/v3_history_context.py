@@ -53,6 +53,14 @@ def enabled(config=None):
         config is None or config.get('history_context_contract') == CONTRACT)
 
 
+def refuse_request(config):
+    """This prepared contract cannot silently ride a legacy model rollback."""
+    if not enabled(config):
+        raise ValidationError('History context was switched off; generate again.')
+    if config.get('provider') != 'anthropic' or config.get('model') != 'claude-sonnet-5':
+        raise ValidationError('History context requires the exact native claude-sonnet-5 model.')
+
+
 def targets(fields, units):
     from .generation import question_key
     if not 0 < len(units) <= MAX_UNITS:
