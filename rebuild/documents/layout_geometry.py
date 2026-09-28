@@ -180,6 +180,11 @@ def geometry(page):
         left, bottom, width, height = item['path'][0][1]
         if width <= 0 or height <= 0 or abs(width-height) > PRECISION: continue
         possible = [v for v in baselines if bottom < v < bottom+height]
+        if len(possible) > 1:
+            # Another line's baseline also lies within the box (text in a neighbouring cell set on a slightly
+            # different baseline): the box belongs to the one line that prints ink beside it, if only one does.
+            possible = [v for v in possible if any(r['y'] == v and r['ink'] is not None and r['ink'][0] <= left + 2 * width
+                                                   and r['ink'][2] >= left - width for r in records)]
         if len(possible) != 1: continue
         diagonals = []
         for next_item in paths[index+1:index+3]:
@@ -283,6 +288,15 @@ def printed(records):
     return ''.join(r['text'] for r in records if not r['text'].isspace())
 
 
+def beside(line, neighbours):
+    """The sides of the row whose printed text this whole line could be: it prints ink and nothing but one
+    contiguous piece of that side's neighbouring text. Its position is checked against the match."""
+    if not any(r['ink'] is not None for r in line['records']):
+        return ()
+    text = printed(line['records'])
+    return tuple(side for side in ('left', 'right') if neighbours[side] and text in neighbours[side])
+
+
 def match_line(line, segments, leader=False, neighbours=None):
     """Match every visible character/control in the complete source paragraph.
 
@@ -352,7 +366,8 @@ def measure(lines, candidate):
                                         {'segments': model['row'], 'dot_leaders': model['row_dot_leaders']}]
     if not 2 <= len(sequence) <= 100: raise ValueError('Incomplete or excessive printed source sequence')
     # Every paragraph is one whole rendered line, in order, with no other line between. Only text the
-    # same table row prints in its other cells may share those lines (see match_line).
+    # same table row prints in its other cells may share those lines (see match_line), or print a line of
+    # its own between them, beside the sequence on that cell's side (see beside).
     # The column header is the paragraph whose segments align with the answer row's.
     header_at = model.get('header_index', 0)
     if type(header_at) is not int or not 0 <= header_at < len(sequence) - 1:
@@ -367,15 +382,29 @@ def measure(lines, candidate):
     if type(model.get('source_occurrences')) is not int or model['source_occurrences'] != 1:
         raise ValueError('The printed source sequence is not unique in the document')
     for page_index, page in enumerate(lines):
-        for index in range(len(page) - len(sequence) + 1):
-            found = []
+        for index in range(len(page)):
+            found, between, at = [], [], index
             for offset, paragraph in enumerate(sequence):
-                reading = match_line(page[index + offset], paragraph['segments'], paragraph['dot_leaders'], neighbours)
+                reading = None
+                while at < len(page):
+                    reading = match_line(page[at], paragraph['segments'], paragraph['dot_leaders'], neighbours)
+                    if reading is not None or not offset:
+                        break
+                    # A line printing only the row's neighbouring text (a wrapped comment line on the baseline
+                    # of a blank spacer paragraph) may lie between two of the sequence's lines.
+                    sides = beside(page[at], neighbours)
+                    if not sides:
+                        break
+                    between.append((page[at], sides)); at += 1
                 if reading is None:
                     break
-                found.append(reading)
+                found.append(reading); at += 1
             else:
-                matches.append((page_index, index, found))
+                ink = [r['ink'] for _, records in found for r in records if r['ink'] is not None]
+                low, high = min(i[0] for i in ink), max(i[2] for i in ink)
+                if all(any(all(r['ink'] is None or (r['ink'][0] > high if side == 'right' else r['ink'][2] < low)
+                               for r in line['records']) for side in sides) for line, sides in between):
+                    matches.append((page_index, index, found))
     if len(matches) != 1: raise ValueError('Missing or ambiguous complete source paragraph pair')
     page, index, found = matches[0]
     headers, rows = found[header_at][0], found[-1][0]

@@ -1006,9 +1006,11 @@ class PrintedContentIsNotAnInstruction(unittest.TestCase):
 class NeighbourTextOnTheSameBaseline(PaintedFixture):
     """F7: a comment written beside an answered coded row shares its baselines; the row is measured on its own ink."""
 
-    def prepared(self):
+    def prepared(self, stops=True):
         summary = ['Head summary', '', ('\tNormal\tAbnormal\tExam not done', (2880, 4320, 5760)),
                    ('\t1 ☐\t2 ☐\t3 ☐', (2880, 4320, 5760)), '']
+        if not stops:
+            summary = [line if isinstance(line, str) else line[0] for line in summary]
         raw = data(stopped_form([[summary, ['']]], (6480, 2880)))
         proposal, _, _ = layout_source.prepare(raw)
         head = next(f for f in proposal['fields'] if f.get('layout_candidate'))
@@ -1030,6 +1032,42 @@ class NeighbourTextOnTheSameBaseline(PaintedFixture):
         self.assertTrue(result['passed']); self.assertEqual(result['held'], [])
         self.assertEqual({(m['header']['y'], m['row']['y']) for m in result['measurements']}, {(280, 260)})
         self.assertEqual(len(result['measurements']), 3)
+
+    def test_a_wrapped_comment_line_between_the_rows_lines_is_the_neighbours_own(self):
+        from .layout_geometry import containment
+        candidate = self.prepared(stops=False)  # a coded sequence: title, header and row
+        self.assertEqual(candidate['rendered_source']['header_index'], 1)
+        title, header, row = self.cell
+        # The comment's second line falls on the baseline of the cell's blank spacer paragraph. The renderer
+        # paints the comment cell after the coded cell.
+        lines = [title, (270, header[1]), (250, row[1]), (300, [(420, 'Scalp laceration 2')]), (290, [(420, 'cm, sutured.')])]
+        result = containment(drawn(self.pdf, lines), [candidate])
+        self.assertTrue(result['passed']); self.assertEqual(len(result['measurements']), 3)
+        # Not the row's text, left of the row's ink, or over it: refused.
+        for stray in ((290, [(420, 'Unrelated words')]), (290, [(5, 'sutured.')]), (290, [(170, 'sutured.')])):
+            with self.subTest(stray=stray), self.assertRaises(ValueError):
+                containment(drawn(self.pdf, [title, (270, header[1]), (250, row[1]), stray]), [candidate])
+
+    def test_a_comment_line_of_its_own_above_the_first_line_is_not_a_second_reading(self):
+        from .layout_geometry import containment
+        candidate = self.prepared()
+        title, header, row = self.cell
+        lines = [title, header, row, (290, [(420, 'Scalp laceration 2 cm, sutured.')])]
+        result = containment(drawn(self.pdf, lines), [candidate])
+        self.assertTrue(result['passed']); self.assertEqual(len(result['measurements']), 3)
+
+    def test_a_box_whose_height_spans_a_comment_baseline_belongs_to_the_line_printed_beside_it(self):
+        from .layout_geometry import containment
+        candidate = self.prepared()
+        title, header, row = self.cell
+        # The comment's line sits 1.1 pt above (or 1 pt below) the answer row's baseline, inside the boxes' height.
+        for y in (261.1, 259):
+            with self.subTest(y=y):
+                result = containment(drawn(self.pdf, [title, header, row, (y, [(420, 'Scalp laceration 2')])]), [candidate])
+                self.assertTrue(result['passed']); self.assertEqual(len(result['measurements']), 3)
+        # With the comment's ink beside a box too, that box belongs to no line: refused.
+        with self.assertRaises(ValueError):
+            containment(drawn(self.pdf, [title, header, row, (261.1, [(364, 'Scalp laceration 2')])]), [candidate])
 
     def test_text_that_is_not_printed_beside_the_row_still_refuses(self):
         from .layout_geometry import containment
