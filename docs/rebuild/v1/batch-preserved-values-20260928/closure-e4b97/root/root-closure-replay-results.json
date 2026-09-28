@@ -1,0 +1,19 @@
+{
+  "source_commit": "e4b97f4355d9f34f62309db3b08165e1e8177303",
+  "source_sha256": {
+    "core/generation_batch.py": "0c50c911a75faa8e73e37caa2fc79e399ae3aae8fb4ef55085854af68ec079ef",
+    "documents/word_v3.py": "cae8ea4c0f922922d98a49fe13c983fd5ace2277e9b500f185e1421e12d75f04"
+  },
+  "results": [
+    {
+      "case": "preserved_scalar",
+      "refused": true,
+      "reason": "['The complete form has an invalid or repeated priority value.']"
+    },
+    {
+      "case": "unknown_dropdown",
+      "refused": true,
+      "reason": "['The preserved state of \"Priority A\" is unreadable; review that constrained answer.']"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+test_laterality_survives_in_detected_and_typed_labels (documents.test_word_v3.OptionReader.test_laterality_survives_in_detected_and_typed_labels) ... ok
+test_list_markers_are_digits_single_letters_and_roman_numerals_only (documents.test_word_v3.OptionReader.test_list_markers_are_digits_single_letters_and_roman_numerals_only) ... ok
+test_options_that_differ_only_in_punctuation_stay_distinct (documents.test_word_v3.OptionReader.test_options_that_differ_only_in_punctuation_stay_distinct) ... ok
+test_the_reviewed_option_is_the_exported_option (documents.test_word_v3.OptionReader.test_the_reviewed_option_is_the_exported_option) ... ok
+test_a_writer_that_leaves_the_ticked_glyph_is_refused (documents.test_word_v3.ControlReadBack.test_a_writer_that_leaves_the_ticked_glyph_is_refused) ... ok
+test_an_added_flag_keeps_the_schema_order (documents.test_word_v3.ControlReadBack.test_an_added_flag_keeps_the_schema_order)
+R5: w14:checked precedes w14:checkedState and w14:uncheckedState (CT_SdtCheckbox is a sequence). ... ok
+test_unticking_a_control_shows_its_unchecked_glyph (documents.test_word_v3.ControlReadBack.test_unticking_a_control_shows_its_unchecked_glyph) ... ok
+test_the_default_entry_is_the_one_printed (documents.test_word_v3.LegacyDropdownDefault.test_the_default_entry_is_the_one_printed) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 4.575s
+
+OK
