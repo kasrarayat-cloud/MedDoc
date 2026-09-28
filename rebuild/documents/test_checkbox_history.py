@@ -753,10 +753,12 @@ class SelectionLimitRefutations(unittest.TestCase):
         raw = data(inline_question('Symptom(s) (tick all that apply):', ('Pain in only one joint', 'Swelling', 'Fever'), 'ff'))
         self.assertMulti(raw, 'Symptom(s)')
         # A standalone tick-one above a separate question and the list is not that question's label.
-        doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Tick one box only.')
-        p = doc.add_paragraph('Escorted: '); ff_field(p, 'checkbox', name='E0'); p.add_run(' Yes ')
-        ff_field(p, 'checkbox', name='E1'); p.add_run(' No')
-        self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
+        for instruction in ('Tick one box only.', 'Please tick one box only:'):
+            with self.subTest(standalone=instruction):
+                doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph(instruction)
+                p = doc.add_paragraph('Escorted: '); ff_field(p, 'checkbox', name='E0'); p.add_run(' Yes ')
+                ff_field(p, 'checkbox', name='E1'); p.add_run(' No')
+                self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
         # A one-only sentence owned by a separate question stops being owned when it names a wider reach.
         doc = Document(); doc.add_heading('Clinical history', 1)
         boxed_question(doc, 'Please tick one box for each question in this section:', ('Yes', 'No'))
