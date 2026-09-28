@@ -121,18 +121,18 @@ class SequenceContainment(unittest.TestCase):
         return [self.glyphs(label)] + [self.glyphs(str(i + 1) + ' ') + [{'kind': 'ff_checkbox', 'text': VECTOR,
                 'checked': i in checked}] for i in range(count)]
 
-    def candidate(self, identity, paragraphs, options=('Normal', 'Abnormal'), header_index=0, **flags):
+    def candidate(self, identity, paragraphs, options=('Normal', 'Abnormal'), header_index=0, occurrences=1, **flags):
         return dict({'id': identity, 'source': {'options': list(options)}, 'rendered_source': {
             'header': paragraphs[header_index], 'row': paragraphs[-1], 'row_dot_leaders': False,
-            'header_index': header_index,
+            'header_index': header_index, 'source_occurrences': occurrences,
             'sequence': [{'segments': p, 'dot_leaders': False} for p in paragraphs]}}, **flags)
 
-    def page(self, lines):
-        """lines: [(y, [(x, text) | (x, None) for a native checkbox])]."""
+    def page(self, lines, before=b''):
+        """lines: [(y, [(x, text) | (x, None) for a native checkbox])], drawn in this order after `before`."""
         reader = PdfReader(io.BytesIO(self.fixture)); page = reader.pages[0]
         font = next(name for name, ref in page['/Resources']['/Font'].items()
                     if ref.get_object().get('/Subtype') == '/TrueType')
-        stream = b'.1 w\n'
+        stream = b'.1 w\n' + before
         for y, items in lines:
             for x, text in items:
                 if text is None:
@@ -200,3 +200,84 @@ class SequenceContainment(unittest.TestCase):
                                          header_index=1, **flags)
                 with self.assertRaises(ValueError):
                     containment(pages, [head, missing])
+
+
+class OwnRenderingWitness(unittest.TestCase):
+    """A candidate is measured only on its own rendered paragraphs (refutation 2026-09-28 A1/C1/C2/C3)."""
+
+    setUpClass = classmethod(SequenceContainment.setUpClass.__func__)
+    glyphs = staticmethod(SequenceContainment.glyphs)
+    row, candidate = SequenceContainment.row, SequenceContainment.candidate
+    page, summary = SequenceContainment.page, SequenceContainment.summary
+
+    header = staticmethod(lambda: [[], [{'kind': 'glyph', 'text': 'Normal'}], [{'kind': 'glyph', 'text': 'Abnormal'}]])
+
+    def aligned(self, y, label='Palpation'):
+        return [(y, [(200, 'Normal'), (300, 'Abnormal')]),
+                (y - 20, [(20, label), (212, '1 '), (222, None), (322, '2 '), (332, None)])]
+
+    def test_a_sequence_printed_twice_in_the_source_is_ambiguous_even_when_one_rendering_is_broken(self):
+        # The candidate's own header shares its baseline with another cell's ink and cannot match; an
+        # identical printed sequence elsewhere matches once. That match is not this candidate's rendering.
+        own = self.aligned(300)
+        own[0] = (300, own[0][1] + [(360, 'describe below')])
+        pages = self.page(own + self.aligned(200))
+        paragraphs = [self.header(), self.row('Palpation')]
+        held = containment(pages, [self.candidate('liver', paragraphs, occurrences=2, optional=True, untouched=True)])
+        self.assertEqual(held['measurements'], [])
+        self.assertEqual([h['candidate'] for h in held['held']], ['liver'])
+        for flags in ({}, {'optional': True, 'untouched': False}):
+            with self.subTest(flags=flags), self.assertRaises(ValueError):
+                containment(pages, [self.candidate('liver', paragraphs, occurrences=2, **flags)])
+        # The same rendering with a unique source is measured; a missing or malformed count never is.
+        self.assertTrue(containment(pages, [self.candidate('spleen', paragraphs)])['passed'])
+        for occurrences in (0, None, '1', True, 1.0):
+            with self.subTest(occurrences=occurrences), self.assertRaises(ValueError):
+                containment(pages, [self.candidate('spleen', paragraphs, occurrences=occurrences)])
+
+    def test_lines_that_are_not_one_contiguous_rendering_never_verify(self):
+        # Header and row lines are adjacent on the page, but other printed text was painted between them:
+        # they are two different places that happen to print the candidate's text, not its own paragraphs.
+        header, row = self.aligned(300)
+        paragraphs = [self.header(), self.row('Palpation')]
+        for between in ([(100, [(20, 'Other text')])], [(100, [(20, '.')])]):
+            with self.subTest(between=between), self.assertRaises(ValueError):
+                containment(self.page([header] + between + [row]), [self.candidate('c', paragraphs)])
+        held = containment(self.page([header, (100, [(20, 'Other')]), row]),
+                           [self.candidate('c', paragraphs, optional=True, untouched=True)])
+        self.assertEqual([h['candidate'] for h in held['held']], ['c'])
+        # Spaces and native controls painted between belong to no printed word; the order is still one run.
+        self.assertTrue(containment(self.page([header, (100, [(20, ' '), (40, None)]), row]),
+                                    [self.candidate('c', paragraphs)])['passed'])
+
+    def test_ownership_is_measured_against_the_named_header_line(self):
+        # Rows between the header and the answer row align with each other but not with the header.
+        lines = [(300, [(200, 'Normal'), (300, 'Abnormal')]),
+                 (280, [(20, 'Tone'), (110, '1 '), (120, None), (210, '2 '), (220, None)]),
+                 (260, [(20, 'Bulk'), (110, '1 '), (120, None), (210, '2 '), (220, None)])]
+        candidate = self.candidate('bulk', [self.header(), self.row('Tone'), self.row('Bulk')], header_index=0)
+        self.assertFalse(containment(self.page(lines), [candidate])['passed'])
+        aligned = [lines[0]] + [(y, [(20, label), (212, '1 '), (222, None), (312, '2 '), (322, None)])
+                                for y, label in ((280, 'Tone'), (260, 'Bulk'))]
+        result = containment(self.page(aligned), [candidate])
+        self.assertTrue(result['passed'])
+        self.assertEqual({m['header']['y'] for m in result['measurements']}, {300})
+        self.assertEqual({m['row']['y'] for m in result['measurements']}, {260})
+
+    def test_a_light_fill_painted_beneath_the_text_does_not_hide_it(self):
+        paragraphs = [[self.glyphs('Head summary')], self.header(), self.row('')]
+        lines = self.summary('Head summary', 300)
+        shade = b'q 0.878 0.878 0.878 rg 5 245 390 70 re f Q\n'
+        self.assertTrue(containment(self.page(lines, before=shade), [self.candidate('head', paragraphs, header_index=1)])['passed'])
+        white = b'q 1 1 1 rg 5 245 390 70 re f Q\n'
+        self.assertTrue(containment(self.page(lines, before=white), [self.candidate('head', paragraphs, header_index=1)])['passed'])
+        # Painted over the text, too dark beneath it, or a stroke across it: the visible-ink proof refuses.
+        for before, after in ((b'', shade), (b'q 0.2 0.2 0.2 rg 5 245 390 70 re f Q\n', b''),
+                              (b'q 0 0 0 RG 5 283 m 395 283 l S Q\n', b'')):
+            with self.subTest(before=before, after=after):
+                pages = self.page(lines, before=before)
+                if after:
+                    page = pages[0]; content = DecodedStreamObject()
+                    content.set_data(page.get_contents().get_data() + after); page[NameObject('/Contents')] = content
+                with self.assertRaises(ValueError):
+                    containment(pages, [self.candidate('head', paragraphs, header_index=1)])

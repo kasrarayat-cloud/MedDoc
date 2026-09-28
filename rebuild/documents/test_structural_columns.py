@@ -363,3 +363,122 @@ class CodedColumnSequences(unittest.TestCase):
         _, coded, notes = detect(data(doc))
         self.assertEqual(coded, [])
         self.assertTrue(any(n.startswith('Coded column sequence at ') for n in notes))
+
+
+def stopped_form(rows, widths, *, control='ff', heading='Physical examination'):
+    """rows: [[cell lines, ...], ...]; a line is text or (text, [(position, kind), ...], leader)."""
+    from docx.oxml import OxmlElement
+    from .test_word_v3 import ff_field
+    doc = Document()
+    if heading:
+        doc.add_paragraph(heading, style='Heading 1')
+    table = doc.add_table(rows=len(rows), cols=len(widths))
+    for col, width in zip(table._tbl.tblGrid.findall(qn('w:gridCol')), widths):
+        col.set(qn('w:w'), str(width))
+    for r, cells in enumerate(rows):
+        for c, lines in enumerate(cells):
+            cell = table.cell(r, c)
+            for n, line in enumerate(lines):
+                paragraph = cell.paragraphs[0] if n == 0 else cell.add_paragraph()
+                text, positions, leader = (line + (None,))[:3] if isinstance(line, tuple) else (line, None, None)
+                pieces = text.split('☐')
+                for ordinal, piece in enumerate(pieces):
+                    if piece:
+                        paragraph.add_run(piece)
+                    if ordinal < len(pieces) - 1:
+                        if control == 'glyph':
+                            paragraph.add_run('☐')
+                        else:
+                            ff_field(paragraph, 'checkbox', name='S%d_%d_%d_%d' % (r, c, n, ordinal))
+                if positions:
+                    tabs = OxmlElement('w:tabs')
+                    for position in positions:
+                        tab = OxmlElement('w:tab'); tab.set(qn('w:val'), 'center'); tab.set(qn('w:pos'), str(position))
+                        if leader:
+                            tab.set(qn('w:leader'), leader)
+                        tabs.append(tab)
+                    paragraph._p.get_or_add_pPr().append(tabs)
+    return doc
+
+
+class WitnessOwnsItsRendering(unittest.TestCase):
+    """A proposal is verified only on its own printed paragraphs (refutation 2026-09-28 A1, C1, C4)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from .test_layout_containment import SequenceContainment
+        cls.pdf = SequenceContainment('test_fixture_font_keeps_literal_character_codes')
+        SequenceContainment.setUpClass()
+
+    def liver_and_spleen(self):
+        # The refuter's form: two cells print the same header and rows; Liver's rows are one column right.
+        liver = ['12b.\tLiver', ('\tNormal\tAbnormal', (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (4320, 5760)),
+                 ('Tenderness\t1 ☐\t2 ☐', (4320, 5760))]
+        spleen = ['12c.\tSpleen', ('\tNormal\tAbnormal', (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (2880, 4320)),
+                  ('Tenderness\t1 ☐\t2 ☐', (2880, 4320))]
+        return data(stopped_form([[liver, ['If abnormal,', 'describe below']], [spleen, ['']]], (6480, 2880)))
+
+    def rendered(self, shift_liver=100):
+        """Liver's header shares its baseline with 'describe below'; Spleen prints alone and aligned."""
+        def cell(y, title, extra, shift):
+            return [(y, [(20, title)] + extra[:1]), (y - 20, [(200, 'Normal'), (300, 'Abnormal')] + extra[1:]),
+                    (y - 40, [(20, 'Palpation'), (212 + shift, '1 '), (222 + shift, None), (322 + shift, '2 '), (332 + shift, None)]),
+                    (y - 60, [(20, 'Tenderness'), (212 + shift, '1 '), (222 + shift, None), (322 + shift, '2 '), (332 + shift, None)])]
+        return self.pdf.page(cell(360, '12b. Liver', [(420, 'If abnormal,'), (420, 'describe below')], shift_liver)
+                             + cell(260, '12c. Spleen', [], 0))
+
+    def test_an_identical_printed_sequence_in_another_cell_never_verifies_a_proposal(self):
+        from .layout_geometry import containment
+        raw = self.liver_and_spleen()
+        proposal, _, _ = layout_source.prepare(raw)
+        candidates = proposal['manifest']['candidates']
+        self.assertEqual([c['source']['label'] for c in candidates], ['Palpation', 'Tenderness'] * 2)
+        result = containment(self.rendered(), candidates)
+        self.assertEqual([(m['candidate'], m['header']['y']) for m in result['measurements']], [])
+        self.assertEqual(len(result['held']), 4)
+        self.assertEqual([c['rendered_source']['source_occurrences'] for c in candidates], [2, 2, 2, 2])
+        # Both rows answered 'Normal' (the common case): the export is refused, never verified from Spleen's lines.
+        fields = [f for f in proposal['fields'] if f.get('layout_candidate') and f['label'] == 'Palpation']
+        prepared, _, _ = layout_source.prepare(raw, mapping=proposal['fields'],
+                                                answers={f['key']: 'Normal' for f in fields})
+        with self.assertRaises(ValueError):
+            containment(self.rendered(), prepared['manifest']['candidates'])
+
+    def test_prepared_sequences_verify_an_aligned_rendering_and_refuse_a_shifted_one(self):
+        from .layout_geometry import containment
+        lungs = ['10.\tLungs', ('\tNormal\tAbnormal', (2880, 4320)), ('Percussion\t1 ☐\t2 ☐', (2880, 4320), 'dot'), '',
+                 ('Auscultation\t1 ☐\t2 ☐', (2880, 4320))]
+        summary = ['Lungs summary', '', ('\tNormal\tAbnormal\tExam not done', (2880, 4320, 5760)),
+                   ('\t1 ☐\t2 ☐\t3 ☐', (2880, 4320, 5760)), '']
+        raw = data(stopped_form([[lungs, ['']], [summary, ['']]], (6480, 2880)))
+        proposal, _, _ = layout_source.prepare(raw)
+        candidates = sorted(proposal['manifest']['candidates'], key=lambda c: c['source']['row']['slot'])
+        self.assertEqual([c['source']['label'] for c in candidates], ['Percussion', 'Auscultation', 'Lungs summary'])
+        # The coded sequences are optional proposals; the summary's single tab pair is a required one.
+        self.assertEqual([c['optional'] for c in candidates], [True, True, False])
+        self.assertEqual([c['rendered_source']['sequence'][i]['dot_leaders'] for c in candidates[:1] for i in (0, 1)],
+                         [False, True])
+        def lines(shift=0):
+            box = lambda x, y, label, dots=False: (y, [(20, label)] + ([(90, '.....'), (180, '.....')] if dots else [])
+                                                    + [(x, '1 '), (x + 10, None), (x + 100, '2 '), (x + 110, None)])
+            return [(360, [(20, '10. Lungs')]), (340, [(200, 'Normal'), (300, 'Abnormal')]),
+                    box(212 + shift, 320, 'Percussion', dots=True), box(212, 300, 'Auscultation'),
+                    (260, [(20, 'Lungs summary')]), (240, [(150, 'Normal'), (230, 'Abnormal'), (310, 'Exam not done')]),
+                    (220, [(162, '1 '), (172, None), (242, '2 '), (252, None), (342, '3 '), (352, None)])]
+        result = containment(self.pdf.page(lines()), candidates)
+        self.assertTrue(result['passed']); self.assertEqual(result['held'], [])
+        self.assertEqual(len(result['measurements']), 7)
+        self.assertEqual({(m['candidate'], m['header']['y'], m['row']['y']) for m in result['measurements']},
+                         {(candidates[0]['id'], 340, 320), (candidates[1]['id'], 340, 300), (candidates[2]['id'], 240, 220)})
+        shifted = containment(self.pdf.page(lines(shift=100)), candidates)
+        self.assertEqual([h['candidate'] for h in shifted['held']], [candidates[0]['id'], candidates[1]['id']])
+
+    def test_a_tab_column_proposal_is_required_and_its_failure_refuses_everything(self):
+        from .layout_geometry import containment
+        from .test_question_boxes import TabColumnOwnership
+        raw = data(TabColumnOwnership().form(control='ff'))
+        proposal, _, _ = layout_source.prepare(raw)
+        [candidate] = proposal['manifest']['candidates']
+        self.assertIs(candidate['optional'], False)
+        with self.assertRaises(ValueError):
+            containment(self.pdf.page([(300, [(20, 'Unrelated text')])]), [candidate])
