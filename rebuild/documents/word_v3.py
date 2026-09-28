@@ -2066,6 +2066,10 @@ class Detector:
     CODE_TOKEN = r"(?:#\s?)?[(\[]?(?:\d{1,3}[a-z]?|[a-z]|[ivx]{1,4})[)\].:=]?(?:\s?[-\u2013=:])?"
     CODE_BEFORE = re.compile(r"(?:^|\s)" + CODE_TOKEN + r"\s*$", re.I)
     CODE_BARE = re.compile(r"\s*" + CODE_TOKEN + r"\s*", re.I)
+    # A code printed against the question with no space: 'Score:0 ☐', 'Grade—0 ☐', 'Pain(0) ☐'. A bracketed code may
+    # touch a word; a bare one follows a printed separator ('COVID-19' then a box is the question's own number, and
+    # is harmless: no bare code follows it).
+    CODE_GLUED = re.compile(r"(?:[(\[]\d{1,3}[a-z]?[)\]]|(?<=[:=/#\-\u2013\u2014])(?:\d{1,3}[a-z]?|[ivx]{1,4}|[a-z]))\s*$", re.I)
 
     def response_code_row(self, slot):
         """A row whose boxes are printed after digit codes ('1 ☐ 2 ☐', '(1) ☐', 'Shape ☐ 2 ☐'), in any shape.
@@ -2078,6 +2082,9 @@ class Detector:
             return False
         segments = [text[marks[i - 1] + 1 if i else 0:mark] for i, mark in enumerate(marks)]
         before = [bool(self.CODE_BEFORE.search(segment)) for segment in segments]
+        # The first code may touch the question ('Pain score:0 ☐ 1 ☐ 2'): it is still printed before its box, and
+        # read box-then-option every box would take the next box's code (refutation R4-3).
+        before[0] = before[0] or bool(self.CODE_GLUED.search(segments[0]))
         if all(before):
             return True  # a code printed before every box
         bare = [segment for segment in segments[1:] if self.CODE_BARE.fullmatch(segment)]

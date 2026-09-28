@@ -1613,6 +1613,18 @@ class CodesGluedToTheQuestion(unittest.TestCase):
                     self.assertEqual(box_fields(result), [])
                     self.assertTrue(any('response codes are not option labels' in n for n in result['notes']))
 
+    def test_a_number_that_is_the_questions_own_is_not_a_code(self):
+        # Positive controls: a range or a name ending in a number before the first box, then options after each box.
+        for line, label, options in (('Pain score (0-10): ☐ 0 ☐ 1 ☐ 2 ☐ Not assessed', 'Pain score (0-10)',
+                                      ['0', '1', '2', 'Not assessed']),
+                                     ('Pain (0–10) ☐ 0 ☐ 1 ☐ 2', 'Pain (0–10)', ['0', '1', '2']),
+                                     ('COVID-19 ☐ Positive ☐ Negative ☐ Not tested', 'COVID-19',
+                                      ['Positive', 'Negative', 'Not tested'])):
+            for control in ('glyph', 'ff'):
+                with self.subTest(line=line, control=control):
+                    result = w.inspect(data(coded_form([line], control=control, heading=None)))
+                    self.assertEqual(box_fields(result), [(label, options)])
+
 
 class LegendsInEveryPrintedForm(unittest.TestCase):
     """R4-4, R4-5: a legend number glued to its word, or printed in a form the parser does not know, is never read as
