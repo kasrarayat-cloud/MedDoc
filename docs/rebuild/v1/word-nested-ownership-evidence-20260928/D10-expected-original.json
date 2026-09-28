@@ -1,0 +1,3173 @@
+{
+ "template": "dev/originals/D10-b54cc9e77067.docx",
+ "sha256": "b54cc9e770678dda021110abc66d155fc419af6baf5a9a0c8272da727ab91546",
+ "role": "reviewer",
+ "pages": 15,
+ "form_title": "Physical Examination",
+ "answer_areas": [
+  {
+   "id": "A1",
+   "label": "Site Name:",
+   "context": "Page header (every page of the Physical Examination section)",
+   "kind": "text",
+   "slots": [
+    "word/header1.xml#hf/p[1]"
+   ],
+   "location": "header",
+   "duplicate_label": false,
+   "notes": "Blank after the label at the right tab stop of the header paragraph; the same header repeats on pages 1-14 (one part, one area). Page 15 uses the empty header2."
+  },
+  {
+   "id": "A2",
+   "label": "Subject ID:",
+   "context": "Page header (every page of the Physical Examination section)",
+   "kind": "text",
+   "slots": [
+    "word/header1.xml#hf/p[2]"
+   ],
+   "location": "header",
+   "duplicate_label": false,
+   "notes": "Blank after the label at the right tab stop; header repeats on pages 1-14."
+  },
+  {
+   "id": "A3",
+   "label": "STAFF ID:",
+   "context": "Section 1: Vital Measurements (section heading row)",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[0]/tc[0]/p[0]"
+   ],
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Underscore run \"__ __ __\" (three character positions) at the end of the section heading paragraph, after a tab."
+  },
+  {
+   "id": "A4",
+   "label": "Blood pressure (mmHg) - Systolic",
+   "context": "Section 1 > Supine measurements > Blood pressure (mmHg) > Systolic",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[3]/tc[0]/p[0]"
+   ],
+   "unit": "mmHg",
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Three digit-entry glyph boxes (Symbol font char F0F0, rendered as dots) BEFORE the \"/\"; caption \"Systolic\" on the line below (p[1]). Same paragraph also holds the diastolic boxes."
+  },
+  {
+   "id": "A5",
+   "label": "Blood pressure (mmHg) - diastolic",
+   "context": "Section 1 > Supine measurements > Blood pressure (mmHg) > diastolic",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[3]/tc[0]/p[0]"
+   ],
+   "unit": "mmHg",
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0) AFTER the \"/\"; caption \"diastolic\" below. Shares the paragraph with systolic."
+  },
+  {
+   "id": "A6",
+   "label": "Heart Rate",
+   "context": "Section 1 > Supine measurements > Heart Rate",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[3]/tc[1]/p[0]"
+   ],
+   "unit": "beats/min",
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0); unit \"beats/min\" printed on the line below."
+  },
+  {
+   "id": "A7",
+   "label": "Respiratory Rate",
+   "context": "Section 1 > Supine measurements > Respiratory Rate",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[3]/tc[2]/p[0]"
+   ],
+   "unit": "breaths/min",
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0); unit \"breaths/min\" printed on the line below."
+  },
+  {
+   "id": "A8",
+   "label": "Standing for __ __ minutes",
+   "context": "Section 1 > Standing measurements (\"Please specify how many minutes\")",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[4]/tc[0]/p[2]"
+   ],
+   "unit": "minutes",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Two underscore runs \"__ __\" (two digit positions) inside the sentence \"Standing for __ __ minutes\"; the instruction \"Please specify how many minutes\" is p[1]."
+  },
+  {
+   "id": "A9",
+   "label": "Blood pressure (mmHg) - Systolic",
+   "context": "Section 1 > Standing measurements > Blood pressure (mmHg) > Systolic",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/p[0]"
+   ],
+   "unit": "mmHg",
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Three digit-entry glyph boxes (Symbol font char F0F0, rendered as dots) BEFORE the \"/\"; caption \"Systolic\" on the line below (p[1]). Same paragraph also holds the diastolic boxes."
+  },
+  {
+   "id": "A10",
+   "label": "Blood pressure (mmHg) - diastolic",
+   "context": "Section 1 > Standing measurements > Blood pressure (mmHg) > diastolic",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[6]/tc[0]/p[0]"
+   ],
+   "unit": "mmHg",
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0) AFTER the \"/\"; caption \"diastolic\" below. Shares the paragraph with systolic."
+  },
+  {
+   "id": "A11",
+   "label": "Heart Rate",
+   "context": "Section 1 > Standing measurements > Heart Rate",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[6]/tc[1]/p[0]"
+   ],
+   "unit": "beats/min",
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0); unit \"beats/min\" printed on the line below."
+  },
+  {
+   "id": "A12",
+   "label": "Respiratory Rate",
+   "context": "Section 1 > Standing measurements > Respiratory Rate",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[6]/tc[2]/p[0]"
+   ],
+   "unit": "breaths/min",
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0); unit \"breaths/min\" printed on the line below."
+  },
+  {
+   "id": "A13",
+   "label": "Oral Temperature:",
+   "context": "Section 1 > Vital Measurements",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[7]/tc[0]/p[0]"
+   ],
+   "unit": "°F",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Digit-entry glyph boxes: 3 digits \".\" 1 digit (Symbol F0F0), then printed degree sign (Symbol F0B0) and \"F\"."
+  },
+  {
+   "id": "A14",
+   "label": "Weight:",
+   "context": "Section 1 > Vital Measurements",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[7]/tc[0]/p[1]"
+   ],
+   "unit": "lbs.",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Digit-entry glyph boxes: 3 digits \".\" 2 digits (Symbol F0F0). Same paragraph also holds Height."
+  },
+  {
+   "id": "A15",
+   "label": "Height:",
+   "context": "Section 1 > Vital Measurements",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[7]/tc[0]/p[1]"
+   ],
+   "unit": "ft. / in.",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Digit-entry glyph boxes: 1 digit then \"ft.\", then 2 digits \".\" 2 digits then \"in.\" - one height value in feet + inches. Shares the paragraph with Weight."
+  },
+  {
+   "id": "A16",
+   "label": "Neck Circumference:",
+   "context": "Section 1 > Vital Measurements",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[7]/tc[0]/p[2]"
+   ],
+   "unit": "in.",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0)."
+  },
+  {
+   "id": "A17",
+   "label": "Waist Circumference:",
+   "context": "Section 1 > Vital Measurements",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[7]/tc[0]/p[3]"
+   ],
+   "unit": "in.",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0). Shares the paragraph with Hip Circumference."
+  },
+  {
+   "id": "A18",
+   "label": "Hip Circumference:",
+   "context": "Section 1 > Vital Measurements",
+   "kind": "measurement",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[7]/tc[0]/p[3]"
+   ],
+   "unit": "in.",
+   "location": "table",
+   "duplicate_label": false,
+   "notes": "Three digit-entry glyph boxes (Symbol F0F0), second measurement in the same paragraph as Waist Circumference."
+  },
+  {
+   "id": "A19",
+   "label": "Hair",
+   "context": "Physical examination > 1. Head > Hair",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[1]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[1]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Alopecia"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A20",
+   "label": "Scalp",
+   "context": "Physical examination > 1. Head > Scalp",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[1]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[1]/tc[0]/p[6]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A21",
+   "label": "Comments",
+   "context": "Physical examination > 1. Head > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[1]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A22",
+   "label": "Head summary",
+   "context": "Physical examination > 1. Head > Head summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A23",
+   "label": "Comments",
+   "context": "Physical examination > Head summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[2]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A24",
+   "label": "Mercury fillings",
+   "context": "Physical examination > 2. Oral cavity > Mercury fillings",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A25",
+   "label": "Dentition",
+   "context": "Physical examination > 2. Oral cavity > Dentition",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[6]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[6]/ff[2]"
+   ],
+   "options": [
+    "Good",
+    "Poor",
+    "Edentulous"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row."
+  },
+  {
+   "id": "A26",
+   "label": "Gums",
+   "context": "Physical examination > 2. Oral cavity > Gums",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[9]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[9]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[9]/ff[2]"
+   ],
+   "options": [
+    "Good",
+    "Fair",
+    "Poor"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row."
+  },
+  {
+   "id": "A27",
+   "label": "Oropharynx",
+   "context": "Physical examination > 2. Oral cavity > Oropharynx",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[12]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[12]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A28",
+   "label": "Comments",
+   "context": "Physical examination > 2. Oral cavity > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[3]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A29",
+   "label": "Oral status summary",
+   "context": "Physical examination > 2. Oral cavity > Oral status summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A30",
+   "label": "Comments",
+   "context": "Physical examination > Oral status summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[4]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A31",
+   "label": "Supple",
+   "context": "Physical examination > 3. Neck > Supple",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[5]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[5]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "Yes",
+    "No"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Note the reversed order: Yes=1, No=2."
+  },
+  {
+   "id": "A32",
+   "label": "Masses",
+   "context": "Physical examination > 3. Neck > Masses",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[5]/tc[0]/p[5]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[5]/tc[0]/p[5]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": true,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A33",
+   "label": "Jugular venous Distension",
+   "context": "Physical examination > 3. Neck > Jugular venous distension",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[5]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[5]/tc[0]/p[8]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label wraps over two lines (\"Jugular venous\" / \"Distension\"); header \"Absent Present\" shares the label line."
+  },
+  {
+   "id": "A34",
+   "label": "Comments",
+   "context": "Physical examination > 3. Neck > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[5]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A35",
+   "label": "Neck summary",
+   "context": "Physical examination > 3. Neck > Neck summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[6]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[6]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[6]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A36",
+   "label": "Comments",
+   "context": "Physical examination > Neck summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[6]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A37",
+   "label": "Visible",
+   "context": "Physical examination > 4. Thyroid > Visible",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[7]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[7]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A38",
+   "label": "Palpable",
+   "context": "Physical examination > 4. Thyroid > Palpable",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[7]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[7]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": true,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. No heading of its own; inherits \"No / Yes\" from the Visible line."
+  },
+  {
+   "id": "A39",
+   "label": "Nodules",
+   "context": "Physical examination > 4. Thyroid > Nodules",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[7]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[7]/tc[0]/p[6]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"No / Yes\" heading."
+  },
+  {
+   "id": "A40",
+   "label": "Size",
+   "context": "Physical examination > 4. Thyroid > Size",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[7]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[7]/tc[0]/p[8]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"No / Yes\" heading from Visible; semantically ambiguous for \"Size\" (probably normal vs enlarged) but the printed options are No/Yes."
+  },
+  {
+   "id": "A41",
+   "label": "Comments",
+   "context": "Physical examination > 4. Thyroid > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[7]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A42",
+   "label": "Thyroid summary",
+   "context": "Physical examination > 4. Thyroid > Thyroid summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[8]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[8]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[8]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A43",
+   "label": "Comments",
+   "context": "Physical examination > Thyroid summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[8]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A44",
+   "label": "Equal",
+   "context": "Physical examination > 5. Eyes > Pupils > Equal",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "Yes",
+    "No"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Sub-heading \"Pupils\"; Yes=1, No=2."
+  },
+  {
+   "id": "A45",
+   "label": "Round",
+   "context": "Physical examination > 5. Eyes > Pupils > Round",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[6]/ff[1]"
+   ],
+   "options": [
+    "Yes",
+    "No"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Yes / No\" heading."
+  },
+  {
+   "id": "A46",
+   "label": "Reactive",
+   "context": "Physical examination > 5. Eyes > Pupils > Reactive",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[8]/ff[1]"
+   ],
+   "options": [
+    "Yes",
+    "No"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Yes / No\" heading."
+  },
+  {
+   "id": "A47",
+   "label": "Accommodate",
+   "context": "Physical examination > 5. Eyes > Pupils > Accommodate",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[10]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[10]/ff[1]"
+   ],
+   "options": [
+    "Yes",
+    "No"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Yes / No\" heading."
+  },
+  {
+   "id": "A48",
+   "label": "Sclera",
+   "context": "Physical examination > 5. Eyes > Sclera",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[13]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[13]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[13]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Icteric",
+    "Other"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. \"Other\" has no specify blank; detail belongs in the Comments cell."
+  },
+  {
+   "id": "A49",
+   "label": "Fundoscopic",
+   "context": "Physical examination > 5. Eyes > Fundoscopic",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[16]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[16]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A50",
+   "label": "Photophobia",
+   "context": "Physical examination > 5. Eyes > Photophobia",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[18]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[9]/tc[0]/p[18]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. No heading of its own; inherits \"Normal / Abnormal\" from Fundoscopic (semantically a yes/no finding)."
+  },
+  {
+   "id": "A51",
+   "label": "Comments",
+   "context": "Physical examination > 5. Eyes > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[9]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A52",
+   "label": "Eyes summary",
+   "context": "Physical examination > 5. Eyes > Eyes summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[10]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[10]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[10]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A53",
+   "label": "Comments",
+   "context": "Physical examination > Eyes summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[10]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A54",
+   "label": "Tympanic membrane",
+   "context": "Physical examination > 6. Ears > Tympanic membrane",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[11]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[11]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A55",
+   "label": "Canals",
+   "context": "Physical examination > 6. Ears > Canals",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[11]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[11]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A56",
+   "label": "Comments",
+   "context": "Physical examination > 6. Ears > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[11]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A57",
+   "label": "Ears summary",
+   "context": "Physical examination > 6. Ears > Ears summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[12]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[12]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[12]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A58",
+   "label": "Comments",
+   "context": "Physical examination > Ears summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[12]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A59",
+   "label": "Nasal mucosa",
+   "context": "Physical examination > 7. Nose > Nasal mucosa",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[13]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[13]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A60",
+   "label": "Comments",
+   "context": "Physical examination > 7. Nose > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[13]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A61",
+   "label": "Nose summary",
+   "context": "Physical examination > 7. Nose > Nose summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[14]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[14]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[14]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A62",
+   "label": "Comments",
+   "context": "Physical examination > Nose summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[14]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A63",
+   "label": "Mucosa",
+   "context": "Physical examination > 8. Pharynx > Mucosa",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[15]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[15]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Row laid out with runs of spaces rather than tabs."
+  },
+  {
+   "id": "A64",
+   "label": "Volume adequate",
+   "context": "Physical examination > 8. Pharynx > Volume adequate",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[15]/tc[0]/p[5]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[15]/tc[0]/p[5]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading; spaces-aligned."
+  },
+  {
+   "id": "A65",
+   "label": "Tongue large",
+   "context": "Physical examination > 8. Pharynx > Tongue large",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[15]/tc[0]/p[7]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[15]/tc[0]/p[7]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading; spaces-aligned."
+  },
+  {
+   "id": "A66",
+   "label": "TMJ tender",
+   "context": "Physical examination > 8. Pharynx > TMJ tender",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[15]/tc[0]/p[9]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[15]/tc[0]/p[9]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading; spaces-aligned."
+  },
+  {
+   "id": "A67",
+   "label": "Comments",
+   "context": "Physical examination > 8. Pharynx > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[15]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A68",
+   "label": "Pharynx summary",
+   "context": "Physical examination > 8. Pharynx > Pharynx summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[16]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[16]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[16]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A69",
+   "label": "Comments",
+   "context": "Physical examination > Pharynx summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[16]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A70",
+   "label": "Shape",
+   "context": "Physical examination > 9. Chest > Shape",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[17]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[17]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A71",
+   "label": "Comments",
+   "context": "Physical examination > 9. Chest > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[17]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A72",
+   "label": "Chest summary",
+   "context": "Physical examination > 9. Chest > Chest summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[18]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[18]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[18]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A73",
+   "label": "Comments",
+   "context": "Physical examination > Chest summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[18]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A74",
+   "label": "Chest percussion",
+   "context": "Physical examination > 10. Lungs > Chest percussion",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[19]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[19]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A75",
+   "label": "Lung auscultation (sound, rales, crepitations)",
+   "context": "Physical examination > 10. Lungs > Lung auscultation",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[19]/tc[0]/p[5]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[19]/tc[0]/p[5]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label spans p[4] and p[5]; inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A76",
+   "label": "Comments",
+   "context": "Physical examination > 10. Lungs > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[19]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A77",
+   "label": "Lungs summary",
+   "context": "Physical examination > 10. Lungs > Lungs summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[20]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[20]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[20]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A78",
+   "label": "Comments",
+   "context": "Physical examination > Lungs summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[20]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A79",
+   "label": "Heart palpation",
+   "context": "Physical examination > 11. Heart and large arteries > Heart palpation",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[21]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[21]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A80",
+   "label": "Heart auscultation (rate, rhythm, murmurs, extra sounds)",
+   "context": "Physical examination > 11. Heart and large arteries > Heart auscultation",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[21]/tc[0]/p[7]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[21]/tc[0]/p[7]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label spans p[5]-p[7]; inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A81",
+   "label": "Carotid artery Auscultation/Pain (systolic bruit)",
+   "context": "Physical examination > 11. Heart and large arteries > Carotid artery",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[21]/tc[0]/p[12]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[21]/tc[0]/p[12]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label spans p[10]-p[12]; heading \"Absent Present\" shares the p[11] label line."
+  },
+  {
+   "id": "A82",
+   "label": "Abdominal artery auscultation (bruit)",
+   "context": "Physical examination > 11. Heart and large arteries > Abdominal artery",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[21]/tc[0]/p[15]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[21]/tc[0]/p[15]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label spans p[14]-p[15]; inherits \"Absent / Present\" heading."
+  },
+  {
+   "id": "A83",
+   "label": "Comments",
+   "context": "Physical examination > 11. Heart and large arteries > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[21]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A84",
+   "label": "Heart and large arteries summary",
+   "context": "Physical examination > 11. Heart and large arteries > Heart and large arteries summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[22]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[22]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[22]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A85",
+   "label": "Comments",
+   "context": "Physical examination > Heart and large arteries summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[22]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A86",
+   "label": "Bowel Sounds",
+   "context": "Physical examination > 12a. Abdomen > Bowel Sounds",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[23]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[23]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A87",
+   "label": "Tenderness",
+   "context": "Physical examination > 12a. Abdomen > Tenderness",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[23]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[23]/tc[0]/p[6]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A88",
+   "label": "Masses",
+   "context": "Physical examination > 12a. Abdomen > Masses",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[23]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[23]/tc[0]/p[8]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": true,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"No / Yes\" heading from Tenderness."
+  },
+  {
+   "id": "A89",
+   "label": "Comments",
+   "context": "Physical examination > 12a. Abdomen > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[23]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A90",
+   "label": "Abdomen summary",
+   "context": "Physical examination > 12a. Abdomen > Abdomen summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[24]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[24]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[24]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A91",
+   "label": "Comments",
+   "context": "Physical examination > Abdomen summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[24]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A92",
+   "label": "Palpable",
+   "context": "Physical examination > 12b. Liver > Palpable",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[25]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[25]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": true,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A93",
+   "label": "Comments",
+   "context": "Physical examination > 12b. Liver > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[25]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. The cell already holds a printed instruction paragraph (preserve it); the answer goes below it in the same cell - no separate blank paragraph exists, so the cell slot is used. Printed instruction in the cell: \"If palpable, describe here\"."
+  },
+  {
+   "id": "A94",
+   "label": "Liver summary",
+   "context": "Physical examination > 12b. Liver > Liver summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[26]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[26]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[26]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A95",
+   "label": "Comments",
+   "context": "Physical examination > Liver summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[26]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A96",
+   "label": "Palpable",
+   "context": "Physical examination > 12c. Spleen > Palpable",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[27]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[27]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": true,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A97",
+   "label": "Comments",
+   "context": "Physical examination > 12c. Spleen > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[27]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. The cell already holds a printed instruction paragraph (preserve it); the answer goes below it in the same cell - no separate blank paragraph exists, so the cell slot is used. Printed instruction in the cell: \"If palpable, describe here\"."
+  },
+  {
+   "id": "A98",
+   "label": "Spleen summary",
+   "context": "Physical examination > 12c. Spleen > Spleen summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[28]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[28]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[28]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A99",
+   "label": "Comments",
+   "context": "Physical examination > Spleen summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[28]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A100",
+   "label": "Edematous",
+   "context": "Physical examination > 13. Extremities > Edematous",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A101",
+   "label": "Dependent rubor",
+   "context": "Physical examination > 13. Extremities > Dependent rubor",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "No",
+    "Yes"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"No / Yes\" heading; spaces-aligned."
+  },
+  {
+   "id": "A102",
+   "label": "Radial - Left",
+   "context": "Physical examination > 13. Extremities > Pulses > Radial > Left",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/tbl[0]/tr[1]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Blank cell of the nested Pulses grid (columns Left | Right) inside the Extremities cell; no grading scale is printed (free text, e.g. present/absent or 0-4+)."
+  },
+  {
+   "id": "A103",
+   "label": "Radial - Right",
+   "context": "Physical examination > 13. Extremities > Pulses > Radial > Right",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/tbl[0]/tr[1]/tc[2]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Blank cell of the nested Pulses grid (columns Left | Right) inside the Extremities cell; no grading scale is printed (free text, e.g. present/absent or 0-4+)."
+  },
+  {
+   "id": "A104",
+   "label": "Femoral - Left",
+   "context": "Physical examination > 13. Extremities > Pulses > Femoral > Left",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/tbl[0]/tr[2]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Blank cell of the nested Pulses grid (columns Left | Right) inside the Extremities cell; no grading scale is printed (free text, e.g. present/absent or 0-4+)."
+  },
+  {
+   "id": "A105",
+   "label": "Femoral - Right",
+   "context": "Physical examination > 13. Extremities > Pulses > Femoral > Right",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/tbl[0]/tr[2]/tc[2]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Blank cell of the nested Pulses grid (columns Left | Right) inside the Extremities cell; no grading scale is printed (free text, e.g. present/absent or 0-4+)."
+  },
+  {
+   "id": "A106",
+   "label": "Tibial art. or dorsalis pedis artery - Left",
+   "context": "Physical examination > 13. Extremities > Pulses > Tibial art. or dorsalis pedis artery > Left",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/tbl[0]/tr[3]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Blank cell of the nested Pulses grid (columns Left | Right) inside the Extremities cell; no grading scale is printed (free text, e.g. present/absent or 0-4+)."
+  },
+  {
+   "id": "A107",
+   "label": "Tibial art. or dorsalis pedis artery - Right",
+   "context": "Physical examination > 13. Extremities > Pulses > Tibial art. or dorsalis pedis artery > Right",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[0]/tbl[0]/tr[3]/tc[2]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Blank cell of the nested Pulses grid (columns Left | Right) inside the Extremities cell; no grading scale is printed (free text, e.g. present/absent or 0-4+)."
+  },
+  {
+   "id": "A108",
+   "label": "Comments",
+   "context": "Physical examination > 13. Extremities > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[29]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A109",
+   "label": "Extremities summary",
+   "context": "Physical examination > 13. Extremities > Extremities summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[30]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[30]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[30]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A110",
+   "label": "Comments",
+   "context": "Physical examination > Extremities summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[30]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A111",
+   "label": "Spine",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Spine",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A112",
+   "label": "Shoulders",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Shoulders",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[5]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[5]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A113",
+   "label": "Elbows",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Elbows",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[7]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[7]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A114",
+   "label": "Wrists",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Wrists",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[9]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[9]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A115",
+   "label": "Hands",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Hands",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[11]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[11]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A116",
+   "label": "Hips",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Hips",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[13]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[13]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A117",
+   "label": "Knees",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Knees",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[15]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[15]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A118",
+   "label": "Ankles",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Ankles",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[17]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[17]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A119",
+   "label": "Feet",
+   "context": "Physical examination > 14. Joints Muscles (review swelling, heat or redness, nodularity, ROM, extensibility, tender points) > Feet",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[19]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[31]/tc[0]/p[19]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A120",
+   "label": "Comments",
+   "context": "Physical examination > 14. Joints Muscles > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[31]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A121",
+   "label": "Joints and muscles summary",
+   "context": "Physical examination > 14. Joints Muscles > Joints and muscles summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[32]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[32]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[32]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A122",
+   "label": "Comments",
+   "context": "Physical examination > Joints and muscles summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[32]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row; at the top of page 9, separated from its section by a page break."
+  },
+  {
+   "id": "A123",
+   "label": "Jaundice",
+   "context": "Physical examination > 15. Skin > Jaundice",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A124",
+   "label": "Acne",
+   "context": "Physical examination > 15. Skin > Acne",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Absent / Present\" heading."
+  },
+  {
+   "id": "A125",
+   "label": "Ulcerations",
+   "context": "Physical examination > 15. Skin > Ulcerations",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[6]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Absent / Present\" heading."
+  },
+  {
+   "id": "A126",
+   "label": "Rash",
+   "context": "Physical examination > 15. Skin > Rash",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[8]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Absent / Present\" heading."
+  },
+  {
+   "id": "A127",
+   "label": "Lesions",
+   "context": "Physical examination > 15. Skin > Lesions",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[10]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[10]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Absent / Present\" heading. An extra tab before the codes pushes the boxes right: in the render box 1 sits in the option-2 column and box 2 is pushed out of view (dot leader runs into the Comments column)."
+  },
+  {
+   "id": "A128",
+   "label": "Too dry",
+   "context": "Physical examination > 15. Skin > Too dry",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[12]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[33]/tc[0]/p[12]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Absent / Present\" heading."
+  },
+  {
+   "id": "A129",
+   "label": "Comments",
+   "context": "Physical examination > 15. Skin > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[33]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A130",
+   "label": "Skin summary",
+   "context": "Physical examination > 15. Skin > Skin summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[34]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[34]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[34]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A131",
+   "label": "Comments",
+   "context": "Physical examination > Skin summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[34]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A132",
+   "label": "Posterior",
+   "context": "Physical examination > 16. Lymph Nodes > Cervical > Posterior",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Enlarged",
+    "Tender"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Coded single response (1/2/3) as printed; clinically Enlarged and Tender can co-occur - reviewer may prefer multi_choice."
+  },
+  {
+   "id": "A133",
+   "label": "Anterior",
+   "context": "Physical examination > 16. Lymph Nodes > Cervical > Anterior",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[5]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[5]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[5]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Enlarged",
+    "Tender"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Coded single response (1/2/3) as printed; clinically Enlarged and Tender can co-occur - reviewer may prefer multi_choice. Anterior line is styled Heading7."
+  },
+  {
+   "id": "A134",
+   "label": "Supraclavicular",
+   "context": "Physical examination > 16. Lymph Nodes > Supraclavicular",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[7]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[7]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[7]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Enlarged",
+    "Tender"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Coded single response (1/2/3) as printed; clinically Enlarged and Tender can co-occur - reviewer may prefer multi_choice."
+  },
+  {
+   "id": "A135",
+   "label": "Axillary",
+   "context": "Physical examination > 16. Lymph Nodes > Axillary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[9]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[9]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[9]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Enlarged",
+    "Tender"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Coded single response (1/2/3) as printed; clinically Enlarged and Tender can co-occur - reviewer may prefer multi_choice."
+  },
+  {
+   "id": "A136",
+   "label": "Inguinal",
+   "context": "Physical examination > 16. Lymph Nodes > Inguinal",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[11]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[11]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[0]/p[11]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Enlarged",
+    "Tender"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Coded single response (1/2/3) as printed; clinically Enlarged and Tender can co-occur - reviewer may prefer multi_choice."
+  },
+  {
+   "id": "A137",
+   "label": "Comments",
+   "context": "Physical examination > 16. Lymph Nodes > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[35]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. The cell already holds a printed instruction paragraph (preserve it); the answer goes below it in the same cell - no separate blank paragraph exists, so the cell slot is used. Printed instruction in the cell: \"Note if supraclavicular fullness present.\""
+  },
+  {
+   "id": "A138",
+   "label": "Lymph nodes summary",
+   "context": "Physical examination > 16. Lymph Nodes > Lymph nodes summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[36]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[36]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[36]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A139",
+   "label": "Comments",
+   "context": "Physical examination > Lymph nodes summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[36]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A140",
+   "label": "Finger-Nose-Finger",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Finger-Nose-Finger",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A141",
+   "label": "Gait",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Gait",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[6]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A142",
+   "label": "Heel to shin",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Heel to shin",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[8]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A143",
+   "label": "Tandem stance/gait",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Tandem stance/gait",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[10]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[10]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A144",
+   "label": "with augmentation",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Tandem stance/gait > with augmentation",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[12]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[12]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Sub-item of Tandem stance/gait (\"Tandem stance/gait with augmentation\"); inherits \"Normal / Abnormal\" heading; spaces-aligned."
+  },
+  {
+   "id": "A145",
+   "label": "Romberg",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Romberg",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[15]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[15]/ff[1]"
+   ],
+   "options": [
+    "Negative",
+    "Positive"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A146",
+   "label": "Handedness",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Handedness",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[18]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[18]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[37]/tc[0]/p[18]/ff[2]"
+   ],
+   "options": [
+    "Right hand",
+    "Left hand",
+    "Both hands"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Heading text and codes are aligned with spaces; the render wraps \"Both hands\". Legacy field names Check1, Check2, Check2 (duplicate name)."
+  },
+  {
+   "id": "A147",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[37]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A148",
+   "label": "Cerebellar summary",
+   "context": "Physical examination > 17. Neurologic > 17a. Cerebellar > Cerebellar summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[38]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[38]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[38]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A149",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > Cerebellar summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[38]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A150",
+   "label": "Visual fields (confrontation)",
+   "context": "Physical examination > 17. Neurologic > 17b. Cranial Nerves > Visual fields (confrontation)",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label spans p[2]-p[3]."
+  },
+  {
+   "id": "A151",
+   "label": "Shoulder raise",
+   "context": "Physical examination > 17. Neurologic > 17b. Cranial Nerves > Shoulder raise",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[5]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[5]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A152",
+   "label": "Hearing (gross)",
+   "context": "Physical examination > 17. Neurologic > 17b. Cranial Nerves > Hearing (gross)",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[7]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[7]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A153",
+   "label": "Extra ocular muscles",
+   "context": "Physical examination > 17. Neurologic > 17b. Cranial Nerves > Extra ocular muscles",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[9]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[9]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A154",
+   "label": "Facial expression",
+   "context": "Physical examination > 17. Neurologic > 17b. Cranial Nerves > Facial expression",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[11]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[39]/tc[0]/p[11]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A155",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > 17b. Cranial Nerves > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[39]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A156",
+   "label": "Cranial nerves summary",
+   "context": "Physical examination > 17. Neurologic > 17b. Cranial Nerves > Cranial nerves summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[40]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[40]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[40]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A157",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > Cranial nerves summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[40]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A158",
+   "label": "Light touch",
+   "context": "Physical examination > 17. Neurologic > 17c. Sensory (hands, feet) > Light touch",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[41]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[41]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A159",
+   "label": "Pinprick",
+   "context": "Physical examination > 17. Neurologic > 17c. Sensory (hands, feet) > Pinprick",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[41]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[41]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A160",
+   "label": "Vibration",
+   "context": "Physical examination > 17. Neurologic > 17c. Sensory (hands, feet) > Vibration",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[41]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[41]/tc[0]/p[6]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A161",
+   "label": "Proprioception (great toe, up/down",
+   "context": "Physical examination > 17. Neurologic > 17c. Sensory (hands, feet) > Proprioception (great toe, up/down",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[41]/tc[0]/p[9]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[41]/tc[0]/p[9]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label spans p[8]-p[9]; closing parenthesis missing as printed."
+  },
+  {
+   "id": "A162",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > 17c. Sensory (hands, feet) > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[41]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A163",
+   "label": "Sensory (hands, feet) summary",
+   "context": "Physical examination > 17. Neurologic > 17c. Sensory (hands, feet) > Sensory (hands, feet) summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[42]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[42]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[42]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A164",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > Sensory (hands, feet) summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[42]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A165",
+   "label": "Tone",
+   "context": "Physical examination > 17. Neurologic > 17d. Muscles > Tone",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A166",
+   "label": "Atrophy",
+   "context": "Physical examination > 17. Neurologic > 17d. Muscles > Atrophy",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading; spaces-aligned."
+  },
+  {
+   "id": "A167",
+   "label": "Rise from chair to tip toes",
+   "context": "Physical examination > 17. Neurologic > 17d. Muscles > Rise from chair to tip toes",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[8]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label spans p[7]-p[8]; inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A168",
+   "label": "Involuntary movements",
+   "context": "Physical examination > 17. Neurologic > 17d. Muscles > Involuntary movements",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[11]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[11]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A169",
+   "label": "Proximal muscle strength",
+   "context": "Physical examination > 17. Neurologic > 17d. Muscles > Proximal muscle strength",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[14]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[14]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label and \"Normal Abnormal\" heading are on p[13]; the boxes are on the next paragraph p[14]; the render wraps \"Abnormal\" onto its own line."
+  },
+  {
+   "id": "A170",
+   "label": "Distal muscle strength",
+   "context": "Physical examination > 17. Neurologic > 17d. Muscles > Distal muscle strength",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[16]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[44]/tc[0]/p[16]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Label and heading on p[15]; boxes on p[16]."
+  },
+  {
+   "id": "A171",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > 17d. Muscles > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[44]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A172",
+   "label": "Muscle strength summary",
+   "context": "Physical examination > 17. Neurologic > 17d. Muscles > Muscle strength summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[45]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[45]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[45]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A173",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > Muscle strength summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[45]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A174",
+   "label": "Biceps",
+   "context": "Physical examination > 17. Neurologic > 17e. Reflexes > Biceps",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[2]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[2]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Hyper"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row."
+  },
+  {
+   "id": "A175",
+   "label": "Triceps",
+   "context": "Physical examination > 17. Neurologic > 17e. Reflexes > Triceps",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[4]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[4]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Hyper"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Inherits \"Normal / Abnormal / Hyper\" heading."
+  },
+  {
+   "id": "A176",
+   "label": "Patellar",
+   "context": "Physical examination > 17. Neurologic > 17e. Reflexes > Patellar",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[6]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[6]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Hyper"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Inherits \"Normal / Abnormal / Hyper\" heading."
+  },
+  {
+   "id": "A177",
+   "label": "Ankle Jerk",
+   "context": "Physical examination > 17. Neurologic > 17e. Reflexes > Ankle Jerk",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[8]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[8]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Hyper"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Inherits \"Normal / Abnormal / Hyper\" heading."
+  },
+  {
+   "id": "A178",
+   "label": "Babinski",
+   "context": "Physical examination > 17. Neurologic > 17e. Reflexes > Babinski",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[11]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[46]/tc[0]/p[11]/ff[1]"
+   ],
+   "options": [
+    "Absent",
+    "Present"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A179",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > 17e. Reflexes > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[46]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A180",
+   "label": "Reflexes summary",
+   "context": "Physical examination > 17. Neurologic > 17e. Reflexes > Reflexes summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[47]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[47]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[47]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A181",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > Reflexes summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[47]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A182",
+   "label": "Neurologic summary",
+   "context": "Physical examination > 17. Neurologic > Neurologic summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[48]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[48]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[48]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A183",
+   "label": "Comments",
+   "context": "Physical examination > 17. Neurologic > Neurologic summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[48]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row (overall neurologic)."
+  },
+  {
+   "id": "A184",
+   "label": "Affect",
+   "context": "Physical examination > 18. Mental and Psychological Status > Affect",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[49]/tc[0]/p[2]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[49]/tc[0]/p[2]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row."
+  },
+  {
+   "id": "A185",
+   "label": "Speech",
+   "context": "Physical examination > 18. Mental and Psychological Status > Speech",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[49]/tc[0]/p[4]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[49]/tc[0]/p[4]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A186",
+   "label": "Orientation",
+   "context": "Physical examination > 18. Mental and Psychological Status > Orientation",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[49]/tc[0]/p[6]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[49]/tc[0]/p[6]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A187",
+   "label": "Thoughts",
+   "context": "Physical examination > 18. Mental and Psychological Status > Thoughts",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[49]/tc[0]/p[8]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[49]/tc[0]/p[8]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Inherits \"Normal / Abnormal\" heading."
+  },
+  {
+   "id": "A188",
+   "label": "Comments",
+   "context": "Physical examination > 18. Mental and Psychological Status > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[49]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A189",
+   "label": "Mental/Psychological status summary",
+   "context": "Physical examination > 18. Mental and Psychological Status > Mental/Psychological status summary",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[50]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[50]/tc[0]/p[3]/ff[1]",
+    "word/document.xml#b/tbl[1]/tr[50]/tc[0]/p[3]/ff[2]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal",
+    "Exam not done"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2, 3); options are the printed column headings above the row. Grey-shaded summary row."
+  },
+  {
+   "id": "A190",
+   "label": "Comments",
+   "context": "Physical examination > Mental/Psychological status summary > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[50]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0]). Grey-shaded summary row."
+  },
+  {
+   "id": "A191",
+   "label": "Other (specify)",
+   "context": "Physical examination > 19. Other (specify) > what was examined",
+   "kind": "text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[51]/tc[0]/p[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "No underline: the empty paragraph directly under the \"19. Other (specify)\" label is where the other body system/finding is specified."
+  },
+  {
+   "id": "A192",
+   "label": "Mental status",
+   "context": "Physical examination > 19. Other (specify) > Mental status",
+   "kind": "choice",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[51]/tc[0]/p[3]/ff[0]",
+    "word/document.xml#b/tbl[1]/tr[51]/tc[0]/p[3]/ff[1]"
+   ],
+   "options": [
+    "Normal",
+    "Abnormal"
+   ],
+   "location": "form_field",
+   "duplicate_label": false,
+   "notes": "Legacy FORMCHECKBOX per option (coded 1, 2); options are the printed column headings above the row. Pre-printed item under \"19. Other\"; heading \"Normal Abnormal\" is on p[2], boxes on p[3] (spaces-aligned)."
+  },
+  {
+   "id": "A193",
+   "label": "Comments",
+   "context": "Physical examination > 19. Other (specify) > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[51]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A194",
+   "label": "Other (specify)",
+   "context": "Physical examination > 20. Other (specify) > what was examined",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[52]/tc[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "The left cell holds only the printed label paragraph (p[0]); the specification/finding is written in the blank space below it in the same cell, so the cell slot is used."
+  },
+  {
+   "id": "A195",
+   "label": "Comments",
+   "context": "Physical examination > 20. Other (specify) > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[52]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A196",
+   "label": "Other (specify)",
+   "context": "Physical examination > 21. Other (specify) > what was examined",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[53]/tc[0]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "The left cell holds only the printed label paragraph (p[0]); the specification/finding is written in the blank space below it in the same cell, so the cell slot is used."
+  },
+  {
+   "id": "A197",
+   "label": "Comments",
+   "context": "Physical examination > 21. Other (specify) > Comments",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[53]/tc[1]"
+   ],
+   "location": "table",
+   "duplicate_label": true,
+   "notes": "Right-hand \"Comments\" column cell (\"If abnormal, explain or describe below\"); free text. Cell contains only tab characters (tc[1]/p[0])."
+  },
+  {
+   "id": "A198",
+   "label": "Impression: Overall impression of this patient",
+   "context": "Section 4: Clinical Impressions/ Differential Diagnoses",
+   "kind": "long_text",
+   "slots": [
+    "word/document.xml#b/p[10]",
+    "word/document.xml#b/p[12]",
+    "word/document.xml#b/p[14]",
+    "word/document.xml#b/p[16]",
+    "word/document.xml#b/p[18]",
+    "word/document.xml#b/p[20]",
+    "word/document.xml#b/p[22]",
+    "word/document.xml#b/p[24]",
+    "word/document.xml#b/p[26]",
+    "word/document.xml#b/p[28]",
+    "word/document.xml#b/p[30]",
+    "word/document.xml#b/p[32]",
+    "word/document.xml#b/p[34]",
+    "word/document.xml#b/p[36]"
+   ],
+   "location": "body",
+   "duplicate_label": false,
+   "notes": "14 ruled lines, each a paragraph with one tab run to a right tab stop at 9360 twips with an underscore leader (the even paragraphs p[10]..p[36]); the odd paragraphs between them (p[11]..p[35]) carry the same tab stop but no tab, i.e. spacing only. The bracketed italic guidance (p[8]) asks for mental status, physical condition, weight, apparent age, problem systems and differential diagnoses. Section 4 is its own Word section (header2, empty) on page 15."
+  }
+ ],
+ "preserve": [
+  {
+   "what": "other",
+   "slots": [
+    "word/header1.xml#hf/p[0]"
+   ],
+   "notes": "Form title \"Physical Examination\" in the page header (pages 1-14)."
+  },
+  {
+   "what": "form id/version",
+   "slots": [
+    "word/header1.xml#hf/p[1]"
+   ],
+   "notes": "\"[Study Name/ID pre-filled]\" - sponsor/study placeholder meant to be pre-filled by the study, not by the clinician at the visit; administrative. Shares the paragraph with the \"Site Name:\" answer area, which must be filled without disturbing it."
+  },
+  {
+   "what": "form id/version",
+   "slots": [
+    "word/footer1.xml#hf/p[0]"
+   ],
+   "notes": "\"ME/CFS CDE Version 1.0\" form version text in the footer (used by both sections)."
+  },
+  {
+   "what": "page number field",
+   "slots": [
+    "word/footer1.xml#hf/p[0]"
+   ],
+   "notes": "\"Page {PAGE} of {NUMPAGES}\" fields; cached result in the file says 14 of 14 while the render has 15 pages - must stay live fields, never overwritten with literal numbers."
+  },
+  {
+   "what": "instructions",
+   "slots": [
+    "word/document.xml#b/tbl[0]/tr[4]/tc[0]/p[1]"
+   ],
+   "notes": "\"Please specify how many minutes\" above the Standing-for blank."
+  },
+  {
+   "what": "instructions",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[0]/tc[1]/p[1]"
+   ],
+   "notes": "Comments column heading \"If abnormal, explain or describe below\" (repeating table header row on every page)."
+  },
+  {
+   "what": "instructions",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[25]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[1]/tr[27]/tc[1]/p[0]",
+    "word/document.xml#b/tbl[1]/tr[35]/tc[1]/p[0]"
+   ],
+   "notes": "Printed instructions inside answer cells: \"If palpable, describe here\" (Liver, Spleen) and \"Note if supraclavicular fullness present.\" (Lymph Nodes). Filled comments must go below them, not replace them."
+  },
+  {
+   "what": "instructions",
+   "slots": [
+    "word/document.xml#b/p[8]"
+   ],
+   "notes": "Bracketed italic guidance for the Section 4 Impression."
+  },
+  {
+   "what": "existing check state",
+   "slots": [
+    "word/document.xml#b/tbl[1]"
+   ],
+   "notes": "All 274 legacy FORMCHECKBOX fields have default value 0 (unchecked) and no w:checked; options not selected must stay unchecked. The printed response codes 1/2/3 beside each box are part of the CDE coding and must be preserved."
+  },
+  {
+   "what": "other",
+   "slots": [
+    "word/document.xml#b/tbl[1]/tr[43]/tc[0]",
+    "word/document.xml#b/tbl[1]/tr[43]/tc[1]"
+   ],
+   "notes": "Empty unlabeled spacer row (dashed borders, bottom of page 11) between the Sensory summary and 17d. Muscles; not an answer area."
+  }
+ ],
+ "families_observed": [
+  "F1",
+  "F2",
+  "F3",
+  "F4",
+  "F5",
+  "F6",
+  "F9",
+  "F10"
+ ],
+ "difficulties": "Almost every answer is a legacy FORMCHECKBOX (274, all unchecked) inside one long two-column table (Physical examination | Comments) that runs from page 2 to page 14; option labels (Normal/Abnormal, No/Yes, Yes/No, Absent/Present, ...) are printed once on a heading line and inherited by the following item lines, and the polarity flips between items (Neck Supple is Yes=1/No=2 but Masses is No=1/Yes=2; Pupils Yes/No). Several items inherit semantically odd headings (Thyroid Size under No/Yes, Photophobia under Normal/Abnormal). Alignment is done with long tab runs and, in places, runs of spaces, so labels, headings and boxes sit in separate paragraphs; the Lesions row mis-renders with its second box pushed out of view. Every body-system row and every grey summary row has a free-text Comments cell to the right, three of which already contain printed instructions. Section 1 vitals use per-digit glyph boxes (Symbol font char F0F0, rendered as dots) with decimal points - filling them means placing digits into fixed-width box positions, BP systolic and diastolic share one paragraph, Weight/Height and Waist/Hip share paragraphs, and Height is split into feet and inches. Header answer areas (Site Name, Subject ID) sit on the same header paragraphs as a sponsor pre-fill placeholder. A nested Pulses table (Left/Right) lives inside the Extremities cell. Section 4 is a separate Word section with 14 underscore tab-leader lines interleaved with spacing paragraphs. The form has no signature, date or examiner-name field.",
+ "unsupportable": "None identified - no anatomical diagrams or drawing areas. The per-digit glyph boxes and the pulses grid carry no printed scale, so their exact expected format (e.g. pulse grade) is not defined by the form.",
+ "review_changes": [
+  {
+   "change": "modified",
+   "area": "A144 (with augmentation)",
+   "why": "Context named only '17a. Cerebellar > with augmentation'; the item is printed indented under 'Tandem stance/gait' and is meaningless without it, so the parent item was added to the context to disambiguate (options, slots and kind unchanged)."
+  }
+ ]
+}

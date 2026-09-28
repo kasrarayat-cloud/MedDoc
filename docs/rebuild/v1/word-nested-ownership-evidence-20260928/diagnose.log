@@ -1,0 +1,55 @@
+D03 49
+CELL b/tbl[0]/tr[9]/tc[0]
+p b/tbl[0]/tr[9]/tc[0]/p[0] ''
+p b/tbl[0]/tr[9]/tc[0]/p[1] '10. Please indicate what your headaches usually feel like: (tick all that apply):'
+p b/tbl[0]/tr[9]/tc[0]/p[2] ''
+tbl b/tbl[0]/tr[9]/tc[0]/tbl[0] '☐ Throbbing/Pulsing ☐ Dull ☐ Shooting ☐ Achy ☐ Stabbing ☐ Burning ☐ Tight ☐ Pressure ☐ Other: __________________________________'
+p b/tbl[0]/tr[9]/tc[0]/p[3] ''
+FIELD v3_17 text Please indicate what your headaches usually feel like: (tick all that apply) 10 > When did your headaches start? #____ days ago, # _____ weeks ago, b/tbl[0]/tr[9]/tc[0]/p[2] {'type': 'paragraph'}
+FIELD v3_18 choice Choose 10 · occurrence 2 of 7 (table row 1: ☐ Throbbing/Pulsing) b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[9]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs', 'glyph': 0}]}
+CELL b/tbl[0]/tr[16]/tc[0]
+p b/tbl[0]/tr[16]/tc[0]/p[0] '17. Do you experience any of the following symptoms before your headache begins? Please tick all that apply.'
+p b/tbl[0]/tr[16]/tc[0]/p[1] 'Visual:'
+tbl b/tbl[0]/tr[16]/tc[0]/tbl[0] '☐ Flashing lights ☐ Loss of vision in one eye ☐ Tunnel vision ☐ Spots: bright/dark ☐ Zigzag lines ☐ Loss of vision on one side ☐ Double vision ☐ Geometric forms ☐ Wavy lines ☐ Total blindness ☐ Distor'
+p b/tbl[0]/tr[16]/tc[0]/p[2] 'Sensory and other:'
+tbl b/tbl[0]/tr[16]/tc[0]/tbl[1] '☐ Numbness/tingling [Where? ___________________ ]☐ Light headedness ☐ Speech difficulty ☐ One-sided weakness [☐ Right  ☐ Left]☐ Vertigo ☐ Confusion/déjà vu/hallucinations ☐ Dizziness/unsteadiness ☐ Ot'
+p b/tbl[0]/tr[16]/tc[0]/p[3] ''
+p b/tbl[0]/tr[16]/tc[0]/p[4] 'If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur ☐ during the headache,  ☐ after the headache, OR  ☐ without the headache'
+p b/tbl[0]/tr[16]/tc[0]/p[5] ''
+FIELD v3_26 choice Visual 10 b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[1]/tc[3]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[2]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[0]/tr[2]/tc[3]/p[0]/glyphs', 'glyph': 0}]}
+FIELD v3_27 choice Sensory and other 10 b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[0]/tc[0]/p[0]/glyphs {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'sdt', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[1]/p[0]/sdt[0]'}, {'kind': 'sdt', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[1]/tc[1]/p[0]/sdt[1]'}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[2]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[2]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[3]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/tbl[1]/tr[3]/tc[1]/p[0]/glyphs', 'glyph': 0}]}
+FIELD v3_28 choice If you have any of these symptoms, they usually last: _____ minutes and terminate _____ minutes before the pain starts OR occur 10 > When did your headaches start? #____ days ago, # _____ weeks ago, b/tbl[0]/tr[16]/tc[0]/p[4]/glyphs {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/p[4]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/p[4]/glyphs', 'glyph': 1}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[16]/tc[0]/p[4]/glyphs', 'glyph': 2}]}
+CELL b/tbl[0]/tr[19]/tc[0]
+p b/tbl[0]/tr[19]/tc[0]/p[0] '20. Do any of the following factors relieve your headaches:'
+p b/tbl[0]/tr[19]/tc[0]/p[1] ''
+tbl b/tbl[0]/tr[19]/tc[0]/tbl[0] '☐ Lying down ☐ Dark quiet room ☐ Hot compress ☐ Massage ☐ N/A☐ Standing ☐ Ice/Cold compress ☐ Keeping active/pacing ☐ Pregnancy ☐ Other: _______________________________________________________________'
+p b/tbl[0]/tr[19]/tc[0]/p[2] ''
+FIELD v3_37 text Do any of the following factors relieve your headaches 10 > When did your headaches start? #____ days ago, # _____ weeks ago, b/tbl[0]/tr[19]/tc[0]/p[1] {'type': 'paragraph'}
+FIELD v3_38 choice Choose 10 · occurrence 7 of 7 (table row 1: ☐ Lying down) b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[2]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[3]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[0]/tc[4]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[1]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[1]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[1]/tc[2]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[1]/tc[3]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[19]/tc[0]/tbl[0]/tr[2]/tc[0]/p[0]/glyphs', 'glyph': 0}]}
+D10 226
+CELL b/tbl[0]/tr[1]/tc[0]
+p b/tbl[0]/tr[1]/tc[0]/p[0] 'Supine measurements'
+p b/tbl[0]/tr[1]/tc[0]/p[1] ''
+FIELD v3_2 text Supine measurements  b/tbl[0]/tr[1]/tc[0]/p[1] {'type': 'paragraph'}
+CELL b/tbl[1]/tr[1]/tc[0]
+p b/tbl[1]/tr[1]/tc[0]/p[0] '\t\t\t1.\tHead'
+p b/tbl[1]/tr[1]/tc[0]/p[1] '\t'
+p b/tbl[1]/tr[1]/tc[0]/p[2] '\t\t\t\t\t\t\t\tNormal\tAlopecia'
+p b/tbl[1]/tr[1]/tc[0]/p[3] '\t\t\t\t\t\t\t\t\t\tHair\t1 \t2 '
+p b/tbl[1]/tr[1]/tc[0]/p[4] '\t\t\t\t\t\t\t\t\t\t'
+p b/tbl[1]/tr[1]/tc[0]/p[5] '\t\t\t\t\t\t\tNormal\tAbnormal'
+p b/tbl[1]/tr[1]/tc[0]/p[6] '\t\t\t\t\t\t\t\t\t\tScalp\t1 \t2 '
+p b/tbl[1]/tr[1]/tc[0]/p[7] '\t\t\t'
+p b/tbl[1]/tr[1]/tc[0]/p[8] ''
+FIELD v3_16 text Head Comments > Physical examination b/tbl[1]/tr[1]/tc[0]/p[1] {'type': 'paragraph'}
+FIELD v3_17 choice Hair 1 Head > Physical examination b/tbl[1]/tr[1]/tc[0]/p[3]/ff[0] {'type': 'checkboxes', 'boxes': [{'kind': 'ff', 'part': 'word/document.xml', 'slot': 'b/tbl[1]/tr[1]/tc[0]/p[3]/ff[0]'}, {'kind': 'ff', 'part': 'word/document.xml', 'slot': 'b/tbl[1]/tr[1]/tc[0]/p[3]/ff[1]'}]}
+FIELD v3_18 choice Scalp 1 Head > Physical examination b/tbl[1]/tr[1]/tc[0]/p[6]/ff[0] {'type': 'checkboxes', 'boxes': [{'kind': 'ff', 'part': 'word/document.xml', 'slot': 'b/tbl[1]/tr[1]/tc[0]/p[6]/ff[0]'}, {'kind': 'ff', 'part': 'word/document.xml', 'slot': 'b/tbl[1]/tr[1]/tc[0]/p[6]/ff[1]'}]}
+CELL b/tbl[1]/tr[2]/tc[0]
+p b/tbl[1]/tr[2]/tc[0]/p[0] '\t\t\t\t\t\t\tHead summary'
+p b/tbl[1]/tr[2]/tc[0]/p[1] '\t\t\t\t\t\t\t\t\t'
+p b/tbl[1]/tr[2]/tc[0]/p[2] '\t\t\t\t\t\t\t\t\t\tNormal\tAbnormal\tExam not done'
+p b/tbl[1]/tr[2]/tc[0]/p[3] '\t\t\t\t\t\t\t\t\t\t\t\t1 \t2 \t3 '
+p b/tbl[1]/tr[2]/tc[0]/p[4] '\t\t\t\t\t\t\t'
+p b/tbl[1]/tr[2]/tc[0]/p[5] '\t'
+FIELD v3_20 long_text Head summary Head > Physical examination b/tbl[1]/tr[2]/tc[0]/p[1] {'type': 'paragraph'}
+FIELD v3_21 choice 1 Head summary > Physical examination b/tbl[1]/tr[2]/tc[0]/p[3]/ff[0] {'type': 'checkboxes', 'boxes': [{'kind': 'ff', 'part': 'word/document.xml', 'slot': 'b/tbl[1]/tr[2]/tc[0]/p[3]/ff[0]'}, {'kind': 'ff', 'part': 'word/document.xml', 'slot': 'b/tbl[1]/tr[2]/tc[0]/p[3]/ff[1]'}, {'kind': 'ff', 'part': 'word/document.xml', 'slot': 'b/tbl[1]/tr[2]/tc[0]/p[3]/ff[2]'}]}

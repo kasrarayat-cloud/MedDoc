@@ -1,0 +1,30 @@
+convert /in/D03-q10-ordinary.docx as a Writer document -> /out/D03-q10-ordinary.pdf using filter : writer_pdf_Export
+
+
+(process:21): dconf-CRITICAL **: 00:21:00.743: unable to create directory '/home/gotenberg/.cache/dconf': Read-only file system.  dconf will not work properly.
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+
+(process:26): dconf-CRITICAL **: 00:21:01.186: unable to create directory '/home/gotenberg/.cache/dconf': Read-only file system.  dconf will not work properly.
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories
+Fontconfig error: No writable cache directories

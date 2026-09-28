@@ -1,0 +1,73 @@
+test_full_nested_question_and_cardinality_preserve_scope_and_checked_state (documents.test_question_boxes.NestedCheckboxOwnership.test_full_nested_question_and_cardinality_preserve_scope_and_checked_state) ... 
+  test_full_nested_question_and_cardinality_preserve_scope_and_checked_state (documents.test_question_boxes.NestedCheckboxOwnership.test_full_nested_question_and_cardinality_preserve_scope_and_checked_state) (heading='', subsection=False) ... FAIL
+  test_full_nested_question_and_cardinality_preserve_scope_and_checked_state (documents.test_question_boxes.NestedCheckboxOwnership.test_full_nested_question_and_cardinality_preserve_scope_and_checked_state) (heading='Donor', subsection=False) ... FAIL
+  test_full_nested_question_and_cardinality_preserve_scope_and_checked_state (documents.test_question_boxes.NestedCheckboxOwnership.test_full_nested_question_and_cardinality_preserve_scope_and_checked_state) (heading='Current visit', subsection=True) ... FAIL
+test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed) ... 
+  test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed) (spacer='underline') ... FAIL
+  test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed) (spacer='other_question') ... FAIL
+test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible) ... FAIL
+
+======================================================================
+FAIL: test_full_nested_question_and_cardinality_preserve_scope_and_checked_state (documents.test_question_boxes.NestedCheckboxOwnership.test_full_nested_question_and_cardinality_preserve_scope_and_checked_state) (heading='', subsection=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 532, in test_full_nested_question_and_cardinality_preserve_scope_and_checked_state
+    self.assertEqual(target['kind'], 'multi_choice')
+AssertionError: 'choice' != 'multi_choice'
+- choice
++ multi_choice
+
+
+======================================================================
+FAIL: test_full_nested_question_and_cardinality_preserve_scope_and_checked_state (documents.test_question_boxes.NestedCheckboxOwnership.test_full_nested_question_and_cardinality_preserve_scope_and_checked_state) (heading='Donor', subsection=False)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 532, in test_full_nested_question_and_cardinality_preserve_scope_and_checked_state
+    self.assertEqual(target['kind'], 'multi_choice')
+AssertionError: 'choice' != 'multi_choice'
+- choice
++ multi_choice
+
+
+======================================================================
+FAIL: test_full_nested_question_and_cardinality_preserve_scope_and_checked_state (documents.test_question_boxes.NestedCheckboxOwnership.test_full_nested_question_and_cardinality_preserve_scope_and_checked_state) (heading='Current visit', subsection=True)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 532, in test_full_nested_question_and_cardinality_preserve_scope_and_checked_state
+    self.assertEqual(target['kind'], 'multi_choice')
+AssertionError: 'choice' != 'multi_choice'
+- choice
++ multi_choice
+
+
+======================================================================
+FAIL: test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed) (spacer='underline')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 553, in test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed
+    self.assertTrue(any('Nested option' in note for note in result['notes']))
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed) (spacer='other_question')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 553, in test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed
+    self.assertTrue(any('Nested option' in note for note in result['notes']))
+AssertionError: False is not true
+
+======================================================================
+FAIL: test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible (documents.test_question_boxes.NestedCheckboxOwnership.test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 557, in test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible
+    self.assertFalse([f for f in mixed['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+AssertionError: [{'key': 'v3_1', 'label': 'Choose', 'kind': 'choice', 'context': '', 'locator': {'contract': 'v3', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'target': {'type': 'checkboxes', 'boxes': [{'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 0}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 1}, {'kind': 'glyph', 'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'glyph': 2}]}, 'fingerprint': 'cc3e2f994e08c5fc8212bd66830172b7b7d350dced448ad44d57df22a3ff3cf9', 'extra': [{'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'fingerprint': '566cc4ffcaa129bda5a709723242ddf117516fd4f1b929379a9163b9c791cfcd'}]}, 'options': ['Tightness', 'Weakness [', 'Right', 'Left]']}] is not false
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.350s
+
+FAILED (failures=6)
+Found 3 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).
