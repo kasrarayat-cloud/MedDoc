@@ -915,13 +915,18 @@ class TabColumnOwnership(unittest.TestCase):
                     self.assertTrue(any('Tab-column' in n and 'Finding' in n for n in result['notes']))
 
     def test_literal_cardinality_is_preserved_and_missing_states_unchanged(self):
+        # A coded row records one code: a title asking for several codes is never honoured by widening it, and never
+        # overruled by narrowing it; the row is held (R4-F3). An ordinary title keeps one code per row.
         raw=data(self.form(many=True));result=self.proposal(raw)
-        field=next(f for f in result['fields'] if f['locator']['target']['type']=='checkboxes')
-        self.assertEqual(field['kind'],'multi_choice')
-        out=self.proposed_fill(raw,result['fields'],{field['key']:field['options']})
-        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),field),[True,True])
+        self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
+        self.assertTrue(any('check-all instruction governs coded rows' in n for n in result['notes']))
         with ZipFile(io.BytesIO(raw)) as old,ZipFile(io.BytesIO(self.proposed_fill(raw,result['fields'],{}))) as new:
             self.assertEqual({n:old.read(n) for n in old.namelist()},{n:new.read(n) for n in new.namelist()})
+        raw=data(self.form());result=self.proposal(raw)
+        field=next(f for f in result['fields'] if f['locator']['target']['type']=='checkboxes')
+        self.assertEqual(field['kind'],'choice')
+        with self.assertRaises(w.V3Failure):
+            self.proposed_fill(raw,result['fields'],{field['key']:field['options']})
 
     def test_inherited_stops_clear_override_and_same_indent_are_resolved(self):
         doc=self.form(inherited=True)
@@ -968,6 +973,8 @@ class TabColumnOwnership(unittest.TestCase):
         self.assertTrue(any('Tab-column' in note for note in result['notes']))
 
     def test_governing_cardinality_and_conflicting_scopes(self):
+        # A heading asking for several codes over coded rows is never honoured by widening them (R4-F3): held, and so
+        # is a conflicting title.
         for conflict in (False, True):
             with self.subTest(conflict=conflict):
                 doc=self.form()
@@ -976,12 +983,9 @@ class TabColumnOwnership(unittest.TestCase):
                 if conflict:cell.paragraphs[0].text='Examination; choose one.'
                 raw=data(doc);result=self.proposal(raw)
                 fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
-                if conflict:
-                    self.assertFalse(fields);self.assertTrue(any('cardinality' in n for n in result['notes']))
-                else:
-                    self.assertEqual(fields[0]['kind'],'multi_choice')
-                    out=self.proposed_fill(raw,result['fields'],{fields[0]['key']:['Pain','Swelling']})
-                    self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),fields[0]),[True,True])
+                self.assertFalse(fields)
+                self.assertTrue(any('cardinality' in n or 'check-all instruction governs coded rows' in n
+                                    for n in result['notes']))
         doc=self.form();doc.paragraphs[0].text='Symptoms; select up to 1.'
         result=self.proposal(data(doc))
         self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
