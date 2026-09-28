@@ -51,8 +51,12 @@ class LayoutContainment(unittest.TestCase):
     def test_wrong_column_and_crossing_adjacent_boundary_refuse(self):
         self.assertFalse(self.result(shift=80)['passed'])
         proof=self.result()['measurements'][0]
-        shift=proof['header']['left']-proof['row']['left']-.001
-        self.assertFalse(self.result(shift=shift)['passed'])
+        # A header word owns the row segment centred under it (refutation 2026-09-28 F10: a centred '1 ☐'
+        # may be wider than a short word); the centre one hundredth of a point past the word is refused.
+        centre=(proof['row']['left']+proof['row']['right'])/2
+        self.assertFalse(self.result(shift=proof['header']['right']-centre+.001)['passed'])
+        self.assertTrue(self.result(shift=proof['header']['right']-centre-.001)['passed'])
+        self.assertTrue(self.result(shift=proof['header']['left']-proof['row']['left']-.001)['passed'])
 
     def test_overwide_overlapping_and_ambiguous_printed_pairs_refuse(self):
         for kwargs in ({'wide':80},{'second':120},{'duplicate':True}):
@@ -81,7 +85,9 @@ class LayoutContainment(unittest.TestCase):
     def test_control_only_segment_measures_every_owned_stroke(self):
         candidate=copy.deepcopy(self.candidate);candidate['rendered_source']['row'][1][-1]['checked']=True
         for segment in candidate['rendered_source']['row'][1:]:segment.pop(0)
-        for paint,expected in ((b'',True),(b'40 w ',False),(b'2 J 30 w ',False)):
+        # Every owned stroke widens the measured control: a stroke that stays centred under 'Normal' and
+        # within its column still passes (F10), and its measured extent is the stroked ink, not the rectangle.
+        for paint,expected in ((b'',True),(b'40 w ',True),(b'2 J 30 w ',True)):
             with self.subTest(paint=paint):
                 pages=self.pages(checked=True); page=pages[0]
                 needle=b'120 278 m 130 268 l S 130 278 m 120 268 l S'
@@ -95,6 +101,9 @@ class LayoutContainment(unittest.TestCase):
                 owned=[line['paths'][i]['bounds'] for i in box['own_paths']]
                 self.assertEqual(box['ink'],[min(b[0] for b in owned),min(b[1] for b in owned),
                                             max(b[2] for b in owned),max(b[3] for b in owned)])
+                row=result['measurements'][0]['row']
+                self.assertEqual((row['left'],row['right']),(box['ink'][0],box['ink'][2]))
+                if paint:self.assertLess(row['left'],119)
 
     def test_embedded_ink_bounds_are_used_instead_of_advances(self):
         lines=geometry(self.pages()[0]);normal=next(line for line in lines if line['text']=='NormalAbnormal')

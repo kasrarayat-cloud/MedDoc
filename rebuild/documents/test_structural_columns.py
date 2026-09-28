@@ -731,8 +731,10 @@ class PaintedFixture(unittest.TestCase):
 class NeverPrintedCharacters(PaintedFixture):
     """F1: two places that print the same thing count as two, whatever the source holds that never prints."""
 
-    def form(self, spleen_header='\tNormal\tAbnormal', *, hidden=False, liver_header='\tNormal\tAbnormal', caps=False):
+    def form(self, spleen_header='\tNormal\tAbnormal', *, hidden=False, liver_header='\tNormal\tAbnormal', caps=False,
+             styled=False):
         from docx.oxml import OxmlElement
+        from docx.enum.style import WD_STYLE_TYPE
         liver = ['12b.\tLiver', (liver_header, (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (4320, 5760)),
                  ('Tenderness\t1 ☐\t2 ☐', (4320, 5760))]
         spleen = ['12c.\tSpleen', (spleen_header, (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (2880, 4320)),
@@ -741,6 +743,9 @@ class NeverPrintedCharacters(PaintedFixture):
         header = doc.tables[0].cell(1, 0).paragraphs[1]
         if hidden:
             run = header.add_run('X'); run._r.get_or_add_rPr().append(OxmlElement('w:vanish'))
+        if styled:  # hidden by its character style, not by its own properties
+            style = doc.styles.add_style('Unprinted', WD_STYLE_TYPE.CHARACTER); style.font.hidden = True
+            header.add_run('X', style='Unprinted')
         if caps:
             for run in header.runs:
                 run._r.get_or_add_rPr().append(OxmlElement('w:caps'))
@@ -751,6 +756,7 @@ class NeverPrintedCharacters(PaintedFixture):
                           ('zero width space', self.form('\tNor​mal\tAbnormal')),
                           ('word joiner', self.form('\tNor⁠mal\tAbnormal')),
                           ('hidden run', self.form(hidden=True)),
+                          ('hidden by style', self.form(styled=True)),
                           ('capitals by formatting', self.form('\tnormal\tabnormal', liver_header='\tNORMAL\tABNORMAL', caps=True))):
             with self.subTest(name):
                 proposal, _, _ = layout_source.prepare(raw)
@@ -787,6 +793,28 @@ class NeverPrintedCharacters(PaintedFixture):
                 answered = [dict(c, untouched=False) if c['id'] in liver else c for c in candidates]
                 with self.assertRaises(ValueError):
                     containment(pages, answered)
+
+
+class RenderedOnAnotherPage(PaintedFixture):
+    """F1: the rendered repeat is looked for on every page, not only on the matched one."""
+
+    def test_the_same_text_painted_on_another_page_is_a_second_place(self):
+        from .layout_geometry import containment
+        glyph = lambda text: [{'kind': 'glyph', 'text': text}]
+        header = [[], glyph('Normal'), glyph('Abnormal')]
+        row = [glyph('Palpation')] + [glyph(str(i + 1) + ' ') + [{'kind': 'ff_checkbox', 'text': '\ufffc', 'checked': False}]
+                                      for i in range(2)]
+        candidate = {'id': 'c', 'source': {'options': ['Normal', 'Abnormal']}, 'rendered_source': {
+            'header': header, 'row': row, 'row_dot_leaders': False, 'source_occurrences': 1}}
+        lines = [(300, [(200, 'Normal'), (300, 'Abnormal')]),
+                 (280, [(20, 'Palpation'), (212, '1 '), (222, None), (312, '2 '), (322, None)])]
+        own = drawn(self.pdf, lines)
+        self.assertTrue(containment([own[0]], [candidate])['passed'])
+        # The second page paints the same characters in the same order (so with the same paint positions);
+        # a word after them keeps its header line from matching whole.
+        other = drawn(self.pdf, lines + [(300, [(380, 'Findings')])])
+        with self.assertRaises(ValueError):
+            containment([own[0], other[0]], [candidate])
 
 
 class RowQuestionCells(unittest.TestCase):
@@ -990,11 +1018,38 @@ class NeighbourTextOnTheSameBaseline(PaintedFixture):
     def test_text_that_is_not_printed_beside_the_row_still_refuses(self):
         from .layout_geometry import containment
         candidate = self.prepared()
+        from .layout_geometry import geometry
+        header = next(l for l in geometry(drawn(self.pdf, self.cell)[0]) if l['y'] == 280)
+        end = header['records'][-1]['ink'][2]
         for stray in ([(280, [(420, 'Unrelated words')])],       # not the row's other cells
                       [(280, [(60, 'Scalp')])],                  # the comment cell is to the right, never the left
-                      [(280, [(360, 'cm, sutured.')])]):         # inside the row's own printed extent
+                      [(280, [(360, 'cm, sutured.')])],          # inside the row's own printed extent
+                      [(280, [(end - 1.5, 'cm, sutured.')])]):   # its ink touches the row's own ink
             with self.subTest(stray=stray), self.assertRaises(ValueError):
                 containment(drawn(self.pdf, self.cell + stray), [candidate])
+
+    def test_a_line_that_reads_as_the_paragraph_in_two_places_is_ambiguous(self):
+        from .layout_geometry import containment
+        candidate = self.prepared()
+        header = candidate['rendered_source']['header']
+        text = ''.join(i['text'] for segment in header for i in segment).replace(' ', '')
+        for neighbours in ({'left': text, 'right': text},):
+            doubled = dict(candidate, rendered_source=dict(candidate['rendered_source'], neighbours=neighbours))
+            line = [(10, 'Normal'), (52, 'Abnormal'), (104, 'Exam not done'), (200, 'Normal'), (242, 'Abnormal'), (294, 'Exam not done')]
+            lines = [self.cell[0], self.cell[2], (280, line)]  # the row painted first: only the line itself is ambiguous
+            with self.assertRaises(ValueError):
+                containment(drawn(self.pdf, lines), [doubled])
+        # Without text beside the row a line is the paragraph alone, not even a space more on either side.
+        for extra in ((280, [(5, ' ')]), (280, [(420, ' ')])):
+            with self.subTest(extra=extra):
+                alone = dict(candidate, rendered_source=dict(candidate['rendered_source'], neighbours={'left': '', 'right': ''}))
+                self.assertTrue(containment(drawn(self.pdf, self.cell), [alone])['passed'])
+                with self.assertRaises(ValueError):
+                    containment(drawn(self.pdf, self.cell + [extra]), [alone])
+        for neighbours in ({'left': 1, 'right': ''}, {'right': ''}, ['', ''], {'left': '', 'right': '', 'other': ''}):
+            malformed = dict(candidate, rendered_source=dict(candidate['rendered_source'], neighbours=neighbours))
+            with self.subTest(neighbours=neighbours), self.assertRaises(ValueError):
+                containment(drawn(self.pdf, self.cell), [malformed])
 
 
 class CentredControlsUnderNarrowWords(PaintedFixture):
