@@ -1828,7 +1828,7 @@ def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_unit
             note_units = [{'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)}]
             corrections = note_units
         preceding = v3_preceding_reading(notes, asked, context, note_units, v3_parsed)
-        preceding['catalogue'] = fields
+        if getattr(settings, 'V3_FIELD_RELATIONS', False): preceding['catalogue'] = fields
         result += ({'units': note_units, 'corrections': corrections, 'preceding': preceding},)
     return result
 
@@ -2787,8 +2787,13 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
                     and reading['subjects'][unit['id']] == label)}
     matches = reading['named'].get(label, ())
     if len(matches) == 1:
-        from .v3_destination import side_warnings
-        warnings.update((unit['id'], unit) for unit in side_warnings(matches[0], selected.values()))
+        from .v3_destination import side_warnings, policy_warnings, temporal_warnings, option_warnings
+        warnings.update((unit['id'], unit) for unit in
+                        side_warnings(matches[0], selected.values()) + policy_warnings(matches[0], selected.values()) +
+                        temporal_warnings(matches[0], selected.values()))
+        if answer_text is not None:
+            warnings.update((unit['id'], unit) for unit in
+                option_warnings(matches[0], reading['units'], selected.values(), str(answer_text).splitlines()))
     warnings.update((unit['id'], unit) for unit in history['warnings'])
     warnings.update((unit['id'], unit) for unit in ordinary['warnings'])
     if len(matches) > 1 and selected and not ordinary['valid']:
@@ -2971,7 +2976,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         if v3:
             scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
             scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
-        if v3 and (item.key in complete_paragraphs or scoped['complete'] or history['ids']):
+        if v3 and (item.key in complete_paragraphs or scoped['complete'] or history['ids'] or ordinary['ids']):
             choices=sorted(choices, key=lambda unit: unit['start'] if isinstance(unit,dict) else allowed[unit][0]['start'])
         for choice in choices:
             quote=choice['quote'] if isinstance(choice,dict) else choice

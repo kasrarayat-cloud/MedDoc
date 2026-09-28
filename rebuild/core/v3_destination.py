@@ -3,7 +3,8 @@ import re
 import unicodedata
 
 
-_SIDE = re.compile(r'\b(?:left(?!\s+(?:blank|empty|unchanged)\b)|right(?!\s+for\b)|lt|rt|bilateral|bil)\b'
+_SIDE = re.compile(r'\b(?:left(?!\s+(?:blank|empty|unchanged|before|after|the\s+(?:clinic|room|hospital))\b)'
+                   r'|right(?!\s+(?:for|after|before|away|now|here|there|to(?!\s+left\b))\b)|lt|rt|bilateral|bil)\b'
                    r'|\(([LR])\)', re.I)
 
 
@@ -31,3 +32,151 @@ def side_warnings(field, selected):
     if not required:
         return []
     return [unit for unit in selected if len(required) != 1 or sides(unit['quote']) != required]
+
+
+_PATIENT_REPORT = re.compile(r'^(?:the\s+)?patient\s+(?:reports?|reported|says?|said|states?|stated|writes?|wrote)\b', re.I)
+_REVIEWED = re.compile(r'^(?:the\s+)?patient\s+(?:(?:has|had)\s+)?(?:read|reviewed|seen)\b[^.!?]*\breport\b', re.I)
+_REPORTED_REVIEW = re.compile(r'^(?:the\s+)?patient\s+(?:reports?|reported|states?|stated|says?|said)\s+'
+    r'(?:having|that\s+(?:(?:he|she|they)\s+(?:has|have|had)|I\s+(?:have|had)))\s+'
+    r'(?:read|reviewed|seen)\b[^.!?]*\breport\b', re.I)
+_OPPORTUNITY = re.compile(r'^(?:the\s+)?patient\s+(?:(?:has|had)\s+)?(?:had|was\s+given)\s+(?:an?\s+)?opportunity\s+'
+                          r'to\s+(?:add\s+)?comments?\b[^.!?]*\breport\b', re.I)
+_QUALIFIED_REVIEW = re.compile(r'\b(?:not|never|no|denies?|uncertain|unsure|possibly|maybe|might|may|could|would|will|if|unless|but)\b|\?', re.I)
+
+
+def explicit_patient_report(text):
+    return bool(_PATIENT_REPORT.search(text) and text.rstrip().endswith('.'))
+
+
+def policy_warnings(field, selected):
+    """Source-printed role/attestation requirements cannot be model permissions.
+
+    These narrow literal prerequisites do not qualify model relevance. They keep
+    clinical observations from becoming patient statements or review attestations.
+    Unknown policy shapes require an explicit clinician decision.
+    """
+    policy = field.get('answer_policy')
+    if not isinstance(policy, dict): return []
+    def anchor(name):
+        source = policy.get(name)
+        return (isinstance(source, dict) and set(source) == {'part', 'slot', 'fingerprint', 'text'} and
+                all(isinstance(value, str) and value.strip() for value in source.values()) and
+                re.fullmatch('[0-9a-f]{64}', source['fingerprint']))
+    valid = (set(policy) <= {'source_author', 'attestation', 'source', 'attestation_source'} and
+             bool(set(policy) & {'source_author', 'attestation'}) and
+             ('source_author' not in policy or anchor('source')) and
+             ('attestation' not in policy or anchor('attestation_source')) and
+             ('source' not in policy or 'source_author' in policy) and
+             ('attestation_source' not in policy or 'attestation' in policy) and
+             policy.get('source_author', 'patient') == 'patient' and
+             policy.get('attestation', 'document_review') == 'document_review')
+    if not valid: return list(selected)
+    warnings = []
+    for unit in selected:
+        text = unicodedata.normalize('NFKC', unit['quote']).strip()
+        if ('source_author' in policy and not _PATIENT_REPORT.search(text) or
+                'attestation' in policy and (not (_REVIEWED.search(text) or _OPPORTUNITY.search(text) or _REPORTED_REVIEW.search(text))
+                                             or _QUALIFIED_REVIEW.search(text))):
+            warnings.append(unit)
+    return warnings
+
+
+_TEMPORAL = re.compile(r'\b(before|after|prior\s+to|following|preceding)\s+'
+    r'(?:(?:the|an?|your|their|his|her|this|that|any)\s+)*([a-z][a-z-]*)', re.I)
+
+
+def word_roots(word):
+    """Literal inflection/agent-noun matching, never synonym or topic inference."""
+    word = word.casefold()
+    forms = {word}
+    for suffix in ('s', 'es', 'er', 'ing'):
+        if word.endswith(suffix) and len(word) > len(suffix) + 2:
+            forms.add(word[:-len(suffix)])
+    if word.endswith('ies'): forms.add(word[:-3] + 'y')
+    return {value.rstrip('e') for value in forms if len(value) >= 3}
+
+
+def temporal_scopes(text):
+    return [('before' if relation.casefold() in ('before', 'prior to', 'preceding') else 'after', word_roots(event))
+            for relation, event in _TEMPORAL.findall(unicodedata.normalize('NFKC', str(text or '')))]
+
+
+def temporal_warnings(field, selected):
+    """A printed event-relative question requires that relation in its source.
+
+    Source without the requested time remains ambiguous; a model cannot assign
+    current symptoms to an explicitly pre-event question by destination ID alone.
+    Full selected statements and every explicit temporal qualifier are retained.
+    """
+    required = temporal_scopes(str(field.get('context') or '') + ' ' + str(field.get('label') or ''))
+    if not required or not selected: return []
+    offered = [scope for unit in selected for scope in temporal_scopes(unit['quote'])]
+    if any(not any(direction == actual and event & actual_event for actual, actual_event in offered)
+           or any(direction != actual and event & actual_event for actual, actual_event in offered)
+           for direction, event in required): return list(selected)
+    return []
+
+
+_QUESTION_WORDS = frozenset('a an the do does is are you your patient any have has there status'.split())
+_PREDICATE = re.compile(r'^(?:the\s+)?patient\s+(?:'
+    r'(?P<does>does\s+(?:(?P<does_not>not|never)\s+)?)|'
+    r'(?P<copula>is\s+(?:(?P<is_not>not|never)\s+)?(?:an?\s+)?)|'
+    r'(?P<has>has\s+(?:(?P<has_no>no)\s+)?(?:an?\s+)?)|'
+    r'(?P<denies>denies\s+)|(?P<reports>reports\s+(?:(?P<reports_no>no)\s+)?))?'
+    r'(?P<predicate>[a-z][a-z -]*)\.$', re.I)
+_UNCERTAIN_PREDICATE = re.compile(r'\b(?:not|no|never|sometimes|usually|occasionally|daily|formerly|previously|currently|'
+                                 r'but|and|or|if|may|might|could|would|will|stopped|ceased|quit|denied|denies|without)\b', re.I)
+
+
+def predicate_polarity(field, unit):
+    """A small exact current-predicate reader; unknown is not a negative.
+
+    Match the original question's words to the complete explicit patient clause,
+    allowing regular inflections (smoker/smoke, pain/pains). No lexical overlap
+    with a neighbouring topic or a qualified tail establishes an answer.
+    """
+    from . import generation as g
+    quote = unicodedata.normalize('NFKC', unit['quote']).strip()
+    own = g.tab_source_value(quote, g.recognized_labels([field]))
+    if own and own[0] == g.question_key(field['label']):
+        literal = g.without_closing_stop(own[1]).casefold()
+        if literal in ('yes', 'no', 'true', 'false', 'present', 'absent'):
+            return literal in ('yes', 'true', 'present')
+        return None
+    match = _PREDICATE.fullmatch(quote)
+    if match is None: return None
+    predicate = match['predicate'].strip().casefold()
+    if _UNCERTAIN_PREDICATE.search(predicate): return None
+    question = str(field['label']).casefold()
+    if re.search(r'\b(?:not|no|non|without|never)\b', question): return None
+    wanted = [word_roots(w) for w in re.findall('[a-z]+', question) if w not in _QUESTION_WORDS]
+    actual = [word_roots(w) for w in predicate.split()]
+    negative = any(match[name] for name in ('does_not', 'is_not', 'has_no', 'denies', 'reports_no'))
+    # The longstanding literal nonsmoker relation remains available.
+    if len(actual) == 1 and predicate.startswith('non'):
+        if negative: return None
+        actual = [word_roots(predicate[3:])]; negative = True
+    if not wanted or len(wanted) != len(actual): return None
+    if not all(left & right for left, right in zip(wanted, actual)): return None
+    return not negative
+
+
+def option_warnings(field, all_units, selected, option_texts):
+    """A binary option needs matching explicit source polarity, never model assent.
+
+    Other option vocabularies still require qualification by the model contract.
+    This guard closes the explicit-predicate binary family without pretending to
+    prove open-ended clinical equivalence.
+    """
+    from documents.word_v3 import printed_options
+    from . import generation as g
+    labels = [g.without_closing_stop(o).casefold() for o in printed_options(field)]
+    pairs = ({'yes', 'no'}, {'true', 'false'}, {'present', 'absent'})
+    if len(labels) != 2 or set(labels) not in pairs or not selected: return []
+    chosen = [g.without_closing_stop(o).casefold() for o in option_texts]
+    if len(chosen) != 1 or chosen[0] not in labels: return list(selected)
+    expected = chosen[0] in ('yes', 'true', 'present')
+    if any(predicate_polarity(field, unit) is not expected for unit in selected): return list(selected)
+    if any((value := predicate_polarity(field, unit)) is not None and value is not expected for unit in all_units):
+        return list(selected)
+    return []

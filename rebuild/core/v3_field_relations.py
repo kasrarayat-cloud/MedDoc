@@ -215,14 +215,23 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             if not all(contexts) or len(contexts) != len(set(contexts)):
                 return refused
             if any(reading['parsed'][u['id']] for u in ordered): return refused
-        from .v3_destination import side_warnings
-        if side_warnings(field, ordered): return refused
+        from .v3_destination import (side_warnings, policy_warnings, temporal_warnings, option_warnings,
+                                     temporal_scopes, predicate_polarity, explicit_patient_report)
+        if side_warnings(field, ordered) or policy_warnings(field, ordered) or temporal_warnings(field, ordered): return refused
+        # A valid printed policy above requires an explicit patient reporting or
+        # completed-review predicate in every unit; it also establishes its actor.
+        policy_patient = isinstance(field.get('answer_policy'), dict)
         # Existing patient/foreign actor, shape and exact-labelled-source guards
         # remain prerequisites, regardless of the model's context declarations.
         for u in ordered:
             own = reading['parsed'][u['id']]
+            predicate_patient = predicate_polarity(field, u) is not None
+            temporal_patient = bool(temporal_scopes(str(field.get('context') or '') + ' ' + field['label'])
+                                    and explicit_patient_report(u['quote']))
             if ((own and own[0] != g.question_key(label)) or u['id'] in reading['unresolved_subjects']
                     or (not own and not reading['patients'].get(u['id'])
+                        and not policy_patient
+                        and not predicate_patient and not temporal_patient
                         and u['id'] not in reading['syntax_complete']
                         and u['id'] not in reading['actor_relations']['units'])
                     or g.v3_shape_holds(u['quote'], own[1] if own else u['quote'])): return refused
@@ -233,8 +242,9 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         if field.get('kind') in ('choice', 'multi_choice', 'checkbox'):
             if (chosen and not selected_options or selected_options and not chosen
                     or field.get('kind') != 'multi_choice' and len(selected_options) > 1
-                    or len({g.question_key(o['text']) for o in choices}) != len(choices)
+                    or any(g.named_option([c['text'] for c in choices], o['text']) is None for o in choices)
                     or any(r == 'qualifier' for r in item.context)): return refused
+            if option_warnings(field, units, ordered, [o['text'] for o in choices if o['id'] in selected_options]): return refused
             if field.get('kind') == 'checkbox':
                 from .v3_mapping import CHECKED
                 answer = CHECKED if selected_options else ''

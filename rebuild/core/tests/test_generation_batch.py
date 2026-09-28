@@ -7,7 +7,6 @@ from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import patch
-from unittest import expectedFailure
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
@@ -142,11 +141,9 @@ class BatchContract(SimpleTestCase):
                 answers,_=b.assemble(plan,[response(plan,1,selections=selected),response(plan,2)])
                 self.assertNotEqual(answers['q000']['status'],'supported')
 
-    @expectedFailure
     def test_known_existing_single_field_side_gap_is_not_clinical_acceptance(self):
-        # Preserved failed acceptance: unchanged single-field validator accepts
-        # this too (runtime11). Batching does not establish clinical relevance.
-        # Keep default-off; this blocker needs a separately reviewed source fix.
+        # The original expected failure is preserved in 9f2bdad0 and runtime11.
+        # The shared destination reader now holds it in single and batch paths.
         e=sample(notes='The patient has left knee pain.')
         e.template_version.fields[0]['label']='Right knee'
         e.template_version.generation_constraints=manifest(e.template_version.fields)

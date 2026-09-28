@@ -851,13 +851,13 @@ def encounter_detail(request,pk):
         try:generation_batch.check_answers(e.template_version,e.answers)
         except ValidationError as exc:batch_constraint_error=error_message(exc)
     try:
-        if generation_batch.needed(e.template_version.fields):
+        if generation_batch.needed(e.template_version.fields, e.notes, quote_config):
             quote_config,maximum_charge=batch_jobs.quote(e,quote_config)
         else:
             maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
     except ValidationError as exc:
         maximum_charge=None
-        if generation_batch.needed(e.template_version.fields):generation_quote_error=error_message(exc)
+        generation_quote_error=error_message(exc)
     audit(request.user,'encounter.view',e.pk,department=e.department)
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
     # further request is disclosed as separately billable. The doctor reads the classification in words, is offered cancel only

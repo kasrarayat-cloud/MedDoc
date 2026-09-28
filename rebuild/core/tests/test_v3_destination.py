@@ -46,3 +46,9 @@ class OrdinaryDestinationSide(SimpleTestCase):
         notes = 'Right knee: painful.'
         answer = run(notes, {'Right knee': [notes]}, fields=[target])['Right knee']
         self.assertEqual((answer['status'], answer['text']), ('supported', 'painful.'))
+
+    def test_temporal_right_or_departure_left_is_not_source_laterality(self):
+        target = field('status', 'Status right after treatment')
+        from core.v3_destination import sides
+        self.assertEqual(sides(target['label']), set())
+        self.assert_held_everywhere(field('site', 'Left knee'), 'The patient left the clinic with knee pain.')

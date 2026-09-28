@@ -52,8 +52,16 @@ def enabled():
     return bool(getattr(settings, 'V3_GENERATION_BATCHES', False))
 
 
-def needed(fields):
-    return v3_mapping.is_v3_fields(fields) and len(v3_mapping.answerable(fields)) > MAX_FIELDS
+def needed(fields, notes=None, config=None):
+    if not v3_mapping.is_v3_fields(fields): return False
+    if len(v3_mapping.answerable(fields)) > MAX_FIELDS: return True
+    if notes is not None and (config or {}).get('ordinary_field_contract'):
+        from . import v3_field_relations as ordinary
+        asked, context, _ = g.v3_generation_fields(fields)
+        units = g.source_units(notes, asked, context_labels=context)[0]
+        return (len(asked) * len(units) > ordinary.MAX_RELATION_CELLS or
+                ordinary.response_bound(asked, units) > g.job_request_profile(config)['max_output_tokens'])
+    return False
 
 
 def refuse(message):
@@ -233,7 +241,7 @@ def check_answers(version, answers):
         validate_constraints(manifest, answers, version.fields, read_options=option_reader(version))
 
 
-def partitions(fields):
+def partitions(fields, *, fits=None):
     groups = {}
     for field in fields:
         locator = field.get('locator') or {}
@@ -248,7 +256,10 @@ def partitions(fields):
     for group in groups.values():
         if len(group) > MAX_FIELDS:
             refuse('An indivisible answer group exceeds 100 fields.')
-        if current and len(current) + len(group) > MAX_FIELDS:
+        if fits is not None and not fits(group):
+            refuse('An indivisible answer group exceeds the complete ordinary response bound.')
+        if current and (len(current) + len(group) > MAX_FIELDS or
+                        (fits is not None and not fits(current + group))):
             parts.append(current); current = []
         current.extend(group)
     if current:
@@ -264,6 +275,16 @@ def request(plan, ordinal):
     contract = plan.get('contract')
     if contract not in (LEGACY_CONTRACT, CONTRACT) or config.get('generation_batch_contract') != contract:
         refuse('The stored batch request contract is unknown or inconsistent.')
+    if config.get('ordinary_field_contract'):
+        from . import v3_field_relations as ordinary
+        if contract != CONTRACT or plan['history_targets']:
+            refuse('Ordinary relations require the current single complete-form contract.')
+        compiled = ordinary.compile_request(plan['notes'], plan['fields'], config,
+            context_labels=[r['label'] for r in plan['requirements']], requirements=plan['requirements'],
+            requested_ids=ids, constraints=plan['constraints'])
+        if compiled['units'] != plan['units'] or compiled['context'] != plan['context_labels']:
+            refuse('The stored complete source or context differs from its ordinary request.')
+        return compiled['wire']
     payload = {'contract': contract, 'full_catalogue': plan['fields'],
         'context_labels': plan['context_labels'], 'requirements': plan['requirements'],
         'form_constraints': plan['constraints'], 'notes': plan['notes'], 'source_units': plan['units'],
@@ -298,7 +319,16 @@ def plan_for(encounter, config):
     manifest = constraints(version, live=config['mode'] == 'live')
     asked, context, _ = g.v3_generation_fields(fields, [r['label'] for r in version.review_requirements])
     units = g.source_units(encounter.notes, asked, context_labels=context)[0]
-    groups = partitions(asked)
+    fits = None
+    if config.get('ordinary_field_contract'):
+        from . import v3_field_relations as ordinary
+        ordinary.require_config(config)
+        indexed = {f['key']: f for f in asked}
+        def fits(ids):
+            return (len(ids) * len(units) <= ordinary.MAX_RELATION_CELLS and
+                    ordinary.response_bound([indexed[key] for key in ids], units) <=
+                    config['request_profile']['max_output_tokens'])
+    groups = partitions(asked, fits=fits)
     plan = {'contract': CONTRACT, 'encounter_id': str(encounter.pk), 'revision': encounter.revision,
         'mapping_version_id': str(version.pk), 'mapping_sha256': digest(fields),
         'original_sha256': version.template.sha256, 'notes': encounter.notes,
@@ -341,6 +371,10 @@ def parse_part(plan, ordinal, response):
             or any(not isinstance(f,dict) or type(f.get('conflict')) is not bool for f in body['fields'])):
         raise ValidationError('Provider answer conflicts must be explicit booleans.')
     schema = BatchSelections
+    if plan['config'].get('ordinary_field_contract'):
+        from . import v3_field_relations as ordinary
+        ordinary.require_config(plan['config'])
+        schema = ordinary.FieldSelections
     if plan['history_targets']:
         from .v3_history_context import HistorySelections
         schema = HistorySelections
@@ -365,13 +399,20 @@ def assemble(plan, responses, *, read_options=None):
         selections.extend(parsed.fields)
         histories.extend(getattr(parsed, 'history_context', []))
     combined = BatchSelections(fields=selections)
+    ordinary_records = {}
+    if plan['config'].get('ordinary_field_contract'):
+        from . import v3_field_relations as ordinary
+        combined = ordinary.FieldSelections(fields=selections)
+        ordinary_records = ordinary.records(plan['notes'], plan['fields'], plan['context_labels'],
+                                             plan['units'], combined, g.SONNET_5)
     records = {}
     if plan['history_targets']:
         from . import v3_history_context as history
         combined = history.HistorySelections(fields=selections, history_context=histories)
         records = history.records(plan['notes'], plan['asked'], plan['context_labels'], plan['units'], combined)
     answers = g.validate_selections(plan['notes'], plan['asked'], combined, context_labels=plan['context_labels'],
-        evidence_contract=g.TAB_CONTRACT, history_records=records)
+        evidence_contract=g.TAB_CONTRACT, history_records=records, ordinary_records=ordinary_records,
+        catalogue=plan['fields'])
     answers = g.v3_adopted(plan['fields'], answers, plan['notes'], plan['asked'], plan['context_labels'])
     validate_constraints(plan['constraints'], answers, plan['fields'], read_options=read_options)
     return answers, {}

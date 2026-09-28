@@ -218,7 +218,8 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
 @transaction.atomic
 def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None):
     from . import generation_batch, batch_jobs
-    if kind=='generation' and generation_batch.needed(encounter.template_version.fields):
+    if kind=='generation' and generation_batch.needed(encounter.template_version.fields, encounter.notes,
+                                                      config or generation.configuration()):
         return batch_jobs.enqueue(encounter,user,config or generation.configuration(),expected_revision)
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)

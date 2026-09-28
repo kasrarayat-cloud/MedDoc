@@ -90,6 +90,45 @@ class OrdinaryFieldRelations(SimpleTestCase):
         self.assertEqual(answers['smoking']['evidence'], [{'quote': notes, 'start': 0, 'end': len(notes)}])
         self.assert_stored_clear(notes, fields, answers)
 
+    def test_wrong_binary_polarity_and_an_omitted_opposite_predicate_cannot_be_model_permissions(self):
+        for label, yes, no in (('Smoker', 'The patient does smoke.', 'The patient does not smoke.'),
+                               ('Pain', 'The patient has pain.', 'The patient has no pain.'),
+                               ('Do you smoke?', 'The patient does smoke.', 'The patient does not smoke.')):
+            fields = [field('predicate', label, 'choice', ['Yes', 'No'])]
+            for notes, option, status in ((yes, 'predicate:0', 'supported'), (no, 'predicate:1', 'supported'),
+                                          (yes, 'predicate:1', 'conflict'), (no, 'predicate:0', 'conflict')):
+                with self.subTest(label=label, notes=notes, option=option):
+                    answer = offered(notes, fields, {'predicate': [notes]}, choices={'predicate': [option]})
+                    self.assertEqual(answer['predicate']['status'], status)
+                    if status == 'supported': self.assert_stored_clear(notes, fields, answer)
+            note = no + ' ' + yes
+            self.assertEqual(offered(note, fields, {'predicate': [no]},
+                choices={'predicate': ['predicate:1']})['predicate']['status'], 'conflict')
+            old = {'status': 'supported', 'text': 'Yes', 'evidence': [{'quote': no, 'start': 0, 'end': len(no)}]}
+            self.assertEqual(g.governed_decisions(no, fields, {'predicate': old}), [label])
+        fields = [field('predicate', 'Smoker', 'choice', ['Yes', 'No'])]
+        for notes in ('The patient does not smoke daily.', 'The patient does not drink.',
+                      'The patient formerly smoked.', 'The patient is not a nonsmoker.'):
+            self.assertEqual(offered(notes, fields, {'predicate': [notes]},
+                choices={'predicate': ['predicate:1']})['predicate']['status'], 'conflict')
+
+    def test_event_relative_destination_requires_explicit_matching_source_scope(self):
+        fields = repeated()
+        current = 'The patient reports that the headache usually feels like intermittent buzzing.'
+        before = 'The patient reports intermittent buzzing before the headache begins.'
+        after = 'The patient reports intermittent buzzing after the headache begins.'
+        for notes, key, status in ((current, 'sensation', 'supported'), (current, 'prodrome', 'conflict'),
+                                   (before, 'prodrome', 'supported'), (after, 'prodrome', 'conflict')):
+            with self.subTest(notes=notes, key=key):
+                answers = offered(notes, fields, {key: [notes]})
+                self.assertEqual(answers[key]['status'], status)
+                if status == 'supported': self.assert_stored_clear(notes, fields, answers)
+        target = field('symptoms', 'Symptoms before treatment')
+        for notes, status in (('The patient reports nausea before treatment.', 'supported'),
+                              ('The patient reports nausea after treatment.', 'conflict'),
+                              ('The patient reports nausea.', 'conflict')):
+            self.assertEqual(offered(notes, [target], {'symptoms': [notes]})['symptoms']['status'], status)
+
     def test_qualifier_cannot_disappear_into_a_fixed_option(self):
         first, last = 'The patient does not smoke.', 'The patient stopped yesterday.'
         notes = first + ' ' + last
@@ -97,6 +136,55 @@ class OrdinaryFieldRelations(SimpleTestCase):
         answers = offered(notes, fields, {'smoking': [first, last]}, choices={'smoking': ['smoking:1']},
                           overrides={('smoking', last): 'qualifier'})
         self.assertEqual(answers['smoking']['status'], 'conflict')
+
+    def test_duplicate_printed_options_and_reordered_identical_occurrences(self):
+        notes = 'The patient does not smoke.'
+        fields = [field('smoking', 'Smoker', 'choice', ['No', 'No.'])]
+        self.assertEqual(offered(notes, fields, {'smoking': [notes]},
+            choices={'smoking': ['smoking:0']})['smoking']['status'], 'conflict')
+        quote = 'The patient reports persistent aching.'; notes = quote + ' ' + quote
+        fields = [field('hpi', 'History of present illness')]
+        units = g.source_units(notes, fields)[0]
+        selections = r.FieldSelections(fields=[r.FieldSelection(key='hpi', unit_ids=[2, 1], conflict=False,
+            option_ids=[], context=['answer', 'answer'])])
+        records = r.records(notes, fields, [], units, selections, g.SONNET_5)
+        answers = g.validate_selections(notes, fields, selections, evidence_contract=g.TAB_CONTRACT,
+            ordinary_records=records, catalogue=fields)
+        answers = g.v3_adopted(fields, answers, notes, fields)
+        self.assertEqual((answers['hpi']['status'], answers['hpi']['text']), ('supported', quote + '\n' + quote))
+        self.assertEqual([e['start'] for e in answers['hpi']['evidence']], [0, len(quote) + 1])
+
+    def test_source_printed_patient_authorship_and_review_attestation_have_literal_prerequisites(self):
+        source = {'part': 'word/document.xml', 'slot': 'b/p[0]', 'fingerprint': 'a' * 64, 'text': 'For the patient:'}
+        target = field('comments', 'Additional comments')
+        target['answer_policy'] = {'source_author': 'patient', 'source': source}
+        for notes, expected in (('The patient reports feeling adequately supported.', 'supported'),
+                                ('The patient is clinically stable.', 'conflict'),
+                                ('The patient had the procedure.', 'conflict'),
+                                ('The clinician reports that the patient is stable.', 'conflict')):
+            with self.subTest(notes=notes):
+                answer = offered(notes, [target], {'comments': [notes]})
+                self.assertEqual(answer['comments']['status'], expected)
+                if expected == 'supported': self.assert_stored_clear(notes, [target], answer)
+                else:
+                    old = {'text': notes, 'status': 'supported', 'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}
+                    self.assertEqual(g.governed_decisions(notes, [target], {'comments': old}), ['Additional comments'])
+        target['answer_policy'] = {'attestation': 'document_review', 'attestation_source': {**source, 'text': 'Confirm patient reviewed report.'}}
+        for notes, expected in (('The patient has reviewed the report.', 'supported'),
+                                ('The patient was given an opportunity to comment on the report.', 'supported'),
+                                ('The patient has not reviewed the report.', 'conflict'),
+                                ('The patient will review the report.', 'conflict'),
+                                ('The patient had the procedure.', 'conflict')):
+            with self.subTest(notes=notes):
+                self.assertEqual(offered(notes, [target], {'comments': [notes]})['comments']['status'], expected)
+        both = {**target['answer_policy'], 'source_author': 'patient', 'source': source}
+        target['answer_policy'] = both
+        notes = 'The patient has reviewed the report.'
+        self.assertEqual(offered(notes, [target], {'comments': [notes]})['comments']['status'], 'conflict')
+        notes = 'The patient reports having read the report.'
+        self.assertEqual(offered(notes, [target], {'comments': [notes]})['comments']['status'], 'supported')
+        target['answer_policy'] = {'attestation': 'document_review', 'source': source}
+        self.assertEqual(offered(notes, [target], {'comments': [notes]})['comments']['status'], 'conflict')
 
     def test_correction_subject_omission_contradiction_and_consent_guards_survive(self):
         first = 'The patient reports intermittent buzzing.'
