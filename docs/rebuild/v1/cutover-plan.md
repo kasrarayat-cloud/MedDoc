@@ -244,8 +244,8 @@ Data-preserving, in this order:
    payments, through the admin console; nothing is replayed, refunded or discarded automatically.
 4. **Fix forward.** Install a schema-compatible release by host replacement (the rebuild path:
    new instance, same state volume moved over, `--existing-state-volume`, `migrate` only forward).
-   A code rollback is allowed only to a release whose migrations are a prefix of those applied; there
-   are no down-migrations.
+   A code rollback is allowed only to a release whose migrations are a prefix of those applied, and
+   only within the limits in *Code rollback onto a newer schema* below; there are no down-migrations.
 5. **Data damage** (wrong writes, corruption): restore RDS to a point in time as a **new** instance,
    run `production_restore_check.py`, compare and reconcile the affected rows into the live database
    through a reviewed, declared correction that appends (ledger and audit are immutable). Never
@@ -255,6 +255,63 @@ Data-preserving, in this order:
 7. **Suspected PHI exposure:** follow the incident response plan (checklist J5): preserve evidence,
    rotate keys, assess breach notification with counsel on the HIPAA clock.
 8. Lift maintenance again only through the G9 step 3 checks.
+
+### Code rollback onto a newer schema (image rollback without a schema rollback)
+
+Verified 2026-09-28 for the installed private-beta release `dedac162` (core migrations 0001-0018,
+byte-identical in V1) on the V1 schema (core 0001-0031): dedac162's own code (`git archive`) was run
+against synthetic databases migrated to 0031, and dedac162's own core suite was run on that schema.
+Nothing here was tried on a database holding real data. A release older than dedac162 is not verified.
+
+- **Never reverse a migration to make an older release work.** 0020, 0021, 0022, 0025 to 0028 and
+  0030 refuse to reverse while their evidence exists (live payments or Stripe events; v3 mapping
+  confirmations, contracts or corrections; mapping jobs; retention holds and preserved records;
+  generation batches; disposition rows). The refusal is atomic for that one migration only: every
+  later migration has already been reversed, so the database is left at an intermediate node. Run
+  `migrate` forward again before starting any release.
+- **Why 0031 exists.** 0021 and 0022 added `core_templateversion.contract`, `corrections` and
+  `assistance` NOT NULL with no database default. On a 0030 schema dedac162's template upload and
+  mapping edit therefore failed with IntegrityError (a 500), and every failed upload left its stored
+  original behind in `originals/` (dedac162 removes it only on a validation or document error). 0031
+  gives the three columns database defaults (`''`, `{}`, `{}`), so dedac162's versions are recorded as
+  the legacy mappings they are. `core.tests.test_migration_rollback_safety` fails if a later migration
+  adds a NOT NULL column without a database default to any table dedac162 writes; move its
+  `PREVIOUS_RELEASE` when the installed release changes.
+- **What works under dedac162 on 0031** (measured by driving its views, and by its own core suite on
+  this schema): uploading a blank form; editing the labels of a legacy mapping (a new version);
+  starting, generating, reviewing, finalizing and exporting documents on legacy mappings. dedac162's
+  core suite on this schema: 1122 tests, 5 errors. Four also error on dedac162's own schema in the
+  test environment (two modules that do not import; two terminology imports that refuse a database
+  not named `quillmd_*`). The fifth is a test fixture that changes an existing job's `kind`, which
+  0022's job-scope trigger refuses; dedac162's application code never changes a job's kind.
+- **What the database refuses under dedac162, by design** (the request fails with a 500 and writes
+  nothing):
+  1. editing the labels of a contract v3 mapping. dedac162 knows no contract and copies the v3 fields
+     into a new version; CHECK `mapping_v3_fields_record_v3_contract` refuses it, because the row
+     would otherwise read as a legacy mapping that needs no confirmation once V1 is installed again;
+  2. starting a document on a contract v3 mapping that no clinician has confirmed. dedac162 has no
+     confirmation gate; `quillmd_encounter_guard` refuses it. Without this guard the draft dedac162
+     started was saved, finalized and exported after V1 was re-installed, with the mapping still
+     unconfirmed (V1 checks confirmation only when a document is started).
+- **What cannot work under dedac162:** a document on a *confirmed* v3 mapping can be started and
+  generated (measured in fixture mode; live-mode charging was not exercised), but dedac162's export
+  refuses every v3 mapping ("The field mapping does not match this original"), so such documents stay
+  in review until V1 is installed again. Before an image rollback, count what would be stranded:
+
+      SELECT count(*) FROM core_templateversion WHERE contract = 'v3';
+      SELECT count(*) FROM core_encounter e JOIN core_templateversion v ON v.id = e.template_version_id
+       WHERE v.contract = 'v3' AND e.status <> 'finalized';
+
+  If either is non-zero, v3 forms cannot be exported while dedac162 runs; fix forward instead.
+- **Drain V1-only jobs first.** dedac162's worker takes the oldest queued job of any kind. It failed a
+  queued blank-mapping job (kind `mapping`, no document) with the misleading error "Access was revoked
+  before processing." (measured in fixture mode, which holds no funds). Batch-generation children
+  (kind `generation_part`, off unless `QUILLMD_V3_GENERATION_BATCHES=1`) were not exercised. Before
+  an image rollback this must return no rows:
+
+      SELECT kind, state, count(*) FROM core_job
+       WHERE kind NOT IN ('generation', 'transcription') AND state IN ('queued', 'running', 'reconciliation')
+       GROUP BY kind, state;
 
 ### Release updates after go-live
 
