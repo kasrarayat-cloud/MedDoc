@@ -91,3 +91,24 @@ not promoted to findings. This review does not establish complete D03 coverage,
 large-form admission, automatic clinical option semantics, rendered/native Word
 compatibility or any qualification denominator. All prior failures and maps stay
 unchanged. Findings 2–3 remain open at this checkpoint; author repair is separate.
+
+## Subsequent exact repair closure
+
+Frozen source `cf481504697c5028f3ae84534bd343792ec91009`, engine SHA256
+`7d2296ea679c7e804bdb8ea88a7a539c01cb7654527f1b0b65dc87f3ee42c2a6`, closes the
+three demonstrated cases/classes above. **The same19 synthetic fixtures pass**
+their bounded ownership, refusal, printed-state and exact neighbor-preservation
+checks. The two-role grid is now visibly unresolved with both source headers;
+governing consent and signing context appears in the refusal; single-option and
+subsection context remains complete. No additional cases were introduced during
+closure. **NOTHING FOUND within these bounded claims on the final repair.**
+
+The complete D03 mapping and notes remain exactly equal to 904's43-field result.
+This preserves the earlier selected-workflow boundary, not a whole-document pass.
+All earlier errors, mappings and exports are retained.
+
+The first closure harness attempted nonexistent `Package.read`, an instrument
+error. Its script and partial outputs remain. `closure-v2.py` changes only that
+byte-reader to `ZipFile.read` and writes a separate directory. Final evidence is
+`closure-v2/closure-results.json`; the complete predecessor-linked seal is
+`seal-closure.json`. No application source was changed by the reviewer.
