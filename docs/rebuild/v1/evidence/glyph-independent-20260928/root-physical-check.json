@@ -1,0 +1,11 @@
+{
+  "source": "literal ☐ symbol retained",
+  "requested_checks": [
+    "Before",
+    "After"
+  ],
+  "printed_xml_text": "Choices? ☒ Before: literal ☒ symbol retained ☐ After",
+  "source_text_corrupted": true,
+  "original_after_unchecked": true,
+  "root_reproduced": true
+}

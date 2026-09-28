@@ -1,0 +1,57 @@
+{
+  "original_text": "\u2610 First: _____ \u2610 Last",
+  "fields": [
+    {
+      "key": "c",
+      "kind": "multi_choice",
+      "label": "Choices",
+      "options": [
+        "First",
+        "Last"
+      ],
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/p[0]",
+        "fingerprint": "94434996c9179aec078a6cac31f2489586501c4ca067c0540bce832cca55c83f",
+        "target": {
+          "type": "checkboxes",
+          "boxes": [
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/p[0]/glyphs",
+              "glyph": 0
+            },
+            {
+              "kind": "glyph",
+              "part": "word/document.xml",
+              "slot": "b/p[0]/glyphs",
+              "glyph": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "key": "t",
+      "kind": "text",
+      "label": "First description",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/p[0]",
+        "fingerprint": "94434996c9179aec078a6cac31f2489586501c4ca067c0540bce832cca55c83f",
+        "target": {
+          "type": "span",
+          "start": 9,
+          "end": 14,
+          "shape": "blank"
+        }
+      }
+    }
+  ],
+  "outcome": "refused",
+  "error_type": "XPathEvalError",
+  "message": "Undefined namespace prefix"
+}

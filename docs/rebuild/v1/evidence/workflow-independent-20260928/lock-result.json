@@ -1,0 +1,9 @@
+{
+  "frozen_commit": "7eae3d0a7d0154dc19393236b850aafecbf06cb8",
+  "wheel_identities_and_platforms": 89,
+  "original_artifacts_unchanged": 64,
+  "active_dependency_edges": 124,
+  "additional_source_mutants_refused": 8,
+  "network_operations": 0,
+  "result": "PASS; no demonstrated counterexample in this bounded review"
+}
