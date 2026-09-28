@@ -1,0 +1,288 @@
+Creating test database for alias 'default' ('test_v1_disposition_01_recovered')...
+Found 16 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying auth.0001_initial... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying core.0001_initial... OK
+  Applying core.0002_job_payer... OK
+  Applying core.0003_immutable_records... OK
+  Applying core.0004_job_config... OK
+  Applying core.0005_providerreceipt... OK
+  Applying core.0006_receipt_immutable... OK
+  Applying core.0007_job_result_path_job_result_sha256... OK
+  Applying core.0008_payment_event_evidence... OK
+  Applying core.0009_provider_identifiers... OK
+  Applying core.0010_canonical_provider_settlement... OK
+  Applying core.0011_template_clinical_review... OK
+  Applying core.0012_billing_policy... OK
+  Applying core.0013_recording_charge_limit... OK
+  Applying core.0014_encounter_service_date... OK
+  Applying core.0015_reconciliation_evidence_guard... OK
+  Applying core.0016_user_session_version... OK
+  Applying core.0017_reconciliation_evidence_kind... OK
+  Applying core.0018_servicehealth... OK
+  Applying core.0019_clinicinvitation... OK
+  Applying core.0020_payment_livemode... OK
+  Applying core.0021_word_v3_mapping_review... OK
+  Applying core.0022_mapping_job_scope... OK
+  Applying core.0023_retention_preservation... OK
+  Applying core.0024_preserved_file... OK
+  Applying core.0025_preservation_guards... OK
+  Applying core.0026_preservation_scope_identity... OK
+  Applying core.0028_disposition_preparation... OK
+  Applying core.0027_generation_batches... OK
+  Applying core.0029_merge_batch_disposition... OK
+  Applying otp_totp.0001_initial... OK
+  Applying otp_totp.0002_auto_20190420_0723... OK
+  Applying otp_totp.0003_add_timestamps... OK
+  Applying sessions.0001_initial...test_changed_graph_or_digest_requires_new_plan (core.tests.test_disposition_preparation.DispositionPreparation.test_changed_graph_or_digest_requires_new_plan) ... ERROR
+test_empty_guard_reverse_can_be_rolled_back_without_losing_catalog (core.tests.test_disposition_preparation.DispositionPreparation.test_empty_guard_reverse_can_be_rolled_back_without_losing_catalog) ... ok
+test_held_funds_and_changed_shared_reference_are_part_of_plan (core.tests.test_disposition_preparation.DispositionPreparation.test_held_funds_and_changed_shared_reference_are_part_of_plan) ... ERROR
+test_hold_archive_and_shared_source_remain_blocked (core.tests.test_disposition_preparation.DispositionPreparation.test_hold_archive_and_shared_source_remain_blocked) ... ERROR
+test_mfa_csrf_actual_forms_and_scope_errors (core.tests.test_disposition_preparation.DispositionPreparation.test_mfa_csrf_actual_forms_and_scope_errors) ... /opt/meddoc-pro/.worktrees/v1-workflow-candidate/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+Forbidden (CSRF token missing.): /console/disposition/
+ERROR
+test_migration_reverse_refuses_when_any_preparation_evidence_exists (core.tests.test_disposition_preparation.DispositionPreparation.test_migration_reverse_refuses_when_any_preparation_evidence_exists) ... ERROR
+test_proposal_and_review_are_immutable_review_only (core.tests.test_disposition_preparation.DispositionPreparation.test_proposal_and_review_are_immutable_review_only) ... ERROR
+test_quarantine_blocks_direct_data_worker_cleanup_but_auth_health_and_review_survive (core.tests.test_disposition_preparation.DispositionPreparation.test_quarantine_blocks_direct_data_worker_cleanup_but_auth_health_and_review_survive) ... ERROR
+test_raw_sql_cannot_forge_self_review_or_mutate_evidence (core.tests.test_disposition_preparation.DispositionPreparation.test_raw_sql_cannot_forge_self_review_or_mutate_evidence) ... ERROR
+test_restore_missing_target_never_admits (core.tests.test_disposition_preparation.DispositionPreparation.test_restore_missing_target_never_admits) ... ok
+test_scope_self_review_suspension_and_conflicting_reuse_refuse (core.tests.test_disposition_preparation.DispositionPreparation.test_scope_self_review_suspension_and_conflicting_reuse_refuse) ... ERROR
+test_terminal_job_receipt_and_late_reconciliation_remain_financial_blockers (core.tests.test_disposition_preparation.DispositionPreparation.test_terminal_job_receipt_and_late_reconciliation_remain_financial_blockers) ... ERROR
+test_unknown_model_edge_column_and_oversized_graph_refuse_atomically (core.tests.test_disposition_preparation.DispositionPreparation.test_unknown_model_edge_column_and_oversized_graph_refuse_atomically) ... ok
+test_batch_guards_and_composed_preservation_body_fail_closed_when_changed (core.tests.test_restore_integrity_contract.ReleaseIntegrityContract.test_batch_guards_and_composed_preservation_body_fail_closed_when_changed) ... ok
+test_fresh_migrations_have_exact_release_bound_guards (core.tests.test_restore_integrity_contract.ReleaseIntegrityContract.test_fresh_migrations_have_exact_release_bound_guards) ... ok
+test_release_restore_reference_queries_include_immutable_batch_response (core.tests.test_restore_integrity_contract.ReleaseIntegrityContract.test_release_restore_reference_queries_include_immutable_batch_response) ... ok
+
+======================================================================
+ERROR: test_changed_graph_or_digest_requires_new_plan (core.tests.test_disposition_preparation.DispositionPreparation.test_changed_graph_or_digest_requires_new_plan)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 55, in test_changed_graph_or_digest_requires_new_plan
+    plan=self.plan()
+         ^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 26, in plan
+    def plan(self):return d.prepare(self.admin,self.request().pk)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+ERROR: test_held_funds_and_changed_shared_reference_are_part_of_plan (core.tests.test_disposition_preparation.DispositionPreparation.test_held_funds_and_changed_shared_reference_are_part_of_plan)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 91, in test_held_funds_and_changed_shared_reference_are_part_of_plan
+    plan=self.plan();self.assertIn('funds_held',plan.graph['blockers'])
+         ^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 26, in plan
+    def plan(self):return d.prepare(self.admin,self.request().pk)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+ERROR: test_hold_archive_and_shared_source_remain_blocked (core.tests.test_disposition_preparation.DispositionPreparation.test_hold_archive_and_shared_source_remain_blocked)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 72, in test_hold_archive_and_shared_source_remain_blocked
+    report=self.plan().graph
+           ^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 26, in plan
+    def plan(self):return d.prepare(self.admin,self.request().pk)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+ERROR: test_mfa_csrf_actual_forms_and_scope_errors (core.tests.test_disposition_preparation.DispositionPreparation.test_mfa_csrf_actual_forms_and_scope_errors)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 144, in test_mfa_csrf_actual_forms_and_scope_errors
+    plan=d.prepare(self.admin,m.DispositionRequest.objects.get().pk)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+ERROR: test_migration_reverse_refuses_when_any_preparation_evidence_exists (core.tests.test_disposition_preparation.DispositionPreparation.test_migration_reverse_refuses_when_any_preparation_evidence_exists)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 113, in test_migration_reverse_refuses_when_any_preparation_evidence_exists
+    self.plan()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 26, in plan
+    def plan(self):return d.prepare(self.admin,self.request().pk)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+ERROR: test_proposal_and_review_are_immutable_review_only (core.tests.test_disposition_preparation.DispositionPreparation.test_proposal_and_review_are_immutable_review_only)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 34, in test_proposal_and_review_are_immutable_review_only
+    plan=self.plan();self.assertFalse(plan.graph['deletion_authorized'])
+         ^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 26, in plan
+    def plan(self):return d.prepare(self.admin,self.request().pk)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+ERROR: test_quarantine_blocks_direct_data_worker_cleanup_but_auth_health_and_review_survive (core.tests.test_disposition_preparation.DispositionPreparation.test_quarantine_blocks_direct_data_worker_cleanup_but_auth_health_and_review_survive)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 180, in test_quarantine_blocks_direct_data_worker_cleanup_but_auth_health_and_review_survive
+    if output:=os.getenv('QUILLMD_DISPOSITION_ARTIFACT_DIR'):(Path(output)/'restore-admin.html').write_bytes(page.content)
+                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1038, in write_bytes
+    with self.open(mode='wb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 1015, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/.runtime/disposition-integration/render-01_recovered/restore-admin.html'
+
+======================================================================
+ERROR: test_raw_sql_cannot_forge_self_review_or_mutate_evidence (core.tests.test_disposition_preparation.DispositionPreparation.test_raw_sql_cannot_forge_self_review_or_mutate_evidence)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 102, in test_raw_sql_cannot_forge_self_review_or_mutate_evidence
+    plan=self.plan()
+         ^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 26, in plan
+    def plan(self):return d.prepare(self.admin,self.request().pk)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+ERROR: test_scope_self_review_suspension_and_conflicting_reuse_refuse (core.tests.test_disposition_preparation.DispositionPreparation.test_scope_self_review_suspension_and_conflicting_reuse_refuse)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 49, in test_scope_self_review_suspension_and_conflicting_reuse_refuse
+    plan=d.prepare(self.admin,request.pk)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+======================================================================
+ERROR: test_terminal_job_receipt_and_late_reconciliation_remain_financial_blockers (core.tests.test_disposition_preparation.DispositionPreparation.test_terminal_job_receipt_and_late_reconciliation_remain_financial_blockers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 82, in test_terminal_job_receipt_and_late_reconciliation_remain_financial_blockers
+    report=self.plan().graph;self.assertIn('receipt_accounting_unresolved',report['blockers'])
+           ^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/tests/test_disposition_preparation.py", line 26, in plan
+    def plan(self):return d.prepare(self.admin,self.request().pk)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/contextlib.py", line 81, in inner
+    return func(*args, **kwds)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 146, in prepare
+    value=graph(request)
+          ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 46, in graph
+    check_catalog()
+  File "/opt/meddoc-pro/.worktrees/v1-disposition-integration/rebuild/core/disposition.py", line 31, in check_catalog
+    raise ValidationError('The reference catalogue changed; a reviewed graph adapter is required.')
+django.core.exceptions.ValidationError: ['The reference catalogue changed; a reviewed graph adapter is required.']
+
+----------------------------------------------------------------------
+Ran 16 tests in 1.056s
+
+FAILED (errors=10)
+Destroying test database for alias 'default' ('test_v1_disposition_01_recovered')...
+ OK
+System check identified no issues (0 silenced).

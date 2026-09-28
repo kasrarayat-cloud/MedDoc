@@ -19,6 +19,10 @@ MAX_POLICY_BYTES=65536
 # class: (model label, optional fixed filter, permitted explicitly chosen review anchors,
 #         immutable/protected-for-this-tool). A count is rows/references, never verified files.
 CATALOG={
+ 'disposition_requests':('core.DispositionRequest',{},('created_at',),True),
+ 'disposition_plans':('core.DispositionPlan',{},('created_at',),True),
+ 'disposition_reviews':('core.DispositionReview',{},('created_at',),True),
+ 'restore_preparations':('core.RestorePreparation',{},('created_at',),True),
  'retention_holds':('core.RetentionHold',{},('created_at',),True),
  'retention_hold_releases':('core.RetentionHoldRelease',{},('created_at',),True),
  'preserved_clinical_rows':('core.PreservedRecord',{},('created_at',),True),

@@ -32,7 +32,7 @@ except _profile.ProfileError as exc:
 SYNTHETIC_ONLY = QUILLMD_DATA_MODE == 'synthetic'
 RELEASE_SHA = os.getenv('QUILLMD_RELEASE_SHA', 'development-unrecorded')
 INSTALLED_APPS = ['django.contrib.auth','django.contrib.contenttypes','django.contrib.sessions','django.contrib.messages','django.contrib.staticfiles','django_otp','django_otp.plugins.otp_totp','core']
-MIDDLEWARE = ['django.middleware.security.SecurityMiddleware','django.middleware.clickjacking.XFrameOptionsMiddleware','core.preview_access.PreviewAccessMiddleware','whitenoise.middleware.WhiteNoiseMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.common.CommonMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware','django_otp.middleware.OTPMiddleware','django.contrib.messages.middleware.MessageMiddleware','core.middleware.AccessMiddleware']
+MIDDLEWARE = ['django.middleware.security.SecurityMiddleware','django.middleware.clickjacking.XFrameOptionsMiddleware','core.disposition.RestoreQuarantineMiddleware','core.preview_access.PreviewAccessMiddleware','whitenoise.middleware.WhiteNoiseMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.common.CommonMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware','django_otp.middleware.OTPMiddleware','django.contrib.messages.middleware.MessageMiddleware','core.middleware.AccessMiddleware']
 ROOT_URLCONF = 'quillmd.urls'
 TEMPLATES = [{'BACKEND':'django.template.backends.django.DjangoTemplates','DIRS':[BASE_DIR/'templates'],'APP_DIRS':True,'OPTIONS':{'context_processors':['django.template.context_processors.request','django.contrib.auth.context_processors.auth','django.contrib.messages.context_processors.messages','core.context.common']}}]
 WSGI_APPLICATION = 'quillmd.wsgi.application'
@@ -156,3 +156,7 @@ if QUILLMD_STRIPE_MODE=='live':
     _refusals+=_profile.stripe_live_problems(os.environ,allowed_hosts=ALLOWED_HOSTS,secret_key=STRIPE_SECRET_KEY,webhook_secret=STRIPE_WEBHOOK_SECRET,app_base_url=QUILLMD_APP_BASE_URL)
 if _refusals:
     raise ImproperlyConfigured('QuillMD refuses to start: '+'; '.join(_refusals)+'.')
+
+# Preparation cannot release quarantine or grant destruction authority.
+RESTORE_QUARANTINE = os.getenv('QUILLMD_RESTORE_QUARANTINE', '0') != '0'
+RESTORE_INSTANCE_ID = os.getenv('QUILLMD_RESTORE_INSTANCE_ID', '')

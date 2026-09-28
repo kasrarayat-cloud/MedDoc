@@ -215,6 +215,8 @@ def stop(batch_id, reason, *, uncertain_part=None, user_declined=False):
 
 
 def finish(batch_id):
+    from .disposition import require_processing
+    require_processing()
     batch=GenerationBatch.objects.get(pk=batch_id)
     parts=list(batch.parts.select_related('job','response').order_by('ordinal'))
     if len(parts)!=len(batch.plan['parts']) or any(p.job.state!='staged' for p in parts):return False
@@ -258,6 +260,8 @@ def finish(batch_id):
 
 
 def run_one():
+    from .disposition import require_processing
+    require_processing()
     with transaction.atomic():
         batch=GenerationBatch.objects.select_for_update(skip_locked=True).filter(state__in=['queued','running','validating']).order_by('created_at').first()
         if not batch:return False
@@ -422,6 +426,8 @@ def recover_recorded(batch_id,user):
     Partial/unknown attempts and already absorbed outcomes cannot be revived. The
     original per-request records, source, rates and ceilings remain authoritative.
     """
+    from .disposition import require_processing
+    require_processing()
     require_admin(user)
     with transaction.atomic():
         batch=GenerationBatch.objects.select_for_update().get(pk=batch_id)

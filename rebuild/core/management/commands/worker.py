@@ -6,6 +6,8 @@ class Command(BaseCommand):
     help='Run private queue; graceful stop finishes the current provider request.'
     def add_arguments(self,p):p.add_argument('--once',action='store_true')
     def handle(self,*args,**options):
+        from core.disposition import require_processing
+        require_processing()
         stopping=False
         def stop(signum,frame):
             nonlocal stopping

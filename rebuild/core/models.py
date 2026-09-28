@@ -76,6 +76,37 @@ class PreservedFile(Entity):
     byte_count=models.PositiveBigIntegerField()
     hold_ids=models.JSONField()
 
+class DispositionRequest(Entity):
+    """Review proposal only. No operation represented here authorizes deletion."""
+    department=models.ForeignKey('Department',on_delete=models.PROTECT)
+    scope=models.CharField(max_length=16)
+    target_id=models.UUIDField()
+    authority_sha256=models.CharField(max_length=64)
+    operation=models.CharField(max_length=16,default='review_only',editable=False)
+    request_key=models.UUIDField(unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionPlan(Entity):
+    request=models.ForeignKey(DispositionRequest,on_delete=models.PROTECT,related_name='plans')
+    graph=models.JSONField()
+    graph_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class DispositionReview(Entity):
+    plan=models.OneToOneField(DispositionPlan,on_delete=models.PROTECT,related_name='review')
+    decision=models.CharField(max_length=16)
+    graph_sha256=models.CharField(max_length=64)
+    evidence_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class RestorePreparation(Entity):
+    instance_id=models.UUIDField()
+    target=models.JSONField()
+    backup_sha256=models.CharField(max_length=64)
+    report=models.JSONField()
+    report_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
 class ProviderIdentifiers:
     @property
     def legacy_resource_identifier(self):

@@ -62,6 +62,7 @@ def assess(rows, context, declared_count):
                       and context_valid and declaration_valid}
 
 FUNCTION_SHA256 = {
+    'quillmd_disposition_instruction': '0f5cb4e0ba4702422b07a889f9fd3e2f7c6b60b0c6e7e5bc2e324994e8d0e5bf',
     'quillmd_append_only': '8d5ec86a531621ac1de53c85109dfb5122f9142b1cb66dcfc377e0945d869764',
     'quillmd_batch_event_guard': 'b3ab717bf72d0b4f67ac36fb487ca491ae07b6846d78b0d216ab4b7864e7d29a',
     'quillmd_batch_guard': '46ea1e09a3598d289b5df9b114a4a4b8e74a314591a9abb6253510da78960c4f',
@@ -133,4 +134,16 @@ GUARDS = (
     ('core_webhookevent', 'webhook_evidence_immutable', 'quillmd_webhook_evidence_guard', 27),
     ('core_webhookevent', 'webhook_livemode_immutable', 'quillmd_livemode_guard', 19),
     ('core_webhookevent', 'webhook_no_truncate', 'quillmd_refuse_truncate', 34),
+    ('core_dispositionplan', 'dispositionplan_immutable', 'quillmd_append_only', 27),
+    ('core_dispositionplan', 'dispositionplan_insert', 'quillmd_disposition_instruction', 7),
+    ('core_dispositionplan', 'dispositionplan_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_dispositionrequest', 'dispositionrequest_immutable', 'quillmd_append_only', 27),
+    ('core_dispositionrequest', 'dispositionrequest_insert', 'quillmd_disposition_instruction', 7),
+    ('core_dispositionrequest', 'dispositionrequest_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_dispositionreview', 'dispositionreview_immutable', 'quillmd_append_only', 27),
+    ('core_dispositionreview', 'dispositionreview_insert', 'quillmd_disposition_instruction', 7),
+    ('core_dispositionreview', 'dispositionreview_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_restorepreparation', 'restorepreparation_immutable', 'quillmd_append_only', 27),
+    ('core_restorepreparation', 'restorepreparation_insert', 'quillmd_disposition_instruction', 7),
+    ('core_restorepreparation', 'restorepreparation_no_truncate', 'quillmd_preservation_no_truncate', 34),
 )

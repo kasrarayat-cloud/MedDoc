@@ -94,6 +94,8 @@ def parse_response(raw,simulated):
     return json.loads(texts[0],object_pairs_hook=unique_pairs)
 
 def run_one():
+    from .disposition import require_processing
+    require_processing()
     from .jobs import NoProviderRequest, NotAdoptedByUser, ended_key
     with transaction.atomic():
         job=Job.objects.select_for_update(skip_locked=True).filter(kind='mapping',state='queued').order_by('created_at').first()

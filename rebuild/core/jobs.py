@@ -620,6 +620,8 @@ def submit_transcription(job,raw,key,submitted,params=None):
     return transcript,cost,dict(submitted,duration_seconds=str(duration)),rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
 def run_one():
+    from .disposition import require_processing
+    require_processing()
     from .batch_jobs import run_one as run_batch
     if run_batch():return True
     from .mapping_jobs import run_one as run_mapping

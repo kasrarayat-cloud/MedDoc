@@ -1,0 +1,58 @@
+[
+  {
+    "page": "disposition",
+    "width": 1280,
+    "title": "Disposition review proposals · QuillMD",
+    "heading": "Disposition review proposals",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 4,
+    "buttons": [
+      "Sign out",
+      "Record review proposal",
+      "Prepare review plan",
+      "Record proposal review"
+    ]
+  },
+  {
+    "page": "restore",
+    "width": 1280,
+    "title": "Restore preparation · QuillMD",
+    "heading": "Restore preparation",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 2,
+    "buttons": [
+      "Sign out",
+      "Record quarantined target"
+    ]
+  },
+  {
+    "page": "disposition",
+    "width": 390,
+    "title": "Disposition review proposals · QuillMD",
+    "heading": "Disposition review proposals",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 4,
+    "buttons": [
+      "Sign out",
+      "Record review proposal",
+      "Prepare review plan",
+      "Record proposal review"
+    ]
+  },
+  {
+    "page": "restore",
+    "width": 390,
+    "title": "Restore preparation · QuillMD",
+    "heading": "Restore preparation",
+    "horizontalOverflow": false,
+    "unlabeledInputs": [],
+    "forms": 2,
+    "buttons": [
+      "Sign out",
+      "Record quarantined target"
+    ]
+  }
+]

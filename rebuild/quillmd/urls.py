@@ -44,3 +44,6 @@ urlpatterns += [
 # department invitations; the str converter cannot match '/', so it never shadows 'invite/<raw>/'.
 from core import clinic_invitations
 urlpatterns += [path('invite/clinic/<str:raw>/', clinic_invitations.accept, name='clinic_invite_accept')]
+
+from core import disposition_views
+urlpatterns += [path('console/disposition/',disposition_views.page,name='disposition_review'),path('console/restore-preparation/',disposition_views.restore,name='restore_preparation')]

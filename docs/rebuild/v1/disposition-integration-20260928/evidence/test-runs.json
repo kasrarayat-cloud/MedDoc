@@ -1,0 +1,120 @@
+[
+  {
+    "started_at": "2026-09-28T03:38:27.196622+00:00",
+    "head": "9f2bdad03dfc135befceae12a600bb0f86c7f7be",
+    "labels": [
+      "core.tests.test_disposition_preparation",
+      "core.tests.test_restore_integrity_contract"
+    ],
+    "synthetic_container": "2b8397103aec77d61fe4d363e445ff93e96dd8518ae25341ed3ca69a2c9f8bf1",
+    "database": "test_v1_disposition_01_recovered",
+    "installed_database_touched": false,
+    "completed_at": "2026-09-28T03:38:33.407085+00:00",
+    "exit_code": 1,
+    "source_unchanged": true,
+    "full_private_manifest_sha256": "41729d715d339972afb25289257af35fe9b87967f0fde35ec404160db0c3441d",
+    "full_private_manifest_path": "rebuild/.runtime/disposition-integration/01_recovered-manifest.json",
+    "original_log_sha256": "f11cb04329d6282e4b536cb2af0707c255a864a313bf267f5174f7e0d990567c",
+    "copied_log_sha256": "f11cb04329d6282e4b536cb2af0707c255a864a313bf267f5174f7e0d990567c",
+    "copy_normalization": "Trailing whitespace only; original private log unchanged."
+  },
+  {
+    "started_at": "2026-09-28T03:41:25.980783+00:00",
+    "head": "9f2bdad03dfc135befceae12a600bb0f86c7f7be",
+    "labels": [
+      "core.tests.test_disposition_integration.RecoveredBoundaries"
+    ],
+    "synthetic_container": "2b8397103aec77d61fe4d363e445ff93e96dd8518ae25341ed3ca69a2c9f8bf1",
+    "database": "test_v1_disposition_02_counterexamples",
+    "installed_database_touched": false,
+    "completed_at": "2026-09-28T03:41:32.143732+00:00",
+    "exit_code": 1,
+    "source_unchanged": true,
+    "full_private_manifest_sha256": "5e228d3585407d3345c900030d18e7a6402dd8ea9401e6649d211be507987c18",
+    "full_private_manifest_path": "rebuild/.runtime/disposition-integration/02_counterexamples-manifest.json",
+    "original_log_sha256": "edfa97833d2e6415d1531b7309d1e405a0afd95f5671793b731e0aa05f7f4ca7",
+    "copied_log_sha256": "5e475f3a3726b53fcd8ae7c69a316fd0031d0429eda0ee811c5af16a82893b49",
+    "copy_normalization": "Trailing whitespace only; original private log unchanged."
+  },
+  {
+    "started_at": "2026-09-28T03:43:32.840616+00:00",
+    "head": "9f2bdad03dfc135befceae12a600bb0f86c7f7be",
+    "labels": [
+      "core.tests.test_disposition_integration",
+      "core.tests.test_disposition_preparation",
+      "core.tests.test_restore_integrity_contract"
+    ],
+    "synthetic_container": "2b8397103aec77d61fe4d363e445ff93e96dd8518ae25341ed3ca69a2c9f8bf1",
+    "database": "test_v1_disposition_03_repaired",
+    "installed_database_touched": false,
+    "completed_at": "2026-09-28T03:43:40.459566+00:00",
+    "exit_code": 0,
+    "source_unchanged": true,
+    "full_private_manifest_sha256": "24bff43b703d29d8243dc3d1df38cf135b7bd8a165b97d0db5f5556d4203340e",
+    "full_private_manifest_path": "rebuild/.runtime/disposition-integration/03_repaired-manifest.json",
+    "original_log_sha256": "3f4300a18db6998c77dd5ffdbeadeae2c3149271f28da33997bd91d3d554e662",
+    "copied_log_sha256": "3f4300a18db6998c77dd5ffdbeadeae2c3149271f28da33997bd91d3d554e662",
+    "copy_normalization": "Trailing whitespace only; original private log unchanged."
+  },
+  {
+    "started_at": "2026-09-28T03:46:03.848169+00:00",
+    "head": "9f2bdad03dfc135befceae12a600bb0f86c7f7be",
+    "labels": [
+      "core.tests.test_disposition_integration.QuarantinedAdoption"
+    ],
+    "synthetic_container": "2b8397103aec77d61fe4d363e445ff93e96dd8518ae25341ed3ca69a2c9f8bf1",
+    "database": "test_v1_disposition_04_adoption_counterexample",
+    "installed_database_touched": false,
+    "completed_at": "2026-09-28T03:46:15.880408+00:00",
+    "exit_code": 1,
+    "source_unchanged": true,
+    "full_private_manifest_sha256": "db7d08120194c8ce081ecfe41129cfd604a9676aab0830b028d927d069673810",
+    "full_private_manifest_path": "rebuild/.runtime/disposition-integration/04_adoption_counterexample-manifest.json",
+    "original_log_sha256": "1fdc145e224c7f172c1fbee9ce6f73d70a57b33fc0bcb404fdc808f836c8d3ae",
+    "copied_log_sha256": "1fdc145e224c7f172c1fbee9ce6f73d70a57b33fc0bcb404fdc808f836c8d3ae",
+    "copy_normalization": "Trailing whitespace only; original private log unchanged."
+  },
+  {
+    "started_at": "2026-09-28T03:48:04.308655+00:00",
+    "head": "9f2bdad03dfc135befceae12a600bb0f86c7f7be",
+    "labels": [
+      "core.tests.test_disposition_integration.QuarantinedAdoption"
+    ],
+    "synthetic_container": "2b8397103aec77d61fe4d363e445ff93e96dd8518ae25341ed3ca69a2c9f8bf1",
+    "database": "test_v1_disposition_05_adoption_counterexample_valid",
+    "installed_database_touched": false,
+    "completed_at": "2026-09-28T03:48:21.860134+00:00",
+    "exit_code": 1,
+    "source_unchanged": true,
+    "full_private_manifest_sha256": "e25982a0dc20a87c6f519aa101a2a99c5c64545a12616108b83c39162a748b62",
+    "full_private_manifest_path": "rebuild/.runtime/disposition-integration/05_adoption_counterexample_valid-manifest.json",
+    "original_log_sha256": "bb127ecd51dff1a6757c6541ddef5f40512631df412223140dd4fe43455256ca",
+    "copied_log_sha256": "bb127ecd51dff1a6757c6541ddef5f40512631df412223140dd4fe43455256ca",
+    "copy_normalization": "Trailing whitespace only; original private log unchanged."
+  },
+  {
+    "started_at": "2026-09-28T03:49:03.217477+00:00",
+    "head": "9f2bdad03dfc135befceae12a600bb0f86c7f7be",
+    "labels": [
+      "core.tests.test_disposition_integration",
+      "core.tests.test_disposition_preparation",
+      "core.tests.test_restore_integrity_contract",
+      "core.tests.test_retention_preservation",
+      "core.tests.test_retention_readiness",
+      "core.tests.test_generation_batch.BatchWorkflow",
+      "core.tests.test_mapping_assistance",
+      "ops.test_production_restore_check"
+    ],
+    "synthetic_container": "2b8397103aec77d61fe4d363e445ff93e96dd8518ae25341ed3ca69a2c9f8bf1",
+    "database": "test_v1_disposition_06_focused_affected",
+    "installed_database_touched": false,
+    "completed_at": "2026-09-28T03:51:29.401632+00:00",
+    "exit_code": 0,
+    "source_unchanged": true,
+    "full_private_manifest_sha256": "44b0ae8ba04db613e6cce9a563b609e98d4b851ad30755dbe188f61e9bc13481",
+    "full_private_manifest_path": "rebuild/.runtime/disposition-integration/06_focused_affected-manifest.json",
+    "original_log_sha256": "aebd140163eeb7c41304311e4c75a079c935deac113796cd05e88a8fcfd9f011",
+    "copied_log_sha256": "aebd140163eeb7c41304311e4c75a079c935deac113796cd05e88a8fcfd9f011",
+    "copy_normalization": "Trailing whitespace only; original private log unchanged."
+  }
+]

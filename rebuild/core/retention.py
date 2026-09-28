@@ -133,6 +133,8 @@ def begin_private_file(path):
 
 
 def cleanup_file(path,*,encounter_id=None,department_id=None):
+    from .disposition import quarantined
+    if quarantined():return False
     try:return _cleanup_file(path,encounter_id=encounter_id,department_id=department_id)
     except (DatabaseError,OSError):
         # A completed provider request must still reach settlement if cleanup

@@ -13,15 +13,15 @@ class ReleaseIntegrityContract(TestCase):
             context = cursor.fetchall()
         report = integrity_contract.assess(rows,context,len(integrity_contract.GUARDS))
         self.assertTrue(report['passed'],report)
-        self.assertEqual(report['found'],51)
-        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),17)
+        self.assertEqual(report['found'],63)
+        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),18)
 
     def test_batch_guards_and_composed_preservation_body_fail_closed_when_changed(self):
         def read():
             with connection.cursor() as cursor:
                 cursor.execute(integrity_contract.CATALOG);rows=cursor.fetchall()
                 cursor.execute(integrity_contract.CONTEXT);context=cursor.fetchall()
-            return integrity_contract.assess(rows,context,51)
+            return integrity_contract.assess(rows,context,63)
         self.assertTrue(read()['passed'])
         with transaction.atomic():
             with connection.cursor() as cursor:

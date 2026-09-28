@@ -17,6 +17,26 @@
     "downloaded_exports": "unresolved"
   },
   "classes": {
+    "disposition_requests": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_plans": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "disposition_reviews": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "restore_preparations": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
     "retention_holds": {
       "mode": "unresolved",
       "anchor": null,
