@@ -637,6 +637,22 @@ def sdt_info(el) -> dict:
     return info
 
 
+def ff_text_limit(data):
+    """Word OOXML admits 1..32767; omission alone is unlimited. -1 is unresolved.
+
+    MS-OI29500 17.16.26 restricts this attribute to a positive XML Schema short.
+    Binary .doc's cch=0 convention does not make w:maxLength=0 unlimited.
+    """
+    nodes = data.findall(q("w:textInput") + "/" + q("w:maxLength"))
+    if not nodes:
+        return None
+    value = (nodes[0].get(q("w:val")) or "").strip()
+    if len(nodes) != 1 or not re.fullmatch(r"\+?[0-9]{1,8}", value):
+        return -1
+    number = int(value)
+    return number if 1 <= number <= 32767 else -1
+
+
 def ff_info(data) -> dict:
     kind = "FORMTEXT"
     info = {}
@@ -654,6 +670,7 @@ def ff_info(data) -> dict:
         ti = data.find(q("w:textInput"))
         typ = ti.find(q("w:type"))
         info["input_type"] = typ.get(q("w:val")) if typ is not None else "regular"
+        info["max_chars"] = ff_text_limit(data)
     name = data.find(q("w:name"))
     info["name"] = name.get(q("w:val")) if name is not None else None
     info["field"] = kind
@@ -1402,7 +1419,8 @@ class Detector:
                               options=[o for o in slot.info.get("options", []) if o]))
             else:
                 kind = "date" if slot.info.get("input_type") == "date" else self.kind_for(label)
-                self.add(Area(kind, clean_label(label), slot, {"type": "ff_text"}, context=self.context_for(slot)))
+                self.add(Area(kind, clean_label(label), slot, {"type": "ff_text"}, context=self.context_for(slot),
+                              protection=ff_text_protection(slot.el)))
 
     # 3. checkboxes: content-control, legacy and glyph boxes, grouped into questions -------------------------------
     def box_units(self, pslot):
@@ -3319,6 +3337,11 @@ class Detector:
             bound = min(bound or 120, 120)
         if any(x.kind == "txbx" for x in chain):
             bound = min(bound or 120, 120)
+        for ref in [slot] + [self.index.by_id.get(r["part"] + "#" + r["slot"])
+                             for r in area.target.get("copies", [])]:
+            native = ref.info.get("max_chars") if ref is not None and ref.kind == "ff" else None
+            if native is not None and native > 0:
+                bound = min(bound, native) if bound is not None else native
         return bound
 
     def surface_duplicates(self):
@@ -3356,6 +3379,7 @@ class Detector:
                 continue
             keep = group[0]
             for other in group[1:]:
+                keep.protection = keep.protection or other.protection
                 keep.target.setdefault("copies", []).append({"part": other.slot.part, "slot": other.slot.path,
                                                              "fingerprint": fingerprint(other.slot.el)})
                 self.areas.remove(other)
@@ -3457,6 +3481,19 @@ def mapped_fields(detector, areas):
         annotate_printed(detector.index, field)
         if field["locator"]["target"]["type"] == "cell_append":
             field["source_instructions"] = cell_instruction_source(detector.index, field)
+        elif field["locator"]["target"]["type"] == "ff_text" and field.get("write_protected"):
+            refs = [field["locator"]] + field["locator"]["target"].get("copies", [])
+            sources = []
+            for ref in refs:
+                slot = detector.index.by_id[ref["part"] + "#" + ref["slot"]]
+                text = ff_literal_help(slot.el)
+                if text:
+                    if len(text) > MAX_SOURCE_INSTRUCTION_CHARS:
+                        fail("The complete legacy field help exceeds the supported metadata bound.", "mapping_limit")
+                    sources.append({"part": slot.part, "slot": slot.path,
+                                    "fingerprint": fingerprint(slot.el), "text": text})
+            if sources:
+                field["source_instructions"] = sources
     source_policy.annotate(detector, fields)
     return fields
 
@@ -3965,7 +4002,47 @@ def _field_result_runs(begin_run):
     fail("A form field is not closed in its paragraph.", "unsupported_layout")
 
 
+def ff_literal_help(begin_run):
+    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
+    return "\n".join(node.get(q("w:val")) or "" for tag in ("w:statusText", "w:helpText")
+                     for node in data.findall(q(tag)) if node.get(q("w:type")) == "text")
+
+
+def ff_text_protection(begin_run):
+    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
+    if data.find(q("w:textInput")) is None:
+        return ""
+    info = ff_info(data)
+    if info["max_chars"] == -1:
+        return "This legacy input has an unsupported native maximum length. Its original value remains unchanged."
+    default = data.find(q("w:textInput") + "/" + q("w:default"))
+    paragraph = next(begin_run.iterancestors(q("w:p")), None)
+    if (info["max_chars"] != 1 or info.get("name") or info.get("input_type") != "regular" or
+            default is None or (default.get(q("w:val")) or "").strip() or not ff_literal_help(begin_run).strip() or
+            paragraph is None or text_of(paragraph).strip() or next(paragraph.iterancestors(q("w:tc")), None) is not None):
+        return ""
+    runs, end = _field_result_runs(begin_run)
+    if not runs or any(text_of(r).strip() for r in runs):
+        return ""
+    for run in [begin_run] + _siblings_between(begin_run, end) + [end]:
+        if run.tag != R:
+            return ""
+        for tag in ("w:sz", "w:szCs"):
+            size = run.find(q("w:rPr") + "/" + q(tag))
+            if size is None or size.get(q("w:val")) not in ("1", "2"):
+                return ""
+    return ("This tiny blank legacy control carries source guidance in its help text. "
+            "It remains protected, with its original value, help and navigation intact.")
+
+
 def write_ff_text(begin_run, answer):
+    reason = ff_text_protection(begin_run)
+    if reason:
+        fail(reason, "protected_source_guidance")
+    data = begin_run.find(FLDCHAR).find(q("w:ffData"))
+    limit = ff_text_limit(data)
+    if limit is not None and len(answer) > limit:
+        fail("This legacy input permits at most %d characters. Nothing was cut or written." % limit, "answer_too_long")
     runs, end = _field_result_runs(begin_run)
     src = runs[0].find(q("w:rPr")) if runs else begin_run.find(q("w:rPr"))
     for r in runs:
@@ -4156,6 +4233,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     protected.rule_question_boxes()
     protected_slots = ({area.slot.id for area in protected.areas if area.protection}
                        | protected.protected_regions | source_detector.protected_regions)
+    legacy_protected = {slot.id: ff_text_protection(slot.el) for slot in index.slots if slot.kind == "ff"}
+    legacy_protected = {identity: reason for identity, reason in legacy_protected.items() if reason}
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -4191,6 +4270,10 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if target.get("type") == "table_rows":
             destinations.append({"part": loc.get("part"), "slot": target.get("table")})
         locations = ["%s#%s" % (x.get("part"), x.get("slot")) for x in destinations]
+        for identity, reason in legacy_protected.items():
+            if any(location == identity or location.startswith(identity + "/") or identity.startswith(location + "/")
+                   for location in locations):
+                fail(reason, "protected_source_guidance")
         if field.get("write_protected") or any(location == s or location.startswith(s + "/") or s.startswith(location + "/")
                                                for location in locations for s in protected_slots):
             fail("This signing area is protected and remains unchanged. Review the original and complete it by hand.",
@@ -4324,7 +4407,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                 or next(node.iterancestors(q("w:p")), None) is not p):
             fail("An answer changed or removed an original printed checkbox.", "mapping_mismatch")
         glyph_readback[key] = {"part": part, "path": element_identity_path(package.tree(part), node)}
-    out = package.write({part: package.tree(part) for part in changed})
+    out = package.write({part: package.tree(part) for part in changed}) if changed else data
     verify_options(out, fields, answers, glyph_readback=glyph_readback)
     if retained_layout is not None:
         for header, row in layout_nodes:
@@ -5034,6 +5117,8 @@ def locate(data: bytes, targets: list) -> list:
             fail("The complete source section exceeds %d characters; nothing was shortened." % MAX_MAPPING_CONTEXT, "invalid_mapping")
         area = Area(kind, label, slot, target, context=clean_label(context, limit=MAX_MAPPING_CONTEXT),
                     options=options if kind in ("choice", "multi_choice") else ([label] if kind == "checkbox" else []))
+        if slot.kind == "ff" and target["type"] == "ff_text":
+            area.protection = ff_text_protection(slot.el)
         area.capacity = detector.capacity_for(area)
         field = area_to_field(n, area)
         field["key"] = "m3_%s" % hashlib.sha256(("%s|%s|%s" % (slot.id, json_dumps(target), label)).encode()).hexdigest()[:12]

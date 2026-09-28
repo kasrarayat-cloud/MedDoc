@@ -13,6 +13,148 @@ from . import word_v3 as w
 from .test_question_boxes import data
 
 
+def legacy_text(*, name='', label='', limit='1', points='2', result=' ', default=' ', help_text='Press TAB to continue.'):
+    from .test_word_v3 import ff_text_field
+    doc = Document(); p = doc.add_paragraph(label); ff_text_field(p, name=name)
+    begin = next(r for r in p._p.findall(w.R) if r.find(w.FLDCHAR) is not None)
+    ff = begin.find(w.FLDCHAR).find(w.q('w:ffData'))
+    ti = ff.find(w.q('w:textInput'))
+    if limit is not None: ti.append(w._el('w:maxLength', **{'w:val':limit}))
+    ti.append(w._el('w:default', **{'w:val':default}))
+    if help_text is not None: ff.append(w._el('w:statusText', **{'w:type':'text','w:val':help_text}))
+    end = p._p.findall(w.R)[-1]
+    run = w._el('w:r'); text = w._el('w:t'); text.text = result; run.append(text); end.addprevious(run)
+    for r in p._p.findall(w.R):
+        pr = w._el('w:rPr')
+        if points is not None:
+            for tag in ('w:sz','w:szCs'): pr.append(w._el(tag, **{'w:val':points}))
+        r.insert(0,pr)
+    return doc
+
+
+class LegacyTextBounds(unittest.TestCase):
+    def mapped(self, **kwargs):
+        raw = data(legacy_text(**kwargs)); fields = w.inspect(raw)['fields']
+        self.assertEqual(len(fields), 1)
+        return raw, fields
+
+    def result(self, raw, field):
+        index = w.SlotIndex(w.open_package(raw)); loc = field['locator']
+        runs, _ = w._field_result_runs(index.by_id[loc['part']+'#'+loc['slot']].el)
+        return ''.join(w.text_of(r) for r in runs)
+
+    def test_native_limit_is_enforced_from_source_for_old_and_forged_metadata(self):
+        raw, fields = self.mapped(name='Code', label='Code: ', points='22')
+        self.assertEqual(fields[0]['max_chars'], 1)
+        for supplied in (1, None, 99999):
+            altered = copy.deepcopy(fields)
+            if supplied is None: altered[0].pop('max_chars')
+            else: altered[0]['max_chars'] = supplied
+            before = copy.deepcopy(altered)
+            self.assertEqual(self.result(w.fill(raw, altered, {altered[0]['key']:'Ω'}), altered[0]), 'Ω')
+            with self.assertRaises(w.V3Failure) as failure: w.fill(raw, altered, {altered[0]['key']:'ΩΩ'})
+            self.assertEqual(failure.exception.code, 'answer_too_long')
+            self.assertEqual(altered, before)
+
+    def test_omitted_limit_is_unlimited_but_explicit_zero_and_malformed_caps_are_protected(self):
+        raw, fields = self.mapped(name='Details', label='Details: ', points='22', limit=None)
+        self.assertNotIn('max_chars', fields[0]); answer = 'A complete observation. ' * 40
+        self.assertEqual(self.result(w.fill(raw, fields, {fields[0]['key']:answer}), fields[0]), answer)
+        for limit in ('0','-1','32768','bad',''):
+            with self.subTest(limit=limit):
+                raw, fields = self.mapped(name='Code', limit=limit)
+                self.assertTrue(fields[0]['write_protected'])
+                self.assertEqual(w.fill(raw, fields, {}), raw)
+                fields[0].pop('write_protected'); fields[0].pop('review_reason')
+                with self.assertRaises(w.V3Failure) as failure: w.fill(raw, fields, {fields[0]['key']:'A'})
+                self.assertEqual(failure.exception.code, 'protected_source_guidance')
+
+    def test_populated_overlength_original_is_preserved_and_never_truncated_on_load(self):
+        raw, fields = self.mapped(name='Code', label='Code: ', points='22', result='ORIGINAL', default='ORIGINAL')
+        self.assertEqual(w.fill(raw, fields, {}), raw)
+        self.assertEqual(self.result(raw, fields[0]), 'ORIGINAL')
+        with self.assertRaises(w.V3Failure): w.fill(raw, fields, {fields[0]['key']:'LONGER ORIGINAL'})
+        self.assertEqual(self.result(w.fill(raw, fields, {fields[0]['key']:'A'}), fields[0]), 'A')
+
+    def test_micro_guidance_is_visible_protected_metadata_and_keeps_full_help(self):
+        help_text = 'Press TAB to continue.\nKeep this full source guidance Ω.'
+        raw, fields = self.mapped(help_text=help_text)
+        field = fields[0]; self.assertTrue(field['write_protected']); self.assertEqual(field['max_chars'], 1)
+        self.assertIn('help', field['review_reason'])
+        self.assertEqual(field['source_instructions'][0]['text'], help_text)
+        self.assertEqual(w.fill(raw, fields, {}), raw)
+        for metadata in ('new', 'removed', 'false'):
+            forged = copy.deepcopy(fields)
+            if metadata != 'new':
+                for key in ('write_protected','review_reason','max_chars','source_instructions'): forged[0].pop(key,None)
+                if metadata == 'false': forged[0]['write_protected'] = False
+            with self.assertRaises(w.V3Failure) as failure: w.fill(raw, forged, {field['key']:'A'})
+            self.assertEqual(failure.exception.code, 'protected_source_guidance')
+
+    def test_micro_source_protection_cannot_be_bypassed_by_replacing_its_parent(self):
+        raw, fields = self.mapped(); field = fields[0]
+        p = w.SlotIndex(w.open_package(raw)).by_id['word/document.xml#b/p[0]']
+        forged = {'key':'old', 'kind':'text', 'label':'Prior mapping', 'locator':{
+            'contract':'v3','part':p.part,'slot':p.path,'fingerprint':w.fingerprint(p.el),'target':{'type':'paragraph'}}}
+        with self.assertRaises(w.V3Failure) as failure: w.fill(raw, [forged], {'old':'A'})
+        self.assertEqual(failure.exception.code, 'protected_source_guidance')
+        self.assertEqual(w.fill(raw, [forged], {}), raw)
+
+    def test_real_named_visible_populated_and_mixed_style_inputs_are_not_micro_guidance(self):
+        for variation in ({'name':'Code'}, {'label':'Code: '}, {'points':'22'}, {'points':None},
+                          {'result':'A'}, {'default':'A'}, {'help_text':None}, {'limit':None}):
+            with self.subTest(variation=variation):
+                raw, fields = self.mapped(**variation)
+                self.assertFalse(fields[0].get('write_protected'))
+                self.assertEqual(self.result(w.fill(raw, fields, {fields[0]['key']:'B'}), fields[0]), 'B')
+
+    def test_direct_writer_checks_native_cap_and_guidance_before_mutation(self):
+        for kwargs, answer, code in (({'name':'Code','points':'22'},'AB','answer_too_long'),
+                                     ({},'A','protected_source_guidance')):
+            raw, fields = self.mapped(**kwargs)
+            slot = w.SlotIndex(w.open_package(raw)).by_id['word/document.xml#b/p[0]/ff[0]']
+            before = etree.tostring(slot.el.getparent())
+            with self.assertRaises(w.V3Failure) as failure: w.write_ff_text(slot.el,answer)
+            self.assertEqual(failure.exception.code,code)
+            self.assertEqual(etree.tostring(slot.el.getparent()),before)
+
+    def test_repeated_headers_use_the_tightest_native_limit(self):
+        doc = Document(); doc.settings.odd_and_even_pages_header_footer = True
+        for header, limit in zip((doc.sections[0].header, doc.sections[0].even_page_header), ('2','1')):
+            p = legacy_text(name='Code',label='Code: ',points='22',limit=limit).paragraphs[0]._p
+            header._element.replace(header.paragraphs[0]._p,p)
+        raw = data(doc); fields = w.inspect(raw)['fields']; self.assertEqual(len(fields),1)
+        self.assertEqual(fields[0]['max_chars'],1)
+        self.assertEqual(len(fields[0]['locator']['target']['copies']),1)
+        fields[0].pop('max_chars')
+        with self.assertRaises(w.V3Failure) as failure: w.fill(raw,fields,{fields[0]['key']:'AB'})
+        self.assertEqual(failure.exception.code,'answer_too_long')
+        output = w.fill(raw,fields,{fields[0]['key']:'A'})
+        index = w.SlotIndex(w.open_package(output))
+        for slot in [s for s in index.slots if s.kind=='ff']:
+            self.assertEqual(''.join(w.text_of(r) for r in w._field_result_runs(slot.el)[0]),'A')
+
+    def test_visible_paired_cell_prompt_retains_a_real_one_character_input(self):
+        doc = Document(); table = doc.add_table(rows=1,cols=2); table.cell(0,0).text='Code'
+        table.cell(0,1)._tc.replace(table.cell(0,1).paragraphs[0]._p,legacy_text().paragraphs[0]._p)
+        raw = data(doc); fields = w.inspect(raw)['fields']; self.assertEqual(len(fields),1)
+        self.assertFalse(fields[0].get('write_protected')); self.assertEqual(fields[0]['max_chars'],1)
+        self.assertEqual(self.result(w.fill(raw,fields,{fields[0]['key']:'A'}),fields[0]),'A')
+
+    def test_sandbox_json_roundtrip_keeps_protection_and_original_help_xml(self):
+        from documents import inspect_template, fill_template, DocumentError
+        raw = data(legacy_text())
+        with tempfile.TemporaryDirectory() as directory:
+            original = Path(directory)/'original.docx'; final = Path(directory)/'final.docx'; original.write_bytes(raw)
+            fields = json.loads(json.dumps(inspect_template(original,engine='v3')['fields']))
+            self.assertTrue(fields[0]['write_protected'])
+            fill_template(original,fields,{},final)
+            self.assertEqual(final.read_bytes(),raw)
+            fields[0].pop('write_protected'); fields[0].pop('review_reason')
+            with self.assertRaises(DocumentError): fill_template(original,fields,{fields[0]['key']:'A'},final)
+            self.assertEqual(original.read_bytes(),raw)
+
+
 def form():
     doc = Document(); table = doc.add_table(rows=1, cols=2)
     table.cell(0, 0).text = 'What information has the patient reviewed?'
