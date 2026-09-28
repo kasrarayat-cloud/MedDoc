@@ -1492,6 +1492,50 @@ class Detector:
         return sorted((pos, kind) for pos, kind in stops.items() if pos > 0), \
             (indent.get("left", 0), indent.get("right", 0))
 
+    def tab_source_visible(self, slot):
+        """Prove this relation's source has no hidden/unknown formatting.
+
+        Style toggle/conditional overrides are deliberately not guessed: an
+        enabled hide marker anywhere in the applicable ancestry remains unresolved.
+        This is separate from region_hidden, which checks checkbox containment.
+        """
+        hide = {q("w:vanish"), q("w:webHidden"), q("w:specVanish")}
+        def unhidden(node):
+            return node is None or not any(n.tag in hide and n.get(q("w:val"), "1")
+                                           not in ("0", "false", "off") for n in node.iter())
+        if not unhidden(slot.el):
+            return False
+        styles = self.package.tree("word/styles.xml") if "word/styles.xml" in self.package.names else None
+        if styles is not None and not unhidden(styles.find(q("w:docDefaults"))):
+            return False
+        def visible_style(refs, kind):
+            if len(refs) > 1:
+                return False
+            if refs:
+                name = refs[0].get(q("w:val"))
+            else:
+                defaults = [s for s in styles.findall(q("w:style")) if s.get(q("w:type")) == kind
+                            and s.get(q("w:default")) in ("1", "true", "on")] if styles is not None else []
+                if len(defaults) > 1:
+                    return False
+                if not defaults:
+                    return True
+                name = defaults[0].get(q("w:styleId"))
+            chain, problem = self.question_box_style_chain(name, kind)
+            return not problem and all(unhidden(style) for style in chain)
+        if not visible_style(slot.el.findall("./" + q("w:pPr") + "/" + q("w:pStyle")), "paragraph"):
+            return False
+        for run in slot.el.iter(R):
+            if not visible_style(run.findall("./" + q("w:rPr") + "/" + q("w:rStyle")), "character"):
+                return False
+        parent = slot.parent
+        while parent is not None:
+            if parent.kind == "tbl" and not visible_style(
+                    parent.el.findall("./" + q("w:tblPr") + "/" + q("w:tblStyle")), "table"):
+                return False
+            parent = parent.parent
+        return True
+
     def rule_tab_columns(self):
         """Complete same-cell title + repeated header/response pairs, never numeric-code guessing."""
         def coded(slot):
@@ -1524,7 +1568,10 @@ class Detector:
                         node.tag in (q("w:drawing"), q("w:pict"), q("w:object"), q("w:br"), q("w:sectPr"))
                         for node in cell.el.iter()):
                     complete = False
-                context, issue = self.question_box_context(cell.parent)
+                context, issue = self.question_box_context(cell.parent, require_visible=True)
+                if any(not self.tab_source_visible(p) for p in paragraphs):
+                    complete = False
+                    problem = "A source title, header or response has hidden or unresolved visibility."
                 headers = []
                 for number, row in enumerate(cell.parent.el.findall(q("w:tr"))[:cell.info["row"]]):
                     marked = row.find("./" + q("w:trPr") + "/" + q("w:tblHeader"))
@@ -1533,6 +1580,8 @@ class Detector:
                     for owner in self.grid(cell.parent).get(number, []):
                         if owner.info["col"] <= cell.info["col"] and owner.info["col"] + owner.info["span"] >= cell.info["col"] + cell.info["span"]:
                             header_paras = self.own_paragraphs(owner)
+                            if any(not self.tab_source_visible(p) for p in header_paras):
+                                issue = "The column header has hidden or unresolved visibility."
                             headers.extend(self.ptext(p.el)[0].strip() for p in header_paras if self.ptext(p.el)[0].strip())
                             if any(self.box_units(p) or self.blank_spans(*self.ptext(p.el))
                                    or "\x00" in self.ptext(p.el)[0] for p in self.own_paragraphs(owner)) \
@@ -1567,8 +1616,13 @@ class Detector:
                     refs = [unit[0] for unit in self.box_units(row)]
                     if len(refs) != len(options) or self.region_hidden(box_region(row.el)):
                         complete = False;problem = "A source control is not independently readable.";break
-                    pending.append((header, row, Area("checkbox" if len(options) == 1 else
-                        self.choice_kind(label, options, title), label, row,
+                    instructions = label + " " + context
+                    if CHECK_ONE.search(instructions) and CHECK_ALL.search(instructions):
+                        complete = False;problem = "The governing cardinality instructions conflict.";break
+                    if re.search(r"\bselect up to\b", instructions, re.I):
+                        complete = False;problem = "The governing cardinality includes an unrepresented selection limit.";break
+                    kind = self.choice_kind(label, options, context)
+                    pending.append((header, row, Area("checkbox" if len(options) == 1 else kind, label, row,
                         {"type": "checkboxes", "boxes": refs}, context=context,
                         options=options, complete_source=True)))
                 # A blank paragraph may still be a separate drawn answer area.
@@ -2273,9 +2327,10 @@ class Detector:
             return int(level) < 9, level == "0", problem
         return self.is_heading(node), False, problem
 
-    def question_box_context(self, question):
+    def question_box_context(self, question, *, require_visible=False):
         """Keep explicit outer section and local heading for this body-only relation."""
         outer, role, heading, awaiting_role = "", "", "", False
+        source_slots = [None, None, None]
         for slot in self.index.roots:
             if slot is question:
                 break
@@ -2296,10 +2351,16 @@ class Detector:
             major = major or re.fullmatch(r"(?:part|section)\s+(?:[A-Z]|\d+|[IVX]+)\s*[:.]?", text, re.I)
             if major:
                 outer, role, heading, awaiting_role = text, "", "", True
+                source_slots = [slot, None, None]
             elif awaiting_role:
                 role, awaiting_role = text, False
+                source_slots[1] = slot
             else:
                 heading = text
+                source_slots[2] = slot
+        if require_visible and any(s is not None and not self.tab_source_visible(s) for s in source_slots):
+            return " > ".join(dict.fromkeys(x for x in (outer, role, heading) if x)), \
+                "A governing heading has hidden or unresolved visibility."
         return " > ".join(dict.fromkeys(x for x in (outer, role, heading) if x)), ""
 
     def question_box_bordered(self, table, cell):

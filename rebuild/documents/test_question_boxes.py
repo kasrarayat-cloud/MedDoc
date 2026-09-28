@@ -835,3 +835,84 @@ class TabColumnOwnership(unittest.TestCase):
         result=w.inspect(data(doc))
         self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
         self.assertTrue(any('Tab-column' in note for note in result['notes']))
+
+    def test_governing_cardinality_and_conflicting_scopes(self):
+        for conflict in (False, True):
+            with self.subTest(conflict=conflict):
+                doc=self.form()
+                doc.paragraphs[0].text='Symptoms; tick all that apply.'
+                cell=doc.tables[0].cell(0,0);cell.paragraphs[1].text='\tPain\tSwelling'
+                if conflict:cell.paragraphs[0].text='Examination; choose one.'
+                raw=data(doc);result=w.inspect(raw)
+                fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
+                if conflict:
+                    self.assertFalse(fields);self.assertTrue(any('cardinality' in n for n in result['notes']))
+                else:
+                    self.assertEqual(fields[0]['kind'],'multi_choice')
+                    out=w.fill(raw,result['fields'],{fields[0]['key']:['Pain','Swelling']})
+                    self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),fields[0]),[True,True])
+        doc=self.form();doc.paragraphs[0].text='Symptoms; select up to 1.'
+        result=w.inspect(data(doc))
+        self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
+        self.assertTrue(any('unrepresented selection limit' in n for n in result['notes']))
+
+    def test_hidden_or_unknown_source_visibility_never_supplies_columns(self):
+        for source in ('header','title','row','heading','marked_header'):
+            for mode in ('direct','paragraph','character','unknown_character'):
+                with self.subTest(source=source,mode=mode):
+                    doc=self.form();table=doc.tables[0];cell=table.cell(0,0)
+                    para={'header':cell.paragraphs[1],'title':cell.paragraphs[0],
+                          'row':cell.paragraphs[2],'heading':doc.paragraphs[0]}.get(source)
+                    if source=='marked_header':
+                        row=table.add_row()._tr;row.getparent().remove(row)
+                        table._tbl.insert(list(table._tbl).index(table.rows[0]._tr),row)
+                        row=table.rows[0];row._tr.get_or_add_trPr().append(OxmlElement('w:tblHeader'))
+                        row.cells[0].text='Donor';para=row.cells[0].paragraphs[0]
+                    if mode=='direct':para.runs[0]._r.get_or_add_rPr().append(OxmlElement('w:vanish'))
+                    elif mode=='unknown_character':
+                        ref=OxmlElement('w:rStyle');ref.set(qn('w:val'),'MissingVisibility')
+                        para.runs[0]._r.get_or_add_rPr().append(ref)
+                    else:
+                        kind=WD_STYLE_TYPE.PARAGRAPH if mode=='paragraph' else WD_STYLE_TYPE.CHARACTER
+                        parent=doc.styles.add_style('HiddenParent',kind)
+                        parent.element.get_or_add_rPr().append(OxmlElement('w:webHidden'))
+                        child=doc.styles.add_style('HiddenChild',kind);child.base_style=parent
+                        if mode=='paragraph':
+                            if source=='heading':parent.base_style=doc.styles['Heading 1']
+                            para.style=child
+                        else:para.runs[0].style=child
+                    result=w.inspect(data(doc))
+                    self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
+                    self.assertTrue(any('Tab-column' in n for n in result['notes']))
+
+    def test_visibility_defaults_and_explicit_off_have_bounded_meaning(self):
+        for mode in ('doc_default','table_default','character_default','paragraph_default',
+                     'table_inherited','character_cycle','explicit_off','ancestor_on_direct_off'):
+            with self.subTest(mode=mode):
+                doc=self.form();header=doc.tables[0].cell(0,0).paragraphs[1]
+                if mode=='doc_default':
+                    holder=doc.styles.element.find(qn('w:docDefaults')).find(qn('w:rPrDefault')).find(qn('w:rPr'))
+                elif mode.endswith('_default'):
+                    kind=mode.split('_')[0]
+                    style=next(s for s in doc.styles.element if s.get(qn('w:type'))==kind
+                               and s.get(qn('w:default'))=='1')
+                    holder=style.get_or_add_rPr()
+                elif mode=='table_inherited':
+                    parent=doc.styles.add_style('HiddenTableParent',WD_STYLE_TYPE.TABLE)
+                    child=doc.styles.add_style('HiddenTableChild',WD_STYLE_TYPE.TABLE);child.base_style=parent
+                    doc.tables[0].style=child;holder=parent.element.get_or_add_rPr()
+                elif mode in ('character_cycle','ancestor_on_direct_off'):
+                    style=doc.styles.add_style('VisibilityAncestor',WD_STYLE_TYPE.CHARACTER)
+                    header.runs[0].style=style;holder=style.element.get_or_add_rPr()
+                    if mode=='character_cycle':style.base_style=style
+                    else:
+                        off=OxmlElement('w:vanish');off.set(qn('w:val'),'0')
+                        header.runs[0]._r.get_or_add_rPr().append(off)
+                else:holder=header.runs[0]._r.get_or_add_rPr()
+                marker=OxmlElement('w:vanish')
+                if mode=='explicit_off':marker.set(qn('w:val'),'0')
+                holder.append(marker)
+                result=w.inspect(data(doc))
+                fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
+                self.assertEqual(bool(fields),mode=='explicit_off')
+                if mode!='explicit_off':self.assertTrue(any('Tab-column' in n for n in result['notes']))
