@@ -123,6 +123,9 @@ def policy_warnings(field, selected):
              policy.get('source_author', 'patient') == 'patient' and
              policy.get('attestation', 'document_review') == 'document_review')
     if not valid: return list(selected)
+    # Additional preserved instructions may qualify the printed attestation.
+    # This narrow reader cannot grant authority from the left question alone.
+    if 'attestation' in policy and field.get('source_instructions'): return list(selected)
     requirements = review_requirements(policy['attestation_source']['text']) if 'attestation' in policy else None
     if 'attestation' in policy and requirements is None: return list(selected)
     warnings = []; supplied = set()

@@ -253,6 +253,23 @@ class OrdinaryFieldRelations(SimpleTestCase):
         notes = 'The patient has read the report.'
         self.assertEqual(offered(notes, [target], {'f': [notes]})['f']['status'], 'conflict')
 
+    def test_additional_preserved_instructions_cannot_be_ignored_by_attestation(self):
+        source = {'part': 'word/document.xml', 'slot': 'b/tbl[0]/tr[0]/tc[0]', 'fingerprint': 'a' * 64,
+                  'text': 'Confirm patient reviewed the application and had an opportunity to comment on the application.'}
+        target = field('f', 'Additional comments')
+        target['answer_policy'] = {'attestation': 'document_review', 'attestation_source': source}
+        notes = 'The patient has read the application and had an opportunity to comment on the application.'
+        self.assertEqual(offered(notes, [target], {'f': [notes]})['f']['status'], 'supported')
+        target['source_instructions'] = [{**source, 'slot': 'b/tbl[0]/tr[0]/tc[1]',
+            'text': 'Third-party information should not be shared with the patient. The patient should still have an opportunity to comment whether or not seeing the full application.'}]
+        self.assertEqual(offered(notes, [target], {'f': [notes]})['f']['status'], 'conflict')
+        old = {'text': notes, 'status': 'supported', 'reviewed': True,
+               'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}
+        self.assertEqual(g.governed_decisions(notes, [target], {'f': old}), ['Additional comments'])
+        target.pop('answer_policy')
+        ordinary = 'The patient reports intermittent buzzing.'
+        self.assertEqual(offered(ordinary, [target], {'f': [ordinary]})['f']['status'], 'supported')
+
     def test_correction_subject_omission_contradiction_and_consent_guards_survive(self):
         first = 'The patient reports intermittent buzzing.'
         fields = repeated()

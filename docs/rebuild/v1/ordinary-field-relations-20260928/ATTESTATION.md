@@ -32,3 +32,7 @@ ordinary usefulness and historical-draft refusal. Before this delta, the
 previous finished diff passed 170 methods in 146.821 seconds and the independent
 bounded 24-case refutation replay passed with stable source hashes. This delta
 requires its own bounded finished-diff refutation before integration closure.
+
+Additional `source_instructions` anchors on an attestation cause an explicit hold:
+the simple reader cannot establish an obligation while ignoring preserved
+right-cell guidance. This guard does not blanket-hold other answer fields.
