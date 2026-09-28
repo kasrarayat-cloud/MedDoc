@@ -1054,6 +1054,28 @@ def all_provider_caps():
     return tuple(cap for path in application_sources() for cap in provider_caps(path))
 
 
+def history_cost_adjustment(function):
+    """Admit only the measured, additive history charge; never skip unknown rate terms."""
+    expected = ast.parse("""
+if config.get('history_context_contract'):
+    from . import v3_history_context as history
+    target_keys = list(history.targets(asked, units)) if v3_fields is not None else []
+    if target_keys:
+        history.refuse_request(config)
+        extra = len((history.INSTRUCTIONS + json.dumps(history.HistorySelections.model_json_schema())
+                     + json.dumps({'history_context_targets': target_keys})).encode())
+        bound += Decimal(extra)*r['input_per_million']/1000000
+""").body[0]
+    matches = [node for node in ast.walk(function) if isinstance(node, ast.If)
+               and ast.dump(node.test) == ast.dump(expected.test)]
+    if len(matches) != 1 or ast.dump(matches[0]) != ast.dump(expected):
+        raise Unresolved('maximum_cost: history charge no longer measures its full guarded request addition')
+    # A matching subtree must not mask another assignment elsewhere in the function.
+    assigned_once(function, 'target_keys')
+    assigned_once(function, 'extra')
+    return matches[0].body[-1].body[-1]
+
+
 def maximum_cost_terms():
     """(input overhead tokens, (kind, output caps)) in core/generation.py's maximum_cost: the overhead traced to one
     number, the output term to one number or to the job's request-profile cap (`cap_value`)."""
@@ -1062,14 +1084,17 @@ def maximum_cost_terms():
     functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == 'maximum_cost']
     if len(functions) != 1:
         raise Unresolved(f'core/generation.py: {len(functions)} maximum_cost functions')
+    history_charge = history_cost_adjustment(functions[0])
     parents = parent_map(tree)
     branches = {}
     for node in ast.walk(functions[0]):
         if (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult) and isinstance(node.right, ast.Subscript)
                 and isinstance(node.right.slice, ast.Constant)):
             assignment = node
-            while assignment in parents and not isinstance(assignment, ast.Assign):
+            while assignment in parents and not isinstance(assignment, (ast.Assign, ast.AugAssign)):
                 assignment = parents[assignment]
+            if assignment is history_charge:
+                continue
             if not isinstance(assignment, ast.Assign):
                 raise Unresolved('maximum_cost: rate term outside a bounded assignment')
             branches.setdefault(assignment, {}).setdefault(node.right.slice.value, []).append(node.left)
@@ -1086,7 +1111,7 @@ def maximum_cost_terms():
                 raise Unresolved('maximum_cost: priced branch returns something other than bound')
         if isinstance(node, ast.Name) and node.id == 'bound' and isinstance(node.ctx, (ast.Store, ast.Del)):
             holder = parents.get(node)
-            if holder in branches:
+            if holder in branches or holder is history_charge:
                 continue
             adjustment = '(bound * US_INFERENCE_MULTIPLIER).quantize(COST_QUANTUM, rounding=ROUND_CEILING)'
             if not (isinstance(holder, ast.Assign) and holder.targets == [node]

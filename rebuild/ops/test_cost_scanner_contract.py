@@ -47,6 +47,32 @@ class AdditionalCostContracts(unittest.TestCase):
         self.check_mutation('core/generation.py', '        return bound',
                             '        bound: Decimal = Decimal(0)\n        return bound', scan.maximum_cost_terms)
 
+    def test_history_addition_must_remain_fully_measured_and_additive(self):
+        cases = [
+            ("if config.get('history_context_contract'):", 'if False:'),
+            ('if target_keys:', 'if not target_keys:'),
+            ('history.refuse_request(config)', 'pass'),
+            ('history.INSTRUCTIONS + json.dumps', "'' + json.dumps"),
+            ('json.dumps(history.HistorySelections.model_json_schema())', "'{}'"),
+            ("json.dumps({'history_context_targets': target_keys})", "'{}'"),
+            ("bound += Decimal(extra)*r['input_per_million']/1000000", 'bound += Decimal(0)'),
+            ("bound += Decimal(extra)*r['input_per_million']/1000000",
+             "bound -= Decimal(extra)*r['input_per_million']/1000000"),
+            ("bound += Decimal(extra)*r['input_per_million']/1000000",
+             "bound += Decimal(extra)*r['output_per_million']/1000000"),
+            ("bound += Decimal(extra)*r['input_per_million']/1000000",
+             "bound += Decimal(extra)*r['input_per_million']/10000000"),
+            ("bound += Decimal(extra)*r['input_per_million']/1000000",
+             "bound = Decimal(extra)*r['input_per_million']/1000000"),
+            ('    return bound\n\nclass Labels', '    extra = 0\n    return bound\n\nclass Labels'),
+            ('    return bound\n\nclass Labels', '    target_keys = []\n    return bound\n\nclass Labels'),
+            ('    return bound\n\nclass Labels',
+             "    bound += Decimal(0)*r['input_per_million']/1000000\n    return bound\n\nclass Labels"),
+        ]
+        for old, new in cases:
+            with self.subTest(mutation=new):
+                self.check_mutation('core/generation.py', old, new, scan.maximum_cost_terms)
+
     def test_compiled_mapping_changes_fail_closed(self):
         def checked():
             caps = scan.provider_caps(scan.REBUILD / 'core/mapping_jobs.py')
