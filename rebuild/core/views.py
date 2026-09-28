@@ -1386,6 +1386,15 @@ def finalize(request,pk):
             e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
             membership(request.user,e.department,roles=['owner','clinician'])
             if e.status=='finalized':return redirect('encounter_detail',pk=pk)
+            # ⚠️ BEFORE ANYTHING IS FILLED. The form refuses to START a document on an unconfirmed contract v3 mapping, but a
+            # draft the previous release started while a rollback had removed the database gate survives re-installing it
+            # (R1), and finalizing it produced an export no clinician's mapping check stood behind. The database refuses
+            # the move too; this says why and what to do, and leaves no filled export behind.
+            if e.template_version.needs_confirmation:
+                raise ValidationError(f"This document's form mapping (version {e.template_version.number}) has not been confirmed by a "
+                                      'clinician, so it cannot be finalized. Nothing was finalized. A clinician can confirm that '
+                                      "mapping version on the form's page if it is still the form's current mapping; otherwise "
+                                      "start a new document from the form's confirmed mapping.")
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
             if batch_jobs.pending(e):raise ValidationError('Resolve pending jobs before finalizing.')
