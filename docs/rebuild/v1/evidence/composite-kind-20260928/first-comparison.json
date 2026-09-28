@@ -1,0 +1,173 @@
+{
+  "base_sha256": "c82ef298b59780238c4f995c6da4056d87ca939282b62c15e74ef185f362cad8",
+  "candidate_sha256": "21399290ec826f9c0c2b9e419b725a93008f39da565558ded076372990af0bc6",
+  "rows": [
+    {
+      "label": "Date of Birth",
+      "expected": "date",
+      "base": [
+        {
+          "kind": "date",
+          "label": "Date of Birth",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "date",
+          "label": "Date of Birth",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "label": "Date of assessment",
+      "expected": "date",
+      "base": [
+        {
+          "kind": "date",
+          "label": "Date of assessment",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "date",
+          "label": "Date of assessment",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "label": "Time of assessment",
+      "expected": "time",
+      "base": [
+        {
+          "kind": "time",
+          "label": "Time of assessment",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "time",
+          "label": "Time of assessment",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "label": "Date of Order and details of restrictions",
+      "expected": "long_text",
+      "base": [
+        {
+          "kind": "date",
+          "label": "Date of Order and details of restrictions",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "long_text",
+          "label": "Date of Order and details of restrictions",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "label": "Time of onset and description of symptoms",
+      "expected": "long_text",
+      "base": [
+        {
+          "kind": "time",
+          "label": "Time of onset and description of symptoms",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "long_text",
+          "label": "Time of onset and description of symptoms",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "label": "Date and summary of previous assessment",
+      "expected": "long_text",
+      "base": [
+        {
+          "kind": "date",
+          "label": "Date and summary of previous assessment",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "long_text",
+          "label": "Date and summary of previous assessment",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "label": "Signature comments",
+      "expected": "signature",
+      "base": [
+        {
+          "kind": "signature",
+          "label": "Signature comments",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "signature",
+          "label": "Signature comments",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "label": "Initials and comments",
+      "expected": "initials",
+      "base": [
+        {
+          "kind": "initials",
+          "label": "Initials and comments",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "initials",
+          "label": "Initials and comments",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "label": "Patient name",
+      "expected": "text",
+      "base": [
+        {
+          "kind": "text",
+          "label": "Patient name",
+          "protected": false
+        }
+      ],
+      "candidate": [
+        {
+          "kind": "text",
+          "label": "Patient name",
+          "protected": false
+        }
+      ]
+    },
+    {
+      "native_date_alias": "Date and assessment details",
+      "candidate_kind": "date",
+      "pass": true
+    }
+  ]
+}

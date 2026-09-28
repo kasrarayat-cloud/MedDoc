@@ -1,0 +1,4 @@
+{
+  "disposition": "Affected original/ordinary page2 and long pages2-5 visually inspected. Original wording, cell geometry, neighbouring questions and branded header/footer retained; long text reflows12\u219215pages without observed clipping/overlap. Native Word unavailable; no whole-document success.",
+  "pdf_proof": "06-render-check.json first raw outcome retained;07-body-check.json90/90complete sentences with full contiguous answer after excluding measured running headers/footers."
+}

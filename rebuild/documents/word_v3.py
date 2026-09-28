@@ -1169,12 +1169,15 @@ class Detector:
             return "signature"
         if INITIALS.search(label) and not DATE_LABEL.search(label):
             return "initials"
+        # A free-text destination asking for description keeps the whole
+        # answer even when its printed question also mentions a date or time.
+        # Dedicated native date controls are typed by their own OOXML rule.
+        if LONG_LABEL.search(label):
+            return "long_text"
         if TIME_LABEL.search(label) and not DATE_LABEL.search(label):
             return "time"
         if DATE_LABEL.search(label) or re.search(r"\bdated\s*$", label, re.I):
             return "date"
-        if LONG_LABEL.search(label):
-            return "long_text"
         return "text"
 
     def choice_kind(self, question: str, options: list, hint: str = "") -> str:
