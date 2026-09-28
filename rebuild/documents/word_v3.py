@@ -1241,6 +1241,7 @@ class Detector:
         self.rule_content_controls()
         self.rule_form_fields()
         self.rule_tab_columns()
+        self.rule_coded_column_sequences()
         self.rule_checkboxes()
         self.rule_question_boxes(list_only=True)
         self.rule_text_option_choices()
@@ -1260,6 +1261,8 @@ class Detector:
                                   ". The complete question or section exceeds the mapping limit; nothing was shortened. "
                                   "Printed text: " + a.label + " Section: " + a.context)
                 self.areas.remove(a)
+                # A withdrawn area is no longer a layout proposal either; its source stays claimed.
+                self.layout_candidates[:] = [c for c in self.layout_candidates if c[2] is not a]
                 continue
             a.capacity = self.capacity_for(a)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
@@ -1557,6 +1560,26 @@ class Detector:
             parent = parent.parent
         return True
 
+    def marked_column_headers(self, cell):
+        """Visible text of the repeating (marked) header rows spanning this cell, or the issue that
+        makes them unusable: hidden/unresolved visibility, or an answer area inside the header."""
+        headers, issue = [], ""
+        for number, row in enumerate(cell.parent.el.findall(q("w:tr"))[:cell.info["row"]]):
+            marked = row.find("./" + q("w:trPr") + "/" + q("w:tblHeader"))
+            if marked is None or marked.get(q("w:val"), "1") in ("0", "false", "off"):
+                continue
+            for owner in self.grid(cell.parent).get(number, []):
+                if owner.info["col"] <= cell.info["col"] and owner.info["col"] + owner.info["span"] >= cell.info["col"] + cell.info["span"]:
+                    header_paras = self.own_paragraphs(owner)
+                    if any(not self.tab_source_visible(p) for p in header_paras):
+                        issue = "The column header has hidden or unresolved visibility."
+                    headers.extend(self.ptext(p.el)[0].strip() for p in header_paras if self.ptext(p.el)[0].strip())
+                    if any(self.box_units(p) or self.blank_spans(*self.ptext(p.el))
+                           or "\x00" in self.ptext(p.el)[0] for p in self.own_paragraphs(owner)) \
+                            or any(node.tag in (q("w:drawing"), q("w:pict"), q("w:tbl")) for node in owner.el.iter()):
+                        issue = "The column header contains an answer area."
+        return headers, issue
+
     def rule_tab_columns(self):
         """Complete same-cell title + repeated header/response pairs, never numeric-code guessing."""
         def coded(slot):
@@ -1593,21 +1616,8 @@ class Detector:
                 if any(not self.tab_source_visible(p) for p in paragraphs):
                     complete = False
                     problem = "A source title, header or response has hidden or unresolved visibility."
-                headers = []
-                for number, row in enumerate(cell.parent.el.findall(q("w:tr"))[:cell.info["row"]]):
-                    marked = row.find("./" + q("w:trPr") + "/" + q("w:tblHeader"))
-                    if marked is None or marked.get(q("w:val"), "1") in ("0", "false", "off"):
-                        continue
-                    for owner in self.grid(cell.parent).get(number, []):
-                        if owner.info["col"] <= cell.info["col"] and owner.info["col"] + owner.info["span"] >= cell.info["col"] + cell.info["span"]:
-                            header_paras = self.own_paragraphs(owner)
-                            if any(not self.tab_source_visible(p) for p in header_paras):
-                                issue = "The column header has hidden or unresolved visibility."
-                            headers.extend(self.ptext(p.el)[0].strip() for p in header_paras if self.ptext(p.el)[0].strip())
-                            if any(self.box_units(p) or self.blank_spans(*self.ptext(p.el))
-                                   or "\x00" in self.ptext(p.el)[0] for p in self.own_paragraphs(owner)) \
-                                    or any(node.tag in (q("w:drawing"), q("w:pict"), q("w:tbl")) for node in owner.el.iter()):
-                                issue = "The column header contains an answer area."
+                headers, header_issue = self.marked_column_headers(cell)
+                issue = header_issue or issue
                 context = " > ".join(x for x in (context, *headers, title) if x)
                 if issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
                     complete = False
@@ -1683,6 +1693,209 @@ class Detector:
                 return False
             codes.append(match.group(1))
         return len(set(codes)) == len(codes)
+
+    def coded_column_parts(self, slot):
+        if not self.coded_choice_paragraph(slot):
+            return None
+        text = self.ptext(slot.el)[0]
+        matches = list(re.finditer(r"\d{1,3}\s*[☐☒]", text))
+        if len(matches) != len(self.box_units(slot)):
+            return None
+        return {"label": text[:matches[0].start()].strip(),
+                "starts": [0] + [m.start() for m in matches]}
+
+    def literal_column_header(self, slot):
+        """Literal option words separated by printed gaps: a tab, or two or more spaces, merged
+        with all adjacent whitespace. A single space stays inside one option's words."""
+        text = self.ptext(slot.el)[0]
+        if any(c in text for c in (BOX, CHECKED, "\x00", "\n")) or self.blank_spans(*self.ptext(slot.el)):
+            return None
+        printed = text.rstrip(" \t")
+        separators = [m for m in re.finditer(r"[ \t]+", printed) if "\t" in m.group() or len(m.group()) > 1]
+        if not separators:
+            return None
+        starts = [0] + [m.end() for m in separators]
+        ends = [m.start() for m in separators] + [len(printed)]
+        parts = [printed[a:b].strip() for a, b in zip(starts, ends)]
+        if len(parts) < 3 or not all(parts[1:]) or len(set(parts[1:])) != len(parts[1:]) \
+                or any(len(p) > 300 for p in parts[1:]):
+            return None
+        # Leading spaces alone may be indentation or an empty label column; the group decides.
+        indented = separators[0].start() == 0 and "\t" not in separators[0].group()
+        return {"prefix": parts[0], "options": parts[1:], "starts": starts, "indented": indented}
+
+    def readable_box_states(self, slot):
+        """Every native control in the paragraph has one known state the renderer can be held to."""
+        for piece in self.ptext(slot.el)[1]:
+            if piece.kind != "obj":
+                continue
+            state = ff_checkbox_state(piece.node) if piece.obj == "ff_checkbox" else \
+                sdt_checkbox_state(piece.node) if piece.obj == "sdt_checkbox" else None
+            if type(state) is not bool:
+                return False
+        return True
+
+    def coded_column_source(self, cell, rows, infos):
+        """Resolve one cell's complete coded-column source, or return the reason it is unresolved.
+
+        Titles (before the first header) are context. A header's lead - text printed directly above
+        it and its own prefix - belongs to the first row below it only; text printed directly above
+        a row belongs to that row. A summary title names only a cell's single unlabelled row.
+        Positions, never codes, bind a box to its header option; only the PDF may confirm that."""
+        children = [s for s in cell.children if s.kind == "p"]
+        texts = {p.id: self.ptext(p.el)[0] for p in children}
+        if cell.parent.parent is not None:
+            return [], "The cell is inside a nested table."
+        if any(s.kind != "p" and s.seq < rows[-1].seq for s in cell.children):
+            return [], "Another object interrupts the printed source."
+        for p in children:
+            if not texts[p.id].strip():
+                if not self.plain_spacing_paragraph(p, unused_tab_stops=True) \
+                        or self.tab_column_properties(p, scope_only=True) is None:
+                    return [], "A marked or unresolved spacer interrupts the source."
+                continue
+            if ("\x00" in texts[p.id] or "\n" in texts[p.id] or not self.tab_source_visible(p)
+                    or self.tab_column_properties(p, scope_only=True) is None
+                    or self.question_box_paragraph(p.el)[2]
+                    or any(n.tag in (q("w:drawing"), q("w:pict"), q("w:object"), q("w:br"), q("w:cr"), q("w:sectPr"))
+                           for n in p.el.iter())):
+                return [], "A source paragraph has hidden, broken, embedded or unresolved content."
+        context, issue = self.question_box_context(cell.parent, require_visible=True)
+        headers, header_issue = self.marked_column_headers(cell)
+        context = " > ".join(x for x in (context, *headers,
+                             " | ".join(texts[p.id].strip() for p in children if texts[p.id].strip())) if x)
+        if issue or header_issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
+            return [], "The full source context is oversized, protected or unresolved."
+        if CHECK_ONE.search(context) and CHECK_ALL.search(context) or re.search(r"\bselect up to\b", context, re.I):
+            return [], "The governing cardinality instructions conflict or carry an unrepresented limit."
+        titles, groups, current, waiting, previous = [], [], None, [], None
+        for p in children:
+            text = texts[p.id]
+            if not text.strip():
+                if waiting:
+                    return [], "A spacer separates printed label text from the row it would name."
+                previous = "blank"
+                continue
+            if p.id in infos:
+                if current is None:
+                    return [], "An answer row precedes its printed column header."
+                current["rows"].append((p, waiting))
+                waiting, previous = [], "row"
+                continue
+            header = self.literal_column_header(p)
+            if header is not None:
+                if current is not None and not current["rows"]:
+                    return [], "A printed column header governs no answer row."
+                current = {"para": p, "info": header, "lead": waiting, "rows": []}
+                groups.append(current)
+                waiting, previous = [], "header"
+                continue
+            if self.box_units(p) or self.blank_spans(*self.ptext(p.el)):
+                return [], "Another answer area interrupts the printed source."
+            asks = (text.strip().endswith((":", "?")) or self.question_box_request(text.strip())
+                    or re.search(r"\b(?:specify|comments?|explain|describe)\b", text, re.I))
+            if current is None:
+                if asks:
+                    return [], "A printed title requests its own answer."
+                titles.append(p)
+                previous = "title"
+                continue
+            if previous == "row":
+                return [], "Printed text directly below an answer row may belong to it or to the next row."
+            if asks or self.is_heading(p.el):
+                return [], "Printed text between rows asks a question or starts a new section."
+            waiting.append(p)
+            previous = "text"
+        if waiting or current is None or not current["rows"]:
+            return [], "Printed text or a column header follows the last answer row."
+        if not titles:
+            return [], "The cell has no printed title of its own."
+        for group in groups:
+            counts = {len(infos[row.id]["starts"]) - 1 for row, _ in group["rows"]}
+            info = group["info"]
+            if len(counts) == 1 and info["indented"] and len(info["options"]) == min(counts) + 1:
+                # Leading printed spaces are indentation here, not an empty label column: the only
+                # reading with one printed option per box. The rendered witness still decides ownership.
+                group["info"] = {"prefix": info["options"][0], "options": info["options"][1:],
+                                 "starts": [0] + info["starts"][2:], "indented": False}
+            if all(re.fullmatch(r"[\d\s.,)(-]+", option) for option in group["info"]["options"]):
+                return [], "A printed column header names only numbers; a response code is never an option's meaning."
+        pending, seen = [], set()
+        paras = [p for p in children if texts[p.id].strip()]
+        for group in groups:
+            header, info = group["para"], group["info"]
+            for number, (row, before) in enumerate(group["rows"]):
+                sources = (group["lead"] if number == 0 else []) + before
+                pieces = [texts[p.id] for p in sources]
+                if number == 0:
+                    pieces += [info["prefix"]]
+                pieces += [infos[row.id]["label"]]
+                label = re.sub(r"[.·]{3,}$", "", " ".join(" ".join(pieces).split())).strip()
+                start = sources[0] if sources and sources[0].seq < header.seq else header
+                if not label:
+                    if len(rows) != 1 or len(titles) != 1:
+                        return [], "An answer row has no printed label of its own."
+                    label, start = " ".join(texts[titles[0].id].split()), titles[0]
+                if label.lower() in seen:
+                    return [], "Two answer rows print the same label; their destinations are ambiguous."
+                seen.add(label.lower())
+                refs = [unit[0] for unit in self.box_units(row)]
+                if len(refs) != len(info["options"]) or len(infos[row.id]["starts"]) != len(info["options"]) + 1:
+                    return [], "A row's answer boxes do not match its printed column header."
+                if (self.region_hidden(box_region(row.el)) or not self.readable_box_states(row)
+                        or any(hyperlink_control(node) for node in checkbox_nodes(row.el))
+                        or any(hyperlink_run(piece.run) for piece, _, _ in glyph_boxes(row.el))):
+                    return [], "A source control is hidden, linked or not independently readable."
+                if (len(label) > MAX_MAPPING_LABEL or self.question_box_signing(label)
+                        or any(self.question_box_signing(o) for o in info["options"])):
+                    return [], "A printed label is oversized or carries signing/consent instructions."
+                chain = [p for p in paras if start.seq <= p.seq <= row.seq]
+                roles = {g["para"].id: g["info"]["starts"] for g in groups}
+                relation = {"header_index": chain.index(header),
+                            "source": [{"part": p.part, "slot": p.path, "fingerprint": fingerprint(p.el),
+                                        "starts": infos[p.id]["starts"] if p.id in infos else roles.get(p.id, [0])}
+                                       for p in chain]}
+                area = Area(self.choice_kind(label, info["options"], context), label, row,
+                            {"type": "checkboxes", "boxes": refs, "column_sequence": relation},
+                            context=context, options=list(info["options"]), complete_source=True)
+                pending.append((header, row, area))
+        return pending, ""
+
+    def rule_coded_column_sequences(self):
+        """Complete coded response columns in one table cell; only the PDF can establish ownership.
+
+        A literal header (tabs or wide spaces) names the options. Each row's boxes are proposed
+        under it by position, as an optional candidate that a rendered witness must confirm; no
+        response code ever supplies an option's meaning. Every unresolved shape is a note."""
+        already = {row.id for _, row, _ in self.layout_candidates}
+        for cell in (s for s in self.index.slots if s.kind == "tc"):
+            rows = [p for p in cell.children if p.kind == "p" and self.coded_choice_paragraph(p)]
+            if not rows or any(p.id in already for p in rows):
+                continue
+            infos = {p.id: self.coded_column_parts(p) for p in rows}
+            if any(info is None for info in infos.values()):
+                continue  # rule_checkboxes notes every unresolved coded row
+            # The strict single labelled tab-pair contract of rule_tab_columns stays its sole owner.
+            if len(rows) == 1 and infos[rows[0].id]["label"] and "\t" in self.ptext(rows[0].el)[0]:
+                continue
+            pending, reason = self.coded_column_source(cell, rows, infos)
+            if reason:
+                self.notes.append("Coded column sequence at " + cell.id + ": " + reason + " Printed source: "
+                                  + " | ".join(self.ptext(p.el)[0] for p in cell.children if p.kind == "p"))
+                continue
+            # This complete source supersedes the tab-stop refusal for the same cell.
+            refused = "Tab-column options at " + cell.id + ": "
+            self.notes[:] = [note for note in self.notes if not note.startswith(refused)]
+            # Titles and spacing in a complete control-bearing source are never free-text answers.
+            for paragraph in (s for s in cell.children if s.kind == "p"):
+                self.claimed.add(id(paragraph.el))
+            for header, row, area in pending:
+                self.layout_candidates.append((header, row, area))
+                if self.layout_proposal:
+                    self.add(area)
+                else:
+                    self.notes.append("Layout verification required for coded-column answer at " + row.id +
+                                      ". Printed question: " + area.label + ". Section: " + area.context)
 
     def rule_checkboxes(self, leftovers=False):
         # paragraph-level units, then grouping. A cell holding ONLY a box under a column header is left for the
@@ -3000,9 +3213,10 @@ class Detector:
         markers = {q("w:sdt"), FLDCHAR, q("w:instrText"), TXBX, q("w:drawing"), q("w:pict"),
                    q("w:object"), q("w:pBdr"), q("w:framePr"), q("w:u"), q("w:br"), q("w:sectPr"), q("w:tabs"),
                    q("w:tab"), q("w:shd"), q("w:highlight"), q("w:numPr"), q("w:bdr"), q("w:strike"), q("w:dstrike")}
-        if unused_tab_stops and not text:
-            # No rendered tab character exists. Its configured stops cannot draw
-            # a blank, but all other direct/inherited marker checks still apply.
+        if unused_tab_stops and "\t" not in text:
+            # No rendered tab character exists (only printed spaces, if any). Its
+            # configured stops cannot draw a blank, but every other direct or
+            # inherited marker check still applies (an underlined space is marked).
             markers -= {q("w:tabs"), q("w:tab")}
         if any(node.tag in markers for node in slot.el.iter()):
             return False
@@ -4573,13 +4787,16 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     out = package.write({part: package.tree(part) for part in changed}) if changed else data
     verify_options(out, fields, answers, glyph_readback=glyph_readback)
     if retained_layout is not None:
-        for header, row in layout_nodes:
+        for header, row, area in source_detector.layout_candidates:
             if any(slot.el.getroottree().getroot() is not package.tree(slot.part) for slot in (header, row)):
                 fail("An answer removed a tab-column source paragraph.", "mapping_mismatch")
             retained_layout.append({"header": {"part": header.part,
                 "path": element_identity_path(package.tree(header.part), header.el)},
                 "row": {"part": row.part,
-                "path": element_identity_path(package.tree(row.part), row.el)}})
+                "path": element_identity_path(package.tree(row.part), row.el)},
+                "sequence": [{"part": ref["part"], "path": element_identity_path(package.tree(ref["part"]),
+                              index.by_id[ref["part"] + "#" + ref["slot"]].el)}
+                             for ref in area.target.get("column_sequence", {}).get("source", [])]})
     return out
 
 
