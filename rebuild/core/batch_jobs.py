@@ -135,9 +135,19 @@ def store_response(batch, part, raw, receipt, *, request_id=''):
     request_id=receipt['provider_request_id'] if receipt is not None else request_id
     payload = json.dumps({'provider_output':raw,'provider_request_id':request_id},ensure_ascii=False).encode()
     path = f'receipts/{secrets.token_hex(24)}.json'; sha = hashlib.sha256(payload).hexdigest()
-    job = part.job
-    if receipt is not None:
-        with transaction.atomic():
+    with transaction.atomic():
+        # The provider runs outside our locks. A stale-attempt closeout can have
+        # released this hold while its one request was still returning. Record
+        # that newly arrived evidence and its accounting state in one commit.
+        # Keep the parent terminal: a replacement batch may already be active.
+        locked=GenerationBatch.objects.select_for_update().get(pk=batch.pk)
+        job=Job.objects.select_for_update().get(pk=part.job_id)
+        if job.state in ('failed','cancelled') and not Usage.objects.filter(job=job).exists():
+            job.state='reconciliation';job.finished_at=None
+            job.error='Late provider evidence requires financial reconciliation; this attempt cannot run again.'
+            job.save(update_fields=['state','finished_at','error'])
+            event(locked,'late_response_recorded',part=part,details={'sha256':sha,'metering_known':receipt is not None})
+        if receipt is not None:
             ProviderReceipt.objects.create(job=job,**receipt,result_path=path,result_sha256=sha)
             job.provider=receipt['provider'];job.provider_request_id=receipt['provider_request_id']
             job.provider_resource_id=receipt['provider_resource_id']
@@ -183,6 +193,10 @@ def stop(batch_id, reason, *, uncertain_part=None, user_declined=False):
         sent=part.events.filter(kind='send_intent').exists()
         known=Usage.objects.filter(job=job).exists()
         if job.state=='succeeded':continue
+        # Explicitly resolved attempts stay consumed. Their immutable evidence
+        # remains, but absence of Usage is valid for no-cost/platform-only
+        # closeout. A late receipt explicitly reopens the child above instead.
+        if job.state=='failed' and part.events.filter(kind='financially_resolved').exists():continue
         if (uncertain_part==part.pk or (sent and not known)):
             job.state='reconciliation';job.error='Batch request outcome requires reconciliation; it will not be sent again.'
         else:
@@ -364,21 +378,38 @@ def resolve_view(request,job_id):
         if job.state!='reconciliation':return HttpResponse('Only unresolved batch attempts may be reconciled.',status=409)
         receipt=ProviderReceipt.objects.filter(job=job).first()
         if receipt and not Usage.objects.filter(job=job).exists():
-            settle(job,receipt.actual_cost,receipt.units,receipt.rates,receipt.provider,
-                   receipt.provider_request_id,receipt.simulated,provider_resource_id=receipt.provider_resource_id)
+            if job.reservations.filter(state='held').exists():
+                settle(job,receipt.actual_cost,receipt.units,receipt.rates,receipt.provider,
+                       receipt.provider_request_id,receipt.simulated,provider_resource_id=receipt.provider_resource_id)
+            else:
+                # Never recreate a released grant or debit a replacement hold.
+                # The original receipt remains authoritative; this separate
+                # platform expense carries no fabricated customer Usage row.
+                cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={
+                    'amount':receipt.actual_cost,'description':'Late provider receipt after released authorization',
+                    'evidence_reference':f'receipt:{receipt.pk} '+data['evidence_note'][:180],
+                    'recorded_by':request.user})
+                if cost.amount!=receipt.actual_cost:
+                    raise ValidationError('Late provider evidence conflicts with the previously recorded platform cost; independent financial reconciliation is required.')
         release(job)
         job.state='failed';job.error='platform_failure: Batch attempt resolved by an administrator; no request was repeated.'
         job.finished_at=timezone.now();job.save(update_fields=['state','error','finished_at'])
         if Usage.objects.filter(job=job).exists():
             absorb_failed_job(job,actor=request.user,note=data['evidence_note'])
-        elif data['outcome']=='absorb_platform_failure':
-            PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={
+        elif data['outcome']=='absorb_platform_failure' and receipt is None:
+            cost,created=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={
                 'amount':data['actual_cost'],'description':'Uncertain batch outcome resolved as platform cost',
                 'evidence_reference':data['evidence_note'],'recorded_by':request.user})
-        event(batch,'financially_resolved',part=part,details={'outcome':data['outcome'],
-              'actor':str(request.user.pk),'evidence_note':data['evidence_note']})
-        if not batch.parts.filter(job__state='reconciliation').exists():
-            batch.state='failed';batch.finished_at=timezone.now();batch.save(update_fields=['state','finished_at'])
+            if cost.amount!=data['actual_cost']:
+                raise ValidationError('New evidence conflicts with the previously recorded platform cost; independent financial reconciliation is required.')
+        late=part.events.filter(kind='late_response_recorded').exists()
+        event(batch,'late_financially_resolved' if late else 'financially_resolved',part=part,
+              details={'outcome':data['outcome'],'actor':str(request.user.pk),
+                       'evidence_note':data['evidence_note'],'receipt_id':str(receipt.pk) if receipt else None})
+        # A financial closeout abandons the entire clinical result. Close/refund
+        # prior staged children too; retain every unknown sibling for its own
+        # explicit evidence resolution. stop never revives a terminal parent.
+        stop(batch.pk,'An administrator resolved a failed batch; no partial form was adopted.')
         audit(request.user,'generation_batch.reconciled',batch.pk,department=batch.department,part=part.ordinal)
     messages.success(request,'Provider evidence recorded and held funds resolved. This attempt cannot be sent again.')
     return redirect('/console/#jobs')

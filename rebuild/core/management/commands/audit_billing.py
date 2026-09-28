@@ -186,6 +186,11 @@ def audit_report(file_reader=None):
                 'child_charge_sum_matches':sum((part.maximum_charge for part in parts),Decimal(0))==batch.maximum_charge,
                 'aggregate_customer_limit':charged<=batch.maximum_charge,
                 'at_most_one_send_per_child':batch.events.filter(kind='send_intent').count()<=len(parts),
+                'terminal_batch_has_no_staged_children':batch.state not in ('failed','cancelled','not_adopted') or not any(part.job.state=='staged' for part in parts),
+                'known_receipts_accounted_or_unresolved':all(
+                    Usage.objects.filter(job=part.job).exists() or part.job.state=='reconciliation'
+                    or PlatformCost.objects.filter(job=part.job,kind='absorbed_failure',amount=receipt.actual_cost).exists()
+                    for part in parts for receipt in ProviderReceipt.objects.filter(job=part.job)),
                 'success_has_complete_responses':batch.state!='succeeded' or (
                     all(part.job.state=='succeeded' for part in parts)
                     and GenerationBatchResponse.objects.filter(part__batch=batch).count()==len(parts)

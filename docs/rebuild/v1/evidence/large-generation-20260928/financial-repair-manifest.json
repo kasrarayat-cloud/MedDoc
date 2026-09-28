@@ -1,0 +1,18 @@
+{
+  "base": "a306e04474a4249a55390d33910deff82600ad5a",
+  "original_refuted_source": "39c682bc64c06a2f67e426d33814617d7c517628",
+  "scope": "F1/F2 closeout, late evidence accounting, replacement-active and immutable manual evidence boundaries; no provider calls",
+  "source_sha256": {
+    "rebuild/core/batch_jobs.py": "cf495316f51df3ca1ef3f61df0799a0ac1bd1965b4aa03fbfc06420988a79f2e",
+    "rebuild/core/management/commands/audit_billing.py": "5d52c9705ad9516cfd9d5308cc1a5e5dc78a8c0f2d7fdfc8f09ce053feb2baf7",
+    "rebuild/core/tests/test_batch_closeout.py": "d73bb78ca2dbdfad1897e22faf11cec91438564cd0894b0ac2c4a34c9d9f3ec9"
+  },
+  "evidence_sha256": {
+    "21-financial-red.log": "37fcb2901a6fb80cc9d0a425e99d9e068b2c5e35827e021d837c7899b65d31c8",
+    "22-financial-after.log": "1fa413a0d2d9d32664f4d24f5d0783e501b37234eb4a91bbffe457e67f4766b2",
+    "23-financial-affected.log": "5e1af5e7cde5be6c33675629851e1fcd1f48ad19e03b365eceffc839fa37132a",
+    "24-financial-identities.json": "5f8b3bb9e8070ecd68e6fdc89608d187682d2bd05f9846d0ed7851e362ee91d2"
+  },
+  "result": "61 tests:60PASS,1 expected unresolved clinical failure;78.847s",
+  "run_one_ast_sha256": "35ea7ea849479e7d2db33623ccc02401f1fd47d46f4e634022ffa1445938a160"
+}
