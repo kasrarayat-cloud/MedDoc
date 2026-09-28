@@ -1,6 +1,7 @@
 """MFA-protected preservation API. No clinical body, filename or purge endpoint."""
 import json
 from django.core.exceptions import ValidationError
+from django.db import DatabaseError
 from django.http import JsonResponse
 from django.contrib import messages
 from django.shortcuts import redirect,render
@@ -12,6 +13,8 @@ from .retention_forms import HoldForm,ReleaseForm
 from .models import RetentionHold
 from .admin_queries import page_for
 from .security import audit
+
+NOT_RECORDED='Preservation instruction not recorded. Nothing changed; retry.'
 
 
 @require_http_methods(['GET','POST'])
@@ -32,6 +35,9 @@ def page(request):
                 messages.success(request,'Hold released. Preserved evidence remains retained; no data was deleted.')
             return redirect('retention_holds')
         except ValidationError as error:form.add_error(None,error)
+        except DatabaseError:
+            # Each instruction is one transaction: an aborted one (a deadlock victim, a lost connection) recorded nothing.
+            form.add_error(None,'The preservation instruction was not recorded. Nothing changed; retry.')
     rows=RetentionHold.objects.select_related('created_by','release__created_by').order_by('-created_at','pk')
     navigation=page_for(request,rows,anchor='holds',size=25)
     audit(request.user,'retention.holds_read')
@@ -59,6 +65,7 @@ def create(request):
         data=body(request,('scope','target','authority_sha256','request_key'))
         row=retention.create_hold(request.user,data['scope'],data['target'],data['authority_sha256'],data['request_key'])
     except ValidationError:return JsonResponse({'error':'Preservation instruction rejected.'},status=400)
+    except DatabaseError:return JsonResponse({'error':NOT_RECORDED},status=503)
     return JsonResponse({'id':str(row.pk),'released':hasattr(row,'release'),'purge_authorized':False})
 
 
@@ -69,4 +76,5 @@ def release(request,pk):
         data=body(request,('authority_sha256',))
         row=retention.release_hold(request.user,pk,data['authority_sha256'])
     except ValidationError:return JsonResponse({'error':'Preservation release rejected.'},status=400)
+    except DatabaseError:return JsonResponse({'error':NOT_RECORDED},status=503)
     return JsonResponse({'id':str(row.hold_id),'released':True,'purge_authorized':False})

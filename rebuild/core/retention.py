@@ -36,6 +36,8 @@ SCOPES={'organization':Organization,'department':Department,'patient':Patient,'e
 #
 # Levels may be skipped, never reversed. Billing's job-scoped entry points (reserve, release, settle, absorb_failed_job)
 # take level 3 themselves before any money row, so no caller can reach a wallet lock ahead of a later job.save() (RF-1).
+# Level 5 comes after level 3 by construction, so a level-1 lock held by a transaction that then waits for LOCK_KEY
+# must not conflict with FOR KEY SHARE: create_hold locks its scope row FOR NO KEY UPDATE (RF-2).
 
 
 def lock_preservation():
@@ -70,7 +72,11 @@ def create_hold(actor,scope,target,authority,request_key):
         if target is not None:raise ValidationError('Global preservation has no target.')
         fields={}
     elif scope in SCOPES:
-        try:row=SCOPES[scope].objects.select_for_update().get(pk=target)
+        # FOR NO KEY UPDATE, not FOR UPDATE (the global lock order above, level 5): the in-flight clinical write this
+        # waits for (at lock_preservation) re-checks its new rows' foreign keys at commit with FOR KEY SHARE on this
+        # very row, which FOR UPDATE refused, so neither could finish (RF-2). This mode still excludes deletion,
+        # key changes and every concurrent update of the scope row, and a second hold on it.
+        try:row=SCOPES[scope].objects.select_for_update(no_key=True).get(pk=target)
         except (ValueError,ValidationError,SCOPES[scope].DoesNotExist):raise ValidationError('Invalid preservation scope.')
         fields={scope:row}
     else:raise ValidationError('Invalid preservation scope.')
