@@ -1,0 +1,199 @@
+{
+  "engine_sha256": "c82ef298b59780238c4f995c6da4056d87ca939282b62c15e74ef185f362cad8",
+  "results": [
+    {
+      "path": "23-root-style-refutation/character_underline.docx",
+      "sha256": "913ba6f86ce9abbcdea0dfb66c08501dff3f9119ddcd70ab10e107c98fdb0b85",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Date of Birth"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "23-root-style-refutation/default_table_underline.docx",
+      "sha256": "37e0027400b8a4d352833c297200c294eee6c644d9e379dc88577c99be26ea1c",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Date of Birth"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "23-root-style-refutation/inherited_character_underline.docx",
+      "sha256": "74342df5dd2388b027fd4a781acbd5407c6b0fca33bd4686d87ddc8c99109c8c",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Date of Birth"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "23-root-style-refutation/simple_spacing.docx",
+      "sha256": "462505ff5efee23b4b67f86cbbd61d261bf6f6b98254eb6849062cb66032540e",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "23-root-style-refutation/unknown_character.docx",
+      "sha256": "9ee6f6e0f65b75f6c8cbee2c32cef095c43b64410e7f9987f3cf61eb95da44a3",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Date of Birth"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Date of Birth"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "30-notes-visible-marker-refutation/bullet.docx",
+      "sha256": "6f676ba4ba06a6193fb6e8040d92a4a2e6eaa34ca4e8062bef1d390e284391c7",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Past medical history"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Past medical history"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "30-notes-visible-marker-refutation/numbered.docx",
+      "sha256": "ef41003cca35c1943f6ba7b33e4f89f80e560db771818a4851ed2f2657f9370e",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Past medical history"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Past medical history"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "30-notes-visible-marker-refutation/paragraph_highlight.docx",
+      "sha256": "ec0194e39d8bfb388d44c308ddb384cc6d335b53e29c4a46371b95c608de6346",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Past medical history"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Past medical history"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "30-notes-visible-marker-refutation/paragraph_shading.docx",
+      "sha256": "9ebd74ec949bfebfce1088800db2b8100bcfde08a82928dc97bda778c24d36c4",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Past medical history"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Past medical history"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "30-notes-visible-marker-refutation/paragraph_shading_inherited.docx",
+      "sha256": "a1c1b7934e24dcd21e744bb2db0d5b6c24fbb7c2dba68d3fa2575b9c43514b43",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Past medical history"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Past medical history"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "30-notes-visible-marker-refutation/plain.docx",
+      "sha256": "254fb8358f52fc110297658e1c21ae79a0ecf371ba796bfcde26ad33e781cbe4",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Past medical history"
+        }
+      ],
+      "notes": []
+    },
+    {
+      "path": "30-notes-visible-marker-refutation/underlined.docx",
+      "sha256": "54bd15907db9f841625e914b438c6736653758a856d444a1610655f2aed93daa",
+      "fields": [
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+          "target": "paragraph",
+          "label": "Past medical history"
+        },
+        {
+          "slot": "b/tbl[0]/tr[0]/tc[1]",
+          "target": "cell",
+          "label": "Past medical history"
+        }
+      ],
+      "notes": []
+    }
+  ]
+}

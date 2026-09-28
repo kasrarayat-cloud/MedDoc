@@ -1,0 +1,30 @@
+test_adjacent_and_spaced_questions_use_the_box_with_complete_scope (documents.test_question_boxes.QuestionBoxes.test_adjacent_and_spaced_questions_use_the_box_with_complete_scope) ... ok
+test_ambiguous_boxes_have_a_visible_source_location (documents.test_question_boxes.QuestionBoxes.test_ambiguous_boxes_have_a_visible_source_location) ... ok
+test_complete_long_question_and_section_are_retained (documents.test_question_boxes.QuestionBoxes.test_complete_long_question_and_section_are_retained) ... ok
+test_conditional_border_in_ancestor_style_is_not_claimed_as_explicit (documents.test_question_boxes.QuestionBoxes.test_conditional_border_in_ancestor_style_is_not_claimed_as_explicit) ... ok
+test_empty_ordinary_long_preserve_other_document_parts_and_neighbours (documents.test_question_boxes.QuestionBoxes.test_empty_ordinary_long_preserve_other_document_parts_and_neighbours) ... ok
+test_explicit_style_borders_and_cell_nil_override (documents.test_question_boxes.QuestionBoxes.test_explicit_style_borders_and_cell_nil_override) ... ok
+test_full_source_limits_keep_boundary_and_refuse_after_scope_expansion (documents.test_question_boxes.QuestionBoxes.test_full_source_limits_keep_boundary_and_refuse_after_scope_expansion) ... ok
+test_inherited_heading_scope_and_unknown_or_cyclic_ancestry (documents.test_question_boxes.QuestionBoxes.test_inherited_heading_scope_and_unknown_or_cyclic_ancestry) ... ok
+test_initial_adjective_cannot_cross_question_section_boundary (documents.test_question_boxes.QuestionBoxes.test_initial_adjective_cannot_cross_question_section_boundary) ... ok
+test_initial_report_adjective_is_not_a_signing_instruction (documents.test_question_boxes.QuestionBoxes.test_initial_report_adjective_is_not_a_signing_instruction) ... ok
+test_manual_derived_context_is_complete_or_visibly_refused (documents.test_question_boxes.QuestionBoxes.test_manual_derived_context_is_complete_or_visibly_refused) ... ok
+test_manual_long_metadata_never_slices_and_oversize_refuses (documents.test_question_boxes.QuestionBoxes.test_manual_long_metadata_never_slices_and_oversize_refuses) ... ok
+test_manual_root_verified_long_donor_scope_is_not_lost (documents.test_question_boxes.QuestionBoxes.test_manual_root_verified_long_donor_scope_is_not_lost) ... ok
+test_multi_paragraph_question_keeps_both_sources_in_review (documents.test_question_boxes.QuestionBoxes.test_multi_paragraph_question_keeps_both_sources_in_review) ... ok
+test_page_break_before_spacer_is_not_plain_empty_space (documents.test_question_boxes.QuestionBoxes.test_page_break_before_spacer_is_not_plain_empty_space) ... ok
+test_paired_cell_keeps_explicit_and_independent_answer_lines (documents.test_question_boxes.QuestionBoxes.test_paired_cell_keeps_explicit_and_independent_answer_lines) ... ok
+test_paired_cell_label_spacing_is_not_a_second_answer (documents.test_question_boxes.QuestionBoxes.test_paired_cell_label_spacing_is_not_a_second_answer) ... ok
+test_paired_cell_spacing_does_not_claim_controls_or_textboxes (documents.test_question_boxes.QuestionBoxes.test_paired_cell_spacing_does_not_claim_controls_or_textboxes) ... ok
+test_paired_spacing_keeps_shading_lists_and_run_answer_marks (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_keeps_shading_lists_and_run_answer_marks) ... ok
+test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) ... ok
+test_part_change_keeps_distinct_supervisors_and_does_not_reuse_a_question (documents.test_question_boxes.QuestionBoxes.test_part_change_keeps_distinct_supervisors_and_does_not_reuse_a_question) ... ok
+test_question_with_its_own_inline_answer_does_not_lose_that_field (documents.test_question_boxes.QuestionBoxes.test_question_with_its_own_inline_answer_does_not_lose_that_field) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 5.604s
+
+OK
+Found 22 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

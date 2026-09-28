@@ -1,10 +1,10 @@
 # Word table destination ownership — bounded continuation
 
 **Prepared local source; independent refutation pending. Neither D30 nor D31 is a
-qualified document success.** Source `a921dfc312acbd6b9ad08b198720a08253481301`,
+qualified document success.** Source `649f65c2bd32b5b994611de91f9cb24cd6522034`,
 base `4caa34431a60e6ce3409ecadbbb6989b50659d7b`, branch `v1-word-workflows`,
 worktree `/opt/meddoc-pro/.worktrees/v1-word-workflows`.
-Engine SHA256: `9a25be7e3fd947e2069fc0be6cc6bc3c3bb964fe26dbb3ec52daf011fab67bd1`.
+Engine SHA256: `c82ef298b59780238c4f995c6da4056d87ca939282b62c15e74ef185f362cad8`.
 
 Root's preflight `20260927T232730Z` permitted work with a disk warning and no
 automatic fixes. Recovery found no active Word writer or test. Historical zero-byte
@@ -51,6 +51,17 @@ direct overrides of inherited answer markers remain conservatively retained.
 The exact five root artifacts now retain all four marked/unknown answer areas and
 suppress only the plain-spacing control. This closes the demonstrated omissions;
 it is not a general Word style-rendering certification.
+
+The independent notes reviewer then found five visible-marker omissions in the
+`a921dfc3` candidate: direct and inherited shading, run highlighting, numbered and
+bulleted empty paragraphs. Root independently confirmed all five. Exact seven
+artifacts remain under `30-notes-visible-marker-refutation/`, including desired
+plain-spacing and retained underline controls. The final narrow repair adds those
+markers, run borders, strike/double-strike and tabs to the conservative marker set.
+Nine new marker controls failed before repair; all are retained in log 31. Final
+22-test module passes in 5.604 seconds. Exact root five plus reviewer seven artifacts
+now keep all marked areas; only plain-spacing controls are suppressed. D30/D31
+maps and warnings again equal the successful workflow candidate in full (record 35).
 
 Existing stored mappings and finalized exports are not rewritten. Old versions
 containing spurious destinations need explicit review and a corrected mapping
@@ -166,7 +177,8 @@ container metadata differs. No original or recorded export was overwritten.
 | Final changed question-box module | 20 tests pass in 4.405 seconds, including controls/text boxes, original checked-state preservation, inherited borders and unknown-style retention. |
 | Independent root style refutation | Four counterexamples retained; 12 added style controls include nine pre-repair failures. Final exact artifact replay passes. |
 | Final changed module after root repair | 21 tests pass in 4.784 seconds; no provider or database used. |
-| Final original map binding | Entire D30 and D31 fields, warnings, contract, source hash and sandbox metadata equal their successful workflow candidates, again after the root style repair (log 26 and record 28). Unchanged workflow/render evidence is reused. |
+| Final visible-marker repair | Nine pre-repair regression failures retained; final 22 tests pass in 5.604 seconds, with all 12 exact independent artifacts replayed. |
+| Final original map binding | Entire D30 and D31 fields, warnings, contract, source hash and sandbox metadata equal their successful workflow candidates, again after both independent repairs (logs 26/33 and records 28/35). Unchanged workflow/render evidence is reused. |
 
 ## Rendered comparisons
 
@@ -211,7 +223,8 @@ report. Filled DOCX/PDF/PNG artifacts remain private, outside Git.
 - `23-root-style-refutation/`, logs 24/25 and records 27/28 retain independent
   failure artifacts, new regression failures, repairs and exact map equivalence.
 - `22-source-identity.json` records the refuted candidate; `29-source-identity-final.json`
-  records the repaired source. Earlier trace 21 is reused only by exact map equivalence.
+  records the first style repair; `36-source-identity-final.json` records the final marker repair. Earlier trace 21 is reused only by exact map equivalence.
+- `30-notes-visible-marker-refutation/`, logs 31/32 and records 34/35 preserve the second independent finding and final repairs.
 - `evidence-manifest.json` records hashes for the retained runtime, including private
   binary artifacts. Text-only copies accompany this report; binaries remain private.
 
