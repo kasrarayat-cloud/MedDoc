@@ -202,8 +202,12 @@ def admin_department_payer(request, pk):
     # is not an authorization boundary; the route is what an ordinary administrator can reach.
     if not admin_console.may_change_payer(request.user):
         raise PermissionDenied(admin_console.payer_restriction_note())
+    # FOR NO KEY UPDATE, never FOR UPDATE (the global lock order, core.retention): department.save() below waits for
+    # the preservation lock in the department's trigger, and every clinical write or settlement holding that lock
+    # re-checks its new rows' foreign keys at commit with FOR KEY SHARE on this very row, which FOR UPDATE refused, so
+    # the payer change was a deadlock victim (RF-R2). This mode still excludes a concurrent change and deletion.
     department = get_object_or_404(
-        Department.objects.select_for_update(of=('self',)).select_related('organization'), pk=pk)
+        Department.objects.select_for_update(of=('self',), no_key=True).select_related('organization'), pk=pk)
     pays = request.POST.get('organization_pays') == 'on'
     reason = (request.POST.get('reason') or '').replace('\x00', '').strip()[:240]
     if len(reason) < 12:
