@@ -243,37 +243,72 @@ def match_line(line, segments, leader=False):
                 found.append(record)
         if found:
             ink = [r['ink'] for r in found if r['ink'] is not None]
-            if not ink: return None
-            spans.append({'left':min(r[0] for r in ink), 'right':max(r[2] for r in ink), 'y':line['y']})
+            if not ink:
+                if ordinal != 0 or any(not r['text'].isspace() for r in found): return None
+                spans.append(None)
+            else:
+                spans.append({'left':min(r[0] for r in ink), 'right':max(r[2] for r in ink), 'y':line['y']})
         else: spans.append(None)
     if cursor != len(records): return None
     return spans
 
 
+def measure(lines, candidate):
+    """Measure one candidate's complete printed sequence; absent, ambiguous or incomplete raises."""
+    model = candidate['rendered_source']
+    matches = []
+    sequence = model.get('sequence') or [{'segments': model['header'], 'dot_leaders': False},
+                                        {'segments': model['row'], 'dot_leaders': model['row_dot_leaders']}]
+    if not 2 <= len(sequence) <= 100: raise ValueError('Incomplete or excessive printed source sequence')
+    # Every paragraph is one whole rendered line, in order, with no other line between.
+    # The column header is the paragraph whose segments align with the answer row's.
+    header_at = model.get('header_index', 0)
+    if type(header_at) is not int or not 0 <= header_at < len(sequence) - 1:
+        raise ValueError('Invalid printed column header position')
+    for page_index, page in enumerate(lines):
+        for index in range(len(page) - len(sequence) + 1):
+            spans = [match_line(page[index + offset], paragraph['segments'], paragraph['dot_leaders'])
+                     for offset, paragraph in enumerate(sequence)]
+            if all(s is not None for s in spans):
+                matches.append((page_index, spans[header_at], spans[-1]))
+    if len(matches) != 1: raise ValueError('Missing or ambiguous complete source paragraph pair')
+    page, headers, rows = matches[0]
+    headers, rows = headers[1:], rows[1:]
+    if len(headers) != len(candidate['source']['options']) or len(rows) != len(headers) or any(r is None for r in headers+rows):
+        raise ValueError('Incomplete visible option set')
+    if any(a['right'] >= b['left'] for a,b in zip(headers,headers[1:])):
+        raise ValueError('Overlapping printed header spans')
+    if any(a['right'] >= b['left'] for a,b in zip(rows,rows[1:])):
+        raise ValueError('Overlapping visible answer segments')
+    measurements = []
+    for ordinal,(header,row) in enumerate(zip(headers,rows)):
+        owners = [i for i,h in enumerate(headers) if h['left'] <= row['left'] < row['right'] <= h['right']]
+        measurements.append({'candidate':candidate['id'],'ordinal':ordinal,'page':page,'header':header,'row':row,
+                             'unique_owners':owners,'passed':owners==[ordinal]})
+    return measurements
+
+
+def holdable(candidate):
+    """Only an optional proposal whose source the export leaves byte-identical and unanswered
+    can be held on its own. Everything else keeps the all-candidates refusal."""
+    return candidate.get('optional') is True and candidate.get('untouched') is True
+
+
 def containment(pages, candidates):
     lines = [geometry(page) for page in pages]
-    measurements = []
+    measurements, held = [], []
     for candidate in candidates:
-        model = candidate['rendered_source']
-        matches = []
-        for page_index, page in enumerate(lines):
-            for index in range(len(page)-1):
-                headers = match_line(page[index], model['header'])
-                rows = match_line(page[index+1], model['row'], model['row_dot_leaders'])
-                if headers is not None and rows is not None:
-                    matches.append((page_index,headers,rows))
-        if len(matches) != 1: raise ValueError('Missing or ambiguous complete source paragraph pair')
-        page, headers, rows = matches[0]
-        headers, rows = headers[1:], rows[1:]
-        if len(headers) != len(candidate['source']['options']) or len(rows) != len(headers) or any(r is None for r in headers+rows):
-            raise ValueError('Incomplete visible option set')
-        if any(a['right'] >= b['left'] for a,b in zip(headers,headers[1:])):
-            raise ValueError('Overlapping printed header spans')
-        if any(a['right'] >= b['left'] for a,b in zip(rows,rows[1:])):
-            raise ValueError('Overlapping visible answer segments')
-        for ordinal,(header,row) in enumerate(zip(headers,rows)):
-            owners = [i for i,h in enumerate(headers) if h['left'] <= row['left'] < row['right'] <= h['right']]
-            measurements.append({'candidate':candidate['id'],'ordinal':ordinal,'page':page,'header':header,'row':row,
-                                 'unique_owners':owners,'passed':owners==[ordinal]})
-    return {'passed':bool(measurements) and all(m['passed'] for m in measurements),'measurements':measurements,
+        try:
+            found = measure(lines, candidate)
+        except ValueError as error:
+            if not holdable(candidate): raise
+            held.append({'candidate': candidate['id'], 'reason': str(error)})
+            continue
+        if holdable(candidate) and not all(m['passed'] for m in found):
+            held.append({'candidate': candidate['id'], 'reason': 'A visible control is outside its printed column'})
+            continue
+        measurements.extend(found)
+    # A held proposal publishes no destination. It is never counted as a verified one.
+    return {'passed':bool(measurements or held) and all(m['passed'] for m in measurements),'measurements':measurements,
+            'held':held,
             'ownership_contract':CONTRACT, 'width_source':'PDF embedded glyph bounds, explicit advances, positioning operators and stroked native control paths'}

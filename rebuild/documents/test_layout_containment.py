@@ -101,3 +101,102 @@ class LayoutContainment(unittest.TestCase):
         glyph=normal['records'][0]
         self.assertNotEqual(glyph['left'],glyph['ink'][0])
         self.assertGreater(glyph['ink'][2],glyph['ink'][0])
+
+
+class SequenceContainment(unittest.TestCase):
+    """Multi-paragraph printed sequences and individually held optional proposals."""
+
+    @classmethod
+    def setUpClass(cls):
+        pdfmetrics.registerFont(TTFont('SequenceProofFixture', str(Path(reportlab.__file__).parent/'fonts/Vera.ttf')))
+        buffer = io.BytesIO(); canvas = Canvas(buffer, pagesize=(400, 400)); canvas.setFont('SequenceProofFixture', 11)
+        canvas.drawString(10, 10, 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ().,/-'); canvas.save()
+        cls.fixture = buffer.getvalue()
+
+    @staticmethod
+    def glyphs(text):
+        return [{'kind': 'glyph', 'text': text}] if text else []
+
+    def row(self, label, count=2, checked=()):
+        return [self.glyphs(label)] + [self.glyphs(str(i + 1) + ' ') + [{'kind': 'ff_checkbox', 'text': VECTOR,
+                'checked': i in checked}] for i in range(count)]
+
+    def candidate(self, identity, paragraphs, options=('Normal', 'Abnormal'), header_index=0, **flags):
+        return dict({'id': identity, 'source': {'options': list(options)}, 'rendered_source': {
+            'header': paragraphs[header_index], 'row': paragraphs[-1], 'row_dot_leaders': False,
+            'header_index': header_index,
+            'sequence': [{'segments': p, 'dot_leaders': False} for p in paragraphs]}}, **flags)
+
+    def page(self, lines):
+        """lines: [(y, [(x, text) | (x, None) for a native checkbox])]."""
+        reader = PdfReader(io.BytesIO(self.fixture)); page = reader.pages[0]
+        font = next(name for name, ref in page['/Resources']['/Font'].items()
+                    if ref.get_object().get('/Subtype') == '/TrueType')
+        stream = b'.1 w\n'
+        for y, items in lines:
+            for x, text in items:
+                if text is None:
+                    stream += f'0 0 0 RG {x} {y - 2} 10 10 re S\n'.encode()
+                else:
+                    stream += f'q 0 0 0 rg BT {x} {y} Td {font} 11 Tf <{text.encode().hex()}> Tj ET Q\n'.encode()
+        content = DecodedStreamObject(); content.set_data(stream); page[NameObject('/Contents')] = content
+        return reader.pages
+
+    def summary(self, title, y, shift=0):
+        return [(y, [(20, title)]), (y - 20, [(100, 'Normal'), (200, 'Abnormal')]),
+                (y - 40, [(110 + shift, '1 '), (120 + shift, None), (210, '2 '), (220, None)])]
+
+    def test_fixture_font_keeps_literal_character_codes(self):
+        lines = geometry(self.page(self.summary('Head summary', 300))[0])
+        self.assertEqual([line['text'] for line in lines], ['Head summary', 'NormalAbnormal', '1 ' + VECTOR + '2 ' + VECTOR])
+
+    def test_a_printed_title_disambiguates_repeated_header_and_row_lines(self):
+        pages = self.page(self.summary('Head summary', 300) + self.summary('Neck summary', 200))
+        header = [[], self.glyphs('Normal'), self.glyphs('Abnormal')]
+        bare = self.candidate('bare', [header, self.row('')])
+        with self.assertRaises(ValueError):
+            containment(pages, [bare])
+        titled = self.candidate('neck', [[self.glyphs('Neck summary')], header, self.row('')], header_index=1)
+        result = containment(pages, [titled])
+        self.assertTrue(result['passed']); self.assertEqual(result['held'], [])
+        self.assertEqual({m['header']['y'] for m in result['measurements']}, {180})
+        self.assertEqual({m['row']['y'] for m in result['measurements']}, {160})
+
+    def test_every_sequence_line_is_consecutive_and_whole(self):
+        header = [[], self.glyphs('Normal'), self.glyphs('Abnormal')]
+        titled = self.candidate('head', [[self.glyphs('Head summary')], header, self.row('')], header_index=1)
+        lines = self.summary('Head summary', 300)
+        interposed = lines[:2] + [(270, [(20, 'Other')])] + [(250, lines[2][1])]
+        for pages in (self.page(interposed), self.page(lines[1:]), self.page([(300, [(20, 'Head summary more')])] + lines[1:])):
+            with self.subTest(), self.assertRaises(ValueError):
+                containment(pages, [titled])
+
+    def test_an_optional_untouched_proposal_is_held_alone_and_publishes_no_measurement(self):
+        header = [[], self.glyphs('Normal'), self.glyphs('Abnormal')]
+        pages = self.page(self.summary('Head summary', 300) + self.summary('Neck summary', 200, shift=80))
+        head = self.candidate('head', [[self.glyphs('Head summary')], header, self.row('')], header_index=1)
+        neck = self.candidate('neck', [[self.glyphs('Neck summary')], header, self.row('')], header_index=1,
+                              optional=True, untouched=True)
+        missing = self.candidate('missing', [[self.glyphs('Eyes summary')], header, self.row('')], header_index=1,
+                                 optional=True, untouched=True)
+        result = containment(pages, [head, neck, missing])
+        self.assertTrue(result['passed'])
+        self.assertEqual([h['candidate'] for h in result['held']], ['neck', 'missing'])
+        self.assertEqual({m['candidate'] for m in result['measurements']}, {'head'})
+        alone = containment(pages, [missing])
+        self.assertTrue(alone['passed']); self.assertEqual(alone['measurements'], [])
+        self.assertEqual([h['candidate'] for h in alone['held']], ['missing'])
+
+    def test_a_required_touched_or_loosely_flagged_failure_still_refuses_everything(self):
+        header = [[], self.glyphs('Normal'), self.glyphs('Abnormal')]
+        pages = self.page(self.summary('Head summary', 300) + self.summary('Neck summary', 200, shift=80))
+        head = self.candidate('head', [[self.glyphs('Head summary')], header, self.row('')], header_index=1)
+        for flags in ({}, {'optional': True}, {'optional': True, 'untouched': False},
+                      {'optional': 1, 'untouched': True}, {'optional': True, 'untouched': 'yes'}):
+            with self.subTest(flags=flags):
+                wrong = self.candidate('neck', [[self.glyphs('Neck summary')], header, self.row('')], header_index=1, **flags)
+                self.assertFalse(containment(pages, [head, wrong])['passed'])
+                missing = self.candidate('eyes', [[self.glyphs('Eyes summary')], header, self.row('')],
+                                         header_index=1, **flags)
+                with self.assertRaises(ValueError):
+                    containment(pages, [head, missing])

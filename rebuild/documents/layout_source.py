@@ -6,6 +6,7 @@ The renderer service recomputes it from bytes, rather than accepting client span
 import hashlib
 import json
 import re
+from bisect import bisect_right
 
 if __package__:
     from . import word_v3 as w
@@ -114,6 +115,64 @@ def rendered_paragraph(paragraph):
     return result
 
 
+def rendered_columns(paragraph, starts):
+    """Partition all printed characters at source code/header boundaries.
+
+    Literal spaces remain part of the complete match. Tabs have no printed
+    character; their geometry still comes solely from the unchanged PDF.
+    """
+    text, pieces = w.paragraph_text(paragraph)
+    if (not starts or starts[0] != 0 or sorted(set(starts)) != starts
+            or any(type(n) is not int or n < 0 or n > len(text) for n in starts)):
+        w.fail('Invalid complete column partition.', 'layout_unresolved')
+    result = [[] for _ in starts]
+    for piece in pieces:
+        if piece.kind == 'tab':
+            continue
+        if piece.kind == 'obj':
+            if piece.obj == 'ff_checkbox':
+                state = w.ff_checkbox_state(piece.node)
+                if type(state) is not bool: w.fail('Unknown native checkbox state.', 'layout_unresolved')
+                item = {'kind': 'ff_checkbox', 'text': '\ufffc', 'checked': state}
+            elif piece.obj == 'sdt_checkbox':
+                state = w.sdt_checkbox_state(piece.node)
+                if type(state) is not bool: w.fail('Unknown content-control state.', 'layout_unresolved')
+                item = {'kind': 'glyph', 'text': '☒' if state else '☐'}
+            else: w.fail('Unresolved object in complete source sequence.', 'layout_unresolved')
+        elif piece.kind in ('t', 'sym'):
+            item = {'kind': 'glyph', 'text': w.piece_text(piece)}
+        else: w.fail('Unresolved source sequence piece.', 'layout_unresolved')
+        if len(item['text']) != piece.end - piece.start:
+            w.fail('A printed source piece changed length.', 'layout_unresolved')
+        for offset, char in enumerate(item['text'], piece.start):
+            if offset >= len(text.rstrip(' \t')):
+                continue
+            result[bisect_right(starts, offset) - 1].append(dict(item, text=char))
+    return result
+
+
+def touched_destinations(mapping, answers):
+    """Every (part, slot) that an answered mapping field may write, including its boxes."""
+    result = []
+    for field in mapping:
+        if answers.get(field.get("key")) in (None, "", []):
+            continue
+        loc = field.get("locator") or {}
+        target = loc.get("target") or {}
+        refs = [loc] + list(loc.get("extra", [])) + list(target.get("copies", [])) + list(target.get("boxes", []))
+        refs += [{"part": anchor.get("part"), "slot": path}
+                 for anchor in [loc] + list(target.get("copies", [])) for path in target.get("paragraphs", [])]
+        if target.get("type") == "table_rows":
+            refs.append({"part": loc.get("part"), "slot": target.get("table")})
+        result.extend((str(ref.get("part")), str(ref.get("slot"))) for ref in refs)
+    return result
+
+
+def overlaps(a, b):
+    """One slot is the other, contains it or lies inside it."""
+    return a[0] == b[0] and (a[1] == b[1] or a[1].startswith(b[1] + "/") or b[1].startswith(a[1] + "/"))
+
+
 def prepare(data, *, mapping=None, answers=None):
     package = w.open_package(data)
     fonts = safety(package)
@@ -157,14 +216,46 @@ def prepare(data, *, mapping=None, answers=None):
         package = w.open_package(actual)
         safety(package)
         paragraph_pairs = [(resolve_path(package, r["header"]), resolve_path(package, r["row"])) for r in retained]
+        sequences = [[resolve_path(package, ref) for ref in r.get('sequence', [])] for r in retained]
     else:
         paragraph_pairs = [(header.el, row.el) for header, row, _ in candidates]
-    for description, (header, row) in zip(descriptions, paragraph_pairs):
-        model = {'header':rendered_paragraph(header), 'row':rendered_paragraph(row),
-                 'row_dot_leaders':any(n.get(w.q('w:leader')) == 'dot' for n in row.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))}
+        sequences = [[detector.index.by_id[ref['part'] + '#' + ref['slot']].el
+                      for ref in area.target.get('column_sequence', {}).get('source', [])]
+                     for _, _, area in candidates]
+    written = touched_destinations(mapping, answers) if mapping is not None else []
+    for description, (header, row), sequence in zip(descriptions, paragraph_pairs, sequences):
+        relation = description['source']['row']['target'].get('column_sequence')
+        if relation:
+            at = relation.get('header_index')
+            if (len(sequence) != len(relation['source']) or len(sequence) < 2 or type(at) is not int
+                    or not 0 <= at < len(sequence) - 1):
+                w.fail('Incomplete retained printed source sequence.', 'mapping_mismatch')
+            model = {'sequence': [{'segments': rendered_columns(p, ref['starts']),
+                                   'dot_leaders': any(n.get(w.q('w:leader')) == 'dot'
+                                       for n in p.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))}
+                                  for p, ref in zip(sequence, relation['source'])],
+                     'header_index': at, 'row_dot_leaders': False}
+            model['header'] = model['sequence'][at]['segments']
+            model['row'] = model['sequence'][-1]['segments']
+            nodes = sequence
+            sources = [(ref['part'], ref['slot'], ref['fingerprint']) for ref in relation['source']]
+        else:
+            model = {'header':rendered_paragraph(header), 'row':rendered_paragraph(row),
+                     'row_dot_leaders':any(n.get(w.q('w:leader')) == 'dot' for n in row.findall('.//' + w.q('w:tabs') + '/' + w.q('w:tab')))}
+            nodes = [header, row]
+            sources = [(description['source'][k]['part'], description['source'][k]['slot'],
+                        description['source'][k]['fingerprint']) for k in ('header', 'row')]
         if len(model['header']) != len(description['source']['options']) + 1 or len(model['row']) != len(model['header']):
             w.fail('A complete printed tab relation changed.', 'layout_unresolved')
         description['rendered_source'] = model
+        # Only a coded-column sequence is a separately holdable proposal, and only
+        # while this export leaves its own answer row byte-identical and unanswered
+        # (earlier rows of its printed sequence are other questions and may be).
+        # A held proposal never publishes its destination.
+        part, slot, fp = sources[-1]
+        description['optional'] = bool(relation)
+        description['untouched'] = (w.fingerprint(nodes[-1]) == fp
+                                    and not any(overlaps(destination, (part, slot)) for destination in written))
     # V2 uses unique original-text alignment. It introduces no annotation glyphs,
     # run splits or bookmarks; both independently rendered packages stay exact.
     anchors = []
