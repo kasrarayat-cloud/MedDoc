@@ -194,6 +194,18 @@ class FailedUploadNeverStrandsItsRecording(LockFlowFixture, TransactionTestCase)
         self.assertTrue(private_path(job.input_path).is_file())
         self.assertEqual(self.orphaned_recordings(), [])
 
+    def test_an_unexpected_error_is_still_reported_but_never_strands_the_upload(self):
+        draft = self.draft()
+        doctor = self.doctor()
+        with patch.dict(os.environ, STANDARD_ENV):
+            quote = doctor.get(f'/encounters/{draft.pk}/').context['usage_quote']
+            with patch('core.views.enqueue', side_effect=RuntimeError('synthetic defect')):
+                response = doctor.post(f'/encounters/{draft.pk}/voice/', {
+                    'audio': self.recording('rf1-defect'), 'consent': 'on', 'usage_quote': quote})
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(self.orphaned_recordings(), [])
+        self.assertFalse(Job.objects.filter(encounter=draft).exists())
+
 
 # The global lock order (core.retention): the preservation lock before any Reservation or Wallet row lock.
 LOCK_HELD = ("SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid() AND granted "
@@ -322,3 +334,42 @@ class BatchStopAgainstVoiceUpload(BatchFixture, TransactionTestCase):
         self.assertEqual(order.violations, [], 'batch closeout locked money before the preservation lock')
         self.assertFalse(Reservation.objects.filter(job__generation_part__batch=batch, state='held').exists())
         self.assertEqual(len(calls), 2)
+
+
+@override_settings(**LOCKED)
+class JobMoneyLockOrder(LockFlowFixture, TransactionTestCase):
+    """The global order on the single-job billing paths: queue (reserve), cancel, administrator resolution (release),
+    worker settlement (settle) and absorption. Each wallet or reservation lock follows the preservation lock."""
+
+    def checked(self, action):
+        order = MoneyAfterPreservation()
+        with connection.execute_wrapper(order):
+            result = action()
+        self.assertGreater(order.checked, 0, 'the flow never locked money; the check would be vacuous')
+        self.assertEqual(order.violations, [])
+        return result
+
+    def test_queue_cancel_resolve_settle_and_absorb(self):
+        from core.billing import absorb_failed_job, settle
+        from core.jobs import cancel, enqueue
+        draft = self.draft()
+        Encounter.objects.filter(pk=draft.pk).update(notes='Symptoms: no chest pain')
+        draft.refresh_from_db()
+        queued = self.checked(lambda: enqueue(draft, self.user))
+        self.checked(lambda: cancel(queued, self.user))
+        self.assertEqual(Job.objects.get(pk=queued.pk).state, 'cancelled')
+        held = Job.objects.create(encounter=self.encounter, user=self.user, request_key='order-held', config={'mode': 'live'})
+        self.checked(lambda: reserve(held, charge_limit=Decimal('1')))
+        Job.objects.filter(pk=held.pk).update(state='reconciliation')
+        admin = self.custodian_client()
+        response = self.checked(lambda: admin.post(f'/console/jobs/{held.pk}/resolve/', {
+            'outcome': 'release_no_cost', 'evidence_note': 'Synthetic console shows no provider request'}))
+        self.assertEqual(response.status_code, 302)
+        settled = Job.objects.create(encounter=self.encounter, user=self.user, request_key='order-settled')
+        reserve(settled, Decimal('0.2'))
+        units = {'input_tokens': 100, 'output_tokens': 0, 'cached_input_tokens': 0, 'cache_creation_tokens': 0}
+        self.checked(lambda: settle(settled, Decimal('0.1'), units, {'input_per_million': '1000'}, 'anthropic:synthetic',
+                                    'req_order', provider_resource_id='msg_order'))
+        Job.objects.filter(pk=settled.pk).update(state='failed', error='platform_failure: synthetic')
+        cost = self.checked(lambda: absorb_failed_job(settled))
+        self.assertEqual(cost.amount, Decimal('0.1'))

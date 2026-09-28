@@ -244,6 +244,18 @@ def real_mode_payment_problems():
     return problems
 
 
+def preservation_before_money():
+    """Level 3 of the global lock order (core.retention): the preservation lock before any Reservation or Wallet row.
+
+    Every preserved clinical write takes this lock through its trigger and holds it until commit, and reserve() writes
+    the job (taking it) before locking wallets. A transaction that locked a wallet first and saved a job afterwards (an
+    administrator's resolution, a batch stop or closeout) deadlocked with that payer's next request (RF-1). release,
+    settle and absorb_failed_job take it here, right after the job row, so the order is structural rather than a
+    property of each caller; reserve reaches it through its own job.save(payer) before the wallet locks."""
+    from .retention import lock_preservation
+    lock_preservation()
+
+
 def payer_wallets(user,department):
     """The personal promotional wallet and the paid wallet that pays for this user's requests in this department."""
     promo=Wallet.objects.get(user=user,kind='promo')
@@ -269,6 +281,7 @@ def reserve(job,maximum_cost=None,*,charge_limit=None):
     department=job.department
     promo,payer=payer_wallets(job.user,department)
     job.payer=department_payer(job.user_id,department)
+    # Level 3 of the lock order before any money row: this write takes the preservation lock (the job trigger).
     job.save(update_fields=['payer'])
     locked={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[promo.pk,payer.pk]).order_by('pk')}
     # Real data mode never spends sandbox-funded money: the whole request is refused, before any hold, rather than
@@ -298,6 +311,7 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
     job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department__organization','user').get(pk=job.pk)
     existing=Usage.objects.filter(job=job).first()
     if existing: return existing
+    preservation_before_money()
     actual=exact(actual_cost)
     if simulated and actual!=0: raise ValidationError('Simulated integrations cannot create billable cost.')
     uncapped=exact(actual*MULTIPLIER)
@@ -343,6 +357,7 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
 def release(job):
     from .models import Job
     Job.objects.select_for_update().get(pk=job.pk)
+    preservation_before_money()
     reservations=list(Reservation.objects.select_for_update().filter(job=job,state='held').order_by('wallet_id'))
     wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[r.wallet_id for r in reservations]).order_by('pk')}
     for r in reservations:
@@ -546,6 +561,7 @@ def absorb_failed_job(job,actor=None,note=''):
     if usage is None or usage.simulated: return None
     if job.state!='failed': raise ValidationError('Only a failed job can be absorbed; a succeeded or pending job keeps its charge.')
     if job.error.startswith('not_adopted:'): raise ValidationError('A successful generation the user did not adopt remains charged; there is no platform failure to absorb.')
+    preservation_before_money()
     reconciliation=CostReconciliation.objects.select_for_update().filter(usage=usage).first()
     net={}
     for entry in LedgerEntry.objects.filter(job=job,kind__in=['usage','reconciliation']).order_by('wallet_id'):

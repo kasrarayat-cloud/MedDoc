@@ -23,6 +23,20 @@ from .security import audit, private_path
 LOCK_KEY=716849203517
 SCOPES={'organization':Organization,'department':Department,'patient':Patient,'encounter':Encounter}
 
+# ⚠️ ONE GLOBAL LOCK ORDER. LOCK_KEY is a single advisory lock that every preserved clinical write takes implicitly
+# (the 0025/0026/0030 triggers: UPDATE/DELETE of an encounter, patient, template, department, job or code suggestion,
+# INSERT of an encounter, a hold, a release or a tombstone), so it is held by most clinical transactions until commit.
+# A transaction that holds a row lock another one needs while waiting for LOCK_KEY deadlocks. The order is:
+#
+#   1. source/scope rows    organization, department, patient, encounter, template, generation batch
+#   2. job rows             Job
+#   3. the preservation lock (lock_preservation(), or any trigger above)
+#   4. money rows           Reservation, then Wallet (sorted by pk)
+#   5. commit               deferred foreign-key checks take FOR KEY SHARE on every row a new row references
+#
+# Levels may be skipped, never reversed. Billing's job-scoped entry points (reserve, release, settle, absorb_failed_job)
+# take level 3 themselves before any money row, so no caller can reach a wallet lock ahead of a later job.save() (RF-1).
+
 
 def lock_preservation():
     if connection.vendor!='postgresql' or not connection.in_atomic_block:

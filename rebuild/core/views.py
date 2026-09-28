@@ -14,7 +14,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate,login as auth_login,logout as auth_logout
 from django.core.exceptions import PermissionDenied,ValidationError
 from django.core import signing
-from django.db import transaction,IntegrityError
+from django.db import transaction,IntegrityError,DatabaseError
 from django.http import FileResponse,HttpResponse,JsonResponse,Http404
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
@@ -1526,6 +1526,15 @@ def voice(request,pk):
     except ValidationError as exc:
         if relative:cleanup_file(private_path(relative))
         messages.error(request,error_message(exc))
+    except DatabaseError:
+        # enqueue is one transaction, so a database failure (a lock timeout, a deadlock victim, a lost connection) rolled
+        # all of it back: nothing was queued, held, sent or charged. The stored recording has no owner; remove it (RF-1).
+        if relative:cleanup_file(private_path(relative))
+        messages.error(request,'The recording could not be queued. Nothing was sent or charged. Upload it again.')
+    except BaseException:
+        # Anything else is a defect and is reported as one, but it never strands the recording it interrupted.
+        if relative:cleanup_file(private_path(relative))
+        raise
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
