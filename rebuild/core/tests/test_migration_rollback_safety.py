@@ -17,25 +17,50 @@ refuse while that evidence exists (counts only, nothing changed at 0021's node) 
 
 No provider, network or real record is involved: every row below is synthetic and made directly.
 """
+from django.core.management import call_command
 from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.db.migrations.exceptions import IrreversibleError
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.recorder import MigrationRecorder
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from core.models import Department, Encounter, MappingConfirmation, Organization, Patient, Template, TemplateVersion, User
+from core.security import private_path
+
+from .test_word_v3_workflow import V3, V3EncounterFixture, V3Fixture
 
 BEFORE_0021 = [('core', '0020_payment_livemode')]
 #: The installed private-beta release (dedac162) applies core 0001-0018; every later migration is this candidate's.
 PREVIOUS_RELEASE = ('core', '0018_servicehealth')
 MIGRATION_0021 = ('core', '0021_word_v3_mapping_review')
+BEFORE_0031 = ('core', '0030_empty_draft_disposition')
+GATE = 'An unconfirmed contract v3 mapping cannot start a document'
+HOLD = 'A document on an unconfirmed contract v3 mapping cannot be finalized'
 
 
 def to_leaf():
     executor = MigrationExecutor(connection)
     executor.migrate(executor.loader.graph.leaf_nodes())
+
+
+def applied():
+    return {key for key in MigrationRecorder(connection).applied_migrations() if key[0] == 'core'}
+
+
+def gate_installed():
+    """Whether quillmd_encounter_guard, as it stands in the database now, holds 0031's confirmation gate."""
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT prosrc FROM pg_proc WHERE proname = 'quillmd_encounter_guard'")
+        return GATE in cursor.fetchone()[0]
+
+
+def release_encounter(version, patient, user):
+    """The INSERT dedac162's encounter_new makes (its model at 0018): it knows no contract and no confirmation."""
+    encounter = MigrationLoader(connection).project_state(PREVIOUS_RELEASE).apps.get_model('core', 'Encounter')
+    return encounter.objects.create(department_id=patient.department_id, patient_id=patient.pk, template_version_id=version.pk,
+                                    created_by_id=user.pk, notes='Pain: yes.', service_date=timezone.localdate(), answers={})
 
 
 def v3_fields(*keys):
@@ -237,3 +262,147 @@ class ThePreviousReleaseWritesOnThisSchema(TestCase):
         for number, extra in enumerate(rows, start=1):
             TemplateVersion.objects.create(template=self.template, number=number, created_by=self.user, **extra)
         self.assertEqual(self.template.versions.count(), len(rows))
+
+
+class ARefusedRollbackKeepsTheConfirmationGate(TransactionTestCase):
+    """R1 (refuter of the MIG-1/MIG-2 repair): 0021's refusal is atomic for 0021 only. `migrate core 0018` first reversed
+    and committed 0022-0031, then 0021 refused saying 'Nothing was changed.'; 0031's confirmation gate was gone, the
+    previous release started a draft on a never-confirmed v3 mapping, re-applying 0031 did not look at that draft, and
+    this code saved it to review and finalized it. No step toward the previous release's schema may drop the gate while
+    v3 mapping evidence exists, and a document on an unconfirmed v3 mapping is never finalized, however it was started."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='r1', email='r1@synthetic.invalid', verified_at=timezone.now())
+        department = Department.objects.create(organization=Organization.objects.create(name='Synthetic R1'), name='r1')
+        self.template = Template.objects.create(department=department, name='Synthetic R1', format='docx',
+                                                original_name='synthetic.docx', original_path='originals/r1.docx',
+                                                sha256='1' * 64, created_by=self.user)
+        self.patient = Patient.objects.create(department=department, display_name='SYNTHETIC R1', reference='r1',
+                                              created_by=self.user)
+
+    def tearDown(self):
+        to_leaf()
+        super().tearDown()
+
+    def v3(self, number=1):
+        return TemplateVersion.objects.create(template=self.template, number=number, fields=v3_fields('pain'),
+                                              contract='v3', created_by=self.user)
+
+    def assert_refused_with_nothing_reversed(self, migrate, counts):
+        before = applied()
+        with self.assertRaisesRegex(IrreversibleError, counts) as refused:
+            migrate()
+        for private in (str(self.user.pk), self.user.email, 'Synthetic R1', str(self.template.pk)):
+            self.assertNotIn(private, str(refused.exception))
+        self.assertEqual(applied(), before)
+        self.assertTrue(gate_installed())
+        return str(refused.exception)
+
+    def test_reproduce_R1_a_rollback_toward_the_previous_release_refuses_before_dropping_the_gate(self):
+        """Reproduce, the refuter's input: one contract v3 mapping that no clinician has confirmed, at the leaf; then
+        MigrationExecutor.migrate([0018]), which is what `migrate core 0018` runs. RED on cb240141: 0021 refused only
+        after 0022-0031 had been reversed and committed, and the gate was gone (0031 no longer applied)."""
+        unconfirmed = self.v3()
+        message = self.assert_refused_with_nothing_reversed(
+            lambda: MigrationExecutor(connection).migrate([PREVIOUS_RELEASE]),
+            r'0 mapping confirmation\(s\) and 1 mapping version\(s\)')
+        self.assertNotIn('Nothing was changed', message)
+        # The previous release's draft on that mapping is refused exactly as at the leaf.
+        with self.assertRaisesMessage(DatabaseError, GATE), transaction.atomic():
+            release_encounter(unconfirmed, self.patient, self.user)
+        self.assertFalse(Encounter.objects.exists())
+
+    def test_reproduce_R1_the_migrate_command_and_a_rollback_to_0030_refuse_the_same_way(self):
+        """`migrate core 0018` and `migrate core 0030` through the command. RED on cb240141: the first reversed
+        0022-0031 before 0021 refused; the second reversed 0031 with no refusal at all ('Reversing loses nothing')."""
+        self.v3()
+        for target in ('0018_servicehealth', '0020_payment_livemode', BEFORE_0031[1]):
+            to_leaf()  # each attempt starts at the leaf, whatever an earlier one left behind
+            with self.subTest(target=target):
+                self.assert_refused_with_nothing_reversed(
+                    lambda: call_command('migrate', 'core', target, verbosity=0, interactive=False),
+                    r'0 mapping confirmation\(s\) and 1 mapping version\(s\)')
+
+    def test_reproduce_R1_confirmed_v3_evidence_alone_refuses_before_anything_is_reversed(self):
+        """A rollback that 0021 will refuse is refused before anything is dropped, even when every v3 mapping is
+        confirmed. RED on cb240141: 0022-0031 were reversed and committed first."""
+        MappingConfirmation.objects.create(version=self.v3(), confirmed_by=self.user)
+        self.assert_refused_with_nothing_reversed(
+            lambda: call_command('migrate', 'core', PREVIOUS_RELEASE[1], verbosity=0, interactive=False),
+            r'1 mapping confirmation\(s\) and 1 mapping version\(s\)')
+
+    def test_reproduce_R1_a_draft_started_while_the_gate_was_missing_cannot_be_finalized(self):
+        """The window, made the only way it can still be made: 0031 reversed while no v3 mapping exists, then an
+        automatic v3 mapping recorded at 0030 (this code's own write there), the previous release's draft on it (no gate
+        at 0030), and `migrate` forward. RED on cb240141: re-applying 0031 did not look at the draft, and this code's
+        saves moved it to review and then to finalized with the mapping still unconfirmed."""
+        MigrationExecutor(connection).migrate([BEFORE_0031])
+        self.assertFalse(gate_installed())
+        unconfirmed = self.v3()
+        draft = release_encounter(unconfirmed, self.patient, self.user)
+        to_leaf()
+        self.assertTrue(gate_installed())
+        self.assertTrue(TemplateVersion.objects.get(pk=unconfirmed.pk).needs_confirmation)
+        # A hold, not a refusal: the clinician's work on the draft is still saved.
+        Encounter.objects.filter(pk=draft.pk).update(answers={'pain': {'text': 'yes', 'reviewed': True}}, status='review',
+                                                     revision=1)
+        with self.assertRaisesMessage(DatabaseError, HOLD), transaction.atomic():
+            Encounter.objects.filter(pk=draft.pk).update(status='finalized', finalized_at=timezone.now(),
+                                                         finalized_by=self.user)
+        self.assertEqual(Encounter.objects.get(pk=draft.pk).status, 'review')
+        # Positive control: once a clinician confirms the mapping, the same document finalizes.
+        MappingConfirmation.objects.create(version=unconfirmed, confirmed_by=self.user)
+        Encounter.objects.filter(pk=draft.pk).update(status='finalized', finalized_at=timezone.now(), finalized_by=self.user)
+        self.assertEqual(Encounter.objects.get(pk=draft.pk).status, 'finalized')
+
+
+@override_settings(**V3)
+class AStrayDraftOnAnUnconfirmedV3Mapping(V3EncounterFixture, TestCase):
+    """This code's own finalize, end to end, on the draft R1's window leaves behind: a real automatic v3 mapping that no
+    clinician confirmed and a draft the previous release started on it while 0031's gate was missing (the gate is
+    switched off for that one INSERT only; its window is reproduced through the migrations above)."""
+
+    def setUp(self):
+        V3Fixture.setUp(self)
+        self.template, self.version = self.uploaded()
+        self.assertTrue(self.version.needs_confirmation)
+        with connection.cursor() as cursor:
+            # The INSERT's deferred checks are fired before the trigger is switched back on (ALTER TABLE refuses a table
+            # with pending trigger events), then returned to their declared DEFERRED.
+            cursor.execute("SELECT string_agg(quote_ident(conname), ', ') FROM pg_constraint "
+                           "WHERE conrelid = 'core_encounter'::regclass AND condeferrable AND condeferred")
+            deferred = cursor.fetchone()[0]
+            cursor.execute('ALTER TABLE core_encounter DISABLE TRIGGER encounter_scope')
+            try:
+                self.encounter = release_encounter(self.version, self.patient, self.user)
+                cursor.execute(f'SET CONSTRAINTS {deferred} IMMEDIATE')
+            finally:
+                cursor.execute('ALTER TABLE core_encounter ENABLE TRIGGER encounter_scope')
+                cursor.execute(f'SET CONSTRAINTS {deferred} DEFERRED')
+        self.encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.by = self.by_label(self.version)
+
+    def exports(self):
+        folder = private_path('exports')
+        return sorted(path.name for path in folder.iterdir()) if folder.exists() else []
+
+    def test_reproduce_R1_finalizing_is_refused_with_a_clear_message_and_writes_no_export(self):
+        """RED on cb240141: the clinician's save and finalize succeeded and the export downloaded (200) with the mapping
+        still unconfirmed. Now the review is saved, finalization is refused with a message saying why and what to do,
+        and no filled export is written."""
+        self.assertEqual(self.save(self.FULL).status_code, 302)
+        self.assertEqual(Encounter.objects.get(pk=self.encounter.pk).status, 'review')
+        response = self.finalize()
+        self.assertEqual(response.status_code, 200)
+        messages = ' '.join(str(message) for message in response.context['messages'])
+        self.assertIn('has not been confirmed by a clinician', messages)
+        self.assertIn('Nothing was finalized', messages)
+        self.assertEqual(Encounter.objects.get(pk=self.encounter.pk).status, 'review')
+        self.assertEqual(self.exports(), [])
+        self.assertEqual(self.client.get(f'/encounters/{self.encounter.pk}/export/').status_code, 404)
+        # Positive control: the clinician confirms the mapping on the form's page, and the same document finalizes.
+        self.confirm(self.template, self.version)
+        response = self.finalize()
+        self.assertEqual(Encounter.objects.get(pk=self.encounter.pk).status, 'finalized',
+                         [str(message) for message in response.context['messages']])
+        self.assertEqual(len(self.exports()), 1)
