@@ -719,6 +719,25 @@ ENTER_HINT = re.compile(r"^(?:enter|insert|type|add|specify)\s+\S.{0,60}$", re.I
 CHECK_ALL = re.compile(r"\b(?:check|tick|mark|select|circle)\s+all\s+that\s+apply\b|\ball that apply\b|\bselect up to\b|"
                        r"\b(?:check|tick|mark|select)\s+(?:any|as many)\b", re.I)
 CHECK_ONE = re.compile(r"\b(?:check|tick|choose|select|mark|circle)\s+(?:only\s+)?one\b|\bone only\b", re.I)
+# Native-checkbox history cardinality (Detector.native_history_source). A sentence that speaks about selecting,
+# how many, or exclusivity must be ONE complete positive command (HISTORY_ONE / HISTORY_MANY); anything else,
+# negated or limited commands included, leaves the history unresolved rather than independent.
+HISTORY_SELECTION = re.compile(
+    r"\b(?:check\w*|tick\w*|choos\w*|chose\w*|select\w*|mark\w*|circl\w*|pick\w*|indicate|cross(?!-)|option\w*|only|"
+    r"one|multiple|several|either|neither|exclusiv\w*|max|maximum|min|minimum|limit|limits)\b"
+    r"|\b(?:that|which|whichever|as)\s+appl(?:y|ies|ied)\b", re.I)
+_HISTORY_VERB = r"(?:check|tick|choose|select|mark|circle|pick|indicate|cross)"
+HISTORY_ONE = re.compile(r"(?:please\s+)?(?:" + _HISTORY_VERB + r"\s+(?:(?:only|just|exactly)\s+)?(?:one|1|a\s+single)"
+                         r"(?:\s+(?:option|answer|response|item|box|category|choice))?(?:\s+only)?(?:\s+of\s+the\s+following)?"
+                         r"|only\s+one|one\s+only)", re.I)
+HISTORY_MANY = re.compile(r"(?:please\s+)?(?:" + _HISTORY_VERB + r"\s+)?"
+                          r"(?:(?:all|any)\s+(?:that|which)|as\s+many\s+as)\s+appl(?:y|ied)", re.I)
+# A printed reference mark sends the reader to guidance this rule never reads.
+HISTORY_REFERENCE = re.compile(r"[*†‡§¶]")
+# Guidance whose reach is the whole form ("tick one box for each question"), wherever it is printed.
+FORM_WIDE_SCOPE = re.compile(r"\b(?:each|every|all|any)\s+(?:of\s+the\s+)?(?:questions?|sections?|parts?|pages?)\b"
+                             r"|\bper\s+(?:question|section|part|page)\b|\bthroughout\b"
+                             r"|\b(?:this|the)\s+(?:whole\s+|entire\s+)?(?:form|document|questionnaire)\b", re.I)
 SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b|\bsign(?:ed)? here\b", re.I)
 INITIALS = re.compile(r"\binitials?\b|\binitial (?:the )?box", re.I)
 DATE_LABEL = re.compile(r"\b(?:date|dob|d\.o\.b|born)\b|mm/dd|dd/mm|yyyy|\bD[DT]\s*\((?:dictated|transcribed)\)", re.I)
@@ -857,6 +876,7 @@ class Detector:
         self._numbering = None
         self._col_lists = {}
         self._pure = {}
+        self._form_wide = None
         self._compute_headings()
 
     # -- cached reads ----------------------------------------------------------------------------------------------
@@ -1881,16 +1901,49 @@ class Detector:
         self.notes.append("Unassigned write-in beside a nested option at " + slot.id + ". " + problem
                           + " Printed text: " + text + " Governing context: " + context)
 
+    def form_wide_selection(self):
+        """Selection guidance no local relation can own: a form-wide sentence
+        anywhere in the body or a page header/footer, or any selection wording
+        in floating text (a text box or a positioned frame) that holds no native
+        boxes of its own and whose printed position relative to a list is
+        unknown here."""
+        if self._form_wide is None:
+            found = ""
+            for part in self.package.content_parts():
+                root = self.package.tree(part)
+                for box in root.iter(q("w:txbxContent")):
+                    if not checkbox_nodes(box, own=False) and any(
+                            HISTORY_SELECTION.search(text_of(p, own=False)) for p in box.iter(q("w:p"))):
+                        found = found or "a text box in " + part
+                for p in root.iter(q("w:p")):
+                    if (p.find("./" + q("w:pPr") + "/" + q("w:framePr")) is not None and not checkbox_nodes(p, own=False)
+                            and HISTORY_SELECTION.search(text_of(p, own=False))):
+                        found = found or "a positioned frame in " + part
+                    for sentence in re.split(r"(?<=[.!?;])\s+", text_of(p, own=True).strip()):
+                        if HISTORY_SELECTION.search(sentence) and FORM_WIDE_SCOPE.search(sentence):
+                            found = found or "form-wide guidance in " + part
+            self._form_wide = found
+        return self._form_wide
+
     def native_history_source(self, group, units, options, used_para):
         """A bounded completed-event list has independent native checkboxes.
 
         This does not change the default for dropdowns, printed option lists,
         table grids or arbitrary checkbox questions. Explicit/known exclusive
         alternatives and single-event wording retain one-choice behavior.
+        Selection wording counts only as one complete positive command; any
+        other selection wording in the owner, its context, its options or the
+        text printed immediately beside the list leaves it unresolved.
         """
         raw = units[0][2] or (self.text(used_para.el) if used_para is not None else "")
         question = clean_label(raw, limit=None)
         if not re.search(r"\b(?:taken|received|completed|attended|undergone)\s*$", question, re.I):
+            return None
+        # A question ("Has a test been completed", "Were any courses attended")
+        # or a conditional owner ("If yes, ...") is not a declarative event
+        # list: the prior one-choice default stands for it.
+        if re.match(r"(?:has|have|had|was|were|is|are|did|does|do|will|would|can|could|should|shall|may|might|must|"
+                    r"which|what|who|whom|whose|when|where|how|why|if|whether|unless)\b", question, re.I):
             return None
         if (len(units) < 2 or len(units) != len(group["units"])
                 or any(u[0]["kind"] not in ("ff", "sdt") for u in units)
@@ -1900,20 +1953,23 @@ class Detector:
         if owner.parent is not None or owner.part != "word/document.xml":
             return None
         problem = "The complete native-checkbox history source is unresolved."
-        selection_words = r"\b(?:check\w*|tick\w*|choos\w*|select\w*|mark\w*|circl\w*|option\w*|only|one|multiple|several)\b"
+        unresolved = "The native-checkbox history selection instruction is unresolved."
         if (len(question) > MAX_MAPPING_LABEL or any(not o for o in options)
                 or len(set(o.casefold() for o in options)) != len(options)
                 or options != [option_text(u[1]) for u in units]
-                or any(re.search(selection_words, o, re.I) for o in options)):
+                or any(HISTORY_SELECTION.search(o) for o in options)):
             return {"problem": problem}
+        if HISTORY_REFERENCE.search(raw) or any(HISTORY_REFERENCE.search(u[1] or "") for u in units):
+            return {"problem": problem + " A printed reference mark points to guidance outside it."}
         roots = [s for s in self.index.roots if s.part == owner.part]
         first, last = roots.index(owner), roots.index(group["paras"][-1])
         sources = roots[first:last + 1]
         if any(s.kind != "p" for s in sources):
             return {"problem": problem}
-        instructions = []
+        instructions, stopper = [], None
         for prior in reversed(roots[:first]):
             if prior.kind != "p":
+                stopper = prior
                 break
             heading, _, issue = self.question_box_paragraph(prior.el)
             if heading:
@@ -1929,36 +1985,105 @@ class Detector:
                 return {"problem": problem}
             sources.insert(0, prior)
         if any(not self.tab_source_visible(s) or any(n.tag in (q("w:sectPr"), q("w:drawing"), q("w:pict"),
-                    q("w:object"), q("w:br")) for n in s.el.iter()) for s in sources):
+                    q("w:object"), q("w:br"), q("w:footnoteReference"), q("w:endnoteReference"), q("w:framePr"))
+                    for n in s.el.iter()) for s in sources):
             return {"problem": problem}
-        context, issue = self.question_box_context(owner, require_visible=True)
-        context = " > ".join(x for x in (context, *instructions) if x)
+
+        def beside(slot):
+            """(owns native boxes, prints text, speaks about selection) for a neighbour outside the source."""
+            texts = [text_of(p, own=False) for p in ([slot.el] if slot.kind == "p" else slot.el.iter(q("w:p")))]
+            return (bool(checkbox_nodes(slot.el, own=False)), any(t.strip() for t in texts),
+                    any(HISTORY_SELECTION.search(t) for t in texts))
+        # The block that ends the instruction scan above the list (a boxed
+        # instruction) and the first printed block below it are never part of
+        # this relation. Selection wording there is ownership nobody resolved,
+        # unless that neighbour holds its own native boxes: then it is a
+        # separate question that owns its instruction (D31's page-1 "please
+        # tick one"). A printed box glyph is not enough: an instruction can show
+        # a sample box ("Mark [x] one box only").
+        outside = "A selection instruction is printed beside the native-checkbox history, outside its source; " \
+                  "which answers it governs is unresolved."
+        if stopper is not None:
+            own_boxes, _, speaks = beside(stopper)
+            if speaks and not own_boxes:
+                return {"problem": outside}
+        for later in roots[last + 1:]:
+            own_boxes, printed, speaks = beside(later)
+            if own_boxes:
+                break
+            if not printed and later.kind == "p":
+                continue
+            if speaks:
+                return {"problem": outside}
+            break
+
+        def points(slot, direction):
+            """A selection sentence in `slot` that points at a list further away ("the list below")."""
+            if checkbox_nodes(slot.el, own=False):
+                return False
+            texts = [text_of(p, own=False) for p in ([slot.el] if slot.kind == "p" else slot.el.iter(q("w:p")))]
+            return any(HISTORY_SELECTION.search(x) and re.search(direction, x, re.I)
+                       for t in texts for x in re.split(r"(?<=[.!?;])\s+", t))
+        # Further away inside the same heading scope, a selection sentence that
+        # points at a list may govern this one; its reach is unresolved.
+        for prior in reversed(roots[:roots.index(sources[0])]):
+            if prior.kind == "p" and self.question_box_paragraph(prior.el)[0]:
+                break
+            if points(prior, r"\b(?:below|following|beneath|underneath|next)\b"):
+                return {"problem": outside}
+        for later in roots[last + 1:]:
+            if points(later, r"\b(?:above|preceding|previous)\b"):
+                return {"problem": outside}
+            if later.kind == "p" and self.question_box_paragraph(later.el)[0]:
+                break
+        if self.form_wide_selection():
+            return {"problem": "A selection instruction the native-checkbox history cannot own is printed as "
+                               + self.form_wide_selection() + "; which answers it governs is unresolved."}
+        heading_context, issue = self.question_box_context(owner, require_visible=True)
+        context = " > ".join(x for x in (heading_context, *instructions) if x)
         scope = context + " > " + question
         if (issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(scope)
                 or any(self.question_box_signing(o) for o in options)
                 or re.search(r"\b(?:above|previous|following)\s+(?:question|answer|section)\b|\bas above\b|\bsame as\b", scope, re.I)):
             return {"problem": problem}
         # Only complete positive selection instructions establish cardinality.
-        # Any other selection language (including negated commands) is unknown,
-        # never permission to fall through to independent selections.
-        command = r"(?:please\s+)?(?:check|tick|choose|select|mark|circle)\s+"
+        # Every sentence of the governing headings and instructions that uses
+        # selection wording must be one; anything else (a negated, limited or
+        # partial command) is unknown, never permission to allow several.
         one, many = False, False
-        for fragment in context.split(" > ") + [question]:
-            if not re.search(selection_words, fragment, re.I):
-                continue
-            if re.fullmatch(command + r"(?:(?:only|just|exactly)\s+)?one(?:\s+(?:option|answer|response|item))?[.!:]?", fragment, re.I):
-                one = True
-            elif re.fullmatch(command + r"all\s+that\s+apply[.!:]?", fragment, re.I):
-                many = True
-            elif fragment == question and re.match(r"^(?:(?:only|just|exactly)\s+)?one\s+", fragment, re.I) \
-                    and not re.search(selection_words, re.sub(r"^(?:(?:only|just|exactly)\s+)?one\s+", "", fragment, flags=re.I), re.I):
-                one = True
-            else:
-                return {"problem": "The native-checkbox history selection instruction is unresolved."}
+        headings = [re.sub(r"^(?:part|section|step|stage|annex|appendix)\s+one\b[\s.:)\-–—]*", "", h, flags=re.I)
+                    for h in heading_context.split(" > ")]
+        for text in (*headings, *instructions):
+            for sentence in re.split(r"(?<=[.!?;])\s+", text.strip()):
+                if not HISTORY_SELECTION.search(sentence):
+                    continue
+                command = re.sub(r"[.!:;]+$", "", sentence.strip()).strip()
+                wrapped = re.fullmatch(r"\((.*)\)", command)
+                if wrapped:
+                    command = re.sub(r"[.!:;]+$", "", wrapped.group(1).strip()).strip()
+                if HISTORY_ONE.fullmatch(command):
+                    one = True
+                elif HISTORY_MANY.fullmatch(command):
+                    many = True
+                else:
+                    return {"problem": unresolved}
+        if HISTORY_SELECTION.search(question):
+            # Only "(only|just|exactly) one <event> received": never "one or
+            # more", "one or two", "one to three" or a second quantity.
+            owner_one = re.fullmatch(r"(?:(?:only|just|exactly)\s+)?one\s+(.+)", question, re.I)
+            rest = owner_one.group(1) if owner_one else ""
+            if (not owner_one or HISTORY_SELECTION.search(rest)
+                    or re.search(r"\b(?:or|and|nor|plus|more|fewer|less|to|two|three|four|five|six|seven|eight|nine|ten|"
+                                 r"both|many|all|any|each|every)\b|\d|[/&+,;()]", rest, re.I)):
+                return {"problem": unresolved}
+            one = True
         if (one and many or re.search(r"\b(?:up to|at most|at least|no more than|between|maximum|minimum)\b", scope, re.I)
                 or re.search(r"\bexactly\b", scope, re.I) and not one):
             return {"problem": "The native-checkbox history has conflicting or unrepresented selection limits."}
-        exclusive = any(YESNO.fullmatch(o) or OPTION_WORD.fullmatch(o) for o in options)
+        # A yes/no/none/not answer ("None of the above", "No treatment", "Yes -
+        # other") excludes the others: the list stays one choice.
+        exclusive = any(YESNO.fullmatch(o) or OPTION_WORD.fullmatch(o)
+                        or re.match(r"(?:yes|no|none|nil|not|n/?a|unknown)\b", o, re.I) for o in options)
         single = bool(re.search(r"\b(?:single|current|currently|latest|last|most recent|primary|main|sole)\b", scope, re.I))
         kind = "choice" if one or exclusive or single else "multi_choice"
         relation = {"relation": "native_checkbox_history", "question": question, "context": context,
