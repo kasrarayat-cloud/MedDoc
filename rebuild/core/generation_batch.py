@@ -84,6 +84,7 @@ def constraints(version, *, live=False):
         refuse('The complete form-wide rules have not been qualified for generation.')
     fields = version.fields
     keys = {f['key'] for f in fields}
+    by_key = {f['key']: f for f in fields}
     if (manifest['contract'] != CONSTRAINTS or manifest['source_sha256'] != version.template.sha256
             or manifest['fields_sha256'] != digest(fields) or manifest['coverage'] != 'complete'
             or manifest['provenance'] not in ('synthetic_fixture', 'reviewed_assisted')
@@ -122,6 +123,7 @@ def constraints(version, *, live=False):
                             or any(not isinstance(x, str) or not x for x in predicate['values'])):
                         refuse('Invalid or duplicated active answer predicate.')
                     seen.add(predicate['key'])
+                    constraint_values(by_key[predicate['key']], predicate['values'])
         elif rule.get('kind') == 'unique_values':
             if (set(rule) != {'kind', 'source_id', 'keys', 'allowed_values'} or not isinstance(rule['keys'], list)
                     or not rule['keys'] or any(k not in keys for k in rule['keys'])
@@ -129,22 +131,96 @@ def constraints(version, *, live=False):
                     or not isinstance(rule['allowed_values'], list) or not rule['allowed_values']
                     or any(not isinstance(v, str) or not v for v in rule['allowed_values'])):
                 refuse('Invalid unique-priority rule.')
+            for key in rule['keys']:
+                if by_key[key].get('kind') in ('multi_choice', 'checkbox', 'table_rows'):
+                    refuse('A unique-priority field must hold one scalar value.')
+                constraint_values(by_key[key], rule['allowed_values'])
         else:
             refuse('A form-wide rule is unsupported; it needs review before generation.')
     return manifest
 
 
-def validate_constraints(manifest, answers):
+def constraint_values(field, values):
+    """Predicate values must be representable by this actual mapped field."""
+    kind = field.get('kind')
+    if field.get('write_protected') or kind in v3_mapping.SIGNING_KINDS or kind == 'table_rows':
+        refuse('A form-wide rule refers to an unsupported or protected answer area.')
+    for value in values:
+        if kind == 'checkbox':
+            valid = value == v3_mapping.CHECKED or value in (field.get('options') or [])
+        elif kind in ('choice', 'multi_choice'):
+            valid = v3_mapping.option_for(field.get('options') or [], value) == value
+        else:
+            valid = v3_mapping.normalize(field, value) == value
+        if not valid:
+            refuse('A form-wide rule names a value that is not an exact option or valid answer.')
+
+
+def option_reader(version):
+    """One sandbox read per complete constraint check, source-hash bound."""
+    def read(fields, writes):
+        from documents.service import effective_options, DocumentError
+        from .security import private_path
+        try:
+            result = effective_options(private_path(version.template.original_path), fields, writes)
+            if result.get('sha256') != version.template.sha256 or result.get('contract') != 'v3':
+                raise ValidationError('The original form changed; its effective option states cannot be verified.')
+            return result.get('states')
+        except (DocumentError, OSError, AttributeError, ValueError) as exc:
+            raise ValidationError('The original constrained option states could not be verified; review the original form.') from exc
+    return read
+
+
+def effective_values(manifest, fields, answers, read_options):
+    keys = {p['key'] for rule in manifest['rules'] if rule['kind'] == 'max_active_groups'
+            for group in rule['groups'] for p in group}
+    keys.update(k for rule in manifest['rules'] if rule['kind'] == 'unique_values' for k in rule['keys'])
+    relevant = [f for f in fields if f['key'] in keys]
+    if len(relevant) != len(keys) or not keys <= set(answers):
+        raise ValidationError('The constrained answer set is incomplete.')
+    controls = [f for f in relevant if f.get('kind') in ('choice', 'multi_choice', 'checkbox')]
+    writes = v3_mapping.fill_answers(controls, answers)
+    states = {}
+    if controls:
+        if read_options is None:
+            raise ValidationError('The original constrained option states are required.')
+        states = read_options(controls, writes)
+        if not isinstance(states, dict) or set(states) != {f['key'] for f in controls}:
+            raise ValidationError('The original constrained option states are incomplete.')
+    values = {}
+    for field in relevant:
+        key = field['key']; kind = field.get('kind')
+        if kind not in ('choice', 'multi_choice', 'checkbox'):
+            text = v3_mapping.normalize(field, answers[key].get('text', ''))
+            values[key] = {text} if text else set()
+            continue
+        options = field.get('options') or []
+        count = 1 if kind == 'checkbox' else len(options)
+        state = states[key]
+        if (not count or not isinstance(state, list) or len(state) != count
+                or any(type(value) is not bool for value in state)
+                or (key not in writes and field.get('printed_unread'))):
+            raise ValidationError(f'The preserved state of "{field["label"]}" is unreadable; review that constrained answer.')
+        if kind == 'checkbox':
+            values[key] = ({v3_mapping.CHECKED} | set(options)) if state[0] else set()
+        else:
+            values[key] = {option for option, selected in zip(options, state) if selected}
+    return values
+
+
+def validate_constraints(manifest, answers, fields, *, read_options=None):
     """Whole-result/save/export invariant; no model declaration can waive a rule."""
+    effective = effective_values(manifest, fields, answers, read_options)
     for rule in manifest['rules']:
         if rule['kind'] == 'max_active_groups':
-            count = sum(any(answers[p['key']].get('text', '') in p['values'] for p in group)
+            count = sum(any(effective[p['key']].intersection(p['values']) for p in group)
                         for group in rule['groups'])
             if count > rule['maximum']:
                 raise ValidationError('The complete form exceeds a source-bound maximum selection count.')
         elif rule['kind'] == 'unique_values':
-            values = [answers[k].get('text', '') for k in rule['keys'] if answers[k].get('text', '')]
-            if any(v not in rule['allowed_values'] for v in values) or len(values) != len(set(values)):
+            values = [v for k in rule['keys'] for v in effective[k]]
+            if (any(len(effective[k]) > 1 for k in rule['keys'])
+                    or any(v not in rule['allowed_values'] for v in values) or len(values) != len(set(values))):
                 raise ValidationError('The complete form has an invalid or repeated priority value.')
 
 
@@ -153,7 +229,7 @@ def check_answers(version, answers):
         manifest = constraints(version)
         if set(answers) != {f['key'] for f in version.fields}:
             raise ValidationError('The complete answer set is required for form-wide validation.')
-        validate_constraints(manifest, answers)
+        validate_constraints(manifest, answers, version.fields, read_options=option_reader(version))
 
 
 def partitions(fields):
@@ -279,7 +355,7 @@ def parse_part(plan, ordinal, response):
     return result
 
 
-def assemble(plan, responses):
+def assemble(plan, responses, *, read_options=None):
     if len(responses) != len(plan['parts']):
         raise ValidationError('The complete form does not have every response.')
     selections, histories = [], []
@@ -296,5 +372,5 @@ def assemble(plan, responses):
     answers = g.validate_selections(plan['notes'], plan['asked'], combined, context_labels=plan['context_labels'],
         evidence_contract=g.TAB_CONTRACT, history_records=records)
     answers = g.v3_adopted(plan['fields'], answers, plan['notes'], plan['asked'], plan['context_labels'])
-    validate_constraints(plan['constraints'], answers)
+    validate_constraints(plan['constraints'], answers, plan['fields'], read_options=read_options)
     return answers, {}

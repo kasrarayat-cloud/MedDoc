@@ -56,6 +56,9 @@ def process_v3(workspace, request):
         if operation == "locate":
             return {"format": "docx", "fields": word_v3.locate(data, request.get("targets") or []),
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "effective_options":
+            return {"format": "docx", "states": word_v3.effective_options(data, request["mapping"], request["answers"]),
+                    "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "fill":
             mapping, answers = request["mapping"], request["answers"]
             if not is_v3_mapping(mapping):
@@ -659,7 +662,7 @@ def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline")
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):

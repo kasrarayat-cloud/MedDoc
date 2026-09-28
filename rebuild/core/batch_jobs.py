@@ -228,7 +228,8 @@ def finish(batch_id):
         # the original at adoption time.
         if refusal := v3_mapping.generation_refusal(batch.encounter.template_version):
             raise ValidationError(refusal)
-        answers,review=b.assemble(batch.plan,[read_response(p) for p in parts])
+        answers,review=b.assemble(batch.plan,[read_response(p) for p in parts],
+                                  read_options=b.option_reader(batch.encounter.template_version))
     except Exception:
         stop(batch.pk,'The complete form failed validation; no partial answers were adopted.')
         return True
@@ -431,7 +432,8 @@ def recover_recorded(batch_id,user):
                 or any(not hasattr(p,'response') for p in parts)):
             raise ValidationError('This batch contains an unknown, cancelled or consumed failure; no recovery is possible.')
         # Validate every file and the complete result before touching any hold.
-        b.assemble(batch.plan,[read_response(p) for p in parts])
+        b.assemble(batch.plan,[read_response(p) for p in parts],
+                   read_options=b.option_reader(batch.encounter.template_version))
         for part in parts:
             job=Job.objects.select_for_update().get(pk=part.job_id)
             receipt=ProviderReceipt.objects.get(job=job)

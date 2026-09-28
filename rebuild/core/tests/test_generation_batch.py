@@ -123,8 +123,8 @@ class BatchContract(SimpleTestCase):
         m['instruction_references']=[{'id':'rule','part':'word/document.xml','slot':'b/p[0]','sha256':'2'*64}]
         m['rules']=[{'kind':'unique_values','source_id':'rule','keys':['q000','q100'],'allowed_values':['1','2','3']}]
         b.constraints(e.template_version)
-        with self.assertRaisesMessage(ValidationError,'priority'):b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'1'}})
-        b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'2'}})
+        with self.assertRaisesMessage(ValidationError,'priority'):b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'1'}},e.template_version.fields)
+        b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'2'}},e.template_version.fields)
         for notes,label in (('Family history:\nQuestion 000: documented finding.','Question 000'),
                 ('Consent obtained: yes.\nConsent was withdrawn.','Consent obtained')):
             with self.subTest(notes=notes):

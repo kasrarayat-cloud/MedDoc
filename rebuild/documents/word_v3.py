@@ -3874,6 +3874,48 @@ def printed_ticked(index, field):
         return []                       # an annotation for the review page; never a reason to refuse the upload
 
 
+def effective_options(data, fields, answers):
+    """The existing writer's actual resulting option states, without persisting an export.
+
+    Unanswered controls retain their original state. Validate their source
+    anchors too: fill validates only fields it writes. Unknown states remain
+    None; the clinical constraint reader must refuse to count them as false.
+    """
+    if (not isinstance(fields, list) or not 0 < len(fields) <= MAX_FIELDS
+            or not isinstance(answers, dict) or any(not isinstance(f, dict) for f in fields)):
+        fail("Constrained option mapping is invalid.", "invalid_mapping")
+    keys = [f.get("key") for f in fields]
+    if any(not isinstance(k, str) or not k for k in keys) or len(keys) != len(set(keys)) or not set(answers) <= set(keys):
+        fail("Constrained option identities are invalid.", "invalid_mapping")
+    index = SlotIndex(open_package(data))
+    for field in fields:
+        loc = field.get("locator") or {}
+        if field.get("kind") not in ("choice", "multi_choice", "checkbox") or loc.get("contract") != CONTRACT:
+            fail("Constrained option mapping is invalid.", "invalid_mapping")
+        for ref in [loc] + list(loc.get("extra", [])) + list((loc.get("target") or {}).get("copies", [])):
+            slot = index.by_id.get("%s#%s" % (ref.get("part"), ref.get("slot")))
+            if slot is None or not ref.get("fingerprint") or fingerprint(slot.el) != ref["fingerprint"]:
+                fail("The stored option mapping no longer matches the original.", "mapping_mismatch")
+    output = fill(data, fields, answers)
+    final = SlotIndex(open_package(output))
+    result = {}
+    for field in fields:
+        loc = field["locator"]; target = loc["target"]
+        state = option_states(final, field)
+        for copy in target.get("copies", []):
+            # These readers resolve their own copied anchor. Absolute checkbox
+            # destinations do not establish an independent copy relationship.
+            if target["type"] not in DISPLAYED + ("text_options", "paragraph_options") and target.get("write") != "option_text":
+                state = [None] * max(1, len(field.get("options") or []))
+                break
+            variant = {**field, "locator": {**loc, **copy}}
+            if option_states(final, variant) != state:
+                state = [None] * max(1, len(field.get("options") or []))
+                break
+        result[field["key"]] = state
+    return result
+
+
 def printed_unread(index, field):
     """Positions whose printed state cannot be read (a control whose flag and glyph disagree, a cell holding a control
     beside another box): the pages never call them unticked. An unreadable field is unread throughout."""

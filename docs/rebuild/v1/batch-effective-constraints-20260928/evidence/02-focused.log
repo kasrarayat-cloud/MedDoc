@@ -1,0 +1,28 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-batch-effective-constraints/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-batch-effective-constraints/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....E..
+======================================================================
+ERROR: test_reviewed_blank_checkbox_clears_but_unreviewed_preserves (core.tests.test_batch_effective_constraints.EffectiveRules.test_reviewed_blank_checkbox_clears_but_unreviewed_preserves)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-batch-effective-constraints/rebuild/core/tests/test_batch_effective_constraints.py", line 83, in test_reviewed_blank_checkbox_clears_but_unreviewed_preserves
+    data,version,selected=self.fixture(single=True)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-batch-effective-constraints/rebuild/core/tests/test_batch_effective_constraints.py", line 53, in fixture
+    rule,selected=rules(fields,sha)
+                  ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-batch-effective-constraints/rebuild/core/tests/test_batch_effective_constraints.py", line 31, in rules
+    [{'key':selected[label]['key'],'values':['checked' if selected[label]['kind']=='checkbox' else 'Active']}]
+            ~~~~~~~~^^^^^^^
+KeyError: 'Group A'
+
+----------------------------------------------------------------------
+Ran 8 tests in 25.650s
+
+FAILED (errors=1)
+Destroying test database for alias 'default'...
+Found 8 test(s).
+System check identified no issues (0 silenced).

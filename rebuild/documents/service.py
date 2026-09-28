@@ -160,6 +160,17 @@ def locate_fields(path, targets: list):
     return _run(path, "locate", engine="v3", targets=targets)
 
 
+def effective_options(path, mapping: list, answers: dict):
+    """Read the constrained controls after their actual writes, inside the sandbox.
+
+    No export is persisted and the original remains untouched. Existing upload,
+    request, memory/CPU and process-time bounds apply to this operation too.
+    """
+    if not isinstance(mapping, list) or not 0 < len(mapping) <= 1500 or not isinstance(answers, dict):
+        raise DocumentError("Constrained option mapping is invalid.", "invalid_mapping")
+    return _run(path, "effective_options", mapping, answers, engine="v3")
+
+
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,
                   document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None):
     """Fill only the verified original's mapped fields, writing a new private file."""
