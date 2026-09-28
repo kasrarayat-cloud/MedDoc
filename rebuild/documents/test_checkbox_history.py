@@ -1042,6 +1042,12 @@ class SelectionLimitRound2(unittest.TestCase):
         doc = Document(); doc.add_heading('Clinical history', 1)
         doc.add_table(rows=1, cols=1).cell(0, 0).text = 'Sex (tick one): ☐ Male ☐ Female'; doc.add_paragraph('')
         self.assertMulti(data(native_list(doc, 'Treatments received', TREATMENTS)), 'Treatments received')
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        cell = doc.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0]; cell.add_run('Sex (tick one): ')
+        for i, option in enumerate(('Male', 'Female')):
+            ff_field(cell, 'checkbox', name='X%d' % i); cell.add_run(' ' + option + ' ')
+        doc.add_paragraph('')
+        self.assertMulti(data(native_list(doc, 'Treatments received', TREATMENTS)), 'Treatments received')
         doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Leave type: (tick one)')
         for i, option in enumerate(('Escorted', 'Unescorted')):
             p = doc.add_paragraph(); ff_field(p, 'checkbox', name='E%d' % i); p.add_run(' ' + option)
