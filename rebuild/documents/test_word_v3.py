@@ -583,7 +583,8 @@ def laterality_form(path):
         grid.cell(0, c).text = h
     for r, name in enumerate(["Effusion", "Warmth", "Crepitus"], 1):
         grid.cell(r, 0).text = name
-    doc.add_paragraph("Joints examined")
+    # Several answers need the printed command (the structural selection rule): the checklist's own instruction.
+    doc.add_paragraph("Joints examined - tick all that apply")
     check = doc.add_table(rows=4, cols=2)
     check.cell(0, 0).text = "Joint"
     check.cell(0, 1).text = "Examined"
