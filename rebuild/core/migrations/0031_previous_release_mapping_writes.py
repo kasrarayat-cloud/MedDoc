@@ -67,7 +67,8 @@ def refuse_to_drop_the_gate(apps, schema_editor):
             'finalizing a document, and 0021 cannot be reversed while this evidence exists either. 0031 was not '
             'reversed and its defaults, constraint and gate are in place; any migration after 0031 that was applied has '
             'already been reversed and stays reversed: run migrate forward to the latest migration before starting any '
-            'release.')
+            'release. A target of zero also unapplies otp_totp before 0031, which drops every TOTP enrollment; the '
+            'supported rollback target is core 0018.')
 
 
 class Migration(migrations.Migration):

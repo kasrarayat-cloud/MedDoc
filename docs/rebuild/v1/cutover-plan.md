@@ -244,8 +244,10 @@ Data-preserving, in this order:
    payments, through the admin console; nothing is replayed, refunded or discarded automatically.
 4. **Fix forward.** Install a schema-compatible release by host replacement (the rebuild path:
    new instance, same state volume moved over, `--existing-state-volume`, `migrate` only forward).
-   A code rollback is allowed only to a release whose migrations are a prefix of those applied, and
-   only within the limits in *Code rollback onto a newer schema* below; there are no down-migrations.
+   A code rollback is allowed only to a release whose migrations are a prefix of those applied, that
+   enforces real-data mode, and only within the limits in *Code rollback onto a newer schema* below;
+   there are no down-migrations. **dedac162 is never a rollback target once real data exists** (next
+   section): it is synthetic-only by construction and drops the per-request transcription opt-out.
 5. **Data damage** (wrong writes, corruption): restore RDS to a point in time as a **new** instance,
    run `production_restore_check.py`, compare and reconcile the affected rows into the live database
    through a reviewed, declared correction that appends (ledger and audit are immutable). Never
@@ -263,6 +265,23 @@ byte-identical in V1) on the V1 schema (core 0001-0031): dedac162's own code (`g
 against synthetic databases migrated to 0031, and dedac162's own core suite was run on that schema.
 Nothing here was tried on a database holding real data. A release older than dedac162 is not verified.
 
+**Before real data only.** Everything in this section applies to an image rollback to dedac162 while
+the database holds synthetic data. After real data exists, dedac162 is not a rollback target: fix
+forward (step 4 above) or roll back only to a release that enforces real-data mode. Reproduced
+2026-09-28 on throwaway synthetic databases, with the provider call replaced by a recorder and the
+network denied (MIG-R-1):
+
+- dedac162 is synthetic-only by construction (`SYNTHETIC_ONLY = True` in its settings). Its `/health/`
+  reports `synthetic-only` whatever `QUILLMD_DATA_MODE` says, and it refuses to start any document
+  without the "These are synthetic clinical notes." attestation. A clinician could continue working
+  under it only by attesting that real notes are synthetic.
+- dedac162's worker sends every transcription with fixed parameters and never reads the job's
+  recorded `deepgram_parameters`, so a recording V1 queued with `mip_opt_out=true` goes to the
+  provider **without** it and the job is marked succeeded. V1 in real-data mode refuses to send a
+  transcription without the opt-out ("Nothing was sent."). Every new dictation made under dedac162
+  would go out without it as well, so draining alone does not close the gap; the account-wide opt-out
+  (P4) reduces the exposure but does not restore the per-request control.
+
 - **Never reverse a migration to make an older release work.** 0020, 0021, 0022, 0025 to 0028, 0030
   and 0031 refuse to reverse while their evidence exists (live payments or Stripe events; v3 mapping
   confirmations, contracts or corrections; mapping jobs; retention holds and preserved records;
@@ -273,8 +292,13 @@ Nothing here was tried on a database holding real data. A release older than ded
   do not). Run `migrate` forward again before starting any release.
 - **0031 refuses first.** It is the first migration reversed by any rollback toward dedac162's schema
   (`migrate core 0018`, `0020`, `0030`, or any target before it), so on a database holding v3 mapping
-  evidence such a rollback is refused before anything is dropped: 0031 stays applied, and so does the
-  database's confirmation gate. Before this, 0021 refused only after 0022 to 0031 had been reversed and
+  evidence such a rollback is refused before anything core owns is dropped: 0031 stays applied, and so
+  does the database's confirmation gate. **Never target `zero`.** `otp_totp` depends on core 0001
+  (through the user model), so `migrate core zero` unapplies `otp_totp` 0003 to 0001 **before** 0031
+  refuses: every TOTP enrollment is dropped, `migrate` forward recreates the table empty, and every
+  clinician is offered enrollment again without the old second factor (MIG-R-2, measured 2026-09-28).
+  The supported target is `migrate core 0018`, which does not touch `otp_totp`; 0031's refusal message
+  says this. Before this, 0021 refused only after 0022 to 0031 had been reversed and
   committed while its message said "Nothing was changed."; 0031's gate was gone, dedac162 started a
   draft on a never-confirmed v3 mapping, re-applying 0031 did not look at that draft, and V1 finalized
   and exported it (R1). A migration added after 0031 is reversed before 0031 is reached; if it drops
@@ -336,14 +360,16 @@ Nothing here was tried on a database holding real data. A release older than ded
        WHERE v.contract = 'v3' AND e.status <> 'finalized';
 
   If either is non-zero, v3 forms cannot be exported while dedac162 runs; fix forward instead.
-- **Drain V1-only jobs first.** dedac162's worker takes the oldest queued job of any kind. It failed a
-  queued blank-mapping job (kind `mapping`, no document) with the misleading error "Access was revoked
-  before processing." (measured in fixture mode, which holds no funds). Batch-generation children
+- **Drain every job except generation first.** dedac162's worker takes the oldest queued job of any
+  kind. It failed a queued blank-mapping job (kind `mapping`, no document) with the misleading error
+  "Access was revoked before processing." (measured in fixture mode, which holds no funds), and it
+  sends a queued V1 transcription without its recorded opt-out (above). Batch-generation children
   (kind `generation_part`, off unless `QUILLMD_V3_GENERATION_BATCHES=1`) were not exercised. Before
-  an image rollback this must return no rows:
+  an image rollback this must return no rows (it counts `queued` transcriptions, which the earlier
+  version of this query excluded; step 3's inventory counts only `running` and `reconciliation`):
 
       SELECT kind, state, count(*) FROM core_job
-       WHERE kind NOT IN ('generation', 'transcription') AND state IN ('queued', 'running', 'reconciliation')
+       WHERE kind <> 'generation' AND state IN ('queued', 'running', 'reconciliation')
        GROUP BY kind, state;
 
 ### Release updates after go-live

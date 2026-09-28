@@ -327,6 +327,10 @@ class ARefusedRollbackKeepsTheConfirmationGate(TransactionTestCase):
             r'0 mapping confirmation\(s\) and 1 mapping version\(s\)')
         self.assertNotIn('Nothing was changed', message)
         self.assertIn('0031_previous_release_mapping_writes cannot be reversed', message)
+        # MIG-R-2: `migrate core zero` unapplies otp_totp (it depends on core 0001) before 0031 is reached; the message
+        # names that and the supported target, so an operator reading a refusal after `zero` knows MFA was dropped.
+        self.assertIn('zero also unapplies otp_totp before 0031, which drops every TOTP enrollment', message)
+        self.assertIn('the supported rollback target is core 0018', message)
         # The previous release's draft on that mapping is refused exactly as at the leaf.
         with self.assertRaisesMessage(DatabaseError, GATE), transaction.atomic():
             release_encounter(unconfirmed, self.patient, self.user)
