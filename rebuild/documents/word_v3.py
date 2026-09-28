@@ -894,19 +894,29 @@ LABEL_ONE = re.compile(r"(?:please\s+)?(?:(?:check|tick|choose|select|mark|circl
                        r"(?:\s*[-–—,]\s*see\s+(?:page\s+\d{1,3}|notes|overleaf))?", re.I)
 
 
-def label_instruction(sentence):
-    """The label of a separate question whose only selection wording is a complete one-only command printed inside
-    it ("Type of discharge applied for (please tick one):", "Sex (tick one):", "Smoking status (tick one)", "Type -
-    please tick one"), or None. The name before the command is not itself a limit, and nothing after the label is.
-    A standalone command ("Tick one box only."), a notice ("Please note: only one box may be ticked.") and a command
-    that says more ("tick one box for leave and one for treatment", "tick one box only throughout this form") are
-    not part of any one question's label; neither is a label with any other selection wording in it."""
+def label_instruction(sentence, contained=False):
+    """The printed label of a separate question whose only selection wording is a complete one-only command printed
+    inside it ("Type of discharge applied for (please tick one):", "Sex [tick one]:", "Smoking status (tick one)",
+    "Type - please tick one"), or None. The command may also stand alone after the label's colon when it is
+    bracketed ("Type of discharge applied for: (please tick one)") or, `contained` in the cell or text box that holds
+    the question's own boxes, unbracketed ("Type of discharge applied for: please tick one"). The name before the
+    command is not itself a limit, and nothing after the label is. A standalone command ("Tick one box only."), a body
+    notice ("Please note: only one box may be ticked.", "NB: tick one box only.") and a command that says more ("tick
+    one box for leave and one for treatment", "tick one box only throughout this form") are not part of any one
+    question's label; neither is a label with any other selection wording in it."""
     m = re.fullmatch(r"\s*([^:?]*[^:?\s])\s*(?:[:?](.*))?", sentence or "", re.S)
-    if not m or limited_selection(m.group(2) or ""):
+    if not m:
         return None
-    label = m.group(1)
-    commands = re.findall(r"\(([^()]*)\)", label)
-    name = re.sub(r"\([^()]*\)", " ", label)
+    label, rest, printed, commands = m.group(1), m.group(2) or "", m.group(1), []
+    after = re.sub(r"[.!:;\s]+$", "", rest.strip())
+    wrapped = re.fullmatch(r"\((.*)\)|\[(.*)\]", after)
+    alone = (wrapped.group(1) if wrapped.group(1) is not None else wrapped.group(2)) if wrapped else after
+    if after and (wrapped or contained) and LABEL_ONE.fullmatch(alone.strip()):
+        commands, rest, printed = [alone], "", re.sub(r"[.!:;\s]+$", "", (sentence or "").strip())
+    if limited_selection(rest):
+        return None
+    commands += [a or b for a, b in re.findall(r"\(([^()]*)\)|\[([^\[\]]*)\]", label)]
+    name = re.sub(r"\([^()]*\)|\[[^\[\]]*\]", " ", label)
     dash = re.search(r"\s[-–—]\s", name)
     if dash:
         commands.append(name[dash.end():])
@@ -914,7 +924,7 @@ def label_instruction(sentence):
     commands = [c.strip() for c in commands if history_selection(c)]
     if (commands and all(LABEL_ONE.fullmatch(re.sub(r"[.!:;]+$", "", c).strip()) for c in commands)
             and re.search(r"[^\W\d_]{2,}", name) and not limited_selection(name)):
-        return label
+        return printed
     return None
 
 
@@ -2118,7 +2128,10 @@ class Detector:
         nothing follows the label in `p`, the next printed block when it starts with a box (the label above its own
         option lines, in a boxed cell, or beside the answer cell of its table row). Boxes printed after other text
         answer a separately labelled question ("Leave type (tick one):" above "Escorted: [ ] Yes [ ] No")."""
-        label = label_instruction(sentence)
+        box = p.getparent()
+        contained = box is not None and box.tag in (q("w:tc"), TXBX) and (
+            bool(checkbox_nodes(box, own=False)) or any(c in (BOX, CHECKED) for c in text_of(box)))
+        label = label_instruction(sentence, contained)
         # The label starts the paragraph as printed: after a box it is an answer's text, not a question's label.
         start = re.match(r"\s*" + re.escape(label) + r"[.\s]*[:?]?", paragraph_text(p)[0]) if label else None
         if start is None:

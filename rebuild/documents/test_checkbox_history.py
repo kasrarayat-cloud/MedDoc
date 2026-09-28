@@ -929,6 +929,12 @@ class SelectionLimitRound2(unittest.TestCase):
         doc = Document(); doc.add_heading('Clinical history', 1); boxed_question(doc, '(tick one):', ('Yes', 'No'))
         doc.add_paragraph('')
         cases.append(('label without a name', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
+        # A body notice is not a label even directly above unlabelled box lines; a bracketed command after a colon is.
+        doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Note: tick one box only.')
+        for i, option in enumerate(('Escorted', 'Unescorted')):
+            p = doc.add_paragraph(); ff_field(p, 'checkbox', name='E%d' % i); p.add_run(' ' + option)
+        doc.add_heading('Clinical history', 1)
+        cases.append(('body notice above box lines', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
         # A positioned frame prints elsewhere on the page: never the label of the box lines that follow it in the file.
         doc = Document(); doc.add_heading('Leave', 1); frame = doc.add_paragraph('Leave type (tick one only):')
         frame._p.get_or_add_pPr().append(parse_xml(
@@ -999,6 +1005,8 @@ class SelectionLimitRound2(unittest.TestCase):
                       'Type of discharge applied for (tick one – see overleaf):',
                       'Type of discharge applied for (tick one — see page 2):', 'Type of discharge applied for (tick 1):',
                       'Type of discharge applied for (s41) (please tick one):',
+                      'Type of discharge applied for: (please tick one)', 'Type of discharge applied for: please tick one',
+                      'Type of discharge applied for [please tick one]:',
                       *('Type of discharge applied for (please %s one):' % verb for verb in (
                           'check', 'choose', 'select', 'mark', 'circle', 'pick', 'indicate', 'cross')),
                       *('Type of discharge applied for (tick one %s):' % noun for noun in (
@@ -1023,6 +1031,12 @@ class SelectionLimitRound2(unittest.TestCase):
             ff_field(cell, 'checkbox', name='S%d' % i); cell.add_run(' ' + option + ' ')
         doc.add_paragraph(''); raw = data(native_list(doc, 'Treatments received', TREATMENTS))
         self.assertMulti(raw, 'Treatments received')
+        # A bracketed command after a body label's colon is that question's own label.
+        doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Leave type: (tick one)')
+        for i, option in enumerate(('Escorted', 'Unescorted')):
+            p = doc.add_paragraph(); ff_field(p, 'checkbox', name='E%d' % i); p.add_run(' ' + option)
+        doc.add_heading('Clinical history', 1)
+        self.assertMulti(data(native_list(doc, 'Treatments received', TREATMENTS)), 'Treatments received')
         # A question name that is a selection verb but not a limit still owns its own tick-one.
         doc = Document(); doc.add_heading('Clinical history', 1)
         boxed_question(doc, 'Select a treatment plan (tick one):', ('Standard', 'Intensive')); doc.add_paragraph('')
