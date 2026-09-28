@@ -53,7 +53,9 @@ FILE_UPLOAD_PERMISSIONS=0o600
 FILE_UPLOAD_DIRECTORY_PERMISSIONS=0o700
 DATA_UPLOAD_MAX_MEMORY_SIZE=20*1024*1024
 FILE_UPLOAD_MAX_MEMORY_SIZE=0
-DATA_UPLOAD_MAX_NUMBER_FIELDS=1000
+# Existing large drafts must remain reviewable if generation is switched off.
+# Bound the whole review form (up to1500 mapped fields); body-size limits still apply.
+DATA_UPLOAD_MAX_NUMBER_FIELDS=16000
 SESSION_COOKIE_NAME='quillmd_admin_session' if ADMIN_SITE else 'quillmd_doctor_session'
 CSRF_COOKIE_NAME='quillmd_admin_csrf' if ADMIN_SITE else 'quillmd_doctor_csrf'
 SESSION_COOKIE_HTTPONLY=True
@@ -125,6 +127,7 @@ AI_INFERENCE_GEO=os.getenv('QUILLMD_AI_INFERENCE_GEO','')
 WM_NARRATIVE=os.getenv('QUILLMD_WM_NARRATIVE','0')=='1'
 # Prepared only: exact-model context qualification is still a release gate.
 V3_HISTORY_CONTEXT=os.getenv('QUILLMD_V3_HISTORY_CONTEXT','0')=='1'
+V3_GENERATION_BATCHES=os.getenv('QUILLMD_V3_GENERATION_BATCHES','0')=='1'
 # Retained provider-shaped narrative responses, keyed by the sha256 of the notes. Read ONLY in fixture mode, never live.
 AI_REPLAY_DIR=os.getenv('QUILLMD_AI_REPLAY_DIR','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')

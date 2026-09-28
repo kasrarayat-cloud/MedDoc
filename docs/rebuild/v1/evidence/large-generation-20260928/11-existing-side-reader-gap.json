@@ -1,0 +1,46 @@
+42 objects imported automatically (use -v 2 for details).
+
+{
+  "notes": "The patient has left knee pain.",
+  "single_original_reader": {
+    "Right knee": {
+      "text": "The patient has left knee pain.",
+      "status": "supported",
+      "evidence": [
+        {
+          "quote": "The patient has left knee pain.",
+          "start": 0,
+          "end": 31
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient has left knee pain.",
+          "start": 0,
+          "end": 31
+        }
+      ]
+    }
+  },
+  "batch_reader": {
+    "text": "The patient has left knee pain.",
+    "status": "supported",
+    "evidence": [
+      {
+        "quote": "The patient has left knee pain.",
+        "start": 0,
+        "end": 31
+      }
+    ],
+    "reviewed": false,
+    "own_evidence": [
+      {
+        "quote": "The patient has left knee pain.",
+        "start": 0,
+        "end": 31
+      }
+    ]
+  },
+  "stored_governance": []
+}

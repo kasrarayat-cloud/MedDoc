@@ -29,6 +29,7 @@ from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit,client_address
 from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,stripe_key_configured,reconcile_usage,release
 from .context import integration_status
+from . import batch_jobs, generation_batch
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
 from .billing import available_balance
 from . import wm_review
@@ -369,10 +370,10 @@ def template_upload(request):
             info=inspect_template(private_path(relative),engine=word_engine())
             contract=v3_mapping.CONTRACT if info.get('contract')==v3_mapping.CONTRACT else ''
             if contract:
-                # ⚠️ The engine maps far more than 100 areas, but generation still refuses more than 100 fields, so a
-                # larger v3 form is refused here, whole and with the count, rather than trimmed or left unusable.
+                # Preserve every answer area. The default single-request limit remains100;
+                # the prepared batch flag has its own bounded admission and rule-coverage gate.
                 answerable=len(v3_mapping.answerable(info['fields']))
-                if answerable>v3_mapping.GENERATION_FIELD_LIMIT:raise ValidationError(v3_mapping.too_many_fields(answerable))
+                if answerable>v3_mapping.field_limit():raise ValidationError(v3_mapping.too_many_fields(answerable))
             elif len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
             with transaction.atomic():
                 t=Template.objects.create(department=department,name=form.cleaned_data['name'],format=info['format'],original_name=Path(form.cleaned_data['file'].name).name[:200],original_path=relative,sha256=info['sha256'],warnings=info.get('warnings',[]),created_by=request.user)
@@ -529,7 +530,7 @@ def v3_page(request,t,version,*,status=200,error='',posted=None,outline=None):
         'find':query,'outline_error':outline_error,'posted_slot':posted.get('slot',''),'posted_add_label':posted.get('label',''),
         'posted_add_kind':posted.get('kind',''),'text_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.TEXT_KINDS],
         'manual_kinds':[(k,v3_mapping.KIND_NAMES[k]) for k in v3_mapping.MANUAL_KINDS],'can_confirm':can_confirm,
-        'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.GENERATION_FIELD_LIMIT,
+        'answerable':len(v3_mapping.answerable(version.fields)),'field_limit':v3_mapping.field_limit(),
         'corrections':version.corrections,'statements':[],'mapping_label_limit':MAX_MAPPING_LABEL,'mapping_input_limit':MAX_MAPPING_INPUT_UNITS,
         'mapping_assistance_enabled':getattr(settings,'QUILLMD_MAPPING_ASSISTANCE',False)},status=status)
 
@@ -627,8 +628,8 @@ def v3_add_field(request,t):
             return v3_page(request,t,t.versions.order_by('-number').first(),status=409,error=V3_MAPPING_CHANGED,posted=request.POST)
         fields=v3_mapping.insert_in_document_order(latest.fields,[field],outline)
         answerable=len(v3_mapping.answerable(fields))
-        if answerable>v3_mapping.GENERATION_FIELD_LIMIT:
-            raise ValidationError(f'Adding this field would give the form {answerable} answer areas; QuillMD can generate answers for at most {v3_mapping.GENERATION_FIELD_LIMIT} per form today. Nothing was saved.')
+        if answerable>v3_mapping.field_limit():
+            raise ValidationError(f'Adding this field would give the form {answerable} answer areas; QuillMD can generate answers for at most {v3_mapping.field_limit()} per form today. Nothing was saved.')
         version=v3_new_version(request,t,latest,fields,added=[field['key']])
     messages.success(request,f'Added "{field["label"]}" ({v3_mapping.KIND_NAMES.get(field["kind"],field["kind"])}) as a manual field in mapping version {version.number}. Confirm the mapping before creating documents.')
     return redirect('template_detail',pk=t.pk)
@@ -845,8 +846,18 @@ def encounter_detail(request,pk):
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
-    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
-    except ValidationError:maximum_charge=None
+    quote_config=configuration();generation_quote_error='';batch_constraint_error=''
+    if e.answers:
+        try:generation_batch.check_answers(e.template_version,e.answers)
+        except ValidationError as exc:batch_constraint_error=error_message(exc)
+    try:
+        if generation_batch.needed(e.template_version.fields):
+            quote_config,maximum_charge=batch_jobs.quote(e,quote_config)
+        else:
+            maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements)*Decimal('1.5')
+    except ValidationError as exc:
+        maximum_charge=None
+        if generation_batch.needed(e.template_version.fields):generation_quote_error=error_message(exc)
     audit(request.user,'encounter.view',e.pk,department=e.department)
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
     # further request is disclosed as separately billable. The doctor reads the classification in words, is offered cancel only
@@ -855,6 +866,22 @@ def encounter_detail(request,pk):
     prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
     for job in jobs:
         job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
+    # One visible outcome per complete form. Child receipts stay in the admin
+    # record; a staged child is never shown as a ready answer draft.
+    visible_jobs=[]
+    for job in jobs:
+        if job.kind=='generation_part':
+            part=job.generation_part
+            if part.ordinal!=1:continue
+            batch=part.batch
+            job.display_kind='Generation'
+            job.state=batch.state
+            job.display_error=batch.error
+            if batch.state in ('queued','running','validating'):
+                job.display_error='The complete form is being prepared. Answers appear together after validation.'
+            prior_generations+=int(batch.state in ('succeeded','not_adopted'))
+        visible_jobs.append(job)
+    jobs=visible_jobs
     transcript_reviews=[]
     applied=set(AuditEvent.objects.filter(action='transcription.applied',target__in=[str(job.pk) for job in jobs]).values_list('target',flat=True))
     for job in jobs:
@@ -868,9 +895,10 @@ def encounter_detail(request,pk):
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
     from . import wm_narrative
-    return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
+        'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
         'export_refusal':v3_mapping.export_refusal(e.template_version.template) if is_v3 else ''})
 
 def clinician_decided(e):
@@ -973,7 +1001,7 @@ def clear_review(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
     membership(request.user,e.department,roles=['owner','clinician'])
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():
+    if batch_jobs.pending(e):
         return document_refusal(request,e,'Wait until the pending job is resolved. Nothing was cleared.',409)
     if request.POST.get('revision')!=str(e.revision):
         return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it before clearing. Nothing was cleared.',409)
@@ -1041,7 +1069,7 @@ def save_answers(request,pk):
     from .tab_review import clinician_identity
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'Wait until the pending job is resolved.',409)
+    if batch_jobs.pending(e):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version before editing.',409)
     is_wm=bool(e.template_version.document_backend)
     is_v3=v3_mapping.is_v3_version(e.template_version)
@@ -1272,6 +1300,8 @@ def save_answers(request,pk):
             decisions[key]={'reviewed':reviewed,'evidence':evidence,'variant':variant}
     kept_proposals=(e.template_review or {}).get('proposals') if is_wm and not (e.template_review or {}).get('decisions') else None
     previous_decisions=dict((e.template_review or {}).get('decisions') or {}) if is_wm else {}
+    try:generation_batch.check_answers(e.template_version,answers)
+    except ValidationError as exc:return document_refusal(request,e,error_message(exc),409)
     e.answers=answers;e.revision=target_revision;e.status='review';wm_review.invalidate_review(e)
     if kept_proposals:e.template_review={'proposals':kept_proposals}
     clinician=is_wm and Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
@@ -1358,7 +1388,7 @@ def finalize(request,pk):
             if e.status=='finalized':return redirect('encounter_detail',pk=pk)
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
-            if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():raise ValidationError('Resolve pending jobs before finalizing.')
+            if batch_jobs.pending(e):raise ValidationError('Resolve pending jobs before finalizing.')
             is_v3=v3_mapping.is_v3_version(e.template_version)
             # A v3 signature or initials area holds no answer (it is signed by hand on the printed form), so there is
             # nothing in it to review; every other field still needs the clinician's review.
@@ -1376,6 +1406,7 @@ def finalize(request,pk):
             governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
                                         [row['label'] for row in e.template_version.review_requirements])
             if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
+            generation_batch.check_answers(e.template_version,e.answers)
             original=private_path(e.template_version.template.original_path)
             if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
@@ -1944,6 +1975,9 @@ def admin_platform_cost(request):
 @transaction.atomic
 def admin_resolve_job(request,pk):
     if not request.user.is_staff or not request.user.is_verified():raise Http404
+    # Batch resolution locks its parent before the child and never frees a consumed key.
+    if Job.objects.filter(pk=pk,kind='generation_part').exists():
+        return batch_jobs.resolve_view(request,pk)
     # Lock only the job row, as settle, cancel and absorb do: locking the encounter and department before the wallets deadlocks a wallet holder that audits.
     job=get_object_or_404(Job.objects.select_for_update(of=('self',)).select_related('encounter__department'),pk=pk)
     if job.state!='reconciliation':return HttpResponse('Only jobs held for reconciliation can be resolved.',status=409)
@@ -2030,7 +2064,7 @@ def api_encounter(request,pk):
 @transaction.atomic
 def encounter_notes(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
-    if e.status=='finalized' or Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'This document is locked.',409)
+    if e.status=='finalized' or batch_jobs.pending(e):return document_refusal(request,e,'This document is locked.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'The notes changed after you opened this document, in another window or by a colleague. Reopen it to see the current notes before editing.',409)
     transcript_job=None;raw_transcript=None
     if request.POST.get('transcript_job'):

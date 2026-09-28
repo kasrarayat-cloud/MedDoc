@@ -1,0 +1,20 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+...................Forbidden (CSRF cookie not set.): /console/accounts/12b0d7c2-7de3-43da-95e2-baf87f6954ce/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/1bbfb364-aad4-4cc5-974c-ecd31957c759/
+Forbidden (CSRF cookie not set.): /console/departments/71ba3796-f40b-4d1a-a65d-f459d91e3d98/payer/
+.........................................................../opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+................/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+........................................................
+----------------------------------------------------------------------
+Ran 150 tests in 22.624s
+
+OK
+Destroying test database for alias 'default'...
+Found 150 test(s).
+System check identified no issues (0 silenced).
+Published backup status: healthy (healthy).
+Published backup status: offsite_stale (failure).

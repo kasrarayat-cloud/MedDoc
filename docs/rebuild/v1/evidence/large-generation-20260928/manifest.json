@@ -1,0 +1,34 @@
+{
+  "base": "113eb72188d6099fbbe01749c48b8bf331f18c5c",
+  "qualification": "mocked synthetic only; existing opposite-side acceptance remains failing",
+  "source_sha256": {
+    "rebuild/core/generation_batch.py": "e7956288ba0e3b2d54a37d63015dad1b2e4633894928ea14e796fe849393e8f3",
+    "rebuild/core/batch_jobs.py": "a49d29f60817b9a09ce89abccc2d1baf68d84345a7e724abf88195a6ff91a07a",
+    "rebuild/core/migrations/0027_generation_batches.py": "911a9c4f846a5441cd672d99571a6fd1389005b35aec4161a9a3bbe6b84d9d9c",
+    "rebuild/core/models.py": "e6f7ec43a2314a3815d041349033f9d5a2134ca30fe2b54555f36559041a7de1",
+    "rebuild/core/jobs.py": "c3d8bd4359c023ca025f550b910034ca49218c515674d64a4b7c8166ba94df61",
+    "rebuild/core/views.py": "68d4fa166ddbc42ea105fd4b8e81e99478e0b8391ef6743943b9834f29a364e1",
+    "rebuild/core/admin_console.py": "25744c20eb092bcb62d270fce2d5914bacc12cf7f26db1cb5853adf1e5ad82fd",
+    "rebuild/core/generation.py": "112e42a146f81b4bb2e0321723bafefaa8fc0dcfcf6ddd502d8b8702b9ecc443",
+    "rebuild/core/tests/test_generation_batch.py": "2c053e58a2a02cd6b3527cf6409216bf322801b288bfebb38180836d314137dd"
+  },
+  "evidence_sha256": {
+    "01-batch-first.log": "427f7e4da0dd09c42398493ded3c58540abff7f21b059a68a1f90e2900ac899d",
+    "02-batch-workflow.log": "1d6fe76830fd9b06cf2445f4ac265b42fac48374650d682e75e352adea371b3f",
+    "03-json-order-red.log": "c426c8ad8c6648d70f2da47de3e53c60874a1b406560d8cc241d3fb670cd0e7c",
+    "04-batch-after-order.log": "f95a271e9f8f41e8d2ed4a0419073f49891f5062d570177804c786e7ee70b6d3",
+    "05-batch-recovery.log": "39780e7e12059de6a175c62cb40fb4f715e2fb7de2a7786f59e8ab5abc9a97e0",
+    "05-long-fragment-diagnosis.json": "cde30197fc4144172db7182eea73efaaf865e2a306bb5147ed9f65f5d70343ef",
+    "06-long-statement-probe.json": "4483b3db4d322415a1e37ffe1b258efb11b2ed8a44f130e21a7138cc89adcc8e",
+    "07-long-punctuated-probe.json": "b69a780ae027d85c13ca60b367fb01911a97b491c26bc47621e1f289c3ebea5b",
+    "08-batch-complete.log": "86e46b5885aa3e770af3bbd239e6d9deb117266736e5d01324024e5a80750695",
+    "09-batch-final-targeted.log": "d4e61bd13b41e5e0f147a2c8387a3a84c1def44949d89c12d11fe89dca5e4bb0",
+    "10-schema-check.log": "a2bfa7b376c38062f77ce2b1e703876aaa04662f96355cdf5dc9d0d075302b05",
+    "11-existing-side-reader-gap.json": "b8941831253a365db78d4939c92f5ad347cf2d6fc7d8f506bb4f069221f8d35f",
+    "12-affected-regressions.log": "32a072362e09e51d31cc0c8e5fa82f7613814f1ff920586a0714ff21cfa0be1c",
+    "13-retention-schema-refresh.log": "cc41d8f8c83aeda846b3a1f87136a0cc3776a1b3bac3927006e5f35ae8a0ec91",
+    "14-batch-final.log": "32cde546217b287ca8a0e55bd03a4cd6f9077255aedb1cc425cceb79aee0dc1b",
+    "15-admin-batch-regressions.log": "dbacf89ba89e2e581b48f4512816839172df9cbe1009a10ec9909bff3ddeeb69",
+    "16-final-schema-check.log": "a2bfa7b376c38062f77ce2b1e703876aaa04662f96355cdf5dc9d0d075302b05"
+  }
+}

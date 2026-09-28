@@ -30,6 +30,10 @@ KIND_NAMES = {'text': 'Text', 'long_text': 'Long text', 'date': 'Date', 'time': 
 #: Generation refuses more than 100 fields, so a v3 form above 100 answerable areas is refused at upload rather
 #: than accepted and later unusable. Signature and initials areas are never generated and do not count.
 GENERATION_FIELD_LIMIT = 100
+
+def field_limit():
+    from .generation_batch import enabled, MAX_PARTS
+    return GENERATION_FIELD_LIMIT * MAX_PARTS if enabled() else GENERATION_FIELD_LIMIT
 CHECKED = 'checked'
 #: The only source values that tick a checkbox automatically.
 CHECKBOX_YES = frozenset(('yes', 'checked', 'present'))
@@ -88,6 +92,9 @@ def generation_refusal(version):
 
 
 def too_many_fields(count):
+    if field_limit()!=GENERATION_FIELD_LIMIT:
+        return (f'This form has {count} answer areas and exceeds the bounded {field_limit()}-area limit. '
+                'The form was not added; no answer area was dropped.')
     return (f'This form has {count} answer areas (signature and initials areas are not counted). QuillMD can generate '
             f'answers for at most {GENERATION_FIELD_LIMIT} per form today, so the form was not added and nothing was '
             f'dropped. Split it into parts of at most {GENERATION_FIELD_LIMIT} answer areas and upload each part.')

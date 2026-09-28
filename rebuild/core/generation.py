@@ -349,6 +349,9 @@ def configuration():
     if getattr(settings,'V3_HISTORY_CONTEXT',False):
         from .v3_history_context import CONTRACT
         config['history_context_contract']=CONTRACT
+    if getattr(settings,'V3_GENERATION_BATCHES',False):
+        from .generation_batch import CONTRACT
+        config['generation_batch_contract']=CONTRACT
     return config
 
 

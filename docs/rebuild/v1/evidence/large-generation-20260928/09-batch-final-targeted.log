@@ -1,0 +1,21 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..................F
+======================================================================
+FAIL: test_unique_priorities_and_full_source_guards_cannot_be_split_away (core.tests.test_generation_batch.BatchContract.test_unique_priorities_and_full_source_guards_cannot_be_split_away) (notes='The patient has left knee pain.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 135, in test_unique_priorities_and_full_source_guards_cannot_be_split_away
+    self.assertNotEqual(answers['q000']['status'],'supported')
+AssertionError: 'supported' == 'supported'
+
+----------------------------------------------------------------------
+Ran 20 tests in 49.652s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 20 test(s).
+System check identified no issues (0 silenced).

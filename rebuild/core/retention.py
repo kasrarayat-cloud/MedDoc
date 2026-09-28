@@ -193,9 +193,10 @@ def _cleanup_file(path,*,encounter_id=None,department_id=None):
             PreservedFile.objects.create(storage_key=relative,sha256=digest.hexdigest(),byte_count=size,hold_ids=sorted(hold_ids))
         return False
     # An active durable reference is never a transient cleanup candidate.
-    from .models import Job,ProviderReceipt,Template
+    from .models import Job,ProviderReceipt,Template,GenerationBatchResponse
     if (Job.objects.filter(Q(input_path=relative)|Q(result_path=relative)).exists()
             or ProviderReceipt.objects.filter(result_path=relative).exists()
+            or GenerationBatchResponse.objects.filter(result_path=relative).exists()
             or Template.objects.filter(original_path=relative).exists()
             or Encounter.objects.filter(export_path=relative).exists()):return False
     existed=validated.is_file()

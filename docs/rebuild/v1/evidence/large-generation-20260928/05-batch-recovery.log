@@ -1,0 +1,22 @@
+Creating test database for alias 'default'...
+/opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+./opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....F........
+======================================================================
+FAIL: test_missing_and_long_answers_use_authenticated_review_without_inventing_missing (core.tests.test_generation_batch.BatchWorkflow.test_missing_and_long_answers_use_authenticated_review_without_inventing_missing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-large-generation-design/rebuild/core/tests/test_generation_batch.py", line 233, in test_missing_and_long_answers_use_authenticated_review_without_inventing_missing
+    self.assertEqual(self.encounter.answers[fs[2]['key']]['text'],long)
+AssertionError: '' != 'documented follow-up detail follow-up det[2346 chars]ail.'
+Diff is 2395 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 14 tests in 36.964s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 14 test(s).
+System check identified no issues (0 silenced).

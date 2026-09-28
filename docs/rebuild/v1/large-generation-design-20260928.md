@@ -184,3 +184,16 @@ Mocked isolated tests only, preserving all first failures:
 6.Affected single-call and accounting checks; finished independent clinical and financial
  REFUTE before integration. Feature stays off; endpoint/account proof and broad V1
  compatibility remain separate release gates.
+
+## Existing-interface reference lock
+
+Refero-design applied before the small status change. No Refero MCP tools are
+available here; read its bundled copywriting and form/focus guidance. Primary
+reference is `encounter_input.html`'s latest-operation notice; secondary references
+are `encounter_detail.html`'s Document record and `voice_limit.html`'s disclosed
+maximum charge. Preserve current type, colors, layout, notice roles and cancellation
+button. No new visual system or extra mapping step. The doctor sees one complete-form
+operation and the existing aggregate charge; only an adopted whole form can say the
+draft is ready. Unknown outcomes direct the user to reconciliation, never blind retry.
+Administrative child receipts remain individually inspectable. These decisions follow
+the user's one usable workflow requirement and the skill's clear next-step/error rules.

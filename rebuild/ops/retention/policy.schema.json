@@ -191,6 +191,10 @@
         "clinical_records_other_status",
         "final_export_references",
         "jobs",
+        "generation_batches",
+        "generation_parts",
+        "generation_attempt_events",
+        "generation_response_references",
         "recording_references",
         "job_result_references",
         "receipt_result_references",
@@ -1472,6 +1476,182 @@
           ]
         },
         "jobs": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "generation_batches": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "generation_parts": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "generation_attempt_events": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "unresolved"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "anchor",
+                "days"
+              ],
+              "properties": {
+                "mode": {
+                  "const": "preserve"
+                },
+                "anchor": {
+                  "type": "null"
+                },
+                "days": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        },
+        "generation_response_references": {
           "oneOf": [
             {
               "type": "object",

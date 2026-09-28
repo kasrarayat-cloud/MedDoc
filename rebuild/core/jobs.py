@@ -166,12 +166,19 @@ def billable_outcome(job):
 def deliverable(job):
     """Provider output the requester may download: exactly the charged outcomes, including a transcript the notes could not take.
     An absorbed failure is never delivered. Department scoping still decides who can see the job at all."""
-    return billable_outcome(job)
+    # A child artifact is evidence for a complete form, never a standalone draft.
+    return job.kind!='generation_part' and billable_outcome(job)
 
 
 def may_cancel(job,user):
     """Same rule jobs.cancel enforces: the requester, or an owner or clinician of the department."""
     if job.state!='queued': return False
+    if job.kind=='generation_part':
+        try: membership(user,job.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
+        except PermissionDenied:return False
+        return (job.generation_part.batch.state=='queued'
+                and not job.generation_part.batch.events.filter(kind='send_intent').exists()
+                and job.generation_part.ordinal==1)
     try: membership(user,job.department,roles=None if job.user_id==user.pk else ['owner','clinician'])
     except PermissionDenied: return False
     return True
@@ -210,6 +217,9 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
 
 @transaction.atomic
 def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None):
+    from . import generation_batch, batch_jobs
+    if kind=='generation' and generation_batch.needed(encounter.template_version.fields):
+        return batch_jobs.enqueue(encounter,user,config or generation.configuration(),expected_revision)
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
@@ -231,7 +241,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if old:
         old.reused=True
         return old
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
+    if batch_jobs.pending(e): raise ValidationError('This encounter already has a pending job.')
     # ⚠️ A SIGNED QUOTE IS A PRICE THE DOCTOR SAW, NOT A LICENCE TO SEND A REQUEST THE OPERATOR HAS SINCE WITHDRAWN. The
     # quote carries the whole configuration() it was signed under, and for its 600 s it used to be enqueued as it stood:
     # measured, a page loaded under claude-sonnet-5 and clicked after a rollback, restart and drain queued and SENT a
@@ -610,11 +620,13 @@ def submit_transcription(job,raw,key,submitted,params=None):
     return transcript,cost,dict(submitted,duration_seconds=str(duration)),rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
 def run_one():
+    from .batch_jobs import run_one as run_batch
+    if run_batch():return True
     from .mapping_jobs import run_one as run_mapping
     next_kind=Job.objects.filter(state='queued').order_by('created_at').values_list('kind',flat=True).first()
     if next_kind=='mapping' and run_mapping(): return True
     with transaction.atomic():
-        job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').exclude(kind='mapping').order_by('created_at').first()
+        job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').exclude(kind__in=['mapping','generation_part']).order_by('created_at').first()
         if not job: return False
         try: membership(job.user,job.department)
         except Exception:
@@ -733,6 +745,9 @@ def run_one():
 def cancel(job,user):
     """Cancel a queued request before any provider request. The row lock is the same one run_one takes with skip_locked, so a job
     being picked up is never cancelled and a job being cancelled is never picked up. Held reservations are released; nothing is charged."""
+    if job.kind=='generation_part':
+        from .batch_jobs import cancel_child
+        return cancel_child(job,user)
     # Lock the job row only: locking the encounter or department too would invert run_one's encounter-then-job order and deadlock.
     job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department').get(pk=job.pk)
     # The requester may cancel their own queued request; anyone else needs a clinician or owner role in the department.
@@ -785,7 +800,9 @@ def reap_stray_submissions():
 
 
 def mark_stale():
-    for job in Job.objects.filter(state='running',started_at__lt=timezone.now()-timedelta(minutes=5)):
+    from .batch_jobs import mark_stale as batch_stale
+    batch_stale()
+    for job in Job.objects.filter(state='running',started_at__lt=timezone.now()-timedelta(minutes=5)).exclude(kind='generation_part'):
         with transaction.atomic():
             locked=Job.objects.select_for_update().get(pk=job.pk)
             if locked.state!='running':continue

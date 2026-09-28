@@ -180,6 +180,9 @@ class TemplateVersion(Entity):
     # {'base_version', 'removed', 'added', 'kind_changed', 'renamed'}. Automatic fields stay as the engine found them.
     corrections=models.JSONField(default=dict,blank=True)
     assistance=models.JSONField(default=dict,blank=True)
+    # Unknown on all historical mappings; absence is never proof of independent
+    # fields. This immutable version can carry a separately qualified rule manifest.
+    generation_constraints=models.JSONField(null=True,blank=True,default=None)
     class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
     @property
     def confirmed(self):
@@ -264,6 +267,54 @@ class Job(ProviderIdentifiers,Entity):
     @property
     def pricing_snapshot(self):
         return self.config.get('pricing_version','Not captured for this historical job')
+class GenerationBatch(Entity):
+    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT,related_name='generation_batches')
+    user=models.ForeignKey(User,on_delete=models.PROTECT)
+    admission_key=models.UUIDField(unique=True)
+    revision=models.PositiveIntegerField()
+    plan=models.JSONField()
+    plan_sha256=models.CharField(max_length=64)
+    maximum_charge=models.DecimalField(max_digits=24,decimal_places=12)
+    state=models.CharField(max_length=20,default='queued')
+    error=models.CharField(max_length=250,blank=True)
+    finished_at=models.DateTimeField(null=True)
+    class Meta:
+        constraints=[models.CheckConstraint(condition=models.Q(maximum_charge__gte=0),name='generation_batch_charge_nonnegative'),
+            models.UniqueConstraint(fields=['encounter'],condition=models.Q(state__in=['queued','running','validating','reconciliation']),name='one_active_generation_batch')]
+    @property
+    def department(self):return self.encounter.department
+
+
+class GenerationBatchPart(Entity):
+    batch=models.ForeignKey(GenerationBatch,on_delete=models.PROTECT,related_name='parts')
+    job=models.OneToOneField(Job,on_delete=models.PROTECT,related_name='generation_part')
+    ordinal=models.PositiveSmallIntegerField()
+    field_ids=models.JSONField()
+    request_sha256=models.CharField(max_length=64)
+    maximum_charge=models.DecimalField(max_digits=24,decimal_places=12)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['batch','ordinal'],name='generation_batch_ordinal_unique'),
+            models.CheckConstraint(condition=models.Q(ordinal__gte=1,ordinal__lte=8,maximum_charge__gte=0),name='generation_batch_part_bounds')]
+
+
+class GenerationBatchEvent(Entity):
+    batch=models.ForeignKey(GenerationBatch,on_delete=models.PROTECT,related_name='events')
+    part=models.ForeignKey(GenerationBatchPart,on_delete=models.PROTECT,null=True,related_name='events')
+    kind=models.CharField(max_length=32)
+    event_key=models.CharField(max_length=160,unique=True)
+    details=models.JSONField(default=dict)
+
+
+class GenerationBatchResponse(Entity):
+    part=models.OneToOneField(GenerationBatchPart,on_delete=models.PROTECT,related_name='response')
+    result_path=models.CharField(max_length=100)
+    result_sha256=models.CharField(max_length=64)
+    model=models.CharField(max_length=100)
+    stop_reason=models.CharField(max_length=100)
+    # The complete SDK response stays in the private child Job result artifact.
+    provider_resource_id=models.CharField(max_length=140,blank=True)
+
+
 class Wallet(Entity):
     user=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     organization=models.ForeignKey(Organization,on_delete=models.PROTECT,null=True)

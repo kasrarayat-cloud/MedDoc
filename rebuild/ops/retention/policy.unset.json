@@ -132,6 +132,26 @@
       "anchor": null,
       "days": null
     },
+    "generation_batches": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "generation_parts": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "generation_attempt_events": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "generation_response_references": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
     "recording_references": {
       "mode": "unresolved",
       "anchor": null,

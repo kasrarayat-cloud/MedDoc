@@ -8,7 +8,8 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Sum
 from django.utils import timezone
-from core.models import CostReconciliation, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage, Wallet
+from core.models import (CostReconciliation, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage, Wallet,
+                         GenerationBatch, GenerationBatchResponse)
 from core.security import private_path
 
 
@@ -171,7 +172,26 @@ def audit_report(file_reader=None):
         wallets.append({'wallet_id':str(wallet.pk),'kind':wallet.kind,'balance_usd':str(wallet.balance),'ledger_sum_usd':str(total),
             'reserved_usd':str(wallet.reserved),'held_reservations_usd':str(held),'checks':{'balance_equals_ledger':wallet.balance==total,'reserved_equals_holds':wallet.reserved==held}})
     unsettled=list(ProviderReceipt.objects.exclude(job__usage__isnull=False).values('job_id','provider','provider_request_id','provider_resource_id','actual_cost','units','rates'))
-    unresolved=list(Job.objects.filter(state__in=['queued','running','reconciliation']).values('id','kind','state','provider','provider_request_id','provider_resource_id'))
+    unresolved=list(Job.objects.filter(state__in=['queued','running','staged','reconciliation']).values('id','kind','state','provider','provider_request_id','provider_resource_id'))
+    batches=[]
+    for batch in GenerationBatch.objects.prefetch_related('parts__job').order_by('created_at'):
+        parts=list(batch.parts.order_by('ordinal'))
+        keys=[key for part in parts for key in part.field_ids]
+        requested=[field['key'] for field in batch.plan.get('asked',[])]
+        charged=Usage.objects.filter(job__generation_part__batch=batch).aggregate(total=Sum('charged_cost'))['total'] or Decimal(0)
+        plan_hash=hashlib.sha256(json.dumps(batch.plan,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        checks={'plan_hash_matches':plan_hash==batch.plan_sha256,
+                'bounded_complete_children':1<=len(parts)<=8 and len(parts)==len(batch.plan.get('parts',[])),
+                'exact_complete_field_partition':len(keys)==len(set(keys)) and set(keys)==set(requested),
+                'child_charge_sum_matches':sum((part.maximum_charge for part in parts),Decimal(0))==batch.maximum_charge,
+                'aggregate_customer_limit':charged<=batch.maximum_charge,
+                'at_most_one_send_per_child':batch.events.filter(kind='send_intent').count()<=len(parts),
+                'success_has_complete_responses':batch.state!='succeeded' or (
+                    all(part.job.state=='succeeded' for part in parts)
+                    and GenerationBatchResponse.objects.filter(part__batch=batch).count()==len(parts)
+                    and batch.events.filter(kind='adopted').count()==1)}
+        batches.append({'batch_id':str(batch.pk),'state':batch.state,'parts':len(parts),
+                        'maximum_charge':str(batch.maximum_charge),'charged_cost':str(charged),'checks':checks})
     platform_costs={'totals_by_kind':{kind:str(PlatformCost.objects.filter(kind=kind).aggregate(total=Sum('amount'))['total'] or Decimal(0)) for kind,_ in PlatformCost.KINDS},
         'rows':PlatformCost.objects.count(),'policy':'Fixed overhead and absorbed platform-failure cost are tracked separately and never charged to users.'}
     evidence_counts={kind:CostReconciliation.objects.filter(evidence_kind=kind).count() for kind,_ in CostReconciliation.EVIDENCE_KINDS}
@@ -185,7 +205,8 @@ def audit_report(file_reader=None):
         'rate_reference_reviewed_on':'2026-09-17','rate_references':['https://platform.claude.com/docs/en/about-claude/pricing','https://deepgram.com/pricing'],
         'rows':rows,'wallets':wallets,'unsettled_provider_receipts':unsettled,'unresolved_jobs':unresolved,
         'ledger_policy':ledger_policy,'cancellation_policy':cancellation_policy,'hold_policy':hold_policy,
-        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets) and all(ledger_policy['checks'].values()) and all(cancellation_policy['checks'].values()) and all(hold_policy['checks'].values()),
+        'generation_batches':batches,
+        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets+batches) and all(ledger_policy['checks'].values()) and all(cancellation_policy['checks'].values()) and all(hold_policy['checks'].values()),
         'durable_receipt_gaps':sum(not row['durable_receipt_present'] and not row['simulated'] for row in rows),
         'invoice_reconciliation':{'invoice_rows':evidence_counts['invoice'],'provider_report_rows':evidence_counts['provider_report'],'unclassified_rows':evidence_counts['unclassified'],'scope':'Administrator-recorded per-usage classification; no account-wide or whole-invoice reconciliation is implied.','provenance':'Source authenticity and attribution require administrator review; this audit verifies ledger arithmetic, not provider authenticity.'}}
 

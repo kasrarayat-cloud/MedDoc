@@ -981,12 +981,12 @@ class ModeSwitch(OutcomeFixture, TestCase):
             job = enqueue(encounter, self.user)
             row = admin_console.language_model_rows()[-1]
         self.assertEqual(row, {'name': 'live language-model jobs',
-                               'value': '1 queued, 0 running, 0 in reconciliation (drained when all three are 0)',
+                               'value': '1 queued, 0 running, 0 in reconciliation, 0 staged (drained when all four are 0)',
                                'severity': ''})
         with override_settings(**self.FIXTURE):
             row = admin_console.language_model_rows()[-1]
         self.assertEqual(row['name'], 'live language-model jobs')
-        self.assertTrue(row['value'].startswith('1 queued, 0 running, 0 in reconciliation — QUILLMD_AI_MODE is not live, '
+        self.assertTrue(row['value'].startswith('1 queued, 0 running, 0 in reconciliation, 0 staged — QUILLMD_AI_MODE is not live, '
                                                 'so the worker refuses'), row['value'])
         self.assertEqual(row['severity'], 'warning')
         self.assertNotIn(str(job.pk), repr(row))
@@ -996,7 +996,7 @@ class ModeSwitch(OutcomeFixture, TestCase):
             enqueue(self.fresh_encounter(), self.user)
             Job.objects.filter(pk=job.pk).update(state='succeeded')
             row = admin_console.language_model_rows()[-1]
-            self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation — '), row['value'])
+            self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation, 0 staged — '), row['value'])
             self.assertEqual(row['severity'], '')
 
     def test_outside_live_mode_running_live_jobs_alone_make_the_row_a_warning(self):
@@ -1009,14 +1009,14 @@ class ModeSwitch(OutcomeFixture, TestCase):
         Job.objects.filter(pk=job.pk).update(state='running')
         with override_settings(**self.FIXTURE):
             row = admin_console.language_model_rows()[-1]
-        self.assertTrue(row['value'].startswith('0 queued, 1 running, 0 in reconciliation — QUILLMD_AI_MODE is not live'),
+        self.assertTrue(row['value'].startswith('0 queued, 1 running, 0 in reconciliation, 0 staged — QUILLMD_AI_MODE is not live'),
                         row['value'])
         self.assertEqual(row['severity'], 'warning')
         # Positive control: once it has ended nothing live is left and the same row is plain.
         Job.objects.filter(pk=job.pk).update(state='succeeded')
         with override_settings(**self.FIXTURE):
             row = admin_console.language_model_rows()[-1]
-        self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation — '), row['value'])
+        self.assertTrue(row['value'].startswith('0 queued, 0 running, 0 in reconciliation, 0 staged — '), row['value'])
         self.assertEqual(row['severity'], '')
 
     def test_the_console_counts_running_and_reconciliation_jobs_and_drained_needs_all_three_at_0(self):
@@ -1037,7 +1037,7 @@ class ModeSwitch(OutcomeFixture, TestCase):
             job('running')
             self.assertEqual(admin_console.language_model_rows()[-1],
                              {'name': 'live language-model jobs', 'severity': '',
-                              'value': '0 queued, 1 running, 0 in reconciliation (drained when all three are 0)'})
+                              'value': '0 queued, 1 running, 0 in reconciliation, 0 staged (drained when all four are 0)'})
             for state in ('reconciliation', 'reconciliation', 'reconciliation', 'running', 'queued'):
                 job(state)
             # Not counted: a fixture job, a live transcription, and live generations that have ended.
@@ -1047,15 +1047,15 @@ class ModeSwitch(OutcomeFixture, TestCase):
             for state in ('succeeded', 'failed', 'cancelled'):
                 job(state)
             self.assertEqual(admin_console.language_model_rows()[-1]['value'],
-                             '1 queued, 2 running, 3 in reconciliation (drained when all three are 0)')
+                             '1 queued, 2 running, 3 in reconciliation, 0 staged (drained when all four are 0)')
             Job.objects.filter(kind='generation', config__mode='live', state__in=['queued', 'running']).update(state='failed')
             # Nothing queued or running is NOT drained while a live job is still in reconciliation.
             self.assertEqual(admin_console.language_model_rows()[-1]['value'],
-                             '0 queued, 0 running, 3 in reconciliation (drained when all three are 0)')
+                             '0 queued, 0 running, 3 in reconciliation, 0 staged (drained when all four are 0)')
         # Outside live mode a live job still in reconciliation is not drained either: the row warns.
         with override_settings(**dict(SONNET_46, AI_MODE='fixture')):
             row = admin_console.language_model_rows()[-1]
-        self.assertTrue(row['value'].startswith('0 queued, 0 running, 3 in reconciliation — QUILLMD_AI_MODE is not live'),
+        self.assertTrue(row['value'].startswith('0 queued, 0 running, 3 in reconciliation, 0 staged — QUILLMD_AI_MODE is not live'),
                         row['value'])
         self.assertEqual(row['severity'], 'warning')
 

@@ -279,4 +279,4 @@ class ConfigurationStatusNamesTheModel(TestCase):
                     self.assertEqual(admin_console.language_model_rows()[-1], unavailable)
         # Positive control: with the table readable the same line is the count, so the patch above is what made it fail.
         report, _ = self.report(**SONNET_46)
-        self.assertIn('live language-model jobs: 0 queued, 0 running, 0 in reconciliation (drained when all three are 0)', report)
+        self.assertIn('live language-model jobs: 0 queued, 0 running, 0 in reconciliation, 0 staged (drained when all four are 0)', report)
