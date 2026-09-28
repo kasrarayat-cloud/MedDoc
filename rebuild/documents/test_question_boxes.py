@@ -31,6 +31,87 @@ def data(doc):
 
 
 class QuestionBoxes(unittest.TestCase):
+    def test_mapped_instruction_cell_owns_its_plain_row_or_column_label(self):
+        from docx.shared import RGBColor
+        for stacked in (False, True):
+            for suffix in ('.', '?'):
+                with self.subTest(stacked=stacked, suffix=suffix):
+                    doc = Document(); table = doc.add_table(rows=2 if stacked else 1, cols=1 if stacked else 2)
+                    table.cell(0, 0).text = 'Please give examples of symptoms experienced:'
+                    answer = table.cell(1, 0) if stacked else table.cell(0, 1)
+                    answer.paragraphs[0].add_run('Describe the frequency and duration' + suffix).font.color.rgb = RGBColor.from_string('0000FF')
+                    original = data(doc); fields = w.inspect(original)['fields']
+                    self.assertEqual(len(fields), 1)
+                    self.assertEqual(fields[0]['locator']['target']['type'], 'cell_append')
+                    result = w.fill(original, fields, {fields[0]['key']: 'Twice a week for one hour.'})
+                    before = w.open_package(original); after = w.open_package(result)
+                    a = w.SlotIndex(before).by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]'].el
+                    b = w.SlotIndex(after).by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]'].el
+                    self.assertEqual(etree.tostring(a), etree.tostring(b))
+
+    def test_mapped_cell_does_not_remove_an_explicit_header_answer(self):
+        from docx.shared import RGBColor
+        for stacked in (False, True):
+            doc = Document(); table = doc.add_table(rows=2 if stacked else 1, cols=1 if stacked else 2)
+            table.cell(0, 0).text = 'Observation: __________'
+            answer = table.cell(1, 0) if stacked else table.cell(0, 1)
+            answer.paragraphs[0].add_run('Describe its duration?').font.color.rgb = RGBColor.from_string('0000FF')
+            fields = w.inspect(data(doc))['fields']
+            self.assertTrue(any(f['locator']['target']['type'] == 'span' for f in fields))
+
+    @staticmethod
+    def layout_borders(table, color='FFFFFF'):
+        borders = OxmlElement('w:tblBorders')
+        for side in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+            edge = OxmlElement('w:' + side); edge.set(qn('w:val'), 'single'); edge.set(qn('w:color'), color)
+            borders.append(edge)
+        table._tbl.tblPr.append(borders)
+
+    def test_presentation_heading_table_spacing_is_not_an_answer(self):
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        for variant in ('presentation', 'boxed', 'explicit_blank', 'question', 'shaded', 'unknown_style', 'theme_border', 'duplicate_properties', 'marked_spacing'):
+            with self.subTest(variant=variant):
+                doc = Document(); table = doc.add_table(rows=1, cols=2)
+                self.layout_borders(table, '000000' if variant == 'boxed' else 'FFFFFF')
+                for i, text in enumerate(('Regional service', 'Assessment form')):
+                    para = table.cell(0, 0).paragraphs[0] if not i else table.cell(0, 0).add_paragraph()
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER; para.add_run(text).bold = True
+                table.cell(0, 0).add_paragraph()
+                if variant == 'explicit_blank': table.cell(0, 1).text = 'Identifier: ______'
+                if variant == 'question': table.cell(0, 0).paragraphs[1].text = 'What symptoms are present?'
+                if variant == 'shaded':
+                    shd = OxmlElement('w:shd'); shd.set(qn('w:fill'), '000000')
+                    table.cell(0, 1)._tc.get_or_add_tcPr().append(shd)
+                if variant == 'unknown_style':
+                    ref = OxmlElement('w:tblStyle'); ref.set(qn('w:val'), 'MissingTableStyle'); table._tbl.tblPr.append(ref)
+                if variant == 'theme_border':
+                    table._tbl.tblPr.find(qn('w:tblBorders')).find(qn('w:insideV')).set(qn('w:themeColor'), 'accent1')
+                if variant == 'duplicate_properties': table.cell(0, 1)._tc.append(OxmlElement('w:tcPr'))
+                if variant == 'marked_spacing': table.cell(0, 0).paragraphs[-1].add_run('        ').underline = True
+                fields = w.inspect(data(doc))['fields']
+                self.assertEqual(bool(fields), variant != 'presentation')
+
+    def test_merge_continuation_tail_keeps_only_the_owned_upper_answer(self):
+        from docx.shared import RGBColor
+        for variant in ('tail', 'boxed', 'explicit_blank', 'unmerged_neighbor'):
+            with self.subTest(variant=variant):
+                doc = Document(); table = doc.add_table(rows=2, cols=2)
+                self.layout_borders(table)
+                table.cell(0, 0).text = 'Date'
+                if variant != 'unmerged_neighbor': table.cell(0, 0).merge(table.cell(1, 0))
+                else: table.cell(1, 0).text = 'Further date'
+                table.cell(0, 1).paragraphs[0].add_run('Enter the date of submission.').font.color.rgb = RGBColor.from_string('0000FF')
+                for row in (0, 1):
+                    borders = OxmlElement('w:tcBorders')
+                    for side in (('top', 'left', 'bottom', 'right') if row == 0 or variant == 'boxed' else ('top',)):
+                        edge = OxmlElement('w:' + side); edge.set(qn('w:val'), 'single'); edge.set(qn('w:color'), '000000'); borders.append(edge)
+                    table.cell(row, 1)._tc.get_or_add_tcPr().append(borders)
+                if variant == 'explicit_blank': table.cell(1, 1).text = '________'
+                fields = w.inspect(data(doc))['fields']
+                lower = [f for f in fields if 'tr[1]/tc[1]' in f['locator']['slot']]
+                self.assertEqual(bool(lower), variant != 'tail')
+                self.assertTrue(any('tr[0]/tc[1]' in f['locator']['slot'] for f in fields))
+
     def test_paired_cell_label_spacing_is_not_a_second_answer(self):
         for layout in ('ordinary', 'merged', 'multicolumn', 'nested'):
             with self.subTest(layout=layout):

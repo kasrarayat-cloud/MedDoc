@@ -2063,9 +2063,141 @@ class Detector:
             return False                # a checkbox its reading does not show (round 3 F1)
         return is_blank_text(txt) and self.is_empty_cell(c) or txt in (BOX, CHECKED)
 
+    def plain_layout_edges(self, table, cell):
+        """Known visible edges on a white background; unknown formatting proves nothing.
+
+        This narrow layout exclusion does not resolve conditional table styles,
+        theme colours, diagonal borders or non-white shading. Missing borders are
+        unknown too: absence of a direct border is not proof of invisible ink.
+        """
+        cell_props, table_props = cell.el.findall(q("w:tcPr")), table.el.findall(q("w:tblPr"))
+        if len(cell_props) > 1 or len(table_props) > 1:
+            return None
+        props = cell_props + table_props
+        refs = table.el.findall("./" + q("w:tblPr") + "/" + q("w:tblStyle"))
+        if len(refs) > 1:
+            return None
+        if refs:
+            name = refs[0].get(q("w:val"))
+        else:
+            defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
+                        if s.get(q("w:type")) == "table" and s.get(q("w:default")) in ("1", "true", "on")] \
+                if "word/styles.xml" in self.package.names else []
+            if len(defaults) > 1:
+                return None
+            name = defaults[0].get(q("w:styleId")) if defaults else None
+        if name:
+            styles, problem = self.question_box_style_chain(name, "table")
+            if problem or any(s.find(q("w:tblStylePr")) is not None for s in styles):
+                return None
+            for style in styles:
+                props.extend([style.find(q("w:tcPr")), style.find(q("w:tblPr"))])
+        elif refs:
+            return None
+        background = self.package.tree(cell.part).find(q("w:background"))
+        if background is not None and (background.get(q("w:color"), "FFFFFF") != "FFFFFF" or
+                                       len(background) or any("theme" in k.lower() for k in background.attrib)):
+            return None
+        for prop in props:
+            if prop is None:
+                continue
+            for shade in prop.findall(q("w:shd")):
+                if shade.get(q("w:val"), "clear") not in ("clear", "nil") or \
+                        shade.get(q("w:fill"), "auto") not in ("auto", "FFFFFF") or \
+                        any("theme" in k.lower() for k in shade.attrib):
+                    return None
+        rows = self.grid(table)
+        last_col = max(c.info["col"] + c.info["span"] for row in rows.values() for c in row)
+        result = {}
+        for side in ("top", "left", "bottom", "right"):
+            table_side = side
+            if (side == "top" and cell.info["row"] != min(rows)) or (side == "bottom" and cell.info["row"] != max(rows)):
+                table_side = "insideH"
+            if (side == "left" and cell.info["col"] != 0) or (side == "right" and cell.info["col"] + cell.info["span"] != last_col):
+                table_side = "insideV"
+            edge = None
+            for prop in props:
+                if prop is None:
+                    continue
+                borders = prop.findall(q("w:tcBorders" if prop.tag == q("w:tcPr") else "w:tblBorders"))
+                if len(borders) > 1:
+                    return None
+                if not borders:
+                    continue
+                if any(n.tag in (q("w:start"), q("w:end"), q("w:tl2br"), q("w:tr2bl")) for n in borders[0]):
+                    return None
+                candidates = borders[0].findall(q("w:" + (side if prop.tag == q("w:tcPr") else table_side)))
+                if len(candidates) > 1:
+                    return None
+                if candidates and edge is None:
+                    edge = candidates[0]
+            if edge is None or any("theme" in k.lower() for k in edge.attrib):
+                return None
+            value, color = edge.get(q("w:val")), edge.get(q("w:color"), "auto")
+            if value in ("none", "nil"):
+                result[side] = False
+            elif value == "single" and (color == "auto" or re.fullmatch(r"[0-9A-Fa-f]{6}", color)):
+                result[side] = color.upper() != "FFFFFF"
+            else:
+                return None
+        return result
+
+    def presentation_heading_table(self, table):
+        """A single unruled title/subtitle band has spacing, not inferred answers."""
+        rows = self.grid(table)
+        if len(rows) != 1 or len(next(iter(rows.values()))) < 2:
+            return False
+        cells = next(iter(rows.values()))
+        if any(c.info["vmerge"] or any(p.kind != "p" for p in c.children) for c in cells):
+            return False
+        printed = [c for c in cells if self.cell_text(c)]
+        if len(printed) != 1:
+            return False
+        headings = [p for p in printed[0].children if self.text(p.el).strip()]
+        if len(headings) < 2:
+            return False
+        for c in cells:
+            edges = self.plain_layout_edges(table, c)
+            if edges is None or any(edges.values()):
+                return False
+            for para in c.children:
+                text = self.text(para.el).strip()
+                if not text:
+                    if not self.plain_spacing_paragraph(para):
+                        return False
+                    continue
+                jc = para.el.findall("./" + q("w:pPr") + "/" + q("w:jc"))
+                if not self.is_heading(para.el) or len(jc) != 1 or jc[0].get(q("w:val")) != "center" or \
+                        not self.tab_source_visible(para) or \
+                        LABEL_END.search(text) or FIELDISH.search(text) or LONG_LABEL.search(text) or \
+                        self.question_box_request(text) or self.blank_spans(*self.ptext(para.el)) or \
+                        "\x00" in self.ptext(para.el)[0]:
+                    return False
+        return True
+
+    def continuation_layout_tail(self, table, cell):
+        """An unmarked remainder below an owned box, beside only merge continuations."""
+        row = self.grid(table)[cell.info["row"]]
+        others = [c for c in row if c is not cell]
+        if not others or any(c.info["vmerge"] != "continue" for c in others) or not self.is_empty_cell(cell):
+            return False
+        if any(p.kind != "p" or not self.plain_spacing_paragraph(p) for p in cell.children):
+            return False
+        above = next((c for c in self.grid(table).get(cell.info["row"] - 1, [])
+                      if c.info["col"] == cell.info["col"] and c.info["span"] == cell.info["span"]), None)
+        if above is None or not any(a.slot is above and a.target.get("type") in
+                                    ("cell", "cell_replace", "cell_append") for a in self.areas):
+            return False
+        edges, upper = self.plain_layout_edges(table, cell), self.plain_layout_edges(table, above)
+        return edges == {"top": True, "left": False, "bottom": False, "right": False} and \
+            upper is not None and all(upper.values())
+
     def rule_tables(self):
         for tslot in [s for s in self.index.slots if s.kind == "tbl"]:
             rows = self.grid(tslot)
+            if self.presentation_heading_table(tslot):
+                self.claimed.update(id(node) for node in tslot.el.iter())
+                continue
             ordered = sorted(rows)
             handled = set()
             box_cols = {}
@@ -2263,6 +2395,9 @@ class Detector:
                     continue
                 for c in sorted(rows[r], key=lambda c: c.info["col"]):
                     if c.info["vmerge"] == "continue" or self.cell_has_claim(c.el) or id(c) in filler:
+                        continue
+                    if self.continuation_layout_tail(tslot, c):
+                        self.claimed.update(id(node) for node in c.el.iter())
                         continue
                     txt = self.cell_text(c)
                     placeholder = bool(txt) and (PLACEHOLDER_TEXT.match(txt) or ENTER_HINT.match(txt) or ANGLE.fullmatch(txt)
@@ -2733,6 +2868,22 @@ class Detector:
             return False
         return any(a.slot is right and a.target.get("type") in ("cell", "cell_replace", "cell_append") for a in self.areas)
 
+    def mapped_below_label(self, slot):
+        """A sole plain column label already owns the cell immediately below it."""
+        cell = self.host_cell(slot)
+        if cell is None or slot.parent is not cell or any(c.kind != "p" for c in cell.children):
+            return False
+        if [p for p in cell.children if self.text(p.el).strip()] != [slot] or \
+                self.blank_spans(*self.ptext(slot.el)) or "\x00" in self.ptext(slot.el)[0]:
+            return False
+        below = next((c for c in self.grid(cell.parent).get(cell.info["row"] + 1, [])
+                      if c.info["col"] == cell.info["col"] and c.info["span"] == cell.info["span"]
+                      and c.info["vmerge"] != "continue"), None)
+        if below is None or clean_label(self.column_header(cell.parent, below.info["col"], below.info["row"],
+                                                         complete=True)) != clean_label(self.text(slot.el)):
+            return False
+        return any(a.slot is below and a.target.get("type") in ("cell", "cell_replace", "cell_append") for a in self.areas)
+
     def rule_lines_below_label(self):
         containers = [s for s in self.index.slots if s.kind in ("tc", "txbx")]
         seqs = [[c for c in s.children if c.kind == "p"] for s in containers]
@@ -3013,7 +3164,7 @@ class Detector:
 
     def is_label_of_next_lines(self, slot, text) -> bool:
         """'Findings:' heading a numbered list / a table / lines below rather than taking an answer after it."""
-        if self.answered_beside(slot):
+        if self.mapped_beside_label(slot) or self.mapped_below_label(slot) or self.answered_beside(slot):
             return True
         nb = self.next_block(slot)
         if nb is not None and nb.kind == "tbl" and text.strip().endswith(":") and len(text.split()) <= 6:
