@@ -1958,8 +1958,7 @@ class Detector:
             before = re.search(self.LEGEND_WORDS + "$", preceding[:len(preceding) - len(joined_before)])
             after = self.legend_words(after.group()) if after else ""
             before = self.legend_words(before.group()) if before else ""
-            listed = bool(after) and bool(re.fullmatch(r"\s*[.):\-\u2013]\s*", joined_after)
-                                          or joined_before.endswith("(") and joined_after.startswith(")"))
+            listed = bool(after) and bool(re.fullmatch(r"\s*[.):\]\-\u2013]\s*", joined_after))
             found.append((match.group(), after, before, bool(self.LEGEND_ARROW.search(joined_after)),
                           bool(self.LEGEND_ARROW.search(joined_before)), listed))
         numbered = [code for code, _, _, _, _, listed in found if listed]
@@ -2969,24 +2968,30 @@ class Detector:
         # what follows is the word printed right before the first box.
         cuts = list(re.finditer(r"[:?]|\t| {2,}|_+|\.{2,}|…+|[\u25af\x00" + BOX + CHECKED + "]+", head))
         blank_cut = bool(cuts) and not re.fullmatch(r"[:?]|\t| {2,}", cuts[-1].group())
-        # A bracketed selection instruction or a bracket drawn around the box ('Sex: (choose one) [☐] M') is not an
-        # option word; a bracketed word ('Smoker: (Yes) ☐ (No) ☐ N/A') still is.
+        # A bracketed selection instruction ('Sex: (choose one) ☐ M') is not an option word; a bracketed word ('Smoker:
+        # (Yes) ☐ (No) ☐ N/A', 'Smoker [Yes] ☐') still is. A bracket drawn around a box ('[☐]') prints no word at all.
         tail = re.sub(r"\(([^()]*)\)", lambda m: " " if any(rx.search(m.group(1)) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE))
                       or re.search(r"\b(?:choose|select|tick|check|circle|mark|pick)\b", m.group(1), re.I) else m.group(0),
                       head[cuts[-1].end():] if cuts else head)
-        tail = re.sub(r"[\[\]]", " ", tail)
-        # The question, a condition or question clause of its own ('Do you smoke? If yes ☐ ...'), or the unit of its
-        # own answer blank ('Weight ____ kg ☐ measured ☐ stated') ends right before the first box. After the question's
-        # colon a unit or a 'When ...' phrase is an option ('Dose unit: mg ☐ mcg ☐', 'When required ☐ Daily ☐').
-        if (not re.search(r"[^\W\d_]", tail) or re.match(r"\s*(?:if|where|how|what|which)\b", tail, re.I)
-                or blank_cut and UNIT_TAIL.fullmatch(re.sub(r"[^\w\s\u00b0%/]", " ", tail).strip())):
+        # The question's own condition or question clause ('If yes', 'If yes, how many', 'which side', 'how often') is
+        # the question's; only what follows it may be the first box's option ('Smoker? If yes Yes ☐ No ☐ Unknown',
+        # 'Diet: what type Normal ☐ Soft ☐'). 'When' begins an option ('When required ☐ Daily ☐'), never a clause.
+        clause = re.compile(r"\s*(?:if\s+(?:not\s+)?|how\s+|what\s+|which\s+|where\s+)[^\W\d_]+[\s,:;]*", re.I)
+        after_clause = False
+        while clause.match(tail):
+            tail, after_clause = tail[clause.match(tail).end():], True
+        # The question, its clause, a rate ('how many per day'), or the unit of its own answer blank ('Weight ____ kg ☐
+        # measured ☐ stated') ends right before the first box. After the question's colon a unit is an option ('Dose
+        # unit: mg ☐ mcg ☐').
+        unit = UNIT_TAIL.fullmatch(re.sub(r"[^\w\s\u00b0%/]", " ", re.sub(r"^\s*(?:per|a|an|each)\s+", "", tail, flags=re.I)).strip())
+        if not re.search(r"[^\W\d_]", tail) or unit and (blank_cut or after_clause):
             return ""
         words = option_text(tail).split()
         grams = lambda chosen: [" ".join(chosen[:k]) for k in (1, 2, 3) if k <= len(chosen)]
         families = lambda texts: set().union(*(self.option_families(x) for x in texts)) if texts else set()
         ending = families([" ".join(words[-k:]) for k in (1, 2, 3) if k <= len(words)])
         # After the question's colon the tail starts at its first word ('Tobacco: Current every day smoker ☐').
-        near = ending | (families(grams(words)) if cuts else set())
+        near = ending | (families(grams(words)) if cuts or after_clause else set())
         anywhere = families([" ".join(words[i:j]) for i in range(len(words)) for j in range(i + 1, min(len(words), i + 3) + 1)])
         own_last = re.split(r"\t{2,}| {4,}", units[-1][1])[0]
         own_last = own_last if re.search(r"\S", own_last) else units[-1][1]
