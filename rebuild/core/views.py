@@ -314,7 +314,9 @@ def verify(request,raw):
         label=welcome_credit_label() if settings.QUILLMD_REGISTRATION=='open' else ''
         return render(request,'confirm.html',{'title':'Verify your test account' if settings.SYNTHETIC_ONLY else 'Verify your account','description':f'Confirm ownership of this email to activate your personal {label} welcome credit.' if label else 'Confirm ownership of this email to activate your account.'})
     with transaction.atomic():
-        user=User.objects.select_for_update().get(pk=v.user_id)
+        # FOR NO KEY UPDATE, as welcome_credit (below) takes it: never FOR UPDATE on an account this transaction holds
+        # while it locks a wallet (the global lock order, core.retention; RF-R1).
+        user=User.objects.select_for_update(no_key=True).get(pk=v.user_id)
         v=Verification.objects.select_for_update().get(pk=v.pk)
         if v.used_at or v.expires_at<=timezone.now() or user.verified_at or not user.is_active: raise Http404
         user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
