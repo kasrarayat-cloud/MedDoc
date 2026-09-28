@@ -536,7 +536,11 @@ def apply_pending_reconciliations(actor=None,wallet=None):
         try:
             with transaction.atomic():
                 Job.objects.select_for_update().get(pk=job_id)
-                row=CostReconciliation.objects.select_for_update().select_related('usage__department').get(pk=pk)
+                # of=('self',): the reconciliation row only, as absorb_failed_job locks it. A bare select_for_update()
+                # beside select_related() also locked the usage row and the department FOR UPDATE while this waits for the
+                # payer's wallet below, and a settlement in that department holding the wallet takes FOR KEY SHARE on the
+                # department at commit: the apply was a deadlock victim (the global lock order, core.retention).
+                row=CostReconciliation.objects.select_for_update(of=('self',)).select_related('usage__department').get(pk=pk)
                 if row.ledger_status!='pending_funds': continue
                 if LedgerEntry.objects.filter(job_id=row.usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=row.usage.job_id,kind='absorbed_failure').exists():
                     # The job was absorbed after this reconciliation was held: the user owes nothing further for it.
