@@ -627,3 +627,47 @@ class CodedSourceScope(unittest.TestCase):
                 self.assertFalse([f for f in proposal['fields'] if '/tc[0]' in f['locator']['slot']
                                   and f['locator']['target']['type'] != 'checkboxes'])
                 self.assertFalse([n for n in proposal['warnings'] if n.startswith('Tab-column options at ')])
+
+
+class WholeFormDestinations(unittest.TestCase):
+    """Refutation 2026-09-28 B1 and B3 (pre-existing on D10): a destination is named by its own printed header."""
+
+    def vitals(self):
+        doc = Document(); doc.add_paragraph('Section 1: Vital Measurements', style='Heading 1')
+        table = doc.add_table(rows=2, cols=3)
+        for col, text in enumerate(('Blood pressure (mmHg)', 'Heart Rate', 'Respiratory Rate')):
+            table.cell(0, col).text = text
+        for col, (boxes, unit) in enumerate((('▯▯▯/▯▯▯', '\tSystolic\tdiastolic'), ('▯▯▯', 'beats/min'),
+                                              ('▯▯▯', 'breaths/min'))):
+            table.cell(1, col).text = boxes; table.cell(1, col).add_paragraph(unit)
+        return data(doc)
+
+    def test_a_value_cell_is_named_by_its_column_header_never_by_the_answer_cell_to_its_left(self):
+        raw = self.vitals()
+        fields = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}
+        rate, breaths = fields['b/tbl[0]/tr[1]/tc[1]/p[0]'], fields['b/tbl[0]/tr[1]/tc[2]/p[0]']
+        self.assertEqual((rate['label'], breaths['label']), ('Heart Rate', 'Respiratory Rate'))
+        for field in (rate, breaths):
+            self.assertNotIn('▯', field['context']); self.assertNotIn('beats/min', field['context'])
+        # A value routed by its label reaches the column that prints that label.
+        out = w.fill(raw, list(fields.values()), {rate['key']: '072', breaths['key']: '16'})
+        index = w.SlotIndex(w.open_package(out))
+        self.assertIn('072', w.text_of(index.by_id['word/document.xml#b/tbl[0]/tr[1]/tc[1]'].el))
+        self.assertIn('16', w.text_of(index.by_id['word/document.xml#b/tbl[0]/tr[1]/tc[2]'].el))
+
+    def test_an_instruction_in_an_answer_column_belongs_to_its_own_row_never_the_next(self):
+        doc = coded_form(['12b.\tLiver', '', '\tNo\tYes', 'Palpable\t1 ☐\t2 ☐', ''], SUMMARY, marked='Physical examination')
+        doc.tables[0].cell(0, 1).add_paragraph('If abnormal, explain or describe below')
+        instruction = 'If palpable, describe here'
+        doc.tables[0].cell(1, 1).text = instruction
+        raw = data(doc)
+        fields = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}
+        self.assertNotIn(instruction, fields['b/tbl[0]/tr[2]/tc[1]']['label'])
+        self.assertNotIn(instruction, fields['b/tbl[0]/tr[2]/tc[1]']['context'])
+        own = fields['b/tbl[0]/tr[1]/tc[1]']
+        self.assertEqual((own['kind'], own['locator']['target']['type']), ('long_text', 'cell_append'))
+        self.assertEqual([s['text'] for s in own['source_instructions']], [instruction])
+        answer = 'Liver edge palpable 2 cm below the costal margin.'
+        out = w.fill(raw, list(fields.values()), {own['key']: answer})
+        cell = w.SlotIndex(w.open_package(out)).by_id['word/document.xml#b/tbl[0]/tr[1]/tc[1]'].el
+        self.assertEqual([w.text_of(p) for p in cell.findall(w.q('w:p'))], [instruction, answer])
