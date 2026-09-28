@@ -482,3 +482,15 @@ class WitnessOwnsItsRendering(unittest.TestCase):
         self.assertIs(candidate['optional'], False)
         with self.assertRaises(ValueError):
             containment(self.pdf.page([(300, [(20, 'Unrelated text')])]), [candidate])
+
+    def test_the_occurrence_count_is_taken_from_the_export_that_is_rendered(self):
+        # A typed answer elsewhere can print the proposal's own sequence a second time in the export.
+        liver = ['12b.\tLiver', ('\tNormal\tAbnormal', (2880, 4320)), ('Palpation\t1 ☐\t2 ☐', (2880, 4320))]
+        notes = ['Notes', ('\tNormal\tAbnormal', (2880, 4320)), 'Palpation ________']
+        raw = data(stopped_form([[liver, ['']], [notes, ['']]], (6480, 2880), control='glyph'))
+        proposal, _, _ = layout_source.prepare(raw)
+        [candidate] = proposal['manifest']['candidates']
+        self.assertEqual(candidate['rendered_source']['source_occurrences'], 1)
+        typed = next(f for f in proposal['fields'] if f['label'] == 'Palpation' and not f.get('layout_candidate'))
+        prepared, _, _ = layout_source.prepare(raw, mapping=proposal['fields'], answers={typed['key']: '1 ☐ 2 ☐'})
+        self.assertEqual(prepared['manifest']['candidates'][0]['rendered_source']['source_occurrences'], 2)

@@ -73,9 +73,10 @@ def geometry(page):
                        x+right*size/outline.unitsPerEm, y+top*size/outline.unitsPerEm]
             # A ligature has one actual advance. Every mapped character retains
             # that whole extent; it cannot acquire an invented fractional width.
+            # 'order' is the painting order: a path records how many glyphs preceded it.
             for character in char:
                 records.append({'text': character, 'left': x, 'right': x + advance, 'y': y,
-                                'ink': ink, 'paint': state['fill'], 'type': 'glyph'})
+                                'ink': ink, 'paint': state['fill'], 'type': 'glyph', 'order': len(records)})
             x += advance
             if len(records) > MAX_GLYPHS: raise ValueError('PDF glyph limit')
     for args, op in operations:
@@ -214,6 +215,30 @@ def geometry(page):
     return lines
 
 
+def luminance(rgb):
+    channels = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in rgb]
+    return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2]
+
+
+def contrast(a, b):
+    high, low = sorted((luminance(a), luminance(b)), reverse=True)
+    return (high + .05) / (low + .05)
+
+
+MIN_CONTRAST = 4.5  # WCAG AA for ordinary text
+
+
+def beneath(index, path, record):
+    """A filled area painted before this ink, in a colour the ink stands out from, hides nothing."""
+    if path['operation'] not in ('f', 'f*'):
+        return False
+    if record['type'] == 'ff_checkbox':
+        painted_before = index < min(record['own_paths'])
+    else:
+        painted_before = path['order'] <= record['order']
+    return painted_before and contrast(path['state']['fill'], record['paint']) >= MIN_CONTRAST
+
+
 def match_line(line, segments, leader=False):
     """Match every visible character/control in the complete source paragraph."""
     records, cursor, spans = line['records'], 0, []
@@ -239,7 +264,8 @@ def match_line(line, segments, leader=False):
                         if i in record.get('own_paths',[]): continue
                         box = path['bounds']
                         if max(box[0],ink[0]) < min(box[2],ink[2]) and max(box[1],ink[1]) < min(box[3],ink[3]):
-                            return None  # A painted overlay/background is outside this narrow visible-ink proof.
+                            if beneath(i, path, record): continue  # e.g. cell shading painted under the text
+                            return None  # A painted overlay, stroke or low-contrast background is outside this proof.
                 found.append(record)
         if found:
             ink = [r['ink'] for r in found if r['ink'] is not None]
@@ -265,14 +291,26 @@ def measure(lines, candidate):
     header_at = model.get('header_index', 0)
     if type(header_at) is not int or not 0 <= header_at < len(sequence) - 1:
         raise ValueError('Invalid printed column header position')
+    # The source prints this sequence exactly once (counted by the preparer over every displayed
+    # paragraph). A second place printing the same text could supply the only matching lines while
+    # the candidate's own rendering fails to match, so it is ambiguous whatever the PDF shows.
+    if type(model.get('source_occurrences')) is not int or model['source_occurrences'] != 1:
+        raise ValueError('The printed source sequence is not unique in the document')
     for page_index, page in enumerate(lines):
         for index in range(len(page) - len(sequence) + 1):
             spans = [match_line(page[index + offset], paragraph['segments'], paragraph['dot_leaders'])
                      for offset, paragraph in enumerate(sequence)]
             if all(s is not None for s in spans):
-                matches.append((page_index, spans[header_at], spans[-1]))
+                matches.append((page_index, index, spans[header_at], spans[-1]))
     if len(matches) != 1: raise ValueError('Missing or ambiguous complete source paragraph pair')
-    page, headers, rows = matches[0]
+    page, index, headers, rows = matches[0]
+    # The matched lines are the candidate's own paragraphs only if they were painted as one run: no
+    # other printed character was painted between their first and last glyph (lines from different
+    # places that merely sit on adjacent baselines are painted with other text between them).
+    own = {r['order'] for line in lines[page][index:index + len(sequence)] for r in line['records'] if r['type'] == 'glyph'}
+    if own and any(min(own) < r['order'] < max(own) and r['order'] not in own and not r['text'].isspace()
+                   for line in lines[page] for r in line['records'] if r['type'] == 'glyph'):
+        raise ValueError('The matched lines are not one contiguous rendering of the source sequence')
     headers, rows = headers[1:], rows[1:]
     if len(headers) != len(candidate['source']['options']) or len(rows) != len(headers) or any(r is None for r in headers+rows):
         raise ValueError('Incomplete visible option set')

@@ -26,7 +26,7 @@ class LayoutContainment(unittest.TestCase):
             'row':[[{'kind':'glyph','text':'Finding'}],
                    [{'kind':'glyph','text':'1 '},{'kind':'ff_checkbox','text':VECTOR,'checked':False}],
                    [{'kind':'glyph','text':'2 '},{'kind':'ff_checkbox','text':VECTOR,'checked':False}]],
-            'row_dot_leaders':False}}
+            'row_dot_leaders':False,'source_occurrences':1}}
 
     def pages(self,shift=0,wide=10,second=200,duplicate=False,extra=b'',checked=False):
         reader=PdfReader(io.BytesIO(self.fixture));page=reader.pages[0]
@@ -271,9 +271,14 @@ class OwnRenderingWitness(unittest.TestCase):
         self.assertTrue(containment(self.page(lines, before=shade), [self.candidate('head', paragraphs, header_index=1)])['passed'])
         white = b'q 1 1 1 rg 5 245 390 70 re f Q\n'
         self.assertTrue(containment(self.page(lines, before=white), [self.candidate('head', paragraphs, header_index=1)])['passed'])
-        # Painted over the text, too dark beneath it, or a stroke across it: the visible-ink proof refuses.
-        for before, after in ((b'', shade), (b'q 0.2 0.2 0.2 rg 5 245 390 70 re f Q\n', b''),
-                              (b'q 0 0 0 RG 5 283 m 395 283 l S Q\n', b'')):
+        # Painted over the text (all of it, only the title's glyphs, or only one control), too dark beneath
+        # it, or a stroke across it (whatever the fill colour of the state it was stroked in): refused.
+        over_title = b'q 1 1 1 rg 5 296 390 16 re f Q\n'
+        over_box = b'q 1 1 1 rg 219.5 256 12 14 re f Q\n'
+        for before, after in ((b'', shade), (b'', over_title), (b'', over_box),
+                              (b'q 0.2 0.2 0.2 rg 5 245 390 70 re f Q\n', b''),
+                              (b'q 0 0 0 RG 5 283 m 395 283 l S Q\n', b''),
+                              (b'q 1 1 1 rg 0 0 0 RG 5 283 m 395 283 l S Q\n', b'')):
             with self.subTest(before=before, after=after):
                 pages = self.page(lines, before=before)
                 if after:

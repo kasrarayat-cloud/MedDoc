@@ -151,6 +151,26 @@ def rendered_columns(paragraph, starts):
     return result
 
 
+def printed_key(paragraph):
+    """A paragraph's printed characters with every space and tab removed and every box state merged.
+    Coarser than the rendered match, so a count over it can only over-count repeats (fail closed)."""
+    return re.sub(r"\s", "", w.paragraph_text(paragraph)[0]).replace(w.CHECKED, w.BOX)
+
+
+def printed_stream(package):
+    """Every nonempty printed paragraph of every displayed part, in document order. Text-box and
+    fallback copies are included, so a repeated place is counted, never missed."""
+    return [key for part in package.displayed_parts() for p in package.tree(part).iter(w.q("w:p"))
+            for key in [printed_key(p)] if key]
+
+
+def occurrences(stream, paragraphs):
+    keys = [printed_key(p) for p in paragraphs]
+    if not all(keys):
+        return 0
+    return sum(1 for i in range(len(stream) - len(keys) + 1) if stream[i:i + len(keys)] == keys)
+
+
 def touched_destinations(mapping, answers):
     """Every (part, slot) that an answered mapping field may write, including its boxes."""
     result = []
@@ -223,6 +243,7 @@ def prepare(data, *, mapping=None, answers=None):
                       for ref in area.target.get('column_sequence', {}).get('source', [])]
                      for _, _, area in candidates]
     written = touched_destinations(mapping, answers) if mapping is not None else []
+    stream = printed_stream(package)  # the package that is rendered: the original, or the export
     for description, (header, row), sequence in zip(descriptions, paragraph_pairs, sequences):
         relation = description['source']['row']['target'].get('column_sequence')
         if relation:
@@ -247,6 +268,8 @@ def prepare(data, *, mapping=None, answers=None):
                         description['source'][k]['fingerprint']) for k in ('header', 'row')]
         if len(model['header']) != len(description['source']['options']) + 1 or len(model['row']) != len(model['header']):
             w.fail('A complete printed tab relation changed.', 'layout_unresolved')
+        # The witness measures only a sequence printed once; any other place printing it is ambiguous.
+        model['source_occurrences'] = occurrences(stream, nodes)
         description['rendered_source'] = model
         # Only a coded-column sequence is a separately holdable proposal, and only
         # while this export leaves its own answer row byte-identical and unanswered
