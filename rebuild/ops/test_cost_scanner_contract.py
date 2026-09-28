@@ -1,5 +1,6 @@
 """Negative controls for the two additional priced request shapes; source files never change."""
 from pathlib import Path
+import ast
 import unittest
 from unittest.mock import patch
 
@@ -72,6 +73,24 @@ class AdditionalCostContracts(unittest.TestCase):
         for old, new in cases:
             with self.subTest(mutation=new):
                 self.check_mutation('core/generation.py', old, new, scan.maximum_cost_terms)
+
+    def test_history_formula_in_dead_or_bypassed_code_is_not_a_bound(self):
+        source = scan.GENERATION.read_text()
+        for case in ('false_wrapper', 'early_return', 'conditional_return', 'earlier_return', 'reordered_geo'):
+            with self.subTest(case=case):
+                tree = ast.parse(source)
+                function = scan.one_function(tree, 'maximum_cost')
+                index = next(i for i, node in enumerate(function.body)
+                             if isinstance(node, ast.If) and ast.unparse(node.test) == "config.get('history_context_contract')")
+                if case == 'false_wrapper':
+                    function.body[index] = ast.If(test=ast.Constant(value=False), body=[function.body[index]], orelse=[])
+                elif case == 'reordered_geo':
+                    function.body[index], function.body[index+1] = function.body[index+1], function.body[index]
+                else:
+                    code = 'return bound' if case != 'conditional_return' else 'if True: return bound'
+                    function.body.insert(index if case != 'earlier_return' else index-1, ast.parse(code).body[0])
+                mutated = ast.unparse(ast.fix_missing_locations(tree))
+                self.check_mutation('core/generation.py', source, mutated, scan.maximum_cost_terms)
 
     def test_compiled_mapping_changes_fail_closed(self):
         def checked():

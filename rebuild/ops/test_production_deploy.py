@@ -1070,6 +1070,16 @@ if config.get('history_context_contract'):
                and ast.dump(node.test) == ast.dump(expected.test)]
     if len(matches) != 1 or ast.dump(matches[0]) != ast.dump(expected):
         raise Unresolved('maximum_cost: history charge no longer measures its full guarded request addition')
+    # A correct formula in dead code is not a priced request. Require the actual
+    # straight-line tail: base bound, history addition, geography, final return.
+    tail = function.body[-4:]
+    geography = ast.parse("if profile.get('inference_geo') == 'us': "
+                          "bound=(bound * US_INFERENCE_MULTIPLIER).quantize(COST_QUANTUM, rounding=ROUND_CEILING)").body[0]
+    if (len(tail) != 4 or not isinstance(tail[0], ast.Assign)
+            or [ast.dump(target) for target in tail[0].targets] != [ast.dump(ast.Name(id='bound', ctx=ast.Store()))]
+            or tail[1] is not matches[0] or ast.dump(tail[2]) != ast.dump(geography)
+            or ast.dump(tail[3]) != ast.dump(ast.parse('return bound').body[0])):
+        raise Unresolved('maximum_cost: history charge is not on the final priced execution path')
     # A matching subtree must not mask another assignment elsewhere in the function.
     assigned_once(function, 'target_keys')
     assigned_once(function, 'extra')
@@ -1105,7 +1115,15 @@ def maximum_cost_terms():
                     and ast.dump(node) == ast.dump(zero_return)]
     if len(allowed_zero) != 1:
         raise Unresolved('maximum_cost: unpriced mode return changed')
+    narrative_test = ast.parse('narrative_contract(fields,config)', mode='eval').body
+    narrative = [node for node in functions[0].body if isinstance(node, ast.If)
+                 and ast.dump(node.test) == ast.dump(narrative_test)]
+    if len(narrative) != 1 or not isinstance(narrative[0].body[-1], ast.Return):
+        raise Unresolved('maximum_cost: narrative priced return is not explicit')
+    allowed_returns = (allowed_zero[0].body[0], narrative[0].body[-1], functions[0].body[-1])
     for node in ast.walk(functions[0]):
+        if isinstance(node, ast.Return) and node not in allowed_returns:
+            raise Unresolved('maximum_cost: an early return bypasses the priced execution path')
         if isinstance(node, ast.Return) and node is not allowed_zero[0].body[0]:
             if not isinstance(node.value, ast.Name) or node.value.id != 'bound':
                 raise Unresolved('maximum_cost: priced branch returns something other than bound')
