@@ -969,6 +969,8 @@ OPTION_FAMILIES = tuple(re.compile(r"(?:%s)\.?" % f, re.I) for f in (
     r"increased|decreased|unchanged|improved|worse|better|same",
     r"active|inactive|resolved|ongoing|acute|chronic",
 ))
+UNIT_TAIL = re.compile(r"\(?\s*(?:mm|cm|m|in|inches|ft|kg|g|lbs?|oz|\u00b0\s?[CF]|bpm|mm\s?hg|%|mg|mcg|ml|l|units?|years?|yrs?|"
+                       r"months?|weeks?|days?|hours?|hrs?|minutes?|mins?|times?)\.?\s*\)?", re.I)
 COMPANION_OPTION = re.compile(r"(?:n/?a|nd|unk|unknown|not known|not applicable|not done|done|other|unsure|"
                               r"don'?t know|dk|not assessed|not examined)\.?", re.I)
 
@@ -2838,16 +2840,18 @@ class Detector:
         if any(rx.search(last) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE)) and not re.search(r"[^\W_]", instruction):
             return "and only a selection instruction after the last one"
         head = units[0][2].rstrip()
-        cut = [m.end() for m in re.finditer(r"[:?]|\t| {2,}", head)]
+        # The question ends at its colon, a printed gap or its own answer blank ('Date: ____ Yes ☐ No ☐ N/A'): only
+        # what follows is the word printed right before the first box.
+        cut = [m.end() for m in re.finditer(r"[:?]|\t| {2,}|_+|\.{2,}|…+|[\u25af\x00" + BOX + CHECKED + "]+", head)]
         # A bracketed selection instruction or a bracket drawn around the box ('Sex: (choose one) [☐] M') is not an
         # option word; a bracketed word ('Smoker: (Yes) ☐ (No) ☐ N/A') still is.
         tail = re.sub(r"\(([^()]*)\)", lambda m: " " if any(rx.search(m.group(1)) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE))
                       or re.search(r"\b(?:choose|select|tick|check|circle|mark|pick)\b", m.group(1), re.I) else m.group(0),
                       head[cut[-1]:] if cut else head)
         tail = re.sub(r"[\[\]]", " ", tail)
-        if (not re.search(r"[^\W\d_]", tail) or re.search(r"_|\.{2,}|…|[\u25af\x00" + BOX + CHECKED + "]", tail)
-                or re.match(r"\s*(?:if|when|where|how|what|which|since)\b", tail, re.I)):
-            return ""  # the question (or its own answer blank) ends right before the first box
+        if (not re.search(r"[^\W\d_]", tail) or re.match(r"\s*(?:if|when|where|how|what|which|since)\b", tail, re.I)
+                or UNIT_TAIL.fullmatch(re.sub(r"[^\w\s\u00b0%/]", " ", tail).strip())):
+            return ""  # the question, its own answer blank or the blank's unit ends right before the first box
         words = option_text(tail).split()
         suffixes = [" ".join(words[-k:]) for k in (1, 2, 3) if k <= len(words)]
         tail_families = set().union(*(self.option_families(x) for x in suffixes))
@@ -2857,10 +2861,11 @@ class Detector:
         for raw in (u[1] for u in units[:-1]):
             if raw.strip() and gap_width(raw[:len(raw) - len(raw.lstrip())]) > gap_width(raw[len(raw.rstrip()):]):
                 return "(a word is printed against the box after it)"
-        # After the question's colon, a word right before the first box is the question's own only when every word
-        # between the boxes is an option of one printed family that it is not ('PMH: Diabetes ☐ Yes ☐ No').
+        # After the question's colon, a short word right before the first box (an option is one to three words) is the
+        # question's own only when every word between the boxes is an option of one printed family that it is not
+        # ('PMH: Diabetes ☐ Yes ☐ No'). A longer run continues the question's own sentence (D03).
         shared = set.intersection(*between_families) if between_families and all(between_families) else set()
-        if cut and not shared - tail_families:
+        if cut and len(words) <= 3 and not shared - tail_families:
             return "(a word printed after the question's colon may be the first box's option)"
         return ""
 

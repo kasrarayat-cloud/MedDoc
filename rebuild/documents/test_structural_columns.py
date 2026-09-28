@@ -1215,7 +1215,8 @@ class WordsBeforeBoxesWithTextAfter(unittest.TestCase):
                  'Smoker: Yes ☐   No ☐   Pack-years: ____', 'Smoker: Yes ☐\tNo ☐\tFormer ☐\t(tick one)',
                  'Result: positive ☐ negative ☐ equivocal', 'Right ☐ Left ☐ Bilateral',
                  'Smoker Current ☐\tFormer ☐\tNever ☐\t(tick one)', 'Smoker: Yes ☐ No ☐   Drinker: Yes ☐ No ☐ (tick one)',
-                 'Smoker: (Yes) ☐ (No) ☐ N/A', 'Smoker [Yes] ☐ [No] ☐ N/A')
+                 'Smoker: (Yes) ☐ (No) ☐ N/A', 'Smoker [Yes] ☐ [No] ☐ N/A', 'Date: ____ Yes ☐ No ☐ N/A',
+                 'Pregnancy test ____ Positive ☐ Negative ☐ Not done')
         for control in ('glyph', 'ff'):
             for line in lines:
                 with self.subTest(control=control, line=line):
@@ -1241,7 +1242,15 @@ class WordsBeforeBoxesWithTextAfter(unittest.TestCase):
                                      ('Social history: Smoking ☐ Current ☐ Former ☐ Never', 'Social history: Smoking',
                                       ['Current', 'Former', 'Never']),
                                      ('Q1? ☐ Yes ☐ No   Q2? ☐ Yes ☐ No', 'Q1?', ['Yes', 'No']),
-                                     ('Allergies: (tick one) ☐ Yes ☐ No ☐ NKDA', 'Allergies: (tick one)', ['Yes', 'No', 'NKDA'])):
+                                     ('Allergies: (tick one) ☐ Yes ☐ No ☐ NKDA', 'Allergies: (tick one)', ['Yes', 'No', 'NKDA']),
+                                     # a question's own answer blank, its unit, or a sentence continuing after it (D03, D28)
+                                     ('Weight ____ kg ☐ measured ☐ stated', 'Weight ____ kg', ['measured', 'stated']),
+                                     ('Referral: Dr ______ ☐ urgent ☐ routine', 'Referral: Dr', ['urgent', 'routine']),
+                                     ('|____|____| TIMES ☐ REFUSED ☐ DON’T KNOW', '|____|____| TIMES', ['REFUSED', 'DON’T KNOW']),
+                                     ('They usually last: _____ minutes and end _____ minutes before the pain starts OR occur '
+                                      '☐ during the headache, ☐ after the headache, OR ☐ without the headache',
+                                      'They usually last: _____ minutes and end _____ minutes before the pain starts OR occur',
+                                      ['during the headache,', 'after the headache, OR', 'without the headache'])):
             for control in ('glyph', 'ff'):
                 with self.subTest(control=control, line=line):
                     result = w.inspect(data(coded_form([line], control=control, heading=None)))
