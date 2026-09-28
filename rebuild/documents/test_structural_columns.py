@@ -1214,7 +1214,8 @@ class WordsBeforeBoxesWithTextAfter(unittest.TestCase):
         lines = ('Allergies: Yes ☐ No ☐ NKDA', 'Smoker: Yes ☐ No ☐ (check one)', 'Smoker Yes ☐ No ☐ If yes, packs/day',
                  'Smoker: Yes ☐   No ☐   Pack-years: ____', 'Smoker: Yes ☐\tNo ☐\tFormer ☐\t(tick one)',
                  'Result: positive ☐ negative ☐ equivocal', 'Right ☐ Left ☐ Bilateral',
-                 'Smoker Current ☐\tFormer ☐\tNever ☐\t(tick one)', 'Smoker: Yes ☐ No ☐   Drinker: Yes ☐ No ☐ (tick one)')
+                 'Smoker Current ☐\tFormer ☐\tNever ☐\t(tick one)', 'Smoker: Yes ☐ No ☐   Drinker: Yes ☐ No ☐ (tick one)',
+                 'Smoker: (Yes) ☐ (No) ☐ N/A', 'Smoker [Yes] ☐ [No] ☐ N/A')
         for control in ('glyph', 'ff'):
             for line in lines:
                 with self.subTest(control=control, line=line):
@@ -1239,7 +1240,8 @@ class WordsBeforeBoxesWithTextAfter(unittest.TestCase):
                                      ('Left ☐ Normal ☐ Abnormal', 'Left', ['Normal', 'Abnormal']),
                                      ('Social history: Smoking ☐ Current ☐ Former ☐ Never', 'Social history: Smoking',
                                       ['Current', 'Former', 'Never']),
-                                     ('Q1? ☐ Yes ☐ No   Q2? ☐ Yes ☐ No', 'Q1?', ['Yes', 'No'])):
+                                     ('Q1? ☐ Yes ☐ No   Q2? ☐ Yes ☐ No', 'Q1?', ['Yes', 'No']),
+                                     ('Allergies: (tick one) ☐ Yes ☐ No ☐ NKDA', 'Allergies: (tick one)', ['Yes', 'No', 'NKDA'])):
             for control in ('glyph', 'ff'):
                 with self.subTest(control=control, line=line):
                     result = w.inspect(data(coded_form([line], control=control, heading=None)))
@@ -1264,13 +1266,14 @@ class LegendNumbersInEveryPrintedForm(unittest.TestCase):
                     self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates], [])
                     self.assertTrue(any('codes' in n and ('Coded column sequence at ' in n or 'Tab-column options at ' in n)
                                         for n in notes))
-        titled = ['12b. Liver (codes: 1 = Abnormal, 2 = Normal)', ('\tNormal\tAbnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops),
-                  '', ('Tender\t1 ☐\t2 ☐', stops)]
-        for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
-            with self.subTest(title=name):
-                detector, _, notes = detect(data(stopped_form([[cell, ['']]], (6480, 2880))))
-                self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates], [])
-                self.assertTrue(any('codes' in n for n in notes))
+        for title in ('12b. Liver (codes: 1 = Abnormal, 2 = Normal)', '12b. Liver (1) Abnormal (2) Normal',
+                      '12b. Liver: 1. Abnormal 2. Normal'):
+            titled = [title, ('\tNormal\tAbnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops), '', ('Tender\t1 ☐\t2 ☐', stops)]
+            for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
+                with self.subTest(title=title, rows=name):
+                    detector, _, notes = detect(data(stopped_form([[cell, ['']]], (6480, 2880))))
+                    self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates], [])
+                    self.assertTrue(any('codes' in n for n in notes))
 
     def test_a_legend_that_agrees_with_the_row_codes_keeps_its_options(self):
         stops = (2880, 4320)
@@ -1278,13 +1281,14 @@ class LegendNumbersInEveryPrintedForm(unittest.TestCase):
         detector, _, _ = detect(data(stopped_form([[agreeing, ['']]], (6480, 2880))))
         self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates],
                          [('Palpable', ['1. Normal', '2. Abnormal']), ('Tender', ['1. Normal', '2. Abnormal'])])
-        titled = ['12b. Liver (codes: 1 = Normal, 2 = Abnormal)', ('\tNormal\tAbnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops),
-                  '', ('Tender\t1 ☐\t2 ☐', stops)]
-        for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
-            with self.subTest(title=name):
-                detector, _, _ = detect(data(stopped_form([[cell, ['']]], (6480, 2880))))
-                self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates][:1],
-                                 [('Palpable', ['Normal', 'Abnormal'])])
+        for title in ('12b. Liver (codes: 1 = Normal, 2 = Abnormal)', '12b. Liver (1) Normal (2) Abnormal', '1. Liver',
+                      '2. Liver'):
+            titled = [title, ('\tNormal\tAbnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops), '', ('Tender\t1 ☐\t2 ☐', stops)]
+            for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
+                with self.subTest(title=title, rows=name):
+                    detector, _, _ = detect(data(stopped_form([[cell, ['']]], (6480, 2880))))
+                    self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates][:1],
+                                     [('Palpable', ['Normal', 'Abnormal'])])
 
 
 class LeftCellAnswerLines(unittest.TestCase):

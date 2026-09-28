@@ -1903,6 +1903,8 @@ class Detector:
     HEADER_NUMBER = re.compile(r"(?<![\w.])[(\[]?(\d{1,3}(?:\.\d+)?)\.?[)\]]?(?![\w.])")
     # A legend printed in the governing text (a title, lead or heading): '(codes: 1 = Abnormal, 2 = Normal)'.
     LEGEND_PAIR = re.compile(r"(?<![\w.])(\d{1,3})\s*=\s*([^\W\d_]+(?:[ '\u2019/-]+[^\W\d_]+)*)")
+    # ... or as a numbered list of two or more of the row's codes: '(1) Abnormal (2) Normal', '1. Abnormal 2. Normal'.
+    LEGEND_LIST = re.compile(r"(?<![\w.])(?:\((\d{1,3})\)|(\d{1,3})\s*[.:)\-\u2013])\s*([^\W\d_]+(?:[ '\u2019/-]+[^\W\d_]+)*)")
 
     def legend_conflict(self, options, row, governing=""):
         """A printed header whose options also print numbers ('2 = Abnormal', '1. Normal') is a code legend. It
@@ -1915,7 +1917,12 @@ class Detector:
         if any(printed) and (len(codes) != len(options) or any(found != [code] for found, code in zip(printed, codes))):
             return True
         words = lambda text: " %s " % " ".join(re.findall(r"[^\W\d_]+", text.lower()))
-        for code, meaning in self.LEGEND_PAIR.findall(governing):
+        pairs = self.LEGEND_PAIR.findall(governing)
+        for segment in re.split(r" > | \| ", governing):
+            listed = [(a or b, meaning) for a, b, meaning in self.LEGEND_LIST.findall(segment)]
+            if len(listed) >= 2 and all(code in codes for code, _ in listed):
+                pairs.extend(listed)
+        for code, meaning in pairs:
             if code not in codes or len(codes) != len(options):
                 return True
             option, meaning = words(options[codes.index(code)]), words(meaning)
@@ -2811,7 +2818,7 @@ class Detector:
     @staticmethod
     def option_families(text):
         """The OPTION_FAMILIES a printed option belongs to; -1 for a companion word ('N/A', 'Unknown')."""
-        word = " ".join(option_text(text).lower().split())
+        word = re.sub(r"^[\s(\[]+|[\s)\].:;,]+$", "", " ".join(option_text(text).lower().split()))
         found = {n for n, family in enumerate(OPTION_FAMILIES) if family.fullmatch(word)}
         return found | ({-1} if COMPANION_OPTION.fullmatch(word) else set())
 
@@ -2832,8 +2839,12 @@ class Detector:
             return "and only a selection instruction after the last one"
         head = units[0][2].rstrip()
         cut = [m.end() for m in re.finditer(r"[:?]|\t| {2,}", head)]
-        # A bracketed instruction or a bracket drawn around the box ('Sex: (choose one) [☐] M') is not an option word.
-        tail = re.sub(r"\([^()]*\)|\[[^\[\]]*\]|[\[\]]", " ", head[cut[-1]:] if cut else head)
+        # A bracketed selection instruction or a bracket drawn around the box ('Sex: (choose one) [☐] M') is not an
+        # option word; a bracketed word ('Smoker: (Yes) ☐ (No) ☐ N/A') still is.
+        tail = re.sub(r"\(([^()]*)\)", lambda m: " " if any(rx.search(m.group(1)) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE))
+                      or re.search(r"\b(?:choose|select|tick|check|circle|mark|pick)\b", m.group(1), re.I) else m.group(0),
+                      head[cut[-1]:] if cut else head)
+        tail = re.sub(r"[\[\]]", " ", tail)
         if (not re.search(r"[^\W\d_]", tail) or re.search(r"_|\.{2,}|…|[\u25af\x00" + BOX + CHECKED + "]", tail)
                 or re.match(r"\s*(?:if|when|where|how|what|which|since)\b", tail, re.I)):
             return ""  # the question (or its own answer blank) ends right before the first box
