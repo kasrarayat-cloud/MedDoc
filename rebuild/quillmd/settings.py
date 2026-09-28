@@ -84,6 +84,8 @@ DEFAULT_AUTO_FIELD='django.db.models.BigAutoField'
 # Word contract for NEW template inspections: 'legacy' (v1/v2 tables, placeholders, tab lines) or 'v3' (every
 # structure, clinician-reviewed mapping). Stored mappings always fill under the contract that made them.
 QUILLMD_WORD_ENGINE=os.getenv('QUILLMD_WORD_ENGINE','legacy')
+QUILLMD_LAYOUT_SOCKET=os.getenv('QUILLMD_LAYOUT_SOCKET','')
+QUILLMD_LAYOUT_SERVICE_UID=os.getenv('QUILLMD_LAYOUT_SERVICE_UID','')
 QUILLMD_MAPPING_ASSISTANCE=os.getenv('QUILLMD_MAPPING_ASSISTANCE','0')=='1'
 # Separate admission: exposing offline review is never authority for provider spending.
 QUILLMD_MAPPING_ASSISTANCE_LIVE=os.getenv('QUILLMD_MAPPING_ASSISTANCE_LIVE','0')=='1'

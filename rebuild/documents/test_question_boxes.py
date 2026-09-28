@@ -712,6 +712,19 @@ class NestedWriteIns(unittest.TestCase):
 
 
 class TabColumnOwnership(unittest.TestCase):
+    """Source proposals only. Rendered ownership is qualified by the layout service."""
+
+    def proposal(self, raw):
+        detector = w.Detector(w.open_package(raw), layout_proposal=True)
+        areas, notes = detector.detect()
+        fields = [w.area_to_field(i + 1, area) for i, area in enumerate(areas)]
+        for field in fields: w.annotate_printed(detector.index, field)
+        return {'fields': fields, 'notes': notes}
+
+    def proposed_fill(self, raw, fields, answers):
+        # Private preparer path tests writer mechanics, never rendered meaning.
+        return w.fill(raw, fields, answers, retained_layout=[])
+
     def form(self, *, control='glyph', inherited=False, problem='', many=False, count=2):
         from .test_word_v3 import checkbox_control, ff_field
         doc = Document();doc.add_paragraph('Current visit', style='Heading 1')
@@ -754,13 +767,13 @@ class TabColumnOwnership(unittest.TestCase):
         elif problem == 'signing':cell.paragraphs[0].text='Signed declaration'
         return doc
 
-    def test_source_columns_bind_literal_options_to_controls_independently_of_codes(self):
+    def test_source_proposals_preserve_literal_options_and_writer_controls(self):
         for control in ('glyph','sdt','ff'):
             for inherited in (False,True):
                 for count in (1,2,3):
                     with self.subTest(control=control,inherited=inherited,count=count):
                         raw=data(self.form(control=control,inherited=inherited,count=count))
-                        result=w.inspect(raw)
+                        result=self.proposal(raw)
                         fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
                         self.assertEqual(len(fields),1)
                         field=fields[0]
@@ -769,7 +782,7 @@ class TabColumnOwnership(unittest.TestCase):
                         self.assertIn('Examination',field['context']);self.assertIn('Current visit',field['context'])
                         self.assertFalse(result['notes'])
                         chosen=True if count==1 else field['options'][-1]
-                        out=w.fill(raw,result['fields'],{field['key']:chosen})
+                        out=self.proposed_fill(raw,result['fields'],{field['key']:chosen})
                         self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),field),[False]*(count-1)+[True])
                         before=w.SlotIndex(w.open_package(raw));after=w.SlotIndex(w.open_package(out))
                         for slot in before.slots:
@@ -779,17 +792,17 @@ class TabColumnOwnership(unittest.TestCase):
     def test_unknown_or_conflicting_geometry_and_source_are_visible(self):
         for problem in ('mismatch','unknown_style','cleared','indent','duplicate','missing','intervening','signing'):
             with self.subTest(problem=problem):
-                result=w.inspect(data(self.form(problem=problem,inherited=problem=='cleared')))
+                result=self.proposal(data(self.form(problem=problem,inherited=problem=='cleared')))
                 self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
                 self.assertTrue(any('Tab-column' in n and 'Finding' in n for n in result['notes']))
 
     def test_literal_cardinality_is_preserved_and_missing_states_unchanged(self):
-        raw=data(self.form(many=True));result=w.inspect(raw)
+        raw=data(self.form(many=True));result=self.proposal(raw)
         field=next(f for f in result['fields'] if f['locator']['target']['type']=='checkboxes')
         self.assertEqual(field['kind'],'multi_choice')
-        out=w.fill(raw,result['fields'],{field['key']:field['options']})
+        out=self.proposed_fill(raw,result['fields'],{field['key']:field['options']})
         self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),field),[True,True])
-        with ZipFile(io.BytesIO(raw)) as old,ZipFile(io.BytesIO(w.fill(raw,result['fields'],{}))) as new:
+        with ZipFile(io.BytesIO(raw)) as old,ZipFile(io.BytesIO(self.proposed_fill(raw,result['fields'],{}))) as new:
             self.assertEqual({n:old.read(n) for n in old.namelist()},{n:new.read(n) for n in new.namelist()})
 
     def test_inherited_stops_clear_override_and_same_indent_are_resolved(self):
@@ -802,7 +815,7 @@ class TabColumnOwnership(unittest.TestCase):
                 tab=OxmlElement('w:tab');tab.set(qn('w:val'),kind);tab.set(qn('w:pos'),str(position));tabs.append(tab)
             ppr.append(tabs)
             ind=OxmlElement('w:ind');ind.set(qn('w:left'),'120');ppr.append(ind)
-        result=w.inspect(data(doc));field=next(f for f in result['fields'] if f['kind']=='choice')
+        result=self.proposal(data(doc));field=next(f for f in result['fields'] if f['kind']=='choice')
         self.assertEqual((field['label'],field['options']),('Finding',['Normal','Abnormal']))
         self.assertFalse(result['notes'])
 
@@ -813,7 +826,7 @@ class TabColumnOwnership(unittest.TestCase):
                 row.getparent().remove(row);table._tbl.insert(list(table._tbl).index(table.rows[0]._tr),row)
                 header=table.rows[0];header.cells[0].text=heading;header.cells[1].text='Recipient'
                 header._tr.get_or_add_trPr().append(OxmlElement('w:tblHeader'))
-                result=w.inspect(data(doc));fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
+                result=self.proposal(data(doc));fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
                 if heading=='Consent':
                     self.assertFalse(fields);self.assertTrue(any('protected' in n for n in result['notes']))
                 else:
@@ -822,7 +835,7 @@ class TabColumnOwnership(unittest.TestCase):
 
     def test_direct_numeric_option_words_are_not_reinterpreted_as_column_codes(self):
         doc=Document();doc.add_table(rows=1,cols=1).cell(0,0).text='Score?\t☐ 1\t☐ 2'
-        result=w.inspect(data(doc));field=next(f for f in result['fields'] if f['kind']=='choice')
+        result=self.proposal(data(doc));field=next(f for f in result['fields'] if f['kind']=='choice')
         self.assertEqual(field['options'],['1','2'])
         self.assertFalse(any('Tab-column' in note for note in result['notes']))
 
@@ -832,7 +845,7 @@ class TabColumnOwnership(unittest.TestCase):
         style=doc.styles.add_style('MarkedBlank',WD_STYLE_TYPE.CHARACTER)
         style.element.get_or_add_rPr().append(OxmlElement('w:u'))
         spacer.add_run().style=style
-        result=w.inspect(data(doc))
+        result=self.proposal(data(doc))
         self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
         self.assertTrue(any('Tab-column' in note for note in result['notes']))
 
@@ -843,16 +856,16 @@ class TabColumnOwnership(unittest.TestCase):
                 doc.paragraphs[0].text='Symptoms; tick all that apply.'
                 cell=doc.tables[0].cell(0,0);cell.paragraphs[1].text='\tPain\tSwelling'
                 if conflict:cell.paragraphs[0].text='Examination; choose one.'
-                raw=data(doc);result=w.inspect(raw)
+                raw=data(doc);result=self.proposal(raw)
                 fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
                 if conflict:
                     self.assertFalse(fields);self.assertTrue(any('cardinality' in n for n in result['notes']))
                 else:
                     self.assertEqual(fields[0]['kind'],'multi_choice')
-                    out=w.fill(raw,result['fields'],{fields[0]['key']:['Pain','Swelling']})
+                    out=self.proposed_fill(raw,result['fields'],{fields[0]['key']:['Pain','Swelling']})
                     self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),fields[0]),[True,True])
         doc=self.form();doc.paragraphs[0].text='Symptoms; select up to 1.'
-        result=w.inspect(data(doc))
+        result=self.proposal(data(doc))
         self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
         self.assertTrue(any('unrepresented selection limit' in n for n in result['notes']))
 
@@ -881,7 +894,7 @@ class TabColumnOwnership(unittest.TestCase):
                             if source=='heading':parent.base_style=doc.styles['Heading 1']
                             para.style=child
                         else:para.runs[0].style=child
-                    result=w.inspect(data(doc))
+                    result=self.proposal(data(doc))
                     self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
                     self.assertTrue(any('Tab-column' in n for n in result['notes']))
 
@@ -912,7 +925,7 @@ class TabColumnOwnership(unittest.TestCase):
                 marker=OxmlElement('w:vanish')
                 if mode=='explicit_off':marker.set(qn('w:val'),'0')
                 holder.append(marker)
-                result=w.inspect(data(doc))
+                result=self.proposal(data(doc))
                 fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
                 self.assertEqual(bool(fields),mode=='explicit_off')
                 if mode!='explicit_off':self.assertTrue(any('Tab-column' in n for n in result['notes']))

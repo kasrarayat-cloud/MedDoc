@@ -39,7 +39,7 @@ if [[ "$gate" == python || "$gate" == python-core || "$gate" == python-core-1 ||
     if [[ "$gate" != python-core && "$gate" != python-core-1 && "$gate" != python-core-2 ]]; then
     # ⚠️ This list is EXPLICIT, not discovered: a new documents/test_*.py that is not named
     # here never runs in CI and is inert. Add the module in the same change as the test.
-    "$quillmd_ci_python" -m unittest documents.tests documents.test_tab_form documents.test_sdk_sandbox documents.test_sdk_service documents.test_layout documents.test_unmapped_areas documents.test_multicolumn_and_mixed documents.test_word_v3 documents.test_signing_areas documents.test_question_boxes documents.test_composite_kind documents.test_hyperlink_destinations documents.test_document_relations documents.test_source_policy -v
+    "$quillmd_ci_python" -m unittest documents.tests documents.test_tab_form documents.test_sdk_sandbox documents.test_sdk_service documents.test_layout documents.test_unmapped_areas documents.test_multicolumn_and_mixed documents.test_word_v3 documents.test_signing_areas documents.test_question_boxes documents.test_composite_kind documents.test_hyperlink_destinations documents.test_document_relations documents.test_source_policy documents.test_layout_verification -v
     "$quillmd_ci_python" -m unittest discover -s ops -p 'test_*.py' -v
     fi
   )

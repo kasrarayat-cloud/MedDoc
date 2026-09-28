@@ -325,6 +325,14 @@ class TabColumnWorkflow(NestedCheckboxWorkflow):
     question = 'Finding'
     wanted_options = ['Normal', 'Abnormal']
 
+    def setUp(self):
+        super().setUp()
+        # CI tests the application contract with a synthetic trusted boundary.
+        # Real isolated renderer witnesses are separate retained qualification.
+        from documents.test_layout_verification import synthetic_verified
+        verifier = patch('documents.layout_transport.verify_document', side_effect=synthetic_verified)
+        verifier.start(); self.addCleanup(verifier.stop)
+
     def source(self):
         from documents.test_question_boxes import TabColumnOwnership
         return data(TabColumnOwnership().form(many=True))

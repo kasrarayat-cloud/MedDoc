@@ -821,10 +821,12 @@ def is_option_word(txt: str) -> bool:
 
 
 class Detector:
-    def __init__(self, package: Package):
+    def __init__(self, package: Package, *, layout_proposal=False):
         self.package = package
         self.index = SlotIndex(package)
         self.areas: list[Area] = []
+        self.layout_proposal = layout_proposal
+        self.layout_candidates = []
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
@@ -1638,7 +1640,13 @@ class Detector:
             self.claimed.add(id(paragraphs[0].el))
             for header, row, area in pending:
                 self.claimed.add(id(header.el))
-                self.add(area)
+                self.layout_candidates.append((header, row, area))
+                if self.layout_proposal:
+                    self.add(area)
+                else:
+                    self.claimed.add(id(row.el))
+                    self.notes.append("Layout verification required for tab-column answer at " + row.id +
+                                      ". Printed question: " + area.label + ". Section: " + area.context)
 
     def rule_checkboxes(self, leftovers=False):
         # paragraph-level units, then grouping. A cell holding ONLY a box under a column header is left for the
@@ -3251,7 +3259,8 @@ def inspect(data: bytes) -> dict:
     for field in fields:
         annotate_printed(detector.index, field)
     source_policy.annotate(detector, fields)
-    return {"contract": CONTRACT, "fields": fields, "notes": notes}
+    return {"contract": CONTRACT, "fields": fields, "notes": notes,
+            "layout_pending": len(detector.layout_candidates)}
 
 
 # ─── fill ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -3920,11 +3929,17 @@ def _options_chosen(field, answer):
     return out
 
 
-def fill(data: bytes, fields: list, answers: dict) -> bytes:
+def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> bytes:
     """Write answers into the original package. Every field's anchor is checked against its fingerprint before
     anything changes; signature and initials areas never take an automatic answer."""
     package = open_package(data)
     index = SlotIndex(package)
+    source_detector = Detector(package, layout_proposal=True)
+    source_detector.detect()
+    layout_nodes = [(header, row) for header, row, _ in source_detector.layout_candidates]
+    if layout_nodes and retained_layout is None and any(value not in (None, "", []) for value in answers.values()):
+        fail("This form's tab-column answers require layout verification before export.",
+             "layout_verification_required")
     protected = Detector(package)
     protected.rule_protected_signing_areas()
     protected.rule_question_boxes()
@@ -4096,6 +4111,14 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
         glyph_readback[key] = {"part": part, "path": element_identity_path(package.tree(part), node)}
     out = package.write({part: package.tree(part) for part in changed})
     verify_options(out, fields, answers, glyph_readback=glyph_readback)
+    if retained_layout is not None:
+        for header, row in layout_nodes:
+            if any(slot.el.getroottree().getroot() is not package.tree(slot.part) for slot in (header, row)):
+                fail("An answer removed a tab-column source paragraph.", "mapping_mismatch")
+            retained_layout.append({"header": {"part": header.part,
+                "path": element_identity_path(package.tree(header.part), header.el)},
+                "row": {"part": row.part,
+                "path": element_identity_path(package.tree(row.part), row.el)}})
     return out
 
 
@@ -4407,7 +4430,7 @@ def constrained_scalar_value(original, final, field, written):
     return "" if not written and is_blank_text(value) else value.strip()
 
 
-def effective_values(data, fields, answers):
+def effective_values(data, fields, answers, *, _written=None):
     """The existing writer's actual resulting constrained values, without an export.
 
     Unanswered controls retain their original state. Validate their source
@@ -4421,6 +4444,11 @@ def effective_values(data, fields, answers):
     if any(not isinstance(k, str) or not k for k in keys) or len(keys) != len(set(keys)) or not set(answers) <= set(keys):
         fail("Constrained option identities are invalid.", "invalid_mapping")
     index = SlotIndex(open_package(data))
+    if _written is None:
+        detector = Detector(index.package, layout_proposal=True)
+        detector.detect()
+        if detector.layout_candidates:
+            fail("Constrained tab-column values require layout verification.", "layout_verification_required")
     for field in fields:
         loc = field.get("locator") or {}
         if field.get("kind") not in ("choice", "multi_choice", "checkbox", "text", "long_text", "date", "time") or loc.get("contract") != CONTRACT:
@@ -4429,7 +4457,9 @@ def effective_values(data, fields, answers):
             slot = index.by_id.get("%s#%s" % (ref.get("part"), ref.get("slot")))
             if slot is None or not ref.get("fingerprint") or fingerprint(slot.el) != ref["fingerprint"]:
                 fail("The stored option mapping no longer matches the original.", "mapping_mismatch")
-    output = fill(data, fields, answers)
+    # The isolated layout preparer may read its own just-written bytes. This is
+    # never a request parameter; callers still reach fill's renderer guard.
+    output = fill(data, fields, answers) if _written is None else _written
     final = SlotIndex(open_package(output))
     result = {}
     for field in fields:

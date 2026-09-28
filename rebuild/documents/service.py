@@ -108,6 +108,27 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
                 response = json.loads(result.stdout)
             except (ValueError, UnicodeError) as exc:
                 raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed") from exc
+        needs_layout = response.get("code") == "layout_verification_required"
+        if (operation == "inspect" and response.get("layout_pending")) or needs_layout:
+            from .layout_transport import verify_document
+            try:
+                verified, actual = verify_document(payload, mapping if needs_layout else None,
+                                                   answers if needs_layout else None)
+            except DocumentError as exc:
+                if needs_layout:
+                    raise
+                response["warnings"].append(str(exc))
+            else:
+                response = {"format": "docx", "contract": "v3", "adapter": "word-v3",
+                    "sandbox": "landlock+seccomp", "fields": mapping if needs_layout else verified["fields"],
+                    "warnings": verified["warnings"], "layout_receipt": verified["receipt"]}
+                if needs_layout:
+                    if operation in ("effective_options", "effective_values"):
+                        response["states"] = verified["states"]
+                    else:
+                        (workspace / "output.docx").write_bytes(actual)
+                        response["filled"] = sum(answers.get(field["key"]) not in (None, "", []) for field in mapping)
+                        response["missing"] = [field["key"] for field in mapping if answers.get(field["key"]) in (None, "", [])]
         if "error" in response:
             raise DocumentError(response["error"], response.get("code", "invalid_document"))
         response["sha256"] = digest

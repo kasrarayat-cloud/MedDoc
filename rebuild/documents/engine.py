@@ -21,10 +21,12 @@ if __package__:
     from .tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
     from . import word_v3
     from .assistance import outline as assistance_outline
+    from .layout_source import prepare as prepare_layout
 else:  # Isolated worker imports this module directly (before the sandbox closes the filesystem).
     from tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
     import word_v3
     from assistance import outline as assistance_outline
+    from layout_source import prepare as prepare_layout
 
 V3_WARNINGS = [
     "QuillMD found these answer areas automatically. Check every field against the form before using it: add any "
@@ -48,7 +50,14 @@ def process_v3(workspace, request):
         if operation == "inspect":
             found = word_v3.inspect(data)
             return {"format": "docx", "fields": found["fields"], "warnings": found["notes"] + V3_WARNINGS,
+                    "layout_pending": found["layout_pending"],
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "layout_prepare":
+            result, actual, instrumented = prepare_layout(data, mapping=request.get("mapping"), answers=request.get("answers"))
+            result["warnings"] += V3_WARNINGS
+            (workspace / "document.docx").write_bytes(actual)
+            (workspace / "instrumented.docx").write_bytes(instrumented)
+            return {"format": "docx", **result, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "outline":
             return {"format": "docx", **word_v3.outline(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "assistance_outline":
@@ -665,7 +674,7 @@ def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values")
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):
