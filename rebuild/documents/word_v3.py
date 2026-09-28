@@ -3524,6 +3524,9 @@ class Detector:
                     if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c) or guidance or instructed):
                         continue
                     label = self.row_label(tslot, r, c.info["col"])
+                    if instructed:
+                        # The row's own item names an instructed cell, never a value printed beside it ('500 mg').
+                        label = self.row_identity(tslot, r, c.info["col"]) or label
                     header = clean_label(self.column_header(tslot, c.info["col"], r))
                     below = self.label_below(tslot, c)
                     if placeholder and not label and not header:
@@ -3554,6 +3557,12 @@ class Detector:
     INSTRUCTED_REQUEST = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)"
                                     r"\s+(?:if|whether|any|all)\b", re.I)
     INSTRUCTED_PLACE = re.compile(r"\b(?:here|below|in this (?:box|space|cell|column|section))\b", re.I)
+    # Printed advice to the patient: it names someone else to tell ('... to your doctor', '... to the nurse'), or
+    # the column prints instructions or information rather than answers (refutation R3-5).
+    ADDRESSED = re.compile(r"\b(?:to|with|tell|ask|call|contact|inform)\s+(?:your|the|a|an)\s+(?:doctor|physician|nurse|"
+                           r"pharmacist|gp|provider|care\s+team|team|clinic|carer|caregiver|patient|family)\b|"
+                           r"\byour\s+(?:doctor|physician|nurse|pharmacist|gp|provider|care\s+team)\b", re.I)
+    CONTENT_COLUMN = re.compile(r"\b(?:instructions?|information|advice|guidance|directions?|education)\b", re.I)
 
     def instructed_answer_cell(self, table, row, cell):
         """A plain cell of a data row whose printed text asks for the answer to be written in it ('If palpable,
@@ -3564,6 +3573,8 @@ class Detector:
         text = self.cell_text(cell)
         if len(text) > 200 or not self.INSTRUCTED.match(text) \
                 or not (self.INSTRUCTED_PLACE.search(text) or self.INSTRUCTED_REQUEST.match(text)) \
+                or self.ADDRESSED.search(text) \
+                or self.CONTENT_COLUMN.search(self.column_header(table, cell.info["col"], row)) \
                 or not self.cell_is_plain(cell) or self.row_kind(table, row) != "data":
             return False
         for paragraph in (x for x in cell.children if x.kind == "p"):
