@@ -1852,18 +1852,19 @@ class Detector:
                         issue = "The column header contains an answer area."
         return headers, issue
 
-    # 'Label:' then a printed gap (a tab, or three or more spaces) and more of the line ('Temp:          °C'): the
-    # answer is written in the gap.
-    ANSWER_LINE = re.compile(r"[^\t\x00:;?!]*[^\W\d_][^\t\x00:;?!]*:(?:[ \u00a0]*\t[ \t\u00a0]*|[ \u00a0]{3,})\S")
-
     def answer_cell(self, c) -> bool:
         """The cell holds an answer place of its own: a box or other control, a drawn answer blank of any kind (an
         underscore rule, leader dots or an ellipsis, digit boxes, a bracket, an underlined gap: every blank the
-        engine itself maps as an answer), or a printed answer gap after a label (refutation F2, R3-3)."""
-        objects = self.cell_objects(c)
-        return BOX in objects or CHECKED in objects or "\x00" in objects or any(
-            self.blank_spans(printed, pieces) or self.ANSWER_LINE.search(printed)
-            for x in c.children if x.kind == "p" for printed, pieces in [self.ptext(x.el)])
+        engine itself maps as an answer), or a printed answer gap after a label read exactly as the engine's own
+        answer-line reader reads one (inline_answer_gap: 'Temp:   °C', 'Weight:<em spaces>kg'; never a two-level
+        label 'Cardiovascular:<tab>Heart sounds'). Linear in the cell's text and read once per cell: a merged cell
+        beside twenty coded rows is asked twenty times (refutation F2, R3-3, R4-6, R4-10)."""
+        key = ("answer_cell", id(c.el))
+        if key not in self._grid:
+            objects = self.cell_objects(c)
+            self._grid[key] = BOX in objects or CHECKED in objects or "\x00" in objects or any(
+                self.blank_spans(*self.ptext(x.el)) or self.inline_answer_gap(x) for x in c.children if x.kind == "p")
+        return self._grid[key]
 
     def printed_row_label(self, cell):
         """(question, issue, group) for the row of `cell`: the row's question printed in its own plain label cell
@@ -4277,7 +4278,9 @@ class Detector:
 
     LABEL_COLON = re.compile(r"([^\t\x00:;?!]{1,160}?)\s*:(?=[\s\x00]|$)")
     ANSWER_GAP = re.compile(r"[ \t\u00a0\u2002\u2003]*")
-    ANSWER_UNIT = re.compile(r"\(?\s*(?:mm|dd|yy|hh|units?|kg|cm|lbs?|in|minutes?|hours?|days?|years?|%)\b", re.I)
+    # A unit printed after an answer gap ('Weight:      kg', 'Temp:      °C', 'Pulse:      bpm').
+    ANSWER_UNIT = re.compile(r"\(?\s*(?:mm|dd|yy|hh|units?|kg|cm|lbs?|in|minutes?|hours?|days?|years?|%|\u00b0\s?[CF]|bpm|"
+                             r"mm\s?hg|mg|mcg|ml|mmol|breaths|weeks?|months?)\b", re.I)
 
     def inline_answer_gap(self, slot) -> bool:
         """'Label:' followed by a printed gap (a tab or three or more spaces) and then more of an answer line:
