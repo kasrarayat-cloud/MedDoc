@@ -1789,6 +1789,7 @@ class RoundFourGuardsArePinned(unittest.TestCase):
             'Smoker: ☐ Yes ☐ No ☐ (tick one)',                        # only an instruction after it
             'Smoking: Current daily user ☐ Former ☐ Never ☐ Ex-smoker',  # the first word after the colon
             'Pupils: Equal ☐ Unequal ☐ Irregular',                    # a negation of an after-box word
+            'Pupils: [Equal] ☐ Unequal ☐ Irregular',                  # ... printed in brackets
             'Blood type A+ ☐ O+ ☐ B+ ☐ AB+', 'Lesion size 5cm ☐ 10cm ☐ 15cm ☐ 20cm',  # the printed form
             'Smoker type: Heavy smoker ☐ Light smoker ☐ Social smoker ☐ Ex-smoker',  # the same last word
             'Referral Cardiology ☐ Neurology ☐ Discussed with ____', 'Referral Cardiology ☐ Neurology ☐ Discussed with ......',
@@ -1797,7 +1798,10 @@ class RoundFourGuardsArePinned(unittest.TestCase):
             'Race: White ☐ Black ☐ Asian ☐ Other (specify) ____',     # an 'Other' write-in
             'Tobacco Current user ☐ Former ☐ Never ☐ Unknown',         # a closed family's word inside the question
             'Dose unit: mg ☐ mcg ☐ units ☐ ml', 'Frequency: When required ☐ Daily ☐ Weekly ☐ Monthly',  # vocabulary
-            'Allergies NKDA ☐ Penicillin ☐ Sulfa ☐ Latex',
+            'Allergies NKDA ☐ Penicillin ☐ Sulfa ☐ Latex', 'Frequency As needed ☐ Daily ☐ Weekly',  # a two-word option
+            'Consent Declined ☐ Given ☐ Deferred',                     # a companion word before the first box
+            'Referral Cardiology ☐ Neurology ☐ Consultant: Dr Smith',  # a label of its own after the last box
+            'Cancer ☐ Stage 1 ☐ Grade 2 ☐ Other ____',                 # numbers after different words are no count
             # a condition or question clause, then an option word (the clause never ends the question early)
             'Smoker: If yes Current ☐ Former ☐ Never', 'Diet: what type Normal ☐ Soft ☐ Liquid ☐ Other',
             'Smoker? If yes Yes ☐ No ☐ Unknown'), controls=('ff',))
@@ -1807,6 +1811,7 @@ class RoundFourGuardsArePinned(unittest.TestCase):
                 ('Weight ..... kg ☐ measured ☐ stated', 'Weight ..... kg', ['measured', 'stated']),
                 ('Weight …… kg ☐ measured ☐ stated', 'Weight …… kg', ['measured', 'stated']),
                 ('Weight ▯▯▯ kg ☐ measured ☐ stated', 'Weight ▯▯▯ kg', ['measured', 'stated']),
+                ('Weight ▭ kg ☐ measured ☐ stated', 'Weight kg', ['measured', 'stated']),  # a text field is a blank
                 ('Smoker\tIf yes ☐ Cigarettes ☐ Cigars ☐ Pipe', 'Smoker If yes', ['Cigarettes', 'Cigars', 'Pipe']),
                 ('Smoker  If yes ☐ Cigarettes ☐ Cigars ☐ Pipe', 'Smoker If yes', ['Cigarettes', 'Cigars', 'Pipe']),
                 ('Allergies: If yes ☐ Penicillin ☐ Sulfa ☐ Latex', 'Allergies: If yes', ['Penicillin', 'Sulfa', 'Latex']),
@@ -1863,6 +1868,16 @@ class RoundFourLegendGuardsArePinned(unittest.TestCase):
         found, _ = self.candidates(['2. Liver', ('\tNormal\tAbnormal', self.STOPS), ('Palpable\t1 ☐\t2 ☐', self.STOPS)],
                                    heading='Abnormal findings')
         self.assertEqual(found, [('Palpable', ['Normal', 'Abnormal'])])
+        # A numbered title and a numbered label above the row are two printed pieces, never one numbered legend.
+        detector, _, _ = detect(data(coded_form(['1. Liver', '\tNormal\tAbnormal', '2. Palpation', 'Edge\t1 ☐\t2 ☐'])))
+        self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates],
+                         [('2. Palpation Edge', ['Normal', 'Abnormal'])])
+
+    def test_a_single_entry_meaning_must_equal_its_option_either_way_round(self):
+        for title, header in (('12b. Liver (1 = Not palpable)', '\tPalpable\tNot palpable'),
+                              ('12b. Liver (1 = Palpable)', '\tNot palpable\tPalpable')):
+            with self.subTest(title=title):
+                self.assertEqual(self.titled(title, header=header), [])
 
     def test_a_legend_in_a_lead_a_prefix_or_the_text_above_a_row_is_read(self):
         for name, cell in (('text above the row', ['12b.\tLiver', '\tNormal\tAbnormal', 'Palpation (1 = Abnormal, 2 = Normal)',
@@ -1910,6 +1925,12 @@ class RoundFourCellGuardsArePinned(unittest.TestCase):
         raw = table_doc([('Medication', 'Dose', 'Findings', 'Initials'), ('Metformin', '500 mg', 'Describe any side effects here', ''),
                          ('', '1000 mg', 'Describe any side effects here', '')])
         self.assertEqual(self.slot_labels(raw, ['b/tbl[0]/tr[1]/tc[2]']), ['Metformin — Findings'])
+
+    def test_the_item_is_the_nearest_label_when_every_row_prints_a_category(self):
+        raw = table_doc([('Category', 'Item', 'Findings', 'Initials'), ('Medication', 'Metformin', 'Describe any side effects here', ''),
+                         ('Medication', 'Warfarin', 'Describe any bleeding here', '')])
+        self.assertEqual(self.slot_labels(raw, ['b/tbl[0]/tr[1]/tc[2]', 'b/tbl[0]/tr[2]/tc[2]']),
+                         ['Metformin — Findings', 'Warfarin — Findings'])
 
     def test_advice_by_any_mark_is_withdrawn_with_a_note(self):
         for text in ('Describe any bleeding here, then email us', 'Describe any stomach upset to the nurse'):
