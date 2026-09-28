@@ -123,3 +123,36 @@ No unknown paid attempt, reservation, deployment lock or pending activation was
 created. Next safe action: independent finished-diff refutation, then lead-owned
 reviewed union and only the missing union checks. Do not install/activate from
 this isolated tree or infer Sonnet5 serving/launch status from these proofs.
+
+## Independent subject refutation and bounded repair — 2026-09-28
+
+Candidate978d6ab0 was independently **REFUTED**, and must not be integrated as
+finished source. `The patient advocate attends...`, `patient care coordinator`
+and `patient caregiver` passed the textual prefix even though the parser correctly
+identified a different grammatical head. The author independently reproduced
+these results and also pinned the probe's `Patient education improves sleep.`
+and a coordinated clause where `her father` is a second explicit subject.
+All first independent/author outputs remain in evidence.
+
+The caller now supplies the exact existing actor-token span. The syntactic
+reader must bind its sole nominal subject to that exact span and permits only
+the existing leading determiner in the noun phrase. Compounds/apposition do not
+become Patient through their prefix, and another explicit subject anywhere in a
+coordinated clause withholds the new fallback. No job-title/person dictionary,
+source rewriting or new semantic inference is involved. Shared-subject
+coordination (`The patient attends an art class and swims every Monday.`) and
+complete negative activity wording remain exact positive controls.
+
+Author replay of the independent16 cases closes all newly reported falseallows.
+The pre-existing modal `should` path is unchanged and still retains its whole
+qualified sentence; this repair does not claim that sentence establishes actual
+attendance. Targeted suite11PASS17.201s includes the four no-edit authenticated
+workflows and eight forced stored page/save/finalization adverse inputs. The
+actual original D30A35 workflow was rerun against the final source with fresh
+artifact paths, still source-supported activities plus assisted missing disclosure.
+See `d30-subject-final.log` and the final-result JSON for measured timing/hashes.
+
+Final generationSHA256 `9fca62e396dba349c32821fd2a23c5bd01f07b80fe7369943cb5dbd6750d0ac7`;
+syntaxSHA256 `61ffd082f4267ce059affe67def3c37b180eda2dacf6fd12adf3d3a78efbef8d`.
+A new independent finished-diff refutation is required. No application model,
+payment, deployment, corpus denominator or remaining34V classification changed.

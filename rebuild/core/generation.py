@@ -2630,9 +2630,22 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     # The parser supplies syntax only. The source actor must already be explicit
     # by the deterministic source grammar or proven by its complete actor ledger.
     # No context, destination or clinical-polarity rule uses this new allowance.
-    syntax_complete = complete_ids([u for u in units if ':' not in u['quote']
-        and not FINITE_STATEMENT_V3.search(u['quote'])
-        and (EXPLICIT_PATIENT_SUBJECT.match(u['quote']) or u['id'] in actor['units'])])
+    syntax_candidates, syntax_subjects = [], {}
+    for unit in units:
+        text = unit['quote']
+        if ':' in text or FINITE_STATEMENT_V3.search(text):
+            continue
+        if match := EXPLICIT_PATIENT_SUBJECT.match(text):
+            end = len(match.group().rstrip())
+            span = (end - len('patient'), end)
+        elif unit['id'] in actor['units'] and (match := re.match(r'(?:He|She)\b', text)):
+            span = (0, match.end())
+        else:
+            continue
+        # A prefix is not a subject: in "patient advocate" the grammatical
+        # subject is advocate. Bind the already named actor to its exact token.
+        syntax_candidates.append(unit); syntax_subjects[unit['id']] = span
+    syntax_complete = complete_ids(syntax_candidates, subject_spans=syntax_subjects)
     return {'units': units, 'evidence_units': evidence_units, 'parsed': parsed,
             'source': {'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)},
             'colon': colon, 'before': before, 'independent': independent, 'general': general, 'groups': groups,

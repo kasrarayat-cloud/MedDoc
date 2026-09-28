@@ -29,3 +29,17 @@ underlined-space positive control keeps both fields. All7 first outcomes are in
 
 No integration approval. Lead was asked to independently reproduce; repairs
 need a new frozen candidate and bounded replay of these exact artifacts.
+
+## Final bounded follow-up — finding closed
+
+Final649f65c2bd32b5b994611de91f9cb24cd6522034, engineSHA256
+`c82ef298b59780238c4f995c6da4056d87ca939282b62c15e74ef185f362cad8`.
+Read the finished marker-set-only follow-up. Independently replayed all7 exact
+original synthetic DOCX bytes (hashes asserted before inspect). All5 marked
+failure variants now equal base fields/notes; the underlined control remains
+unchanged; unmarked spacing still yields only the intended right answer cell.
+`replay-final.json` retains every actual map and expected-equality assertion.
+
+**NOTHING ELSE FOUND** within this bounded finished-diff/source-marker scope.
+Earlier failed candidate and every first result remain. This is not a corpus,
+render, native Word, clinical-generation or whole-document compatibility result.

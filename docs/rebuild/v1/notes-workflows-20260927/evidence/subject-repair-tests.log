@@ -1,0 +1,32 @@
+Using existing test database for alias 'default' ('test_quillmd_ci')...
+test_compound_activity_supported_but_missing_disclosure_is_assisted (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_compound_activity_supported_but_missing_disclosure_is_assisted) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_forced_old_supported_fragment_or_foreign_subject_stays_held_on_page_save_finalize (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_forced_old_supported_fragment_or_foreign_subject_stays_held_on_page_save_finalize) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_varied_complete_answers_need_review_but_no_answer_edit (core.tests.test_v3_sentence_syntax.SentenceWorkflow.test_varied_complete_answers_need_review_but_no_answer_edit) ... ok
+test_compound_review_preserves_printed_text_without_inventing_coverage (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_compound_review_preserves_printed_text_without_inventing_coverage) ... ok
+test_dependency_failure_and_bounds_preserve_old_finite_path (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_dependency_failure_and_bounds_preserve_old_finite_path) ... ok
+test_different_package_version_or_model_bytes_fail_closed (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_different_package_version_or_model_bytes_fail_closed) ... ok
+test_fragments_are_not_released_on_generation_or_stored_reader (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_fragments_are_not_released_on_generation_or_stored_reader) ... ok
+test_materially_varied_complete_sentences_keep_exact_text_and_offsets (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_materially_varied_complete_sentences_keep_exact_text_and_offsets) ... ok
+test_negative_activity_is_preserved_not_converted_to_positive (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_negative_activity_is_preserved_not_converted_to_positive) ... ok
+test_no_actor_context_correction_side_or_shape_guard_is_replaced (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_no_actor_context_correction_side_or_shape_guard_is_replaced) ... ok
+test_single_subject_coordination_is_retained_without_inventing_a_second_actor (core.tests.test_v3_sentence_syntax.SentenceSyntax.test_single_subject_coordination_is_retained_without_inventing_a_second_actor) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 17.201s
+
+OK
+Preserving test database for alias 'default' ('test_quillmd_ci')...
+Found 11 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

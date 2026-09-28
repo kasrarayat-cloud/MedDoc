@@ -68,6 +68,12 @@ class SentenceSyntax(SimpleTestCase):
             ('The patient might attend art classes.', 'The patient might attend art classes.', 'Activities'),
             ('The patient could attend art classes.', 'The patient could attend art classes.', 'Activities'),
             ('The patient and her father attend art classes.', 'The patient and her father attend art classes.', 'Activities'),
+            ('The patient advocate attends an art class every Monday.', 'The patient advocate attends an art class every Monday.', 'Activities'),
+            ('The patient care coordinator attends art classes.', 'The patient care coordinator attends art classes.', 'Activities'),
+            ('The patient caregiver attends art classes.', 'The patient caregiver attends art classes.', 'Activities'),
+            ('Patient education improves sleep.', 'Patient education improves sleep.', 'Activities'),
+            ('The patient attends an art class and her father swims every Monday.',
+             'The patient attends an art class and her father swims every Monday.', 'Activities'),
             ('Her father enjoys music. He attends an art class every Monday.', 'He attends an art class every Monday.', 'Activities'),
             (ACTIVITY + ' Correction: the art class ended last month.', ACTIVITY, 'Activities'),
             ('If symptoms improve, the patient attends an art class.', 'If symptoms improve, the patient attends an art class.', 'Activities'),
@@ -103,6 +109,12 @@ class SentenceSyntax(SimpleTestCase):
 
     def test_negative_activity_is_preserved_not_converted_to_positive(self):
         quote = 'The patient never attends an art class.'
+        label = 'What activities does the patient attend?'
+        answer = run(quote, {label: [quote]}, fields=[field('v3_1', label, 'long_text')])[label]
+        self.assertEqual((answer['status'], answer['text']), ('supported', quote))
+
+    def test_single_subject_coordination_is_retained_without_inventing_a_second_actor(self):
+        quote = 'The patient attends an art class and swims every Monday.'
         label = 'What activities does the patient attend?'
         answer = run(quote, {label: [quote]}, fields=[field('v3_1', label, 'long_text')])[label]
         self.assertEqual((answer['status'], answer['text']), ('supported', quote))
@@ -188,7 +200,11 @@ class SentenceWorkflow(V3Fixture, TestCase):
         self.confirm(template, version)
         target = version.fields[0]
         for notes in ('Her father attends an art class every Monday.', 'The patient attending art classes.',
-                      'The patient hopes to attend art classes.'):
+                      'The patient hopes to attend art classes.',
+                      'The patient advocate attends an art class every Monday.',
+                      'The patient care coordinator attends art classes.',
+                      'The patient caregiver attends art classes.', 'Patient education improves sleep.',
+                      'The patient attends an art class and her father swims every Monday.'):
             with self.subTest(notes=notes):
                 self.new_encounter(version, notes=notes)
                 e = Encounter.objects.latest('created_at')

@@ -39,7 +39,7 @@ def _parser():
         return None
 
 
-def _complete(doc):
+def _complete(doc, subject_span=None):
     if len(doc) > MAX_TOKENS or len(list(doc.sents)) != 1:
         return False
     sentence = next(iter(doc.sents))
@@ -58,19 +58,34 @@ def _complete(doc):
     subjects = [token for token in root.children if token.dep_ in ('nsubj', 'nsubjpass')]
     if not finite or len(subjects) != 1 or min(t.i for t in subjects) >= min(t.i for t in finite):
         return False
+    # A second explicit subject in a coordinated clause is a separate actor;
+    # shared-subject coordination retains just this one subject token.
+    if sum(token.dep_ in ('nsubj', 'nsubjpass') for token in doc) != 1:
+        return False
     if any(token.dep_ == 'conj' for token in subjects[0].children):
         return False
+    if subject_span is not None:
+        subject = subjects[0]
+        if (subject.idx, subject.idx + len(subject.text)) != subject_span:
+            return False
+        # The caller's exact actor phrase permits only its leading determiner.
+        # Apposition, compounds or other nominal qualifiers need explicit review.
+        if any(token.i != subject.i and not (token.dep_ == 'det' and token.i < subject.i
+                   and token.text.casefold() == 'the') for token in subject.subtree):
+            return False
     words = [token for token in doc if not token.is_punct and not token.is_space]
     # A dangling conjunction, preposition or determiner is not a complete sentence.
     return bool(words and words[-1].pos_ not in ('CCONJ', 'SCONJ', 'ADP', 'DET', 'AUX', 'PART'))
 
 
-def complete_ids(units):
+def complete_ids(units, *, subject_spans=None):
     """Syntax proof for at most 64 bounded source units in their original order.
 
     A missing model, excess unit, long text or parser error yields no new allowance.
     Input strings and offsets remain untouched. The caller passes only sentences
     which lack the existing finite-word proof, never labelled values or options.
+    When the caller supplies already established actor spans, syntax must bind
+    that exact token to the sole subject; it cannot invent or expand the actor.
     """
     candidates = [unit for unit in units[:MAX_UNITS]
                   if isinstance(unit.get('quote'), str) and 0 < len(unit['quote']) <= MAX_CHARACTERS]
@@ -83,7 +98,9 @@ def complete_ids(units):
                 return set()
             result = set()
             for unit, doc in zip(candidates, parser.pipe((u['quote'] for u in candidates), batch_size=16)):
-                if _complete(doc):
+                if subject_spans is not None and unit['id'] not in subject_spans:
+                    continue
+                if _complete(doc, None if subject_spans is None else subject_spans[unit['id']]):
                     result.add(unit['id'])
             return result
     except (ValueError, TypeError, RuntimeError):
