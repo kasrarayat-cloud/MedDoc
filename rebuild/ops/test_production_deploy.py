@@ -971,7 +971,50 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # undercharging replacement of Decimal. These fixed identities accompany reviewed
 # offline compiler/price witnesses; they are never learned from inspected source.
 # Any semantic module change fails until its dependency/price proof is reviewed.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': '357a26d580ec01db5a5ab6bd3485ef265ecb3eb7b07ae6317e5495f4f808e7d6', 'core/batch_jobs.py': 'b9f184db2512ff7ffedb354a602f25399b2c7ce8ec6529d40ffd2cc6b306e91b'}
+BATCH_PRICED_MODULES = {'core/generation_batch.py': '9173e760118b7346d83032f6ccad5cc48518ef6be2ee0e9e4fb1fd5a86682ff5', 'core/batch_jobs.py': '94e727600ce8386b6751c3de250019a561f1d4cdc0e8a57d5717a35d0cfd6c5a'}
+
+# Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
+# quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
+# independent exact-wire/price/reservation witness and negative controls.
+ORDINARY_PRICED_SHA256 = '636dcb8f16a6a07f9bcec54141f9ba7a91bc1e3af4add2b35e241be4f39aeff3'
+
+
+def ordinary_module_proof(where):
+    path = REBUILD / 'core/v3_field_relations.py'
+    tree = ast.parse(path.read_text())
+    actual = hashlib.sha256(ast.dump(tree, include_attributes=False).encode()).hexdigest()
+    if actual != ORDINARY_PRICED_SHA256:
+        raise Unresolved(f'{where}: complete ordinary compiler/binding/price proof needs review')
+    return tree
+
+
+def ordinary_dispatch(tree, name):
+    """The checked imported price/send branch must be the actual early route."""
+    function = one_function(tree, name)
+    tail = ('return ordinary.maximum_cost(notes,fields,config,context_labels,requirements or ())'
+            if name == 'maximum_cost' else
+            'return ordinary.generate(notes,fields,config,context_labels=context_labels,requirements=requirements or ())')
+    expected = ast.parse("if config.get('ordinary_field_contract') and natural_v3(fields):\n"
+        "    from . import v3_field_relations as ordinary\n    " + tail).body[0]
+    index = 2 if name == 'maximum_cost' else 1
+    first = ast.parse('config=config or configuration(fields)').body[0]
+    if (function.decorator_list or len(function.body) <= index or
+            ast.dump(function.body[0]) != ast.dump(first) or
+            ast.dump(function.body[index]) != ast.dump(expected)):
+        raise Unresolved(f'{name}: ordinary execution route bypasses its checked compiler')
+    return function.body[index].body[-1]
+
+
+def compiled_ordinary_cap(path, tree, call, expression, where):
+    if path != REBUILD / 'core/v3_field_relations.py' or ast.unparse(expression) != "compiled['wire']":
+        raise Unresolved(f'{where}: unknown ordinary request contract')
+    if enclosing_function(call, parent_map(tree)) is not one_function(tree, 'generate'):
+        raise Unresolved(f'{where}: ordinary request moved outside its reviewed send boundary')
+    ordinary_module_proof(where)
+    profile_tree = ast.parse(GENERATION.read_text())
+    ordinary_dispatch(profile_tree, 'generate')
+    ordinary_dispatch(profile_tree, 'maximum_cost')
+    return 'profile', profile_cap_values(profile_tree, int_constants(profile_tree), where)
 
 def compiled_batch_cap(path, tree, call, expression, where):
     if path != REBUILD / 'core/batch_jobs.py' or ast.unparse(expression) != 'wire':
@@ -1002,6 +1045,7 @@ def compiled_batch_cap(path, tree, call, expression, where):
         actual = hashlib.sha256(ast.dump(modules[relative], include_attributes=False).encode()).hexdigest()
         if actual != expected:
             raise Unresolved(f'{where}: {relative} changed; its complete binding/price proof needs review')
+    ordinary_module_proof(where)  # Batch compilation imports this complete request/price contract too.
     profile_tree = ast.parse(GENERATION.read_text())
     return 'profile', profile_cap_values(profile_tree, int_constants(profile_tree), where)
 
@@ -1075,6 +1119,9 @@ def provider_caps(path):
             if len(node.keywords) != 1:
                 raise Unresolved(f'{where}: ** beside other keywords hides the request')
             if isinstance(node.keywords[0].value, ast.Subscript):
+                if path == REBUILD / 'core/v3_field_relations.py':
+                    caps.append((where, compiled_ordinary_cap(path, tree, node, node.keywords[0].value, where)))
+                    continue
                 caps.append((where, compiled_mapping_cap(path, tree, node, node.keywords[0].value, where)))
                 continue
             if path == REBUILD / 'core/batch_jobs.py':
@@ -1137,6 +1184,8 @@ def maximum_cost_terms():
     functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == 'maximum_cost']
     if len(functions) != 1:
         raise Unresolved(f'core/generation.py: {len(functions)} maximum_cost functions')
+    ordinary_module_proof('maximum_cost')
+    ordinary_return = ordinary_dispatch(tree, 'maximum_cost')
     history_charge = history_cost_adjustment(functions[0])
     parents = parent_map(tree)
     branches = {}
@@ -1163,11 +1212,11 @@ def maximum_cost_terms():
                  and ast.dump(node.test) == ast.dump(narrative_test)]
     if len(narrative) != 1 or not isinstance(narrative[0].body[-1], ast.Return):
         raise Unresolved('maximum_cost: narrative priced return is not explicit')
-    allowed_returns = (allowed_zero[0].body[0], narrative[0].body[-1], functions[0].body[-1])
+    allowed_returns = (allowed_zero[0].body[0], narrative[0].body[-1], functions[0].body[-1], ordinary_return)
     for node in ast.walk(functions[0]):
         if isinstance(node, ast.Return) and node not in allowed_returns:
             raise Unresolved('maximum_cost: an early return bypasses the priced execution path')
-        if isinstance(node, ast.Return) and node is not allowed_zero[0].body[0]:
+        if isinstance(node, ast.Return) and node not in (allowed_zero[0].body[0], ordinary_return):
             if not isinstance(node.value, ast.Name) or node.value.id != 'bound':
                 raise Unresolved('maximum_cost: priced branch returns something other than bound')
         if isinstance(node, ast.Name) and node.id == 'bound' and isinstance(node.ctx, (ast.Store, ast.Del)):

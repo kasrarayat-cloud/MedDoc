@@ -25,9 +25,9 @@ class AdditionalCostContracts(unittest.TestCase):
             check()
 
     def test_current_general_and_mapping_contracts_resolve(self):
-        self.assertEqual(scan.maximum_cost_terms(), (12000, ('profile', frozenset({6000, 8000, 16000}))))
+        self.assertEqual(scan.maximum_cost_terms(), (12000, ('profile', frozenset({6000, 8000, 16000, 20000}))))
         self.assertEqual({cap for _, cap in scan.provider_caps(scan.GENERATION)},
-                         {('profile', frozenset({6000, 8000, 16000}))})
+                         {('profile', frozenset({6000, 8000, 16000, 20000}))})
         self.assertEqual([cap for _, cap in scan.provider_caps(scan.REBUILD / 'core/mapping_jobs.py')],
                          [('mapping-profile', frozenset({20000}))])
 
@@ -128,7 +128,7 @@ class BatchCostContract(unittest.TestCase):
     check_mutation = AdditionalCostContracts.check_mutation
     def test_batch_compiler_send_and_complete_price_have_reviewed_identities(self):
         self.assertEqual([cap for _,cap in scan.provider_caps(scan.REBUILD/'core/batch_jobs.py')],
-                         [('profile',frozenset({6000,8000,16000}))])
+                         [('profile',frozenset({6000,8000,16000,20000}))])
 
     def test_batch_price_control_flow_and_request_mutants_refuse(self):
         def checked():scan.provider_caps(scan.REBUILD/'core/batch_jobs.py')
@@ -172,3 +172,56 @@ def Decimal(value=0):
             ('core/generation_batch.py',"    return bool(getattr(settings, 'V3_GENERATION_BATCHES', False))",'    return True'),
         ):
             with self.subTest(relative=relative,mutation=new):self.check_mutation(relative,old,new,checked)
+
+class OrdinaryCostContract(unittest.TestCase):
+    check_mutation = AdditionalCostContracts.check_mutation
+
+    def test_imported_compiler_and_single_and_batch_sends_share_the_reviewed_price(self):
+        expected = ('profile', frozenset({6000, 8000, 16000, 20000}))
+        self.assertEqual(scan.maximum_cost_terms(), (12000, expected))
+        for relative in ('core/v3_field_relations.py', 'core/batch_jobs.py'):
+            self.assertEqual([cap for _, cap in scan.provider_caps(scan.REBUILD / relative)], [expected])
+
+    def test_imported_module_changes_cannot_hide_under_the_batch_pin(self):
+        def checked(): scan.provider_caps(scan.REBUILD / 'core/batch_jobs.py')
+        cases = [
+            ('Decimal(len(json.dumps(compiled[\'wire\']).encode()) + 12000)',
+             'Decimal(len(json.dumps(compiled[\'wire\']).encode()))'),
+            ("Decimal(profile['max_output_tokens'])", 'Decimal(6000)'),
+            ('amount *= g.US_INFERENCE_MULTIPLIER', 'amount *= Decimal(0)'),
+            ("'catalogue': catalogue", "'catalogue': catalogue[:1]"),
+            ("'source_units': list(units)", "'source_units': list(units)[:1]"),
+            ("response = client.messages.create(**compiled['wire'])",
+             "compiled['wire']['max_tokens'] = 90000\n    response = client.messages.create(**compiled['wire'])"),
+            ("response = client.messages.create(**compiled['wire'])",
+             "escape(compiled)\n    response = client.messages.create(**compiled['wire'])"),
+            ('from decimal import Decimal, ROUND_CEILING', 'from other_decimal import Decimal, ROUND_CEILING'),
+            ('import json', 'import replacement_json as json'),
+            ('def compile_request(', '@unpriced\ndef compile_request('),
+        ]
+        for old, new in cases:
+            with self.subTest(mutation=new):
+                self.check_mutation('core/v3_field_relations.py', old, new, checked)
+
+    def test_single_dispatch_cannot_price_or_send_a_different_input(self):
+        cases = [
+            ('return ordinary.maximum_cost(notes,fields,config,context_labels,requirements or ())',
+             'return Decimal(0)'),
+            ('return ordinary.maximum_cost(notes,fields,config,context_labels,requirements or ())',
+             'return ordinary.maximum_cost(notes[:1],fields[:1],config,context_labels,requirements or ())'),
+            ('return ordinary.generate(notes,fields,config,context_labels=context_labels,requirements=requirements or ())',
+             'return ordinary.generate(notes,fields,another,context_labels=context_labels,requirements=requirements or ())'),
+            ("if config.get('ordinary_field_contract') and natural_v3(fields):", 'if False:'),
+        ]
+        def checked(): scan.provider_caps(scan.REBUILD / 'core/v3_field_relations.py')
+        for old, new in cases:
+            with self.subTest(mutation=new): self.check_mutation('core/generation.py', old, new, checked)
+
+    def test_ordinary_sdk_send_must_remain_in_its_reviewed_function(self):
+        def checked(): scan.provider_caps(scan.REBUILD / 'core/v3_field_relations.py')
+        for old, new in [
+            ("response = client.messages.create(**compiled['wire'])", 'response = client.messages.create(**replacement)'),
+            ("response = client.messages.create(**compiled['wire'])", "response = client.messages.create(**compiled['other'])"),
+            ('max_retries=0', 'max_retries=2'),
+        ]:
+            with self.subTest(mutation=new): self.check_mutation('core/v3_field_relations.py', old, new, checked)
