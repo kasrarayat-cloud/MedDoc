@@ -1,0 +1,94 @@
+test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) ...
+  test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) (notes='The patient is subject to Multi-Agency Public Protection Arrangements (MAPPA).') ... FAIL
+  test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) (notes='The patient is not subject to Multi-Agency Public Protection Arrangements (MAPPA).') ... FAIL
+  test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) (notes='The patient is responsive to physiotherapy.') ... FAIL
+  test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) (notes='The patient is not responsive to physiotherapy.') ... FAIL
+test_copular_allowance_cannot_invent_actor_certainty_or_a_complete_complement (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_copular_allowance_cannot_invent_actor_certainty_or_a_complete_complement) ... ok
+test_copular_source_still_requires_complete_context_and_original_contract (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_copular_source_still_requires_complete_context_and_original_contract) ... FAIL
+
+======================================================================
+FAIL: test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) (notes='The patient is subject to Multi-Agency Public Protection Arrangements (MAPPA).')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-copular/rebuild/core/tests/test_v3_field_relations.py", line 76, in test_complete_patient_copular_complements_retain_every_source_word
+    self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', notes))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient is subject to Mu[47 chars]A).')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported',
++  'The patient is subject to Multi-Agency Public Protection Arrangements '
++  '(MAPPA).')
+
+======================================================================
+FAIL: test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) (notes='The patient is not subject to Multi-Agency Public Protection Arrangements (MAPPA).')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-copular/rebuild/core/tests/test_v3_field_relations.py", line 76, in test_complete_patient_copular_complements_retain_every_source_word
+    self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', notes))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient is not subject t[51 chars]A).')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported',
++  'The patient is not subject to Multi-Agency Public Protection Arrangements '
++  '(MAPPA).')
+
+======================================================================
+FAIL: test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) (notes='The patient is responsive to physiotherapy.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-copular/rebuild/core/tests/test_v3_field_relations.py", line 76, in test_complete_patient_copular_complements_retain_every_source_word
+    self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', notes))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient is responsive to physiotherapy.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'The patient is responsive to physiotherapy.')
+
+======================================================================
+FAIL: test_complete_patient_copular_complements_retain_every_source_word (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_complete_patient_copular_complements_retain_every_source_word) (notes='The patient is not responsive to physiotherapy.')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-copular/rebuild/core/tests/test_v3_field_relations.py", line 76, in test_complete_patient_copular_complements_retain_every_source_word
+    self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', notes))
+AssertionError: Tuples differ: ('conflict', '') != ('supported', 'The patient is not responsive to physiotherapy.')
+
+First differing element 0:
+'conflict'
+'supported'
+
+- ('conflict', '')
++ ('supported', 'The patient is not responsive to physiotherapy.')
+
+======================================================================
+FAIL: test_copular_source_still_requires_complete_context_and_original_contract (core.tests.test_v3_field_relations.OrdinaryFieldRelations.test_copular_source_still_requires_complete_context_and_original_contract)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-patient-copular/rebuild/core/tests/test_v3_field_relations.py", line 111, in test_copular_source_still_requires_complete_context_and_original_contract
+    self.assertEqual(g.governed_decisions(first, fields, {'f': changed}), [fields[0]['label']])
+AssertionError: Lists differ: [] != ['Status under the arrangements']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'Status under the arrangements'
+
+- []
++ ['Status under the arrangements']
+
+----------------------------------------------------------------------
+Ran 3 tests in 1.692s
+
+FAILED (failures=5)
+Found 3 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).
