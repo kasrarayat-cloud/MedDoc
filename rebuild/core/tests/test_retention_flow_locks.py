@@ -193,3 +193,132 @@ class FailedUploadNeverStrandsItsRecording(LockFlowFixture, TransactionTestCase)
         job = Job.objects.get(encounter=draft, kind='transcription')
         self.assertTrue(private_path(job.input_path).is_file())
         self.assertEqual(self.orphaned_recordings(), [])
+
+
+# The global lock order (core.retention): the preservation lock before any Reservation or Wallet row lock.
+LOCK_HELD = ("SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid() AND granted "
+             "AND classid::bigint=%s AND objid::bigint=%s AND objsubid=1)")
+
+
+class MoneyAfterPreservation:
+    """A connection execute wrapper: every Reservation/Wallet row lock must find LOCK_KEY already held by its own
+    transaction. It counts what it checked, so a flow that never locks money cannot pass vacuously."""
+
+    def __init__(self):
+        self.checked, self.violations, self.inside = 0, [], False
+
+    def __call__(self, execute, sql, params, many, context):
+        if not self.inside and 'FOR UPDATE' in sql and ('FROM "core_wallet"' in sql or 'FROM "core_reservation"' in sql):
+            self.inside = True
+            try:
+                with context['connection'].cursor() as cursor:
+                    cursor.execute(LOCK_HELD, [retention.LOCK_KEY >> 32, retention.LOCK_KEY & 0xffffffff])
+                    held = cursor.fetchone()[0]
+            finally:
+                self.inside = False
+            self.checked += 1
+            if not held:
+                self.violations.append(sql[sql.index(' FROM '):][:40])
+        return execute(sql, params, many, context)
+
+
+from core import batch_jobs  # noqa: E402
+from core.tests.test_generation_batch import BatchFixture, SETTINGS as BATCH_SETTINGS  # noqa: E402
+
+
+@override_settings(**BATCH_SETTINGS)
+class BatchStopAgainstVoiceUpload(BatchFixture, TransactionTestCase):
+    """RF-1, the batch shapes the finding named from reading (batch_jobs.py:210-211, resolve_view).
+    Reproduce: the clinician cancels a queued complete-form batch (cancel_child -> stop()), paused inside release() after
+    its 'usage.release' audit; the same clinician uploads a 2 s recording to an empty draft; the cancellation resumes.
+    RED on bf8f7b78: stop() released the part's funds (wallet locked) before job.save() took the preservation lock, the
+    upload held that lock and waited for the wallet, and one of the two was aborted as a deadlock victim."""
+
+    def draft(self):
+        return Encounter.objects.create(department=self.department, patient=self.patient,
+                                        template_version=self.encounter.template_version, created_by=self.user,
+                                        notes='', service_date=self.encounter.service_date)
+
+    def orphaned_recordings(self):
+        return LockFlowFixture.orphaned_recordings(self)
+
+    def test_cancelling_a_queued_batch_and_the_same_payers_voice_upload_serialize(self):
+        batch = self.admit()
+        draft = self.draft()
+        doctor = Client(raise_request_exception=False)
+        doctor.force_login(self.user)
+        real = billing.audit
+        paused, resume = threading.Event(), threading.Event()
+
+        def audit(actor, action, *args, **kwargs):
+            row = real(actor, action, *args, **kwargs)
+            if action == 'usage.release' and not paused.is_set():
+                paused.set()
+                resume.wait(30)
+            return row
+        with patch.dict(os.environ, STANDARD_ENV), patch('core.billing.audit', side_effect=audit):
+            quote = doctor.get(f'/encounters/{draft.pk}/').context['usage_quote']
+            cancelling, cancelled = in_thread(lambda: batch_jobs.cancel_child(batch.parts.first().job, self.user))
+            try:
+                self.assertTrue(paused.wait(15), 'the cancellation never reached release()')
+                uploading, uploaded = in_thread(lambda: doctor.post(f'/encounters/{draft.pk}/voice/', {
+                    'audio': SimpleUploadedFile('rf1-batch.wav', wav_bytes(seconds=2, tag='rf1-batch'),
+                                                content_type='audio/wav'),
+                    'consent': 'on', 'usage_quote': quote}))
+                blocked = wait_for_blocked_backend()
+            finally:
+                resume.set()
+            for thread in (cancelling, uploading):
+                thread.join(60)
+                self.assertFalse(thread.is_alive())
+        self.assertTrue(blocked, 'the upload never waited for the cancellation')
+        self.assertNotIn('error', cancelled, cancelled.get('error'))
+        self.assertNotIn('error', uploaded, uploaded.get('error'))
+        self.assertEqual(uploaded['value'].status_code, 302)
+        batch.refresh_from_db()
+        self.assertEqual(batch.state, 'cancelled')
+        self.assertFalse(Reservation.objects.filter(job__generation_part__batch=batch, state='held').exists())
+        queued = Job.objects.get(encounter=draft, kind='transcription')
+        self.assertEqual(queued.state, 'queued')
+        self.assertEqual(self.orphaned_recordings(), [])
+
+    def test_every_money_lock_in_a_batch_stop_follows_the_preservation_lock(self):
+        """The order itself, without a second actor: a batch stop (cancel_child). RED on bf8f7b78: release() locks
+        the part's reservation and wallet rows before the transaction holds the preservation lock."""
+        batch = self.admit()
+        order = MoneyAfterPreservation()
+        with connection.execute_wrapper(order):
+            batch_jobs.cancel_child(batch.parts.first().job, self.user)
+        self.assertGreater(order.checked, 0)
+        self.assertEqual(order.violations, [], 'batch stop locked money before the preservation lock')
+        batch.refresh_from_db()
+        self.assertEqual(batch.state, 'cancelled')
+
+    def test_every_money_lock_in_a_batch_closeout_follows_the_preservation_lock(self):
+        """An administrator's closeout of an uncertain part (resolve_view: release, job.save, absorb, stop).
+        RED on bf8f7b78: release() locks money before job.save() takes the preservation lock."""
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.test import RequestFactory
+        batch = self.admit()
+        calls, call = self.fake(batch, fail_at=2)
+        with patch('anthropic.Anthropic') as provider:
+            provider.return_value.messages.create.side_effect = call
+            batch_jobs.run_one()
+            batch_jobs.run_one()
+        uncertain = batch.parts.get(ordinal=2).job
+        uncertain.refresh_from_db()
+        self.assertEqual(uncertain.state, 'reconciliation')
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        request = RequestFactory().post('/console/jobs/resolve/', {
+            'outcome': 'release_no_cost', 'evidence_note': 'Synthetic provider console evidence: request not charged'})
+        request.user = self.user
+        request.session = {}
+        request._messages = FallbackStorage(request)
+        order = MoneyAfterPreservation()
+        with connection.execute_wrapper(order):
+            self.assertEqual(batch_jobs.resolve_view(request, uncertain.pk).status_code, 302)
+        self.assertGreater(order.checked, 0)
+        self.assertEqual(order.violations, [], 'batch closeout locked money before the preservation lock')
+        self.assertFalse(Reservation.objects.filter(job__generation_part__batch=batch, state='held').exists())
+        self.assertEqual(len(calls), 2)
