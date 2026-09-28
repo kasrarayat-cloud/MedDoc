@@ -2133,7 +2133,8 @@ class Detector:
         if text.strip() or self.blank_spans(text, pieces):
             return False
         markers = {q("w:sdt"), FLDCHAR, q("w:instrText"), TXBX, q("w:drawing"), q("w:pict"),
-                   q("w:object"), q("w:pBdr"), q("w:framePr"), q("w:u"), q("w:br"), q("w:sectPr"), q("w:tabs")}
+                   q("w:object"), q("w:pBdr"), q("w:framePr"), q("w:u"), q("w:br"), q("w:sectPr"), q("w:tabs"),
+                   q("w:tab"), q("w:shd"), q("w:highlight"), q("w:numPr"), q("w:bdr"), q("w:strike"), q("w:dstrike")}
         if any(node.tag in markers for node in slot.el.iter()):
             return False
         if "word/styles.xml" in self.package.names:

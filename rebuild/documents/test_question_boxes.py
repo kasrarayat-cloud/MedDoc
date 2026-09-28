@@ -138,6 +138,35 @@ class QuestionBoxes(unittest.TestCase):
                 self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
                 self.assertEqual(len([f for f in result['fields'] if f['locator']['target']['type'] == 'cell']), 1)
 
+    def test_paired_spacing_keeps_shading_lists_and_run_answer_marks(self):
+        for marker in ('shading', 'inherited_shading', 'highlight', 'number', 'bullet',
+                       'run_border', 'strike', 'double_strike', 'leader_tab'):
+            with self.subTest(marker=marker):
+                doc = Document()
+                table = doc.add_table(rows=1, cols=2)
+                table.cell(0, 0).text = 'Past medical history:'
+                blank = table.cell(0, 0).add_paragraph()
+                if marker in ('shading', 'inherited_shading'):
+                    shade = OxmlElement('w:shd');shade.set(qn('w:fill'), 'D9D9D9')
+                    if marker == 'shading': blank._p.get_or_add_pPr().append(shade)
+                    else:
+                        style = doc.styles.add_style('Shaded Answer', WD_STYLE_TYPE.PARAGRAPH)
+                        style.element.get_or_add_pPr().append(shade);blank.style = style
+                elif marker in ('number', 'bullet'):
+                    blank.style = 'List Number' if marker == 'number' else 'List Bullet'
+                else:
+                    run = blank.add_run('        ')
+                    if marker == 'leader_tab': run.add_tab()
+                    else:
+                        tag = {'highlight': 'highlight', 'run_border': 'bdr',
+                               'strike': 'strike', 'double_strike': 'dstrike'}[marker]
+                        mark = OxmlElement('w:' + tag)
+                        mark.set(qn('w:val'), 'yellow' if marker == 'highlight' else 'single' if marker == 'run_border' else '1')
+                        run._r.get_or_add_rPr().append(mark)
+                result = w.inspect(data(doc))
+                self.assertEqual(len(result['fields']), 2)
+                self.assertTrue(any(f['locator']['target']['type'] == 'paragraph' for f in result['fields']))
+
     def test_paired_cell_spacing_does_not_claim_controls_or_textboxes(self):
         from .test_word_v3 import _sdt, ff_field
         doc = Document()
