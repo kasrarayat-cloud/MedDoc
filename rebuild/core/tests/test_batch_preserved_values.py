@@ -190,3 +190,68 @@ class PreservedConstraintValues(SimpleTestCase):
         # relationship is qualified, unknown must not be counted as empty.
         with self.assertRaisesMessage(ValidationError, 'unreadable'):
             b.check_answers(version, self.answers(version, '1', '2'))
+
+    def placeholder_fixture(self, kind, flag, *, missing_content=False, duplicate=False):
+        doc = Document(); doc.add_paragraph('Priorities must be unique.')
+        for index, value in enumerate(('1', '2')):
+            control = _sdt('dropdown' if kind == 'choice' else 'rich', options=['1', '2', '3'], placeholder=value)
+            pr = control.find(qn('w:sdtPr'))
+            for node in pr.findall(qn('w:showingPlcHdr')): pr.remove(node)
+            if kind == 'scalar':pr.append(OxmlElement('w:date'))
+            if index == 0:
+                marker = OxmlElement('w:showingPlcHdr')
+                if flag is not None:marker.set(qn('w:val'), flag)
+                pr.append(marker)
+                if duplicate:pr.append(OxmlElement('w:showingPlcHdr'))
+                if missing_content:control.remove(control.find(qn('w:sdtContent')))
+            doc.add_paragraph(f'Priority {index}: ')._p.append(control)
+        return self.fixture(doc)
+
+    def test_false_placeholder_flags_preserve_value_and_true_flags_remain_placeholders(self):
+        # OnOffType lexical values, independently listed from the XML contract.
+        for kind in ('scalar', 'choice'):
+            for flag in ('0', 'false', 'off'):
+                with self.subTest(kind=kind, flag=flag):
+                    _, version = self.placeholder_fixture(kind, flag)
+                    with self.assertRaisesMessage(ValidationError, 'priority'):
+                        b.check_answers(version, self.answers(version, '', '1'))
+                    b.check_answers(version, self.answers(version, '3', '1'))
+            for flag in (None, '1', 'true', 'on'):
+                with self.subTest(kind=kind, flag=flag):
+                    _, version = self.placeholder_fixture(kind, flag)
+                    b.check_answers(version, self.answers(version, '', '1'))
+
+    def test_malformed_placeholder_and_missing_content_are_unknown(self):
+        for kind in ('scalar', 'choice'):
+            for flag, missing, duplicate in [('bogus', False, False), ('', False, False),
+                                              ('0', False, True), ('0', True, False)]:
+                with self.subTest(kind=kind, flag=flag, missing=missing, duplicate=duplicate):
+                    _, version = self.placeholder_fixture(kind, flag, missing_content=missing, duplicate=duplicate)
+                    with self.assertRaisesMessage(ValidationError, 'unreadable'):
+                        b.check_answers(version, self.answers(version))
+
+    def test_malformed_legacy_boundaries_never_become_known_empty(self):
+        for mode in ('missing', 'duplicate', 'text_before', 'begin_text', 'separator_text', 'end_text'):
+            with self.subTest(mode=mode):
+                doc = Document(); doc.add_paragraph('Priorities must be unique.')
+                p = doc.add_paragraph('Priority A: '); legacy(p, '1')
+                separator = next(n for n in p._p.iter(qn('w:fldChar')) if n.get(qn('w:fldCharType')) == 'separate')
+                if mode == 'missing':p._p.remove(separator.getparent())
+                elif mode == 'duplicate':
+                    r = OxmlElement('w:r'); n = OxmlElement('w:fldChar'); n.set(qn('w:fldCharType'), 'separate')
+                    r.append(n); separator.getparent().addnext(r)
+                elif mode == 'text_before':
+                    r = OxmlElement('w:r'); t = OxmlElement('w:t'); t.text = '3'; r.append(t)
+                    separator.getparent().addprevious(r)
+                else:
+                    boundary = {'begin_text': 'begin', 'separator_text': 'separate', 'end_text': 'end'}[mode]
+                    marker = next(n for n in p._p.iter(qn('w:fldChar')) if n.get(qn('w:fldCharType')) == boundary)
+                    t = OxmlElement('w:t'); t.text = '3'; marker.getparent().append(t)
+                legacy(doc.add_paragraph('Priority B: '), '2')
+                _, version = self.fixture(doc)
+                with self.assertRaisesMessage(ValidationError, 'unreadable'):
+                    b.check_answers(version, self.answers(version, '', '2'))
+                # The unchanged writer cannot remove text in an unresolved
+                # result area by adding a separator. Explicit text still holds.
+                with self.assertRaisesMessage(ValidationError, 'unreadable'):
+                    b.check_answers(version, self.answers(version, '3', '2'))

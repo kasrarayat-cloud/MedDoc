@@ -3874,6 +3874,27 @@ def printed_ticked(index, field):
         return []                       # an annotation for the review page; never a reason to refuse the upload
 
 
+def constrained_placeholder(sdt):
+    """A present AND true w:showingPlcHdr is a placeholder; malformed is unknown.
+
+    ISO/IEC 29500 common boolean property, documented by Microsoft's
+    Wordprocessing.ShowingPlaceholder / OnOffType reference. Presence alone
+    must not erase a control whose explicit on/off value is false.
+    """
+    pr = sdt.find(q("w:sdtPr"))
+    flags = pr.findall(q("w:showingPlcHdr")) if pr is not None else []
+    if not flags:
+        return False
+    if len(flags) != 1:
+        return None
+    value = flags[0].get(q("w:val"))
+    if value is None or value in ("1", "true", "on"):
+        return True
+    if value in ("0", "false", "off"):
+        return False
+    return None
+
+
 def constrained_option_states(index, field):
     """Unlike an empty placeholder, an unrecognised displayed value is unknown."""
     target = field["locator"]["target"]
@@ -3882,6 +3903,17 @@ def constrained_option_states(index, field):
         slot = index.by_id.get("%s#%s" % (loc["part"], loc["slot"]))
         if slot is None:
             return [None] * len(printed_options(field))
+        if target["type"] == "sdt_choice":
+            printed = printed_options(field)
+            content = slot.el.find(q("w:sdtContent"))
+            placeholder = constrained_placeholder(slot.el)
+            if content is None or wraps_structure(content) or placeholder is None:
+                return [None] * len(printed)
+            shown = "" if placeholder else text_of(content).strip()
+            if not shown:
+                return [False] * len(printed)
+            matches = [i for i, word in enumerate(printed) if str(word).strip() == shown]
+            return [i == matches[0] for i in range(len(printed))] if len(matches) == 1 else [None] * len(printed)
         try:
             position = displayed_option(index, field)
             if position is None and (target["type"] == "ff_dropdown" or displayed_words(slot, target)):
@@ -3910,9 +3942,19 @@ def constrained_scalar_value(original, final, field, written):
         except V3Failure:
             return None
         between = _siblings_between(after.el, end)
+        if any(text_of(node).strip() for node in [after.el, end] + [
+                node for node in between if node.find(FLDCHAR) is not None]):
+            return None
         if any(node.tag != R and text_of(node).strip() or
                any(fc.get(q("w:fldCharType")) == "begin" for fc in node.iter(FLDCHAR)) or
                wraps_structure(node) and node.find(FLDCHAR) is None for node in between):
+            return None
+        separators = [i for i, node in enumerate(between) if any(
+            fc.get(q("w:fldCharType")) == "separate" for fc in node.iter(FLDCHAR))]
+        # No/duplicate separator is an unresolved result boundary, not an
+        # empty value. Visible XML text before the separator is ambiguous too,
+        # including text a writer could retain while adding a missing marker.
+        if len(separators) != 1 or any(text_of(node).strip() for node in between[:separators[0]]):
             return None
         value = "".join(text_of(run) for run in runs)
         # A nonempty default without a visible result is not evidence of an
@@ -3922,9 +3964,10 @@ def constrained_scalar_value(original, final, field, written):
             return None
     elif kind == "sdt_text":
         content = after.el.find(q("w:sdtContent"))
-        if content is None or wraps_structure(content):
+        placeholder = constrained_placeholder(after.el)
+        if content is None or wraps_structure(content) or placeholder is None:
             return None
-        value = "" if sdt_info(after.el)["placeholder"] else text_of(content)
+        value = "" if placeholder else text_of(content)
     elif kind in ("cell", "cell_replace", "paragraph"):
         anchors = [after]
         if kind == "paragraph":
