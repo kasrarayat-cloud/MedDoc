@@ -299,6 +299,145 @@ class OrdinaryFieldRelations(SimpleTestCase):
         with patch.object(literal.syntax, '_parser', return_value=Broken()):
             self.assertEqual(literal.opposed_ids(reading['units'], reading), {1})
 
+    def assert_useful(self, selected, other, label):
+        """Kept on generation and on review/save, in both source orders."""
+        fields = [field('f', label)]
+        for notes in (selected + ' ' + other, other + ' ' + selected):
+            with self.subTest(notes=notes):
+                answers = offered(notes, fields, {'f': [selected]})
+                self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', selected))
+                self.assert_stored_clear(notes, fields, answers)
+
+    MAPPA = 'Please confirm that this patient is subject to Multi-Agency Public Protection Arrangements (MAPPA)'
+    FULL = 'The patient is subject to Multi-Agency Public Protection Arrangements (MAPPA).'
+
+    def test_a_labelled_or_dashed_answer_is_never_part_of_the_topic(self):
+        # CL-1/F1: the answer word after a label colon or a spaced dash, and a label
+        # naming only the object, are an unread answer about the same predicate.
+        for other in ('Subject to MAPPA: no.', 'Subject to MAPPA: No.', 'Subject to the arrangements: No.',
+                      'Patient subject to MAPPA: no.', 'MAPPA subject: no.', 'Subject to MAPPA - no.',
+                      'Subject to MAPPA - No.', 'MAPPA: No.'):
+            self.assert_opposed(self.FULL, other, self.MAPPA)
+        self.assert_opposed('The patient is allergic to penicillin.', 'Allergic to penicillin: no.', 'Allergies')
+
+    def test_a_question_or_a_negative_inversion_is_never_agreement(self):
+        # CL-2: the pinned tagger reads the inverted predicate as a noun subject.
+        for other in ('Is the patient subject to MAPPA? No.', 'Is she subject to MAPPA? No.',
+                      'Is the patient currently subject to MAPPA? No.',
+                      'Is the patient subject to MAPPA? Not applicable.'):
+            self.assert_opposed(self.FULL, other, self.MAPPA)
+        self.assert_opposed('The patient is subject to the arrangements.',
+                            'Nor is the patient subject to the arrangements.')
+
+    def test_a_first_or_second_person_possessor_may_be_the_patient(self):
+        # CL-3: "our service user", "my client" name the clinician's own patient.
+        for other in ('Our service user is not subject to MAPPA.', 'Our client is not subject to MAPPA.',
+                      'My client is not subject to MAPPA.'):
+            self.assert_opposed(self.FULL, other, self.MAPPA)
+
+    def test_an_adjunct_quantifier_modifier_or_acronym_is_not_a_different_topic(self):
+        # CL-4: a prepositional phrase the other statement lacks is a qualifier, not a topic.
+        for other in ('The patient is not subject to MAPPA at present.', 'The patient is not subject to MAPPA at this time.',
+                      'The patient is not subject to MAPPA as of this week.',
+                      'The patient is not subject to MAPPA since her discharge.',
+                      'The patient is not subject to MAPPA in the community.',
+                      'The patient is not subject to MAPPA per the probation officer.',
+                      'The patient is not subject to MAPPA arrangements.',
+                      'The patient is not subject to any MAPPA arrangements.'):
+            self.assert_opposed(self.FULL, other, self.MAPPA)
+        # An acronym names its full name without any apposition in the note.
+        self.assert_opposed('The patient is subject to Multi-Agency Public Protection Arrangements.',
+                            'The patient is not subject to MAPPA.', self.MAPPA)
+        # A more specific positive entails the general one it opposes.
+        self.assert_opposed('The patient is not subject to MAPPA.', 'The patient is subject to MAPPA level 2.', self.MAPPA)
+
+    def test_a_universal_negative_opposes_any_positive_instance(self):
+        # CL-5, in both selection directions.
+        self.assert_opposed('The patient is allergic to penicillin.', 'The patient is not allergic to any medication.', 'Allergies')
+        self.assert_opposed('The patient is not allergic to any medication.', 'The patient is allergic to penicillin.', 'Allergies')
+        self.assert_opposed('The patient is allergic to penicillin.', 'The patient is not allergic to anything.', 'Allergies')
+
+    def test_a_past_statement_with_a_time_adjunct_or_an_elided_present_negation_is_not_another_time(self):
+        # CL-6: only a bare simple tense proves a different time.
+        for other in ('Today the patient was not subject to MAPPA.',
+                      "The patient was not subject to MAPPA at today's review.",
+                      'The patient was previously subject to MAPPA but is not now.'):
+            self.assert_opposed(self.FULL, other, self.MAPPA)
+
+    def test_a_negative_determiner_or_negative_adverbial_phrase_is_not_agreement(self):
+        # CL-7/F2: negation outside the neg dependency.
+        positive = 'The patient is subject to the arrangements.'
+        for other in ('The patient is subject to no arrangements.',
+                      'The patient is in no way subject to the arrangements.'):
+            self.assert_opposed(positive, other)
+        self.assert_opposed(self.FULL, 'The patient is subject to no MAPPA arrangements.', self.MAPPA)
+
+    def test_a_prefixed_form_of_the_same_predicate_word_is_a_direct_opposite(self):
+        # CL-8/F2: withheld on the structural relation only; nothing is adopted from it.
+        for selected, other, label in (
+                ('The patient is allergic to penicillin.', 'The patient is non-allergic to penicillin.', 'Allergies'),
+                ('The patient is allergic to penicillin.', 'The patient is nonallergic to penicillin.', 'Allergies'),
+                ('The patient is responsive to physiotherapy.', 'The patient is non-responsive to physiotherapy.',
+                 'Clinical observation'),
+                ('The patient is stable.', 'The patient is unstable.', 'Clinical observation'),
+                ('The patient is unstable.', 'The patient is stable.', 'Clinical observation'),
+                ('The patient is conscious.', 'The patient is unconscious.', 'Clinical observation'),
+                ('The patient is responsive.', 'The patient is unresponsive.', 'Clinical observation'),
+                ('The patient is a smoker.', 'The patient is a non-smoker.', 'Clinical observation'),
+                ('The patient is a smoker.', 'The patient is a nonsmoker.', 'Clinical observation'),
+                ('The patient is compliant with medication.', 'The patient is non-compliant with medication.',
+                 'Clinical observation')):
+            self.assert_opposed(selected, other, label)
+
+    def test_an_unavailable_parser_or_an_overlong_selected_statement_withholds(self):
+        from core import v3_literal_facts as literal
+        # CL-9: another reader still admits the statement, so the hold must not fail open.
+        with patch.object(literal.syntax, '_parser', return_value=None):
+            for selected, other in (('The patient is stable.', 'The patient is not stable.'),
+                                    ('The patient is not stable.', 'The patient is stable.')):
+                notes = selected + ' ' + other
+                with self.subTest(notes=notes):
+                    answer = offered(notes, [field('f', 'Clinical observation')], {'f': [selected]})['f']
+                    self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+        # CL-10: an over-long selected unit is withheld as an over-long other unit is.
+        for count in (80, 120):
+            selected = 'The patient is stable, ' + 'comfortable, ' * count + 'and calm.'
+            self.assertGreater(len(selected), literal.syntax.MAX_CHARACTERS)
+            answer = offered(selected + ' The patient is not stable.', [field('f', 'Clinical observation')],
+                             {'f': [selected]})['f']
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+
+    def test_attributive_adverbial_and_different_site_uses_keep_ordinary_answers_useful(self):
+        # FH-1: an adjective modifying another noun is no claim about the patient.
+        for selected, other in (('The patient is not suicidal.', 'She denies suicidal ideation.'),
+                                ('The patient is not suicidal.', 'No suicidal ideation was reported.'),
+                                ('The patient is not suicidal.', 'She has no suicidal thoughts.'),
+                                ('The patient is not psychotic.', 'No psychotic symptoms were elicited.'),
+                                ('The patient is not depressed.', 'Depressed mood was not observed.'),
+                                ('The patient is not homeless.', 'The homeless outreach team closed his case.'),
+                                ('The patient is not febrile.', 'A febrile illness last month was treated by the GP.'),
+                                ('The patient is not violent.', 'He has a history of violent offending.'),
+                                ('The patient is not diabetic.', 'Diabetic eye screening letters were sent in error.')):
+            self.assert_useful(selected, other, 'Risk assessment')
+        self.assert_useful('The patient is not subject to MAPPA.', 'Patients subject to MAPPA are reviewed monthly.', self.MAPPA)
+        # FH-2: an adverb of another verb with the same polarity, or a noun modifier, is no opposite.
+        for other in ('Blood glucose is well controlled.', 'The wound is well healed.', 'She is eating and drinking well.',
+                      'She tolerated the procedure well.', 'The patient is well known to the service.',
+                      'Her pain is well managed.', 'The patient is eating and drinking well.'):
+            self.assert_useful('The patient is well.', other, 'Clinical observation')
+        self.assert_useful('The patient is a smoker.', 'Smoker status was reviewed.', 'Smoking status')
+        # FH-3: the same preposition with a different object is a different site,
+        # whether the parser attaches it to the adjective or to the copula.
+        for selected, other in (('The patient is tender over the lateral epicondyle.',
+                                 'She is not tender over the medial epicondyle.'),
+                                ('She is not tender over the medial epicondyle.',
+                                 'The patient is tender over the lateral epicondyle.'),
+                                ('The patient is tender over the lateral joint line.',
+                                 'She is not tender over the medial joint line.'),
+                                ('The patient is tender over the anterior talofibular ligament.',
+                                 'She is not tender over the deltoid ligament.')):
+            self.assert_useful(selected, other, 'Examination findings')
+
     def test_identical_contexts_and_ambiguous_labelled_answers_stay_held(self):
         notes = 'The patient reports intermittent buzzing.'
         fields = repeated(); fields[1]['context'] = fields[0]['context']
