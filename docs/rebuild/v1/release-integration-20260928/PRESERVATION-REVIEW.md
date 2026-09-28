@@ -76,3 +76,33 @@ one separate positive-control failure: a stacked question plus guidance answer
 also produced a phantom colon answer in the question. Its test remains failing,
 not skipped or expected, pending the separately reviewed mapped-label repair.
 No full green candidate claim is made at this intermediate commit.
+
+
+## Combined Word preservation, 05:43 UTC
+
+The mapped-label positive control is closed by D31 commits1f68f877/24c6e2a6,
+including root-reproduced inherited-background counterexamples. Native legacy
+limits/protected help controls were integrated as85440337; root12 independent
+cases matched. The conflict was resolved as a union of static-reference,
+signing/question-box and source-derived legacy protection. D10 unchanged-render
+containment and complete native stroke bounds were integrated ascb26a07f/45e8751e.
+Root replayed the five retained PDFs: both demonstrated wrong outputs refuse,
+and thin black rectangle/mark controls retain correct ownership. No whole-D10
+success follows; its126 fields still fall short of the independent198-area map.
+
+The combined258-method Word run retained one failure: hyperlink-only contact
+cells were incorrectly admitted as guidance by the new linked-guidance rule.
+The rule now requires ordinary unlinked guidance text as well as hint formatting;
+link text or punctuation alone supplies no answer area. All37 affected hyperlink/
+guidance methods pass after this repair. The other221 methods are unchanged
+source evidence pending final candidate CI, not a new258-pass claim.
+D31 now covers all51 independently recorded slots, with exactly10 additional
+visible, write-protected native guidance controls. Slot counts do not establish
+clinical/control/appearance qualification.
+
+The root D31 probe accidentally overwrote three generated synthetic fixture ZIPs
+when replaying its closure. Their first script, parameters, results and hashes
+remain, but the first generated ZIP bytes do not. No corpus original or map was
+overwritten. The exact correction is retained in shared runtime
+word-ownership-root-refutation/fixture-preservation-correction.json; subsequent
+closure fixtures are separately retained. This limitation is part of provenance.

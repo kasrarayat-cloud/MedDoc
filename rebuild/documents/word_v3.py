@@ -2818,6 +2818,12 @@ class Detector:
                 c.el.find(".//" + FLDCHAR) is not None \
                 or BOX in self.cell_text(c):
             return False
+        # Hyperlink colour alone denotes a fixed reference, not an answer area.
+        # A linked guidance cell must also carry ordinary unlinked guidance.
+        if not any(any(ch.isalnum() for ch in (r.findtext(T) or "")) and
+                   not any(parent.tag == q("w:hyperlink") for parent in r.iterancestors())
+                   for r in runs):
+            return False
         return all(is_hint_run(r) for r in runs)
 
     def cell_is_plain(self, c) -> bool:

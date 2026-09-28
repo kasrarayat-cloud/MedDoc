@@ -73,10 +73,15 @@ class HyperlinkDestinations(unittest.TestCase):
                 self.assertTrue(any('hyperlink' in message.lower() for message in info['notes']))
 
     def test_link_only_value_cell_is_not_replacement_guidance(self):
-        d = Document(); table = d.add_table(rows=1, cols=2)
-        table.cell(0, 0).text = 'Send the completed form to'
-        link(table.cell(0, 1).paragraphs[0], 'forms@example.invalid')
-        self.assertEqual(w.inspect(data(d))['fields'], [])
+        for suffix in ('', ' . '):
+            with self.subTest(suffix=suffix):
+                d = Document(); table = d.add_table(rows=1, cols=2)
+                table.cell(0, 0).text = 'Send the completed form to'
+                paragraph = table.cell(0, 1).paragraphs[0]
+                link(paragraph, 'forms@example.invalid')
+                from docx.shared import RGBColor
+                paragraph.add_run(suffix).font.color.rgb = RGBColor.from_string('0563C1')
+                self.assertEqual(w.inspect(data(d))['fields'], [])
 
     def test_old_whole_cell_mapping_cannot_remove_later_link(self):
         d = Document(); cell = d.add_table(rows=1, cols=1).cell(0, 0)
