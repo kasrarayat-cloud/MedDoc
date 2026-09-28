@@ -886,3 +886,81 @@ class PayerChangeAgainstClinicalWritesAndSettlement(LockFlowFixture, Transaction
         self.assertEqual(Usage.objects.get(job=job).pk, usage.pk)
         # Settled before the change committed: the job keeps the payer reserve() recorded (the user).
         self.assertEqual(Job.objects.get(pk=job.pk).payer, f'user:{self.user.pk}')
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_synthetic_adapter', **LOCKED)
+class OrganizationTopUpAgainstRequestsInItsDepartment(LockFlowFixture, TransactionTestCase):
+    """RF-R1's class, found while repairing it (the same rule: a row held FOR UPDATE while waiting for a money row).
+    Reproduce: D bills its organization. A clinician's 2 s upload in D is paused inside reserve() after its
+    'usage.reserve' audit (the organization's paid wallet W locked); the organization's owner, a member of D, starts a
+    one-time organization top-up (/billing/checkout/, payer organization:<O>); the upload resumes.
+    RED on 8cc0b8fd: checkout's owner-membership check, a bare select_for_update() over a join, locked the owner's
+    account and D FOR UPDATE; its Payment row's commit-time foreign-key check waited for W; the upload's commit waited
+    for FOR KEY SHARE on D: the top-up is the deadlock victim (500, no payment). No Stripe request is made (patched)."""
+
+    def setUp(self):
+        super().setUp()
+        from core.models import User
+        self.owner = User.objects.create_user(username='rfr1-owner', email='rfr1-owner@synthetic.invalid',
+                                              verified_at=timezone.now())
+        Membership.objects.create(user=self.owner, department=self.department, role='owner')
+        billing.welcome_credit(self.owner)
+        type(self.department).objects.filter(pk=self.department.pk).update(organization_pays=True)
+        self.wallet, _ = Wallet.objects.get_or_create(organization=self.organization, kind='paid')
+
+    def top_up(self):
+        from types import SimpleNamespace
+        from django.core import signing
+        client = Client(raise_request_exception=False)
+        client.force_login(self.owner)
+        data = {'amount': '10.00', 'consent': 'on', 'payer': f'organization:{self.organization.pk}',
+                'checkout_token': signing.dumps({'user': str(self.owner.pk), 'nonce': 'rfr1-topup'}, salt='checkout-authorization')}
+        session = SimpleNamespace(id='cs_test_rfr1_topup', url='https://checkout.stripe.com/test/synthetic-rfr1')
+        return client, data, session
+
+    def assert_topped_up(self, response):
+        self.assertEqual(response.status_code, 302, getattr(response, 'exc_info', None))
+        self.assertEqual(response['Location'], 'https://checkout.stripe.com/test/synthetic-rfr1')
+        from core.models import Payment
+        payment = Payment.objects.get(user=self.owner)
+        self.assertEqual((payment.wallet_id, payment.status, payment.amount_cents), (self.wallet.pk, 'pending', 1000))
+
+    def test_positive_control_the_top_up_alone_starts_checkout(self):
+        client, data, session = self.top_up()
+        with patch('stripe.checkout.Session.create', return_value=session):
+            self.assert_topped_up(client.post('/billing/checkout/', data))
+
+    def test_a_top_up_and_an_upload_holding_the_organization_wallet_serialize(self):
+        draft = self.draft()
+        doctor = self.doctor()
+        client, data, session = self.top_up()
+        real = billing.audit
+        paused, resume = threading.Event(), threading.Event()
+
+        def audit(actor, action, *args, **kwargs):
+            row = real(actor, action, *args, **kwargs)
+            if action == 'usage.reserve' and not paused.is_set():
+                paused.set()
+                resume.wait(30)
+            return row
+        with patch.dict(os.environ, STANDARD_ENV), patch('core.billing.audit', side_effect=audit), \
+                patch('stripe.checkout.Session.create', return_value=session):
+            quote = doctor.get(f'/encounters/{draft.pk}/').context['usage_quote']
+            uploading, uploaded = in_thread(lambda: doctor.post(f'/encounters/{draft.pk}/voice/', {
+                'audio': self.recording('rfr1-topup'), 'consent': 'on', 'usage_quote': quote}))
+            try:
+                self.assertTrue(paused.wait(15), 'the upload never reached reserve()')
+                paying, paid = in_thread(lambda: client.post('/billing/checkout/', data))
+                blocked = wait_for_blocked_backend()
+            finally:
+                resume.set()
+            self.finish(uploading, paying)
+        self.assertTrue(blocked, 'the top-up never waited for the upload')
+        self.assertNotIn('error', paid, paid.get('error'))
+        self.assert_topped_up(paid['value'])
+        self.assertNotIn('error', uploaded, uploaded.get('error'))
+        self.assertEqual(uploaded['value'].status_code, 302)
+        queued = Job.objects.get(encounter=draft, kind='transcription')
+        self.assertEqual((queued.state, queued.payer), ('queued', f'organization:{self.organization.pk}'))
+        self.assertTrue(Reservation.objects.filter(job=queued, state='held').exists())
+        self.assertEqual(self.orphaned_recordings(), [])
