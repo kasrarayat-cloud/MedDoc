@@ -430,13 +430,53 @@ class OrdinaryFieldRelations(SimpleTestCase):
         # whether the parser attaches it to the adjective or to the copula.
         for selected, other in (('The patient is tender over the lateral epicondyle.',
                                  'She is not tender over the medial epicondyle.'),
-                                ('She is not tender over the medial epicondyle.',
-                                 'The patient is tender over the lateral epicondyle.'),
+                                ('The patient is not tender over the medial epicondyle.',
+                                 'She is tender over the lateral epicondyle.'),
                                 ('The patient is tender over the lateral joint line.',
                                  'She is not tender over the medial joint line.'),
                                 ('The patient is tender over the anterior talofibular ligament.',
                                  'She is not tender over the deltoid ligament.')):
             self.assert_useful(selected, other, 'Examination findings')
+
+    def test_further_spellings_of_the_same_opposites_found_against_this_repair(self):
+        # Answers after an unspaced dash, a semicolon or a comma, or in the next unit;
+        # a question naming the object; a singular/plural object; a neither/nor subject;
+        # and a predicate the tagger reads as a passive participle ("is oriented").
+        for other in ('Subject to MAPPA—no.', 'Subject to MAPPA; no.', 'Subject to MAPPA, no.',
+                      'Subject to MAPPA. No.', 'MAPPA. No.', 'MAPPA? No.', 'Is the patient on MAPPA? No.',
+                      'The patient is not subject to MAPPA arrangement.',
+                      # a telegraphic question, and the predicate read as a noun subject
+                      # that carries its own complement
+                      'Patient subject to MAPPA?', 'Patient subject to MAPPA review was declined.'):
+            self.assert_opposed(self.FULL, other, self.MAPPA)
+        self.assert_opposed('The patient is allergic to penicillin.', 'The patient is not allergic to penicillins.', 'Allergies')
+        self.assert_opposed('The patient is a smoker.', 'Neither the patient nor her husband are smokers.', 'Smoking status')
+        for selected, other in (('The patient is oriented.', 'The patient is not oriented.'),
+                                ('The patient is oriented.', 'The patient is disoriented.'),
+                                ('The patient is not oriented.', 'The patient is oriented to person.')):
+            self.assert_opposed(selected, other, 'Mental state')
+        self.assert_opposed('The patient is registered with a GP.', 'The patient is not registered with a GP.', 'Registration')
+        # A negative inversion that is not a question; the full name opposing a selected
+        # acronym; and an answer the parser reads as the object ("MAPPA - no") against a
+        # more specific selected statement.
+        self.assert_opposed('The patient is subject to the arrangements.', 'Nor is she subject to the arrangements.')
+        self.assert_opposed('The patient is subject to MAPPA.',
+                            'The patient is not subject to Multi-Agency Public Protection Arrangements.', self.MAPPA)
+        for other in ('Subject to MAPPA - no.', 'Patient subject to MAPPA: no.'):
+            self.assert_opposed('The patient is subject to MAPPA level 2.', other, self.MAPPA)
+        # Positive controls: a label or a negative that adds its own words, a bare past,
+        # and a different object stay useful.
+        for other in ('MAPPA coordinator: Jane Smith.', 'MAPPA level: 2.', 'The patient is not subject to MAPPA level 3.',
+                      'Her partner is not subject to MAPPA.', 'The patient was not subject to MAPPA.'):
+            self.assert_useful(self.FULL, other, self.MAPPA)
+        self.assert_useful('The patient is not subject to Multi-Agency Public Protection Arrangements (MAPPA).',
+                           'The patient was subject to MAPPA.', self.MAPPA)
+        self.assert_useful('The patient is oriented.', 'The patient was not oriented.', 'Mental state')
+        self.assert_useful('The patient is registered with a GP.', 'The patient is not registered with a dentist.', 'Registration')
+        self.assert_useful('The patient is allergic to penicillin.', 'The patient is not allergic to latex.', 'Allergies')
+        # A qualifier both state is compared, never dropped: another side is another site.
+        self.assert_useful('The patient is tender over the medial aspect of the left knee.',
+                           'She is not tender over the medial aspect of the right knee.', 'Examination findings')
 
     def test_identical_contexts_and_ambiguous_labelled_answers_stay_held(self):
         notes = 'The patient reports intermittent buzzing.'
