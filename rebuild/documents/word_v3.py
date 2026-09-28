@@ -944,9 +944,13 @@ class Detector:
         texts = [c for c in cells if self.cell_text(c) and not is_blank_text(self.cell_text(c))]
         kind = "label"
         cells = sorted(cells, key=lambda c: c.info["col"])
-        # A native checkbox (BOX in the cell's objects, though its printed text omits it) is an answer too.
+        # A native checkbox (BOX in the cell's objects, though its printed text omits it) is an answer too, and
+        # so is a value cell (a drawn blank and no printed words: '▯▯▯') or an answer gap inside a printed line
+        # ('Number of sessions:      Average duration:   minutes'): such a row is never a column header
+        # (refutation F5, F8). A header that prints a blank beside its words ('Participant #____') still is one.
         if any(self.is_empty_cell(c) or BOX in self.cell_text(c) or "\x00" in self.cell_objects(c)
-               or BOX in self.cell_objects(c) or CHECKED in self.cell_objects(c) for c in cells):
+               or BOX in self.cell_objects(c) or CHECKED in self.cell_objects(c) or self.value_cell(c)
+               or any(self.inline_answer_gap(x) for x in c.children if x.kind == "p") for c in cells):
             # a data row starts with its label (or an answer); a row that starts empty and carries text only in
             # cells spanning the answer columns is a sub-header ('| | | Yes/No/NA | |')
             first = cells[0] if cells else None
@@ -1051,6 +1055,20 @@ class Detector:
                                   for x in c.children if x.kind == "p" for printed, pieces in [self.ptext(x.el)]
                                   for start, end, kind in self.blank_spans(printed, pieces))
         return self._grid[key]
+
+    def value_cell(self, c) -> bool:
+        """The cell prints a drawn answer blank and no printed words outside its blanks ('▯▯▯', '▯▯▯/▯▯▯')."""
+        if not self.prints_answer_blank(c):
+            return False
+        for x in c.children:
+            if x.kind != "p":
+                continue
+            printed, pieces = self.ptext(x.el)
+            spans = self.blank_spans(printed, pieces)
+            outside = "".join(ch for i, ch in enumerate(printed) if not any(a <= i < b for a, b, _ in spans))
+            if re.search(r"[^\W\d_]", outside):
+                return False
+        return True
 
     def row_identity(self, tbl_slot, row, col, *, complete=False) -> str:
         """The leftmost label of the row (the item the row is about)."""
@@ -1593,18 +1611,60 @@ class Detector:
                         issue = "The column header contains an answer area."
         return headers, issue
 
+    def answer_cell(self, c) -> bool:
+        """The cell holds an answer place of its own: a box or other control, or a drawn answer blank."""
+        objects = self.cell_objects(c)
+        return BOX in objects or CHECKED in objects or "\x00" in objects or any(
+            kind != "blank" or "_" in printed[start:end]
+            for x in c.children if x.kind == "p" for printed, pieces in [self.ptext(x.el)]
+            for start, end, kind in self.blank_spans(printed, pieces))
+
     def printed_row_label(self, cell):
-        """The row's question printed in its own label cell to the left of `cell`, or the issue when a cell to
-        the left prints text that is not a usable label. A cell to the right (comments, fixed details) never is."""
+        """(question, issue, group) for the row of `cell`: the row's question printed in its own plain label cell
+        to the left; or the issue when a cell to the left prints something that is not one; and the text of any
+        vertically merged cell to the left, which spans several rows, so it is context and no one row's question.
+        A cell that holds its own answer (a box, a control, a drawn blank) is another question: never this row's.
+        A cell to the right (comments, fixed details) never names the row (refutation F2)."""
         table, row, col = cell.parent, cell.info["row"], cell.info["col"]
-        label = self.row_label(table, row, col)
+        rows = self.grid(table)
+        groups, plain = [], []
+        for c in sorted((c for c in rows.get(row, []) if c.info["col"] < col), key=lambda c: c.info["col"]):
+            if c.info["vmerge"]:
+                head = c
+                if c.info["vmerge"] == "continue":
+                    head = next((x for r in sorted((r for r in rows if r < row), reverse=True) for x in rows[r]
+                                 if x.info["col"] == c.info["col"] and x.info["vmerge"] != "continue"), None)
+                if head is None or self.answer_cell(head):
+                    return "", "A merged cell to the left of the source is not a printed group label.", ""
+                if not is_blank_text(self.cell_text(head)):
+                    groups.append(clean_label(self.cell_text(head)))
+                continue
+            if self.answer_cell(c):
+                return "", "A cell to the left of the source holds its own answer; it is not this row's question.", ""
+            if not is_blank_text(self.cell_text(c)):
+                plain.append(c)
+        group = " > ".join(g for g in groups if g)
+        label = ""
+        for c in plain:
+            if self.is_label_cell(c):
+                label = clean_label(self.cell_text(c))
         if label and re.search(r"[^\W\d_]", label):
-            return label, ""
-        printed = any(c.info["col"] < col and c.info["vmerge"] != "continue" and not is_blank_text(self.cell_text(c))
-                      for c in self.grid(table).get(row, []))
-        if label or printed:
-            return "", "A cell to the left of the source prints text that is not a usable row label."
-        return "", ""
+            return label, "", group
+        if plain:
+            return "", "A cell to the left of the source prints text that is not a usable row label.", group
+        return "", "", group
+
+    HEADER_NUMBER = re.compile(r"(?<![\w.])[(\[]?(\d{1,3})[)\]]?(?![\w.])")
+
+    def legend_conflict(self, options, row):
+        """A printed header whose options also print numbers ('2 = Abnormal') is a code legend. It agrees with a
+        row only when each option prints exactly the code printed before the box under it; otherwise which box
+        means which option is not certain (refutation F4). A header that prints no number never conflicts."""
+        printed = [self.HEADER_NUMBER.findall(option) for option in options]
+        if not any(printed):
+            return False
+        codes = re.findall(r"(\d{1,3})\s*[☐☒]", self.ptext(row.el)[0])
+        return len(codes) != len(options) or any(found != [code] for found, code in zip(printed, codes))
 
     def coded_kind(self, label, options, context):
         """A coded response row records one code per row. Only a literal instruction widens it; a plural label
@@ -1651,12 +1711,12 @@ class Detector:
                     complete = False
                     problem = "A source title, header or response has hidden or unresolved visibility."
                 headers, header_issue = self.marked_column_headers(cell)
-                row_question, row_issue = self.printed_row_label(cell)
+                row_question, row_issue, group = self.printed_row_label(cell)
                 issue = header_issue or row_issue or issue
-                context = " > ".join(x for x in (context, *headers, row_question, title) if x)
+                context = " > ".join(x for x in (context, *headers, group, row_question, title) if x)
                 if issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
                     complete = False
-                    problem = "The complete governing context is unresolved, oversized or protected."
+                    problem = row_issue or "The complete governing context is unresolved, oversized or protected."
                 for header, row in zip(paragraphs[1::2], paragraphs[2::2]):
                     item = coded(row)
                     printed = self.ptext(header.el)[0].rstrip(" \t").split("\t")
@@ -1680,6 +1740,10 @@ class Detector:
                         problem = "Literal headers, complete row labels or effective tab coordinates do not agree."
                         break
                     label = item[0] or unlabelled
+                    if self.legend_conflict(options, row):
+                        complete = False
+                        problem = "The printed header prints numbers that are not the row's response codes."
+                        break
                     if self.question_box_signing(label) or any(self.question_box_signing(o) for o in options):
                         complete = False;problem = "The printed row or options contain signing/consent instructions.";break
                     refs = [unit[0] for unit in self.box_units(row)]
@@ -1731,8 +1795,11 @@ class Detector:
             codes.append(match.group(1))
         return len(set(codes)) == len(codes)
 
-    CODE_BEFORE = re.compile(r"(?:^|\s)[(\[]?\d{1,3}[)\].]?\s*$")
-    CODE_AFTER = re.compile(r"^\s*[(\[]?\d{1,3}[)\].]?(?:\s|$)")
+    # A response code as forms print it: '1', '(1)', '1.', '#1', '1a', '1=', '1:', '1 -', 'a)', 'a', 'I', 'iv'.
+    CODE_TOKEN = r"(?:#\s?)?[(\[]?(?:\d{1,3}[a-z]?|[a-z]|[ivx]{1,4})[)\].:=]?(?:\s?[-\u2013=:])?"
+    CODE_BEFORE = re.compile(r"(?:^|\s)" + CODE_TOKEN + r"\s*$", re.I)
+    CODE_AFTER = re.compile(r"^\s*" + CODE_TOKEN + r"(?:\s|$)", re.I)
+    CODE_BARE = re.compile(r"\s*" + CODE_TOKEN + r"\s*", re.I)
 
     def response_code_row(self, slot):
         """A row whose boxes are printed after digit codes ('1 ☐ 2 ☐', '(1) ☐', 'Shape ☐ 2 ☐'), in any shape.
@@ -1749,7 +1816,7 @@ class Detector:
         # A code printed before every box; or a bare code between two boxes (the previous box's option or the
         # next box's code) unless the whole row reads box-then-number: nothing coded before the first box
         # and a number after the last one.
-        bare = any(re.fullmatch(r"\s*[(\[]?\d{1,3}[)\].]?\s*", segment) for segment in segments[1:])
+        bare = any(self.CODE_BARE.fullmatch(segment) for segment in segments[1:])
         return all(before) or (bare and (before[0] or not trailing))
 
     def coded_column_parts(self, slot):
@@ -1820,10 +1887,10 @@ class Detector:
                 return [], "A source paragraph has hidden, broken, embedded or unresolved content."
         context, issue = self.question_box_context(cell.parent, require_visible=True)
         headers, header_issue = self.marked_column_headers(cell)
-        row_question, row_issue = self.printed_row_label(cell)
+        row_question, row_issue, group = self.printed_row_label(cell)
         if row_issue:
             return [], row_issue
-        context = " > ".join(x for x in (context, *headers, row_question,
+        context = " > ".join(x for x in (context, *headers, group, row_question,
                              " | ".join(texts[p.id].strip() for p in children if texts[p.id].strip())) if x)
         if issue or header_issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
             return [], "The full source context is oversized, protected or unresolved."
@@ -1917,6 +1984,8 @@ class Detector:
                 refs = [unit[0] for unit in self.box_units(row)]
                 if len(refs) != len(info["options"]) or len(infos[row.id]["starts"]) != len(info["options"]) + 1:
                     return [], "A row's answer boxes do not match its printed column header."
+                if self.legend_conflict(info["options"], row):
+                    return [], "The printed header prints numbers that are not the row's response codes."
                 if (self.region_hidden(box_region(row.el)) or not self.readable_box_states(row)
                         or any(hyperlink_control(node) for node in checkbox_nodes(row.el))
                         or any(hyperlink_run(piece.run) for piece, _, _ in glyph_boxes(row.el))):
@@ -2197,6 +2266,15 @@ class Detector:
             options = [option_text(re.split(r"\t{2,}| {4,}", o)[0]) if re.search(r"\S", re.split(r"\t{2,}| {4,}", o)[0]) else option_text(o)
                        for _, o, _ in units]
             question = clean_label(units[0][2])
+            if len(units) > 1 and question and all(options[:-1]) and not options[-1]:
+                # ⚠️ WORDS PRINTED BEFORE THEIR BOXES ('Smoker: Yes ☐ No ☐', 'Smoker ☐ Diabetic ☐'): read as the text
+                # after each box, every box took the next box's word, and 'No' ticked the Yes box (refutation F3).
+                self.notes.append("Boxes at %s have their words printed before each box and nothing after the last one, "
+                                  "so which printed word names which box was left for manual mapping. Printed source: %s"
+                                  % (pslot.id, " | ".join(self.ptext(p.el)[0] for p in g["paras"])))
+                for p in g["paras"]:
+                    self.claimed.add(id(p.el))
+                continue
             host = pslot
             used_para = None
             row_question = False
@@ -2846,16 +2924,24 @@ class Detector:
                         continue
                     self.add(Area(self.kind_for(name), clean_label(name), c, target, context=self.context_for(c)))
 
-    INSTRUCTED = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)\b",
-                            re.I)
+    # An imperative to write, never a printed 'Note: ...' or 'Detail: ...' label; and a request for what to write
+    # ('Note if ... present', 'Describe any findings') or where to write it ('describe here', 'explain below').
+    INSTRUCTED = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)\b"
+                            r"(?!\s*:)", re.I)
+    INSTRUCTED_REQUEST = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)"
+                                    r"\s+(?:if|whether|any|all)\b", re.I)
+    INSTRUCTED_PLACE = re.compile(r"\b(?:here|below|in this (?:box|space|cell|column|section))\b", re.I)
 
     def instructed_answer_cell(self, table, row, cell):
         """A plain cell of a data row whose printed text asks for the answer to be written in it ('If palpable,
-        describe here', 'Note if ... present.'), under a printed column header and beside the row's own label.
-        Its answer is appended below the instruction; the instruction never names another row's cell."""
+        describe here', 'Describe any findings below'), under a printed column header and beside the row's own
+        label; or 'Note if ... present.'. Its answer is appended below the instruction; the instruction never names
+        another row's cell. Printed content ('Note: INR must be checked', 'Detail: bleeding, infection', 'Explain
+        the procedure to the patient') is not a request to write there (refutation F6)."""
         text = self.cell_text(cell)
-        if len(text) > 200 or not self.INSTRUCTED.match(text) or not self.cell_is_plain(cell) \
-                or self.row_kind(table, row) != "data":
+        if len(text) > 200 or not self.INSTRUCTED.match(text) \
+                or not (self.INSTRUCTED_PLACE.search(text) or self.INSTRUCTED_REQUEST.match(text)) \
+                or not self.cell_is_plain(cell) or self.row_kind(table, row) != "data":
             return False
         for paragraph in (x for x in cell.children if x.kind == "p"):
             printed, pieces = self.ptext(paragraph.el)
@@ -3537,6 +3623,23 @@ class Detector:
                 self.claimed.add(id(p))
 
     LABEL_COLON = re.compile(r"([^\t\x00:;?!]{1,160}?)\s*:(?=[\s\x00]|$)")
+    ANSWER_GAP = re.compile(r"[ \t\u00a0\u2002\u2003]*")
+    ANSWER_UNIT = re.compile(r"\(?\s*(?:mm|dd|yy|hh|units?|kg|cm|lbs?|in|minutes?|hours?|days?|years?|%)\b", re.I)
+
+    def inline_answer_gap(self, slot) -> bool:
+        """'Label:' followed by a printed gap (a tab or three or more spaces) and then more of an answer line:
+        another 'Label:' or a unit. The answer is written inside the printed line (segment_paragraph's reading)."""
+        text = self.ptext(slot.el)[0]
+        for m in self.LABEL_COLON.finditer(text):
+            label_text = m.group(1)
+            if len(label_text.split()) > MAX_LABEL_WORDS or not re.search(r"[A-Za-z]", label_text):
+                continue
+            rest = text[m.end():]
+            gap = self.ANSWER_GAP.match(rest).group(0)
+            after = rest[len(gap):]
+            if after and ("\t" in gap or len(gap) >= 3) and (self.LABEL_COLON.match(after) or self.ANSWER_UNIT.match(after)):
+                return True
+        return False
 
     def fixed_link_introduction(self, slot):
         """A printed instruction introducing a fixed link in the next paragraph."""
@@ -3568,7 +3671,7 @@ class Detector:
             if any(s <= m.start() < e or s <= end - 1 < e for s, e, _ in blanks):
                 continue
             rest = text[end:]
-            gap = re.match(r"[ \t   ]*", rest).group(0)
+            gap = self.ANSWER_GAP.match(rest).group(0)
             after = rest[len(gap):]
             if after.startswith(("\x00", BOX, CHECKED)):
                 continue                          # an object or box right after the label answers it
@@ -3584,7 +3687,7 @@ class Detector:
                 continue                          # 'Date: (month/day/year)': the answer goes after the hint
             if after and not ("\t" in gap or len(gap) >= 3):
                 continue                          # a sentence continues after the colon
-            if after and not self.LABEL_COLON.match(after) and not re.match(r"\(?\s*(?:mm|dd|yy|hh|units?|kg|cm|lbs?|in|minutes?|hours?|days?|years?|%)\b", after, re.I):
+            if after and not self.LABEL_COLON.match(after) and not self.ANSWER_UNIT.match(after):
                 continue                          # other printed text follows the gap: not an answer space
             blanks.append((end, end + len(gap), "after_label"))
         blanks = merge_spans(blanks)

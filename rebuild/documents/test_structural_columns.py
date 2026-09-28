@@ -935,10 +935,16 @@ class ValueRowsAreNotHeaders(unittest.TestCase):
             self.assertNotIn('Right (cm)', left['label'] + ' ' + left['context'])
             self.assertNotIn('Left (cm)', right['label'] + ' ' + right['context'])
 
+    def test_a_header_that_prints_a_blank_beside_its_words_is_still_a_header(self):
+        raw = table_doc([('Criteria', 'Participant #_______', 'Participant #_______'), ('Met all inclusion criteria', '', '')])
+        fields = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}
+        for col in (1, 2):
+            self.assertIn('Participant #', fields['b/tbl[0]/tr[1]/tc[%d]' % col]['label'])
+
     def test_a_row_of_inline_answer_gaps_is_not_the_header_of_the_items_below(self):
         from .test_word_v3 import ff_field
         doc = Document(); cell = doc.add_table(rows=1, cols=1).cell(0, 0)
-        cell.paragraphs[0].text = 'Optional items'
+        cell.paragraphs[0].add_run('Optional items').bold = True  # a printed sub-heading, as on the development form
         inner = cell.add_table(rows=3, cols=1)
         inner.cell(0, 0).text = '5. Number of completed sessions:        6. Average duration of sessions:    minutes'
         for r, (question, options) in enumerate((('7. Provider type:', ('Speech therapist', 'Physical therapist')),
@@ -985,6 +991,16 @@ class PrintedContentIsNotAnInstruction(unittest.TestCase):
         table.cell(1, 0).text = 'Liver'; table.cell(1, 1).text = instruction
         own = {f['locator']['slot']: f for f in w.inspect(data(doc))['fields']}['b/tbl[0]/tr[1]/tc[1]']
         self.assertEqual(own['locator']['target']['type'], 'cell_append')
+        # A request for what to write (the development form's 'Note if ... present.') is one too; printed
+        # content that merely starts with the same verb is not.
+        for text, destination in (('Note if supraclavicular fullness present.', True), ('Describe any findings', True),
+                                  ('Note INR must be checked before each dose', False),
+                                  ('Detail: bleeding below the knee', False),
+                                  ('Explain the procedure to the patient', False)):
+            with self.subTest(text=text):
+                table.cell(1, 1).text = text
+                fields = {f['locator']['slot']: f for f in w.inspect(data(doc))['fields']}
+                self.assertEqual('b/tbl[0]/tr[1]/tc[1]' in fields, destination)
 
 
 class NeighbourTextOnTheSameBaseline(PaintedFixture):
