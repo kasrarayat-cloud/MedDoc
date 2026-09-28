@@ -693,8 +693,9 @@ class SelectionLimitRefutations(unittest.TestCase):
         multi.append(('a glyph question in another section owns its tick-one', native_list(doc, 'Treatments received', treatments)))
         doc = Document(); doc.add_paragraph('You may tick more than one box for each question.'); doc.add_heading('Clinical history', 1)
         multi.append(('open count in the preamble', native_list(doc, 'Treatments received', treatments)))
-        doc = Document(); doc.add_paragraph('Section 1: tick all boxes that apply.'); doc.add_heading('Clinical history', 1)
-        multi.append(('a section number in the preamble', native_list(doc, 'Treatments received', treatments)))
+        for preamble in ('Section 1: tick all boxes that apply.', 'Part One - tick all boxes that apply.'):
+            doc = Document(); doc.add_paragraph(preamble); doc.add_heading('Clinical history', 1)
+            multi.append(('a section number in the preamble: ' + preamble, native_list(doc, 'Treatments received', treatments)))
         multi.append(('dated instruction', form(instruction='Record treatments received within 6 weeks of discharge.')))
         multi.append(('clinical option name', form(options=('Fragile X', 'Karyotype', 'Microarray'), question='Tests completed')))
         doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, 'Treatments received', treatments)
@@ -731,7 +732,7 @@ class SelectionLimitRefutations(unittest.TestCase):
                        '2006/main"><w:footnote w:id="1"><w:p><w:r><w:t>Tick one box only.</w:t></w:r></w:p></w:footnote>'
                        '</w:footnotes>')
         self.assertNeverTwo(out.getvalue(), 'Treatments received')
-        doc = Document(); doc.add_heading('Application', 1); frame = doc.add_paragraph('Tick one only')
+        doc = Document(); doc.add_heading('Application', 1); frame = doc.add_paragraph('Leave type (tick one only):')
         frame._p.get_or_add_pPr().append(parse_xml(
             '<w:framePr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
             'w:w="2400" w:hAnchor="page" w:vAnchor="page" w:x="8000" w:y="3000"/>'))
@@ -747,8 +748,10 @@ class SelectionLimitRefutations(unittest.TestCase):
         doc = Document(); doc.add_heading('Application', 1); doc.add_paragraph('Type of application (please tick one):')
         doc.add_paragraph('☐ Conditional'); doc.add_paragraph('☐ Absolute'); doc.add_heading('Clinical history', 1)
         self.assertMulti(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
-        doc = Document(); doc.add_paragraph('Mark ☒ one box only, leave the others ☐.'); doc.add_heading('Clinical history', 1)
-        self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
+        for legend in ('Mark ☒ one box only, leave the others ☐.', 'Legend: mark ☒ for the one answer, ☐ for the others.'):
+            with self.subTest(legend=legend):
+                doc = Document(); doc.add_paragraph(legend); doc.add_heading('Clinical history', 1)
+                self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
         # An answer label is not a one-only limit on the question it belongs to.
         raw = data(inline_question('Symptom(s) (tick all that apply):', ('Pain in only one joint', 'Swelling', 'Fever'), 'ff'))
         self.assertMulti(raw, 'Symptom(s)')
@@ -760,10 +763,13 @@ class SelectionLimitRefutations(unittest.TestCase):
                 ff_field(p, 'checkbox', name='E1'); p.add_run(' No')
                 self.assertNeverTwo(data(native_list(doc, 'Treatments received', treatments)), 'Treatments received')
         # A one-only sentence owned by a separate question stops being owned when it names a wider reach.
-        doc = Document(); doc.add_heading('Clinical history', 1)
-        boxed_question(doc, 'Please tick one box for each question in this section:', ('Yes', 'No'))
-        doc.add_paragraph(''); native_list(doc, 'Treatments received', treatments)
-        self.assertNeverTwo(data(doc), 'Treatments received')
+        for label in ('Please tick one box for each question in this section:',
+                      'Leave type (tick one box only for each question below):'):
+            with self.subTest(label=label):
+                doc = Document(); doc.add_heading('Clinical history', 1)
+                boxed_question(doc, label, ('Yes', 'No'))
+                doc.add_paragraph(''); native_list(doc, 'Treatments received', treatments)
+                self.assertNeverTwo(data(doc), 'Treatments received')
         # Ordinary questions: a count that is an amount, and "more than one" in a question, are not selection limits.
         options = ('Physiotherapy', 'Hydrotherapy', 'Literacy')
         for question in ('Symptom(s) in the one week before admission:', 'Symptom(s) lasting no more than 1 day:'):
