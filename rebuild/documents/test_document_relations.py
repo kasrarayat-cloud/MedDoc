@@ -90,7 +90,7 @@ class DocumentRelations(unittest.TestCase):
         doc = Document(); doc.add_heading('Patient name: __________', 1)
         self.assertEqual([f['label'] for f in w.inspect(data(doc))['fields']], ['Patient name'])
 
-    def test_other_box_has_full_question_without_guessing_list_cardinality(self):
+    def test_list_box_has_full_question_without_guessing_list_cardinality(self):
         doc = Document(); doc.add_heading('Accommodation', 1)
         doc.add_paragraph('What type of residence does the patient occupy:')
         numbered(doc, ('Own home', 'With family', 'Other (please specify)'))
@@ -98,7 +98,7 @@ class DocumentRelations(unittest.TestCase):
         box(doc)
         fields = w.inspect(data(doc))['fields']
         field = next(f for f in fields if f['locator']['target']['type'] == 'cell')
-        self.assertEqual(field['label'], 'Other (please specify)')
+        self.assertEqual(field['label'], 'What type of residence does the patient occupy:')
         self.assertIn('What type of residence does the patient occupy:', field['context'])
         self.assertIn('Own home | With family | Other (please specify)', field['context'])
         for answer in ('', 'Synthetic supported residence.', 'Synthetic long response. ' * 100):

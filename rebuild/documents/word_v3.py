@@ -1242,6 +1242,7 @@ class Detector:
         self.rule_form_fields()
         self.rule_tab_columns()
         self.rule_checkboxes()
+        self.rule_question_boxes(list_only=True)
         self.rule_text_option_choices()
         self.rule_tables()
         self.rule_question_boxes()
@@ -2630,57 +2631,89 @@ class Detector:
                 "reference": {"part": question.part, "slot": question.path,
                               "fingerprint": fingerprint(question.el)}}
 
-    def other_box_source(self, table):
-        """An explicit Other/specify list item owns the immediately following box.
+    def paragraph_list_box_source(self, table):
+        """A whole question/list owns its sole blank box; bullets are not controls.
 
-        Carry the printed parent question and all options without choosing a
-        cardinality for the list itself. No table or content boundary is crossed.
+        With no printed selection operation, the answer is complete text and
+        cardinality stays unspecified. A final Other descriptor does not acquire
+        the whole box. Explicit selection controls/instructions keep their own
+        rules. All source blocks and package definitions are bound at export.
         """
         node, blanks = table.el.getprevious(), 0
         while node is not None and node.tag == q("w:p") and not self.text(node).strip():
             slot = self.index.by_el.get(id(node))
-            if slot is None or not self.plain_spacing_paragraph(slot):
+            if slot is None or not self.plain_spacing_paragraph(slot) or self.question_box_paragraph(node)[2]:
                 return None
             blanks += 1
             if blanks > 4:
                 return None
             node = node.getprevious()
-        option = self.index.by_el.get(id(node)) if node is not None else None
-        raw = re.sub(r"\s+", " ", self.text(node)).strip() if node is not None else ""
-        if option is None or option.parent is not None or not self.list_info(node) or not re.fullmatch(
-                r"other\s*\(?\s*(?:please\s+)?specify\s*\)?\s*:?[ ]*", raw, re.I):
-            return None
-        options = []
+        descriptors, sources = [], []
+        unsafe = {SDT, FLDCHAR, q("w:instrText"), q("w:drawing"), q("w:pict"),
+                  q("w:object"), q("w:sectPr"), q("w:sym")}
         while node is not None and node.tag == q("w:p") and self.list_info(node):
-            if self.question_box_paragraph(node)[2] or any(x.tag in {
-                    SDT, FLDCHAR, q("w:hyperlink"), q("w:br"), q("w:drawing"), q("w:pict")}
-                    for x in node.iter()):
+            slot = self.index.by_el.get(id(node))
+            _, _, problem = self.question_box_paragraph(node)
+            # Bold list text is still a descriptor. Only explicit heading/outline
+            # properties establish a new section inside this numbered block.
+            style = node.find("./" + q("w:pPr") + "/" + q("w:pStyle"))
+            chain, _ = self.question_box_style_chain(style.get(q("w:val")), "paragraph") if style is not None else ([], "")
+            heading = any((outline := part.find("./" + q("w:pPr") + "/" + q("w:outlineLvl"))) is not None
+                          and outline.get(q("w:val")) in tuple(str(i) for i in range(9)) for part in [node] + chain)
+            heading = heading or style is not None and bool(HEADING_STYLE.match(style.get(q("w:val"), "")))
+            info = self.list_info(node)
+            if (slot is None or slot.parent is not None or id(node) in self.claimed or heading
+                    or problem and not problem.startswith("A page break ")
+                    or not self.tab_source_visible(slot)
+                    or any(x.tag in unsafe or x.tag == q("w:br") and x.get(q("w:type")) != "page"
+                           for x in node.iter())
+                    or info[1] not in self.numbering().get(info[0], {})):
                 return None
             text = re.sub(r"\s+", " ", self.text(node)).strip()
-            if not text or len(text) > MAX_MAPPING_LABEL or self.blank_spans(*self.ptext(node)):
+            if (not text or len(text) > MAX_MAPPING_LABEL or self.blank_spans(*self.ptext(node))
+                    or BOX in text or CHECKED in text or self.question_box_request(text)):
                 return None
-            options.insert(0, text)
+            if descriptors and list(info[1:]) != descriptors[0]["numbering"][1:]:
+                return None
+            descriptors.insert(0, {"part": slot.part, "slot": slot.path, "fingerprint": fingerprint(node),
+                                   "text": text, "numbering": list(info)})
+            sources.insert(0, slot)
             node = node.getprevious()
         question = self.index.by_el.get(id(node)) if node is not None else None
-        if len(options) < 2 or question is None or question.kind != "p" or question.parent is not None:
+        if len(descriptors) < 2 or question is None or question.kind != "p" or question.parent is not None:
             return None
         prompt = re.sub(r"\s+", " ", self.text(node)).strip()
-        if not prompt.endswith(("?", ":")) or self.question_box_paragraph(node)[2] or self.blank_spans(*self.ptext(node)):
+        if (id(node) in self.claimed or not prompt.endswith(("?", ":"))
+                or not (self.question_box_request(prompt) or re.match(r"^(?:what|which|where|how|who|when)\b", prompt, re.I)
+                        or self.question_box_authorship(prompt))
+                or self.question_box_paragraph(node)[2] or not self.tab_source_visible(question)
+                or any(x.tag in unsafe for x in node.iter()) or self.blank_spans(*self.ptext(node))):
             return None
-        context, problem = self.question_box_context(question)
-        context = " > ".join(x for x in (context, prompt, "Printed options: " + " | ".join(options)) if x)
-        if problem or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
+        context, problem = self.question_box_context(question, require_visible=True)
+        context = " > ".join(x for x in (context, prompt,
+                              "Printed descriptors: " + " | ".join(x["text"] for x in descriptors)) if x)
+        if (problem or len(prompt) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT
+                or self.question_box_signing(context)
+                or re.search(r"\b(?:select|choose|tick|check|mark|circle|indicate)\b|\b(?:only one|one only|all that apply)\b",
+                             context, re.I)):
             return None
         protection = ("This area is reserved for another author's comments. Ordinary clinician notes do not establish that author's statement."
                       if self.question_box_authorship(prompt) else "")
-        return option, raw, context, protection
+        relation = {"relation": "paragraph_list_answer", "question": prompt, "context": context,
+                    "cardinality": "unspecified",
+                    "source": {"part": question.part, "slot": question.path, "fingerprint": fingerprint(node)},
+                    "descriptors": descriptors,
+                    "definitions": {name: hashlib.sha256(self.package.zip.read(name)).hexdigest()
+                                    for name in ("word/numbering.xml", "word/_rels/document.xml.rels")
+                                    if name in self.package.names}}
+        return question, prompt, context, protection, relation, sources
 
     @staticmethod
     def question_box_authorship(text):
         return re.match(r"^this section is for (?:the )?(?:patient|parent|guardian|line manager|employer|witness)\b"
                         r".*\bto (?:add|provide|record)\b.*\b(?:comments|concerns|statement)\b", text, re.I)
 
-    def rule_question_boxes(self):
+    def rule_question_boxes(self, *, list_only=False):
         """A printed body question followed by its own empty one-cell bordered table.
 
         Never borrow across another block, assign a list option, shorten a question,
@@ -2715,16 +2748,19 @@ class Detector:
                     break
                 node = node.getprevious()
             bordered = self.question_box_bordered(table, cell)
-            other_source = self.other_box_source(table) if bordered and cell.info["span"] == 1 and cell.info["vmerge"] is None else None
-            if other_source:
-                option, other_label, other_context, protection = other_source
+            list_source = self.paragraph_list_box_source(table) if bordered and cell.info["span"] == 1 and cell.info["vmerge"] is None else None
+            if list_source:
+                owner, label, list_context, protection, relation, sources = list_source
                 if protection:
                     self.protected_regions.add(cell.id)
                 if not self.is_empty_cell(cell):
                     continue
-                self.add(Area("long_text", other_label, cell, {"type": "cell"},
-                              context=other_context, complete_source=True, protection=protection))
-                self.claimed.add(id(option.el))
+                self.add(Area("long_text", label, cell, {"type": "cell"}, context=list_context,
+                              complete_source=True, protection=protection, source_questions=[relation]))
+                for source in [owner] + sources:
+                    self.claimed.add(id(source.el))
+                continue
+            if list_only:
                 continue
             if question is not None and self.question_box_authorship(raw):
                 # Existing author statements are just as protected as an empty
@@ -4298,10 +4334,15 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if not isinstance(relations, list):
             fail("The related question mapping is invalid.", "invalid_mapping")
         for relation in relations:
-            if not isinstance(relation, dict) or relation.get("relation") != "immediate_previous_question":
+            if not isinstance(relation, dict):
                 fail("The related question mapping is invalid.", "invalid_mapping")
-            for name in ("source", "reference"):
-                ref = relation.get(name)
+            if relation.get("relation") == "immediate_previous_question":
+                refs = [relation.get("source"), relation.get("reference")]
+            elif relation.get("relation") == "paragraph_list_answer" and isinstance(relation.get("descriptors"), list):
+                refs = [relation.get("source")] + relation["descriptors"]
+            else:
+                fail("The related question mapping is invalid.", "invalid_mapping")
+            for ref in refs:
                 if not isinstance(ref, dict) or not ref.get("fingerprint"):
                     fail("The related question source is missing.", "invalid_mapping")
                 resolve(ref.get("part"), ref.get("slot"), ref["fingerprint"])
