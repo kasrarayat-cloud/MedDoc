@@ -1,0 +1,69 @@
+{
+  "notes": "The current supported residence provides staff supervision and secure medication storage.\n\nThe patient reports stable relationships with family and expects no relationship changes before the next report.\n\nThe relationship reporting condition is monitored during weekly supervision visits.\n\nWhen asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits.\n\nThe patient attends an art class three times a week and enjoys painting.\n\nThe diagnosis remains unchanged from the previous clinical report.\n\nThe prescribed medication is administered by residence staff and each administered dose is recorded.\n\nThe patient has taken every prescribed dose during this reporting period.\n\nNo new physical illness has affected treatment attendance during this reporting period.\n\nThe clinical supervisor saw the patient at the community clinic on 20 September 2026.\n\nThe patient says regular attendance at the art class is the main progress since discharge.\n\nThe patient has read the report and had an opportunity to add comments about the report.",
+  "cases": [
+    {
+      "key": "v3_21",
+      "label": "Set out the suitability of the accommodation and its appropriateness for monitoring of compliance with treatment and risk?",
+      "context": "Part B > Social Supervisor\u2019s Report > Accommodation",
+      "source_questions": null,
+      "quote": "The current supported residence provides staff supervision and secure medication storage."
+    },
+    {
+      "key": "v3_24",
+      "label": "If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+      "context": "Part B > Social Supervisor\u2019s Report > Relationships",
+      "source_questions": null,
+      "quote": "The relationship reporting condition is monitored during weekly supervision visits."
+    },
+    {
+      "key": "v3_25",
+      "label": "In relation to the above question have you asked the patient directly about relationships and what was the response? How do you vary your supervision to monitor compliance with this condition outside of self-reporting?",
+      "context": "Part B > Social Supervisor\u2019s Report > Relationships > Related preceding question: If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+      "source_questions": [
+        {
+          "source": {
+            "part": "word/document.xml",
+            "slot": "b/p[97]",
+            "fingerprint": "5054841d6d719424db1a9edd0e862bc12019407f5db40e5d266222b9b86c7fd9"
+          },
+          "question": "If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+          "relation": "immediate_previous_question",
+          "reference": {
+            "part": "word/document.xml",
+            "slot": "b/p[99]",
+            "fingerprint": "5d7fb6f4812a21c477a1d48e94ad771d62f99b9fe14262a747c52e2095d4b665"
+          }
+        }
+      ],
+      "quote": "When asked directly about relationships, the patient said the partner knows about the reporting condition; staff also confirm attendance at planned visits."
+    },
+    {
+      "key": "v3_44",
+      "label": "What is the patient\u2019s diagnosis? Has this changed over the course of their time in the community?",
+      "context": "Part C > Clinical Supervisor\u2019s Report > Diagnosis",
+      "source_questions": null,
+      "quote": "The diagnosis remains unchanged from the previous clinical report."
+    },
+    {
+      "key": "v3_46",
+      "label": "Please set out the medication prescribed to the patient to treat their mental disorder and how this is administered and monitored?",
+      "context": "Part C > Clinical Supervisor\u2019s Report > Treatment",
+      "source_questions": null,
+      "quote": "The prescribed medication is administered by residence staff and each administered dose is recorded."
+    },
+    {
+      "key": "v3_50",
+      "label": "Have there been any physical illnesses, or change in existing physical condition, which has impacted upon the patient\u2019s mental health or compliance with treatment?",
+      "context": "Part C > Clinical Supervisor\u2019s Report > Physical Health",
+      "source_questions": null,
+      "quote": "No new physical illness has affected treatment attendance during this reporting period."
+    },
+    {
+      "key": "v3_53",
+      "label": "When was the patient last seen by you or by another clinical professional (e.g. Locum, CPN)? Please give dates of the last CPA or professionals meeting in relation to the patient, inclusive of MAPPA meetings.",
+      "context": "Part C > Clinical Supervisor\u2019s Report > Supervision",
+      "source_questions": null,
+      "quote": "The clinical supervisor saw the patient at the community clinic on 20 September 2026."
+    }
+  ]
+}

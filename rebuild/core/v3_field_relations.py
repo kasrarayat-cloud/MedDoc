@@ -173,7 +173,7 @@ def records(notes, catalogue, context, units, selections, model):
 
 def read(reading, label, evidence, record, *, text=None, field_key=None):
     """One revalidation on generation, review, save and finalization."""
-    empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False}
+    empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False, 'syntax_ids': set()}
     if record is None: return empty
     units = reading['units']; refused = {**empty, 'warnings': units or [reading['source']]}
     if not enabled() or not isinstance(record, str) or len(record) > 50000: return refused
@@ -215,24 +215,27 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
                 return refused
             if any(reading['parsed'][u['id']] for u in ordered): return refused
         from .v3_destination import (side_warnings, policy_warnings, temporal_warnings, option_warnings,
-                                     temporal_scopes, predicate_polarity, explicit_patient_report)
+                                     destination_temporal_scopes, predicate_polarity, explicit_patient_report)
         if side_warnings(field, ordered) or policy_warnings(field, ordered) or temporal_warnings(field, ordered): return refused
         # A valid printed policy above requires an explicit patient reporting or
         # completed-review predicate in every unit; it also establishes its actor.
         policy_patient = isinstance(field.get('answer_policy'), dict)
+        from .v3_literal_facts import complete_ids
+        literal_ids = complete_ids(field, ordered, reading)
         # Existing patient/foreign actor, shape and exact-labelled-source guards
         # remain prerequisites, regardless of the model's context declarations.
         for u in ordered:
             own = reading['parsed'][u['id']]
             predicate_patient = predicate_polarity(field, u) is not None
-            temporal_patient = bool(temporal_scopes(str(field.get('context') or '') + ' ' + field['label'])
+            temporal_patient = bool(destination_temporal_scopes(field)
                                     and explicit_patient_report(u['quote']))
             if ((own and own[0] != g.question_key(label)) or u['id'] in reading['unresolved_subjects']
                     or (not own and not reading['patients'].get(u['id'])
                         and not policy_patient
                         and not predicate_patient and not temporal_patient
                         and u['id'] not in reading['syntax_complete']
-                        and u['id'] not in reading['actor_relations']['units'])
+                        and u['id'] not in reading['actor_relations']['units']
+                        and u['id'] not in literal_ids)
                     or g.v3_shape_holds(u['quote'], own[1] if own else u['quote'])): return refused
         values = [reading['parsed'][u['id']][1] if reading['parsed'][u['id']] else u['quote'] for u in ordered]
         answer = '\n'.join(values)
@@ -256,7 +259,7 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         self_reference = bool(chosen and related == chosen and len(group) == 1
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
                     and reading['patients'].get(u['id']) for u in ordered))
-        return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference}
+        return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference, 'syntax_ids': literal_ids}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused
 

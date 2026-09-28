@@ -2791,6 +2791,7 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
     # still see the entire source and retain their existing vetoes.
     scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
     scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
+    scoped['ordinary_syntax'] = ordinary.get('syntax_ids', set())
     complete = set()
     if label in reading['general']:
         for group in reading['groups']:
@@ -2846,6 +2847,7 @@ def v3_complete_statement(reading, unit, scoped):
     """
     return (':' in unit['quote'] or bool(FINITE_STATEMENT_V3.search(unit['quote']))
             or unit['id'] in reading['syntax_complete']
+            or unit['id'] in scoped.get('ordinary_syntax', set())
             or (unit['id'] in scoped['complete']
                 and unit['id'] in (reading['conditional_units'] | reading['declarations'])))
 
@@ -2991,6 +2993,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         if v3:
             scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
             scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
+            scoped['ordinary_syntax'] = ordinary.get('syntax_ids', set())
         if v3 and (item.key in complete_paragraphs or scoped['complete'] or history['ids'] or ordinary['ids']):
             choices=sorted(choices, key=lambda unit: unit['start'] if isinstance(unit,dict) else allowed[unit][0]['start'])
         for choice in choices:

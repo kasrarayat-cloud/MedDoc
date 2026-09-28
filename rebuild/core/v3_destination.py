@@ -162,6 +162,29 @@ def temporal_scopes(text):
             for relation, event in _TEMPORAL.findall(unicodedata.normalize('NFKC', str(text or '')))]
 
 
+def destination_temporal_scopes(field):
+    """Keep question words, excluding only a verified engine-generated link label."""
+    context = str(field.get('context') or '')
+    links = field.get('source_questions')
+    if isinstance(links, list) and len(links) == 1:
+        link = links[0]
+        def anchor(value):
+            return (isinstance(value, dict) and set(value) == {'part', 'slot', 'fingerprint'}
+                    and all(isinstance(v, str) and v.strip() for v in value.values())
+                    and re.fullmatch('[0-9a-f]{64}', value['fingerprint']))
+        if (isinstance(link, dict) and set(link) == {'relation', 'question', 'source', 'reference'}
+                and link['relation'] == 'immediate_previous_question'
+                and isinstance(link['question'], str) and 0 < len(link['question']) <= 1000
+                and anchor(link['source']) and anchor(link['reference'])
+                and link['source']['part'] == link['reference']['part']
+                and link['source']['slot'] != link['reference']['slot']):
+            marker = ' > Related preceding question: '
+            suffix = marker + link['question']
+            if context.endswith(suffix) and context.count(marker) == 1:
+                context = context[:-len(suffix)] + ' > ' + link['question']
+    return temporal_scopes(context + ' ' + str(field.get('label') or ''))
+
+
 def temporal_warnings(field, selected):
     """A printed event-relative question requires that relation in its source.
 
@@ -169,7 +192,7 @@ def temporal_warnings(field, selected):
     current symptoms to an explicitly pre-event question by destination ID alone.
     Full selected statements and every explicit temporal qualifier are retained.
     """
-    required = temporal_scopes(str(field.get('context') or '') + ' ' + str(field.get('label') or ''))
+    required = destination_temporal_scopes(field)
     if not required or not selected: return []
     warnings = []
     for unit in selected:
