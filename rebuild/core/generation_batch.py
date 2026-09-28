@@ -59,8 +59,7 @@ def needed(fields, notes=None, config=None):
         from . import v3_field_relations as ordinary
         asked, context, _ = g.v3_generation_fields(fields)
         units = g.source_units(notes, asked, context_labels=context)[0]
-        return (len(asked) * len(units) > ordinary.MAX_RELATION_CELLS or
-                ordinary.response_bound(asked, units) > g.job_request_profile(config)['max_output_tokens'])
+        return ordinary.response_bound(asked, units) > g.job_request_profile(config)['max_output_tokens']
     return False
 
 
@@ -325,8 +324,7 @@ def plan_for(encounter, config):
         ordinary.require_config(config)
         indexed = {f['key']: f for f in asked}
         def fits(ids):
-            return (len(ids) * len(units) <= ordinary.MAX_RELATION_CELLS and
-                    ordinary.response_bound([indexed[key] for key in ids], units) <=
+            return (ordinary.response_bound([indexed[key] for key in ids], units) <=
                     config['request_profile']['max_output_tokens'])
     groups = partitions(asked, fits=fits)
     plan = {'contract': CONTRACT, 'encounter_id': str(encounter.pk), 'revision': encounter.revision,

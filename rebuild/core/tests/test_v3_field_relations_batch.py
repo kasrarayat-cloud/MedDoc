@@ -30,7 +30,7 @@ class OrdinaryBatchContract(SimpleTestCase):
     def test_bounded_children_keep_whole_source_catalogue_constraints_and_exact_price(self):
         encounter = sample(notes=NOTE); config = g.configuration(); plan = b.plan_for(encounter, config)
         self.assertGreater(len(plan['parts']), 1)
-        self.assertLess(max(len(p['field_ids']) for p in plan['parts']), 100)
+        self.assertLessEqual(max(len(p['field_ids']) for p in plan['parts']), 100)
         selected = []
         for ordinal, part in enumerate(plan['parts'], 1):
             wire = b.request(plan, ordinal); payload = json.loads(wire['messages'][0]['content'])
@@ -55,7 +55,7 @@ class OrdinaryBatchContract(SimpleTestCase):
         self.assertTrue(all(a['status'] == 'missing' for k, a in answers.items() if k != 'q000'))
 
     def test_response_capacity_can_require_batch_below_100_and_never_splits_physical_group(self):
-        note = ' '.join('The patient reports symptom ' + str(i) + '.' for i in range(6))
+        note = ' '.join('The patient reports symptom ' + str(i) + '.' for i in range(20))
         encounter = sample(50, notes=note); config = g.configuration()
         self.assertTrue(b.needed(encounter.template_version.fields, note, config))
         plan = b.plan_for(encounter, config)

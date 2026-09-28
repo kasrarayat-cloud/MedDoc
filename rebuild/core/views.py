@@ -846,7 +846,7 @@ def encounter_detail(request,pk):
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
-    quote_config=configuration();generation_quote_error='';batch_constraint_error=''
+    quote_config=configuration(e.template_version.fields);generation_quote_error='';batch_constraint_error=''
     if e.answers:
         try:generation_batch.check_answers(e.template_version,e.answers)
         except ValidationError as exc:batch_constraint_error=error_message(exc)

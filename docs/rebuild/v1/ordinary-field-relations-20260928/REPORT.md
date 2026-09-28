@@ -108,8 +108,8 @@ complete report review, and explicit patient-authored review statements.
 The single and batch paths use one actual SDK keyword-argument compiler. Each
 child keeps the same complete source, catalogue, protected context and qualified
 form constraints. Only requested output IDs differ. Deterministic partitions
-preserve physical source groups, at most 100 fields and 256 field×source-unit
-relations per child, at most eight children, and at most 512,000 serialized
+preserve physical source groups, at most 100 fields per child, at most eight
+children, and at most 512,000 serialized
 request bytes. A conservative closed-response byte bound must fit the exact
 profile's output-token cap. Indivisible over-limit groups or a form needing more
 than eight children are refused before reservation or provider use.

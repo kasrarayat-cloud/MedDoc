@@ -219,8 +219,8 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
 def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None):
     from . import generation_batch, batch_jobs
     if kind=='generation' and generation_batch.needed(encounter.template_version.fields, encounter.notes,
-                                                      config or generation.configuration()):
-        return batch_jobs.enqueue(encounter,user,config or generation.configuration(),expected_revision)
+                                                      config or generation.configuration(encounter.template_version.fields)):
+        return batch_jobs.enqueue(encounter,user,config or generation.configuration(encounter.template_version.fields),expected_revision)
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
@@ -253,10 +253,10 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     # switched to fixture queued a LIVE job — held, sent, charged — while the console said no request is sent; the reverse
     # queued a fixture job whose synthetic answers entered a live deployment. Both directions are refused here.
     if config is not None and kind=='generation':
-        current=generation.configuration()
+        current=generation.configuration(e.template_version.fields)
         if config.get('mode')!=current['mode']: raise ValidationError(QUOTE_MODE_CHANGED)
         if config.get('pricing_version')!=current['pricing_version']: raise ValidationError(QUOTE_PRICE_CHANGED)
-    config=dict(config or generation.configuration())
+    config=dict(config or generation.configuration(e.template_version.fields))
     if kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,config)):
         raise ValidationError(refusal)
     if kind=='transcription':

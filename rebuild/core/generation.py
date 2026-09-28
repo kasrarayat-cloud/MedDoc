@@ -116,6 +116,8 @@ LEGACY_PROFILE={'profile':'legacy-v1','max_output_tokens':6000,'timeout_seconds'
 #: Both stay under the SDK's non-streaming ceiling (a non-streaming request may not expect to run past 10 minutes:
 #: 3600 s × max_tokens / 128000 ≤ 600 s, i.e. max_tokens ≤ 21333); the request is non-streaming and stays so.
 SONNET_5_MAX_OUTPUT_TOKENS={'disabled':8000,'adaptive':16000}
+ORDINARY_RESPONSE_PROFILE='claude-sonnet-5-ordinary-v1'
+ORDINARY_MAX_OUTPUT_TOKENS=20000
 NONSTREAMING_MAX_OUTPUT_TOKENS=21333
 #: Under the worker's TimeoutStopSec=150 (a graceful stop finishes the current request, then systemd kills), leaving 30 s
 #: for the receipt and settlement, and under mark_stale's 5-minute mark (a request still in flight is never declared
@@ -258,10 +260,11 @@ def job_request_profile(config):
     if 'invalid' in profile:
         _refuse_profile('The language-model request settings are invalid: '+str(profile['invalid'])+' Nothing was sent.')
     sonnet_5=provider=='anthropic' and model==SONNET_5
+    ordinary_profile = sonnet_5 and profile.get('profile') == ORDINARY_RESPONSE_PROFILE
     allowed={'profile','max_output_tokens','timeout_seconds','inference_geo'}|({'thinking','effort'} if sonnet_5 else set())
     tokens,timeout=profile.get('max_output_tokens'),profile.get('timeout_seconds')
     well_formed=(set(profile)<=allowed
-        and profile.get('profile')==('claude-sonnet-5-v1' if sonnet_5 else 'legacy-v1')
+        and (profile.get('profile')==('claude-sonnet-5-v1' if sonnet_5 else 'legacy-v1') or ordinary_profile)
         and type(tokens) is int and 0<tokens<=NONSTREAMING_MAX_OUTPUT_TOKENS
         and type(timeout) is int and 0<timeout<WORKER_STOP_SECONDS
         and ('inference_geo' not in profile or (profile['inference_geo'] in INFERENCE_GEOS and provider=='anthropic'
@@ -269,6 +272,11 @@ def job_request_profile(config):
     if sonnet_5:
         well_formed=(well_formed and profile.get('thinking') in ({'type':'disabled'},{'type':'adaptive','display':'omitted'})
                      and profile.get('effort') in EFFORT_LEVELS)
+    if ordinary_profile:
+        from .v3_field_relations import CONTRACT
+        well_formed = (well_formed and config.get('ordinary_field_contract') == CONTRACT
+                       and tokens == ORDINARY_MAX_OUTPUT_TOKENS and timeout == SONNET_5_TIMEOUT_SECONDS
+                       and profile.get('thinking') == {'type': 'disabled'})
     if not well_formed:
         _refuse_profile('The request profile recorded for this job does not match its model. Nothing was sent.')
     return profile
@@ -326,7 +334,7 @@ def us_inference_multiplier(provider,units):
     return US_INFERENCE_MULTIPLIER if units.get('inference_geo')=='us' and us_inference_priced(provider) else Decimal(1)
 
 
-def configuration():
+def configuration(fields=None):
     import os
     config={'mode':settings.AI_MODE,'provider':settings.AI_PROVIDER,'model':settings.AI_MODEL,
             'input_rate':settings.AI_INPUT_RATE,'output_rate':settings.AI_OUTPUT_RATE,'cached_rate':settings.AI_CACHED_RATE,
@@ -337,6 +345,13 @@ def configuration():
             'discount_rate':normalized_discount(os.getenv('QUILLMD_PROVIDER_DISCOUNT_RATE','0')),
             'request_profile':request_profile(settings.AI_PROVIDER,settings.AI_MODEL,settings.AI_THINKING,settings.AI_EFFORT,
                                               settings.AI_INFERENCE_GEO)}
+    # New ordinary authorizations only. Existing 8k/16k snapshots reconstruct
+    # unchanged; non-v3 callers retain their original model profile.
+    if (getattr(settings,'V3_FIELD_RELATIONS',False) and (fields is None or natural_v3(fields))
+            and config['provider']=='anthropic' and config['model']==SONNET_5
+            and config['request_profile'].get('thinking')=={'type':'disabled'}):
+        config['request_profile']={**config['request_profile'], 'profile':ORDINARY_RESPONSE_PROFILE,
+                                   'max_output_tokens':ORDINARY_MAX_OUTPUT_TOKENS}
     # The discount fraction is part of the versioned price: changing it changes the fingerprint of every later job.
     price={k:config[k] for k in ('provider','model','input_rate','output_rate','cached_rate','voice_rate_minute','voice_rate_second','discount_rate')}
     price.update(cost_basis='configured_usd_rates',voice_provider='deepgram:nova-3-medical',voice_cost_quantum='0.0000000001',voice_rounding='half_even',multiplier='1.5')
@@ -422,7 +437,7 @@ def rates(config=None):
     except Exception: raise ValidationError('Provider rates are not configured. No billable request can run.')
 
 def maximum_cost(notes,fields,config=None,*,context_labels=(),requirements=None):
-    config=config or configuration()
+    config=config or configuration(fields)
     if config['mode']!='live': return Decimal('0')
     if config.get('ordinary_field_contract') and natural_v3(fields):
         from . import v3_field_relations as ordinary
@@ -3565,7 +3580,7 @@ def before_the_provider(active):
 
 
 def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
-    config=config or configuration()
+    config=config or configuration(fields)
     if config.get('ordinary_field_contract') and natural_v3(fields):
         from . import v3_field_relations as ordinary
         return ordinary.generate(notes,fields,config,context_labels=context_labels,requirements=requirements or ())

@@ -17,7 +17,6 @@ from . import generation as g
 
 CONTRACT = 'ordinary-field-relations-v1'
 SALT = 'quillmd.ordinary-field-relations.v1'
-MAX_RELATION_CELLS = 256
 MAX_REQUEST_BYTES = 512000
 INSTRUCTIONS = (
     'Interpret ordinary patient documentation against the COMPLETE original form catalogue. '
@@ -118,7 +117,7 @@ def compile_request(notes, catalogue, config, *, context_labels=(), requirements
     units = g.source_units(notes, asked, context_labels=context)[0]
     profile = g.job_request_profile(config)
     bound = response_bound(requested, units)
-    if (not requested or len(requested) > 100 or len(requested) * len(units) > MAX_RELATION_CELLS
+    if (not requested or len(requested) > 100
             or bound > profile['max_output_tokens']):
         raise ValidationError('The complete ordinary relation exceeds one bounded response; nothing was shortened.')
     payload = {'contract': CONTRACT, 'catalogue': catalogue, 'catalogue_sha256': digest(catalogue),

@@ -345,7 +345,8 @@ class OrdinaryFieldRelations(SimpleTestCase):
             with self.assertRaises(ValidationError): r.compile_request(notes, fields, config)
 
     def test_closed_response_capacity_refuses_before_any_provider(self):
-        fields = repeated(); notes = ' '.join('The patient reports pain.' for _ in range(129))
+        fields = [field('f' + str(i), 'Finding ' + str(i)) for i in range(100)]
+        notes = ' '.join('The patient reports pain.' for _ in range(129))
         with patch('anthropic.Anthropic') as sdk:
             with self.assertRaises(ValidationError): g.maximum_cost(notes, fields)
             sdk.assert_not_called()
