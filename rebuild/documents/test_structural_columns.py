@@ -1822,6 +1822,13 @@ class RoundFourGuardsArePinned(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(self.read(line)[:1], [(label, options)])
 
+    def test_a_bracket_drawn_around_each_box_is_no_word(self):
+        # D35's CTCAE grade: 'Grade [☐] 1 [☐] 2 ...' prints each grade after its box, in brackets drawn round the box.
+        for control in ('glyph', 'ff'):
+            with self.subTest(control=control):
+                fields = self.read('Grade [☐] 1 [☐] 2 [☐] 3 [☐] 4 [☐] 5', control=control)
+                self.assertEqual([[o.strip('[] ') for o in options] for _, options in fields], [['1', '2', '3', '4', '5']])
+
     def test_a_code_glued_after_any_printed_separator_is_noted(self):
         for line in ('Grade-0 ☐ 1 ☐ 2 ☐ Unknown', 'Grade/0 ☐ 1 ☐ 2 ☐ Unknown', 'Grade=0 ☐ 1 ☐ 2 ☐ Unknown',
                      'Grade#0 ☐ 1 ☐ 2 ☐ Unknown', 'Grade–0 ☐ 1 ☐ 2 ☐ Unknown', 'Grade:a ☐ b ☐ c ☐ Unknown'):

@@ -2969,10 +2969,12 @@ class Detector:
         cuts = list(re.finditer(r"[:?]|\t| {2,}|_+|\.{2,}|…+|[\u25af\x00" + BOX + CHECKED + "]+", head))
         blank_cut = bool(cuts) and not re.fullmatch(r"[:?]|\t| {2,}", cuts[-1].group())
         # A bracketed selection instruction ('Sex: (choose one) ☐ M') is not an option word; a bracketed word ('Smoker:
-        # (Yes) ☐ (No) ☐ N/A', 'Smoker [Yes] ☐') still is. A bracket drawn around a box ('[☐]') prints no word at all.
+        # (Yes) ☐ (No) ☐ N/A', 'Smoker [Yes] ☐') still is. A bracket drawn around a box ('Grade [☐] 1 [☐] 2') prints no
+        # word at all (D35).
         tail = re.sub(r"\(([^()]*)\)", lambda m: " " if any(rx.search(m.group(1)) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE))
                       or re.search(r"\b(?:choose|select|tick|check|circle|mark|pick)\b", m.group(1), re.I) else m.group(0),
                       head[cuts[-1].end():] if cuts else head)
+        tail = re.sub(r"[\[\]]", " ", tail)
         # The question's own condition or question clause ('If yes', 'If yes, how many', 'which side', 'how often') is
         # the question's; only what follows it may be the first box's option ('Smoker? If yes Yes ☐ No ☐ Unknown',
         # 'Diet: what type Normal ☐ Soft ☐'). 'When' begins an option ('When required ☐ Daily ☐'), never a clause.
@@ -3014,8 +3016,10 @@ class Detector:
         if len(shapes) == 1 and re.search(r"[9+%/<>=#\u00b0]", next(iter(shapes))) and \
                 any(self.option_shape(" ".join(words[-k:])) in shapes for k in (1, 2, 3) if k <= len(words)):
             return "(the words before the first box have the printed form of the options between the boxes)"
-        ends = {option_text(o).lower().split()[-1] for o in between if len(option_text(o).split()) > 1}
-        if len(words) > 1 and ends == {words[-1].lower()} and all(len(option_text(o).split()) > 1 for o in between if o):
+        # The same last WORD ('... every day smoker ☐ Former smoker ☐'): printed brackets and numbers are not words.
+        lettered = lambda text: re.findall(r"[^\W\d_][\w'\-]*", text.lower())
+        ends = {lettered(o)[-1] for o in between if len(lettered(o)) > 1}
+        if len(lettered(tail)) > 1 and ends == {lettered(tail)[-1]} and all(len(lettered(o)) > 1 for o in between if o):
             return "(the words before the first box have the printed form of the options between the boxes)"
         if write_in and not other_write_in:
             return "(the text after the last box is a write-in of its own, so the last box's word is printed before it)"
