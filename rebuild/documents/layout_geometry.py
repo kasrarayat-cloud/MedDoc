@@ -44,7 +44,7 @@ def geometry(page):
     """Read a bounded horizontal PDF profile; retain actual glyph advances."""
     if page.get('/Rotate', 0): raise ValueError('Rotated containment page')
     fonts, records, paths, stack = {}, [], [], []
-    state = {'fill': (0., 0., 0.), 'stroke': (0., 0., 0.), 'width': 1.}
+    state = {'fill': (0., 0., 0.), 'stroke': (0., 0., 0.), 'width': 1., 'cap': 0, 'join': 0, 'dashed': False}
     x = y = size = 0.; font = outline = None; widths = mapping = {}; active = False; path = []
     contents = page.get_contents()
     operations = [] if contents is None else contents.operations
@@ -88,9 +88,16 @@ def geometry(page):
             if len(rgb) != 3 or any(c < 0 or c > 1 for c in rgb): raise ValueError('Invalid RGB')
             state['fill' if op == b'rg' else 'stroke'] = rgb
         elif op == b'w': state['width'], = finite(args)
-        elif op in (b'J', b'j', b'd'):
-            # These can change a control's stroke. Record them in its paint state.
-            state[op.decode()] = repr(args)
+        elif op in (b'J', b'j'):
+            value, = finite(args)
+            if value not in (0., 1., 2.): raise ValueError('Unsupported stroke cap or join')
+            state['cap' if op == b'J' else 'join'] = int(value)
+        elif op == b'd':
+            if len(args) != 2: raise ValueError('Invalid dash pattern')
+            lengths, phase = finite(args[0]), float(args[1])
+            if not math.isfinite(phase) or phase < 0 or any(v < 0 for v in lengths) or (lengths and not sum(lengths)):
+                raise ValueError('Invalid dash pattern')
+            state['dashed'] = bool(lengths)
         elif op == b'BT':
             if active: raise ValueError('Nested text object')
             active = True; x = y = 0.
@@ -146,10 +153,25 @@ def geometry(page):
                 px,py,pw,ph = values; points += [(px,py),(px+pw,py+ph)]
             else: points.append(values)
         if not points: raise ValueError('Empty painted path')
-        pad = item['state']['width']/2 if item['operation']=='S' else 0
-        if pad < 0: raise ValueError('Negative stroke width')
-        item['bounds'] = [min(p[0] for p in points)-pad,min(p[1] for p in points)-pad,
-                          max(p[0] for p in points)+pad,max(p[1] for p in points)+pad]
+        xpad = ypad = 0.
+        if item['operation'] == 'S':
+            half = item['state']['width']/2
+            if half <= 0: raise ValueError('Unmeasured zero or negative stroke width')
+            kinds = [kind for kind, values in item['path']]
+            if kinds == ['rect']:
+                xpad = ypad = half  # all supported rectangular joins stay within these bounds
+            elif kinds == ['m', 'l']:
+                (x0,y0),(x1,y1) = points
+                dx,dy = abs(x1-x0),abs(y1-y0); length = math.hypot(dx,dy)
+                if not length: raise ValueError('Degenerate stroked segment')
+                cap = item['state']['cap']
+                if cap == 0: xpad,ypad = half*dy/length,half*dx/length
+                elif cap == 1: xpad = ypad = half
+                else: xpad = ypad = half*(dx+dy)/length
+            else:
+                raise ValueError('Unsupported joined stroke geometry')
+        item['bounds'] = [min(p[0] for p in points)-xpad,min(p[1] for p in points)-ypad,
+                          max(p[0] for p in points)+xpad,max(p[1] for p in points)+ypad]
     baselines = sorted({r['y'] for r in records})
     rectangles = []
     for index, item in enumerate(paths):
@@ -171,12 +193,15 @@ def geometry(page):
             if len(diagonals) != 2 or any(abs(a-b)>PRECISION for actual,wanted in zip(diagonals,expected) for p,q in zip(actual,wanted) for a,b in zip(p,q)):
                 raise ValueError('Ambiguous native checkbox marks')
             checked = True
-        if item['state']['stroke'] != (0.,0.,0.) or item['state']['width'] <= 0:
-            continue
+        owned = paths[index:index+1+len(diagonals)]
+        if any(stroke['state']['stroke'] != (0.,0.,0.) or stroke['state']['width'] <= 0 or
+               stroke['state']['dashed'] for stroke in owned):
+            raise ValueError('Unqualified native checkbox stroke paint')
+        ink = [min(stroke['bounds'][0] for stroke in owned), min(stroke['bounds'][1] for stroke in owned),
+               max(stroke['bounds'][2] for stroke in owned), max(stroke['bounds'][3] for stroke in owned)]
         rectangles.append({'text': VECTOR, 'left': left, 'right': left+width, 'y': possible[0],
                            'bottom': bottom, 'top': bottom+height, 'paint': item['state']['stroke'],
-                           'ink':[left-item['state']['width']/2,bottom-item['state']['width']/2,
-                                  left+width+item['state']['width']/2,bottom+height+item['state']['width']/2],
+                           'ink': ink,
                            'own_paths':list(range(index,index+1+len(diagonals))),
                            'type': 'ff_checkbox', 'checked': checked})
     lines = []

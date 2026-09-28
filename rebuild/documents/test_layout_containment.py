@@ -68,6 +68,34 @@ class LayoutContainment(unittest.TestCase):
         candidate=copy.deepcopy(self.candidate);candidate['rendered_source']['row'][0][0]['text']='Different question'
         with self.assertRaises(ValueError):containment(self.pages(),[candidate])
 
+    def test_every_owned_checkbox_stroke_has_visible_solid_ink(self):
+        candidate=copy.deepcopy(self.candidate);candidate['rendered_source']['row'][1][-1]['checked']=True
+        for paint in (b'1 1 1 RG ', b'1 0 0 RG ', b'0 w ', b'[0 20] 0 d ', b'[1 20] 0 d '):
+            with self.subTest(paint=paint):
+                pages=self.pages(checked=True); page=pages[0]
+                needle=b'120 278 m 130 268 l S 130 278 m 120 268 l S'
+                content=DecodedStreamObject();content.set_data(page.get_contents().get_data().replace(needle,b'q '+paint+needle+b' Q'))
+                page[NameObject('/Contents')]=content
+                with self.assertRaises(ValueError):containment(pages,[candidate])
+
+    def test_control_only_segment_measures_every_owned_stroke(self):
+        candidate=copy.deepcopy(self.candidate);candidate['rendered_source']['row'][1][-1]['checked']=True
+        for segment in candidate['rendered_source']['row'][1:]:segment.pop(0)
+        for paint,expected in ((b'',True),(b'40 w ',False),(b'2 J 30 w ',False)):
+            with self.subTest(paint=paint):
+                pages=self.pages(checked=True); page=pages[0]
+                needle=b'120 278 m 130 268 l S 130 278 m 120 268 l S'
+                stream=page.get_contents().get_data().replace(b'<3120> Tj',b'<> Tj').replace(b'<3220> Tj',b'<> Tj')
+                content=DecodedStreamObject();content.set_data(stream.replace(needle,b'q '+paint+needle+b' Q'))
+                page[NameObject('/Contents')]=content
+                result=containment(pages,[candidate]);self.assertEqual(result['passed'],expected)
+                lines=geometry(page)
+                line=next(line for line in lines if any(r['type']=='ff_checkbox' and r['checked'] for r in line['records']))
+                box=next(r for r in line['records'] if r['type']=='ff_checkbox' and r['checked'])
+                owned=[line['paths'][i]['bounds'] for i in box['own_paths']]
+                self.assertEqual(box['ink'],[min(b[0] for b in owned),min(b[1] for b in owned),
+                                            max(b[2] for b in owned),max(b[3] for b in owned)])
+
     def test_embedded_ink_bounds_are_used_instead_of_advances(self):
         lines=geometry(self.pages()[0]);normal=next(line for line in lines if line['text']=='NormalAbnormal')
         glyph=normal['records'][0]
