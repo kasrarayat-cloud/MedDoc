@@ -21,10 +21,12 @@ import os
 import tempfile
 from contextlib import contextmanager, nullcontext
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 import anthropic
 import httpx
+import openai
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from core import batch_jobs as jobs, generation as g
@@ -32,6 +34,7 @@ from core.jobs import public_error, run_one as run_job
 from core.models import (AuditEvent, Encounter, GenerationBatch, Job, LedgerEntry, Membership, PlatformCost,
                          ProviderReceipt, Reservation, Usage, Wallet)
 from .test_generation_batch import SETTINGS as BATCH, BatchFixture, response as batch_response
+from .test_security import SyntheticFixture
 from .test_v3_ordinary_notes import LIVE
 from .test_word_v3_workflow import V3EncounterFixture
 
@@ -425,3 +428,175 @@ class NoCredentialNarrative(DeniedNetwork, SimpleTestCase):
         self.assertEqual(sent[0].headers.get('x-api-key'), SYNTHETIC_KEY)
         self.assertGreater(cost, 0)
         self.assertEqual(self.connects, [])
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# MONEY-2 on the optional OpenAI adapter (R1-MONEY2-OPENAI)
+# --------------------------------------------------------------------------------------------------------------------
+
+#: The SDK class itself, captured before any test patches `openai.OpenAI`.
+REAL_OPENAI = openai.OpenAI
+#: The finding's settings: the optional OpenAI adapter on a legacy (non-v3) form, rates 3/15/.3.
+OPENAI_LIVE = dict(AI_MODE='live', AI_PROVIDER='openai', AI_MODEL='gpt-4.1-mini', AI_INPUT_RATE='3',
+                   AI_OUTPUT_RATE='15', AI_CACHED_RATE='.3')
+
+
+@contextmanager
+def no_credential_for_any_provider(**present):
+    """Every OPENAI_* and ANTHROPIC_* variable unset and a HOME holding no profile; `present` then sets exactly the
+    variables a case names (for example only OPENAI_ADMIN_KEY). The environment is restored afterwards."""
+    with tempfile.TemporaryDirectory(prefix='quillmd-no-credential-') as home, patch.dict(os.environ, {'HOME': home}):
+        for name in [name for name in os.environ if name.startswith(('OPENAI_', 'ANTHROPIC_'))]:
+            del os.environ[name]
+        os.environ.update(present)
+        yield
+
+
+def openai_response_json(text):
+    """A completed Responses API body, shaped as the provider returns it; `responses.parse` reads `text` into the schema."""
+    return {'id': 'resp_synthetic_money', 'object': 'response', 'created_at': 0, 'status': 'completed',
+            'model': 'gpt-4.1-mini', 'error': None, 'incomplete_details': None, 'instructions': None, 'metadata': {},
+            'parallel_tool_calls': False, 'temperature': None, 'tool_choice': 'auto', 'tools': [], 'top_p': None,
+            'output': [{'type': 'message', 'id': 'msg_synthetic_money', 'status': 'completed', 'role': 'assistant',
+                        'content': [{'type': 'output_text', 'text': text, 'annotations': []}]}],
+            'usage': {'input_tokens': 100, 'input_tokens_details': {'cached_tokens': 0}, 'output_tokens': 10,
+                      'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 110}}
+
+
+def openai_over_mock_transport(handler):
+    """`openai.OpenAI` as the REAL SDK class, constructed exactly as QuillMD constructs it, over a MockTransport."""
+    def build(**kwargs):
+        return REAL_OPENAI(http_client=httpx.Client(transport=httpx.MockTransport(handler)), **kwargs)
+    return patch('openai.OpenAI', side_effect=build)
+
+
+@override_settings(**OPENAI_LIVE)
+class NoCredentialOpenAIAdapter(DeniedNetwork, SyntheticFixture, TestCase):
+    """R1-MONEY2-OPENAI. Reproduce with the finding's input: a SyntheticFixture scope (a legacy, non-v3 template with one
+    text field, notes 'Symptoms: no chest pain', answers cleared); AI_MODE=live, AI_PROVIDER=openai,
+    AI_MODEL=gpt-4.1-mini, rates 3/15/.3; every OPENAI_*/ANTHROPIC_* variable unset, HOME an empty temporary directory,
+    every socket connect refused and recorded; jobs.enqueue(encounter, user) then jobs.run_one().
+
+    RED on 8b409024: openai 2.54.0 raises OpenAIError inside the client constructor (no client exists, nothing can have
+    been sent), but the construction sits in a before_the_provider block that is inactive for a legacy form, so the
+    job ended 'reconciliation', 'Provider outcome is uncertain; reconcile before retrying.', the hold kept, audit billing
+    'uncertain' error_class OpenAIError. The same class through the request build: with only OPENAI_ADMIN_KEY set the
+    client is constructed and the SDK's own header validation raises TypeError before its only send, which MONEY-2's
+    Anthropic-only predicate did not recognise either."""
+
+    def setUp(self):
+        super().setUp()
+        self.deny_network()
+        directory = tempfile.TemporaryDirectory(prefix='quillmd-money-media-')
+        self.addCleanup(directory.cleanup)
+        media = override_settings(MEDIA_ROOT=Path(directory.name))
+        media.enable()
+        self.addCleanup(media.disable)
+        self.user, _, self.department, _, _, self.encounter, _ = self.make_scope('money-openai')
+        self.encounter.answers = {}
+        self.encounter.save(update_fields=['answers'])
+
+    def enqueued(self):
+        from core.jobs import enqueue
+        job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+        self.assertEqual(job.config['provider'], 'openai')
+        # A legacy form: no v3 generated field, so generate()'s before_the_provider guard is inactive for it.
+        self.assertIsNone(g.v3_generation_fields(self.encounter.template_version.fields, [])[2])
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state', flat=True)), ['held'])
+        return job
+
+    def assert_not_processed(self, job):
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'failed', job.error)
+        self.assertTrue(job.error.startswith('Not processed: '), job.error)
+        self.assertIn('not connected', job.error)
+        self.assertIn('held funds were released', job.error)
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state', flat=True)), ['released'])
+        self.assertFalse(ProviderReceipt.objects.filter(job=job).exists())
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertFalse(LedgerEntry.objects.filter(job=job).exists())
+        self.assertEqual(self.connects, [])
+        row = AuditEvent.objects.filter(action='job.failed', target=str(job.pk)).get()
+        self.assertEqual((row.details['billing'], row.details['error_class']), ('not_processed', 'NoProviderRequest'))
+        self.assertTrue(all(w.reserved == 0 for w in Wallet.objects.filter(user=self.user)))
+        # Released exactly once: nothing is pending, and the encounter takes a new request without an administrator.
+        self.assertFalse(Job.objects.filter(encounter=self.encounter, state__in=['queued', 'running', 'reconciliation'])
+                         .exists())
+        from core.jobs import enqueue
+        again = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+        self.assertEqual(list(Reservation.objects.filter(job=again).values_list('state', flat=True)), ['held'])
+
+    def test_legacy_form_without_any_credential_is_not_processed_and_releases_the_hold(self):
+        job = self.enqueued()
+        with no_credential_for_any_provider():
+            self.assertTrue(run_job())
+        self.assert_not_processed(job)
+
+    def test_legacy_form_with_only_an_admin_key_is_refused_at_request_build_and_releases_the_hold(self):
+        """The SDK is constructed (an admin key satisfies its constructor) but the Responses request carries no bearer
+        credential, so the SDK's own header validation refuses the only attempt before any send."""
+        job = self.enqueued()
+        with no_credential_for_any_provider(OPENAI_ADMIN_KEY='synthetic-admin-key-never-sent'):
+            self.assertTrue(run_job())
+        self.assert_not_processed(job)
+
+    # Controls: a present credential still sends, and nothing but the SDK's own proof releases a hold.
+
+    def test_control_with_the_credential_the_request_leaves_once_and_is_settled(self):
+        job = self.enqueued()
+        sent = []
+
+        def handler(request):
+            sent.append(request)
+            body = json.dumps({'fields': [{'key': 'symptoms', 'quotes': ['no chest pain'], 'conflict': False}]})
+            return httpx.Response(200, json=openai_response_json(body), headers={'x-request-id': 'req_synthetic_openai'})
+        with no_credential_for_any_provider(OPENAI_API_KEY=SYNTHETIC_KEY), openai_over_mock_transport(handler):
+            self.assertTrue(run_job())
+        job.refresh_from_db()
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0].headers.get('authorization'), f'Bearer {SYNTHETIC_KEY}')
+        self.assertEqual(job.state, 'succeeded', job.error)
+        self.assertEqual(job.provider, 'openai:gpt-4.1-mini')
+        self.assertTrue(ProviderReceipt.objects.filter(job=job).exists())
+        self.assertEqual(set(Reservation.objects.filter(job=job).values_list('state', flat=True)), {'settled'})
+        self.assertGreater(Usage.objects.get(job=job).charged_cost, 0)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.answers['symptoms']['text'], 'no chest pain')
+        self.assertEqual(self.connects, [])
+
+    def assert_uncertain_with_its_hold(self, job):
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'reconciliation', job.error)
+        self.assertEqual(job.error, 'Provider outcome is uncertain; reconcile before retrying.')
+        self.assertEqual(list(Reservation.objects.filter(job=job).values_list('state', flat=True)), ['held'])
+
+    def test_control_the_same_openai_error_from_the_send_stays_an_unknown_outcome_with_its_hold(self):
+        """The constructor's class and message, raised by the send itself, prove nothing: a failure after transmission
+        looks the same, so the conservative outcome stays."""
+        job = self.enqueued()
+        with no_credential_for_any_provider(), patch('openai.OpenAI') as client:
+            client.return_value.responses.parse.side_effect = openai.OpenAIError(
+                'Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the '
+                '`OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable.')
+            self.assertTrue(run_job())
+        self.assert_uncertain_with_its_hold(job)
+
+    def test_control_a_connection_error_from_the_real_sdk_stays_an_unknown_outcome_with_its_hold(self):
+        """A subclass of OpenAIError raised by the real SDK after it tried to send is never read as 'nothing left'."""
+        job = self.enqueued()
+
+        def handler(request):
+            raise httpx.ConnectError('synthetic: connection dropped after the request was written')
+        with no_credential_for_any_provider(OPENAI_API_KEY=SYNTHETIC_KEY), openai_over_mock_transport(handler):
+            self.assertTrue(run_job())
+        self.assert_uncertain_with_its_hold(job)
+        row = AuditEvent.objects.filter(action='job.reconciliation', target=str(job.pk)).get()
+        self.assertEqual(row.details['error_class'], 'APIConnectionError')
+
+    def test_control_a_type_error_from_the_openai_send_itself_stays_an_unknown_outcome(self):
+        job = self.enqueued()
+        with no_credential_for_any_provider(), patch('openai.OpenAI') as client:
+            client.return_value.responses.parse.side_effect = TypeError(
+                '"Could not resolve authentication method. Expected either api_key or admin_api_key to be set."')
+            self.assertTrue(run_job())
+        self.assert_uncertain_with_its_hold(job)
