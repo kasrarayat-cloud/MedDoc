@@ -583,18 +583,21 @@ def laterality_form(path):
         grid.cell(0, c).text = h
     for r, name in enumerate(["Effusion", "Warmth", "Crepitus"], 1):
         grid.cell(r, 0).text = name
-    doc.add_paragraph("Joints examined")
+    doc.add_paragraph("Dressing site")
+    ticks = doc.add_table(rows=2, cols=2)
+    for r, name in enumerate(["(L) knee", "(R) knee"]):
+        ticks.cell(r, 0).width = Twips(300)
+        ticks.cell(r, 1).text = name
+    # Several answers need the printed command (the structural selection rule): the checklist's own instruction,
+    # printed under its own heading (an instruction printed between two questions belongs to neither, R4-F5).
+    doc.add_heading("Examination", 2)
+    doc.add_paragraph("Joints examined - tick all that apply")
     check = doc.add_table(rows=4, cols=2)
     check.cell(0, 0).text = "Joint"
     check.cell(0, 1).text = "Examined"
     for r, name in enumerate(["(L) knee", "(R) knee", "(L) hip"], 1):
         check.cell(r, 0).text = name
         check.cell(r, 1).text = "☐"
-    doc.add_paragraph("Dressing site")
-    ticks = doc.add_table(rows=2, cols=2)
-    for r, name in enumerate(["(L) knee", "(R) knee"]):
-        ticks.cell(r, 0).width = Twips(300)
-        ticks.cell(r, 1).text = name
     Path(path).write_bytes(docx_bytes(doc))
 
 

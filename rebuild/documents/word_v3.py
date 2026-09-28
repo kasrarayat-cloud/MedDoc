@@ -723,7 +723,7 @@ CHECK_ONE = re.compile(r"\b(?:check|tick|choose|select|mark|circle)\s+(?:only\s+
 _NOT_A_MEASURE = (r"(?!\s*(?:st|nd|rd|th|am|pm|h|hr|hrs|hours?|mins?|minutes?|days?|nights?|weeks?|months?|years?|"
                   r"times?|occasions?|mg|mcg|ml|kg|g|l|cm|mm|%)\b)")
 # Explicit one-only commands CHECK_ONE misses ("select just one", "pick one", "select a single option").
-# choice_kind uses it (through one_only) ONLY to keep a question single, never to allow more selections.
+# Detector.cardinality uses it (through one_only) ONLY to keep a question single, never to allow more selections.
 EXPLICIT_ONE = re.compile(r"\b(?:check|tick|choose|select|mark|circle|pick|indicate)\s+(?:(?:only|just|exactly)\s+)?"
                           r"(?:one|1|a\s+single)\b"
                           r"|(?<!\bthan\sa\s)(?<!\bthan\s)(?<!\bnot\sa\s)\bsingle\s+(?:option|answer|response|choice|selection)\b",
@@ -753,7 +753,7 @@ MORE_THAN_ONE_AFTER = re.compile(
     r"|[-–]\d{1,2}\b(?=\s+(?:boxes|options|answers|items|responses|categories|choices)\b)", re.I)
 # An open count ("one or more", "1+", "more than one", "one, some or all") is never a limit.
 OPEN_COUNT = re.compile(r"\b(?:one|1)\s*(?:or\s+more\b|\+)|\bmore\s+than\s+(?:one|1)\b|\bone\s*,\s*some\s+or\s+all\b"
-                        r"|\bone\s*/\s*both\b|\bany\s+number\b", re.I)
+                        r"|\bone\s*(?:/|\s+or\s+)\s*both\b|\bany\s+number\b|\bat\s+least\s+(?:one|1)\b" + _NOT_A_MEASURE, re.I)
 
 
 def one_only(texts, questions=""):
@@ -775,9 +775,12 @@ def one_only(texts, questions=""):
 # Uses of "one", "multiple" and heading numbers that are not a quantity of answers.
 NOT_A_QUANTITY = re.compile(r"^\s*\(?(?:\d{1,3}(?:\.\d{1,3})*|[a-z]|[ivxlc]{1,5})[.):]\s"
                             r"|\b(?:day|week|month|year|part|section|stage|step|phase|visit|cycle|level|grade|type|class|"
-                            r"tier|appendix|annex|chapter|pages?|schedule|volume|number|no\.?|questions?|items?|q|box)\s+"
+                            r"tier|appendix|annex|chapter|pages?|schedule|volume|number|no\.?|questions?|items?|q|box|options?)\s+"
                             r"(?:one|\d{1,3}[a-z]?|[ivx]{1,4})\b"
-                            r"|\bone-\w+|\bmultiple\s+(?:sclerosis|myeloma|births?|pregnancy)\b", re.I)
+                            r"|\bone-\w+|\bmultiple\s+(?:sclerosis|myeloma|births?|pregnancy)\b"
+                            # a printed date ("Revised: April 9, 2025"), never a count
+                            r"|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:st|nd|rd|th)?"
+                            r"(?:\s*,\s*\d{4})?\b", re.I)
 # A standalone small number printed as a quantity ("Put an X in 1 box.", "Record 2 treatments.", "Just 1."), never
 # a code, a decimal, a date, a time or a measured amount.
 NUMERAL_QUANTITY = (r"(?<![\w/.:,\-–])\d{1,2}(?![\w/:%]|[.,\-–]\d{3})(?!\s*(?:st|nd|rd|th|am|pm|h|hr|hrs|hours?|mins?|"
@@ -859,7 +862,7 @@ ONE_ANSWER = re.compile(r"\b(?:(?:only\s+)?(?:one|1)|a\s+single|single)\s+(?:box
 # A negated count is a limit, never an open count: "do not tick more than one box", "no more than one answer",
 # "never select multiple options".
 NEGATED_MANY = re.compile(r"(?:\b(?:no|not|never|cannot)\b|n[’']t\b)[^.;!?]*?"
-                          r"(?:\bmore\s+than\s+(?:one|1)\b|\b(?:multiple|several)\b)", re.I)
+                          r"(?:\bmore\s+than\s+(?:one|1)\b" + _NOT_A_MEASURE + r"|\b(?:multiple|several)\b)", re.I)
 ANSWER_NOUN = re.compile(r"\b(?:box|answer|option|response|choice|categor)", re.I)
 # Only a complete one-box-per-row rule for a table or grid is about a table ("Tick one box per row in the table
 # below."); any other sentence that mentions a column or a table ("tick one box in the column provided", "see table of
@@ -927,6 +930,350 @@ def label_instruction(sentence, contained=False):
         return printed
     return None
 
+
+# ── Selection cardinality: one structural, fail-closed rule (Detector.cardinality) ─────────────────────────────────
+# A question accepts MORE THAN ONE answer only with explicit POSITIVE local evidence - a complete "all / any / as many
+# as / one or more that apply" command (MANY_COMMAND) printed in its own label, its own source (the text printed after
+# its boxes, its answer cell, its column header) or its own adjacent instruction, or a verified independent-event
+# native-checkbox history relation (Detector.native_history_source) - and only when no one-only or limited-count
+# language is printed in its reachable scope: its own texts, the instructions printed next to it, and every one-only
+# instruction printed anywhere else in the form that no separate question owns, unless all it counts is form-filling
+# mechanics (Detector.scope_limit, limit_reaches). Everything else keeps ONE choice:
+# - a count phrase in a question ("one or both sides", "one or more joints", "at least one", "1+", "any number") and
+#   any other wording that only suggests several answers ("Reason(s)", "which apply") keep one choice with a review
+#   note, never several (R4-F1);
+# - an instruction printed between two questions belongs to neither: it never grants the question below several
+#   answers, and a limit there still governs both (R4-F5);
+# - a printed answer count or bound is never permission: a range or bound over answers that are themselves counts or
+#   scale points ("up to 3" over One / Two / Three, "circle 1-5" over 1 Never .. 5 Always) is a scale key and keeps
+#   one choice (R4-F4); any other count of two or more ("select up to 3" of 17, "at least two", "exactly 2", "pick
+#   one or two") is held for manual mapping, because one choice cannot record it and several cannot enforce it
+#   (R4-F14);
+# - a positive command beside a limit (in its own texts, next to it or elsewhere in the form), beside a count, or
+#   beside a per-item instruction ("tick one box for each symptom present") is a conflict: held, never guessed.
+# A rating-grid row, a coded response row and a column of boxes over labelled rows have their own structural rules
+# (Detector.rule_tables, Detector.coded_kind).
+_SELECT_VERB = r"(?:check|tick|choose|select|mark|circle|pick|indicate|cross|ring|record|list|give)"
+_TICK_VERB = r"(?:check|tick|choose|select|mark|circle|pick|indicate|cross|ring)"
+_ANSWER_NOUNS = r"(?:boxes|options|answers|items|categories|responses|choices|squares)"
+_TICKED = r"(?:checked|ticked|chosen|selected|marked|circled|picked|indicated|crossed|ringed|recorded)"
+_OF_THESE = r"(?:(?:of\s+)?(?:the\s+following|these|those|them|the)\s+)?"
+# The complete positive commands. A count phrase alone is never one: "one or more" needs "that apply" or a selection
+# verb acting on the answers ("select one or more options", "tick one or both"), never a question's own subject
+# ("Pain in one or more joints?", "on one or both sides?").
+MANY_COMMAND = re.compile(
+    r"\b(?:all|any|any\s*/\s*all|all\s*/\s*any|any\s+or\s+all|one\s+or\s+more)\s+" + _OF_THESE +
+    r"(?:" + _ANSWER_NOUNS + r"\s+)?(?:that|which)\s+(?:appl(?:y|ies|ied)|are\s+(?:applicable|relevant|appropriate))\b"
+    r"|\bas\s+many\s+(?:" + _ANSWER_NOUNS + r"\s+)?as\s+(?:appl(?:y|ies|ied)|are\s+(?:applicable|relevant|appropriate)|"
+    r"applicable|relevant|appropriate|necessary|needed|required)\b"
+    r"|\ball\s+(?:applicable|relevant|appropriate)\s+" + _ANSWER_NOUNS + r"\b"
+    r"|\b" + _TICK_VERB + r"\s+(?:one\s+or\s+more|one\s*(?:/|\s+or\s+)\s*both)\b"
+    r"|\bmore\s+than\s+(?:one|1|a\s+single)(?:\s+(?:box|option|answer|item|category|response|choice))?\s+(?:may|can)\s+be\s+"
+    + _TICKED + r"\b"
+    r"|\byou\s+(?:may|can)\s+" + _SELECT_VERB + r"\s+more\s+than\s+(?:one|1)\b", re.I)
+_NEGATION = re.compile(r"\b(?:no|not|never|cannot|nor)\b|n[’']t\b", re.I)
+_COUNT_VALUE = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+                "ten": 10}
+_NUMBER = r"(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)"
+# Counts of answers, as (kind, numbers): an upper bound ("up to 3", "no more than two", "maximum 2"), a lower bound
+# ("at least two", "minimum of 2"), an exact count ("exactly two", "tick 2", "2 answers"), a range after a selection
+# verb ("tick 1-3", "select one to three") and a list ("pick one, two or three"). A scale key after "tick one" ("tick
+# one - 1: never, 5: always") is none of them: its number is 1 and it names a scale point.
+COUNT_BOUND = re.compile(
+    r"\b(?P<upper>up\s+to|at\s+most|no\s+more\s+than|not\s+more\s+than|(?:a\s+)?max(?:imum)?\.?(?:\s+of)?)\s*" + _NUMBER
+    + r"\b" + _NOT_A_MEASURE +
+    r"|\b(?P<lower>at\s+least|(?:a\s+)?min(?:imum)?\.?(?:\s+of)?)\s*" + _NUMBER.replace("(", "(?P<low>", 1) + r"\b"
+    + _NOT_A_MEASURE +
+    r"|\b(?P<exact>exactly|" + _SELECT_VERB + r")\s+" + _NUMBER.replace("(", "(?P<num>", 1) + r"\b(?!\s*(?:[-–—/+]|or\b|to\b|,))"
+    + _NOT_A_MEASURE +
+    r"|\b" + _SELECT_VERB + r"\s+(?:(?:between|from)\s+)?" + _NUMBER.replace("(", "(?P<first>", 1)
+    + r"\s*(?:[-–—]|to|and|or)\s*" + _NUMBER.replace("(", "(?P<last>", 1)
+    # the upper bound ends the phrase or names the answers, as in MORE_THAN_ONE_AFTER: "tick one - two ticks void the
+    # answer" is a warning and "tick 1-5 = always" a scale key, not ranges
+    + r"\b(?=\s*(?:$|[):.;,]|(?:that|which|of|boxes|options|answers|items|responses|categories|choices)\b))" +
+    r"|\b(?:one|1)\s*,\s*(?:(?:two|2)\s*,?\s*)?(?:or|and)\s+" + _NUMBER.replace("(", "(?P<listed>", 1) + r"\b"
+    + _NOT_A_MEASURE, re.I)
+# Answer-count nouns after a number ("2 answers", "three boxes") make an exact count.
+COUNTED_ANSWERS = re.compile(r"(?<![\w/.:,\-–])" + _NUMBER + r"\s+(?:" + _ANSWER_NOUNS + r"|treatments|symptoms|"
+                             r"diagnoses|reasons|types)\b", re.I)
+# One-only and limited-count language (limit_language, fail-closed): a selection command with a limit
+# (limited_selection), a negated count, a count with a recording verb or an answer noun ("Record 1 treatment.", "Only
+# one type of leave may be recorded."), a bare count ("Just 1."), a one-only count with no verb at all ("Only one
+# treatment per admission.", "A maximum of one treatment is permitted.", "Patients are allowed a single treatment.",
+# "One treatment per patient.", R4-F7) and exclusivity ("These are mutually exclusive.", "Treatments may not be
+# combined.", "neither"). What such a sentence LIMITS is read by limit_targets: printed elsewhere in the form it
+# reaches every question (fail-closed) unless all it counts is form-filling mechanics that is not that question's own
+# subject ("one letter per box", "one emergency contact" and "a single patient label" limit how the form is written,
+# R4-F10; limit_reaches). A
+# single-answer word alone ("focus on your worst headache", "the principal treatment") scopes its own question, never
+# the form: the native-checkbox history reads it in its own heading chain and instructions (SINGLE_QUANTITY, R3-F7).
+# ("document" as a noun is not an act: "Use one font throughout the document.")
+LIMIT_ACT = re.compile(SELECTION_ACT.pattern + r"|\b(?:record(?:s|ed|ing)?|enter(?:s|ed|ing)?|document(?:ed|ing)|"
+                       r"report(?:s|ed|ing)?|list(?:s|ed|ing)?|writ(?:e|es|ten|ing)|giv(?:e|es|en|ing)|stat(?:e|es|ed|ing)|"
+                       r"put(?:s|ting)?|plac(?:e|es|ed|ing)|answer(?:s|ed|ing)?|ring(?:s|ed|ing)?|underlin(?:e|es|ed|ing)|"
+                       r"highlight(?:s|ed|ing)?|nominat(?:e|es|ed|ing)|specif(?:y|ies|ied))\b", re.I)
+LIMIT_COUNT = re.compile(r"\b(?:one|single|sole)\b" + _NOT_A_MEASURE + r"|" + NUMERAL_QUANTITY +
+                         r"|\b" + _COUNT_WORD + r"\b" + _NOT_A_MEASURE, re.I)
+ONE_COUNT = re.compile(r"\b(?:only|just|exactly)\s+(?:one|1|a\s+single)\b" + _NOT_A_MEASURE +
+                       r"|\b(?:may|can|must|should|shall|will)\s+(?:only\s+)?(?:have|receive|get|take|be\s+(?:given|"
+                       r"ticked|checked|selected|chosen|marked|recorded|entered|reported))\s+(?:only\s+)?(?:one|1|a\s+single)\b"
+                       + _NOT_A_MEASURE +
+                       r"|\b(?:limited|restricted|confined)\s+to\s+(?:only\s+)?(?:one|1|a\s+single)\b|\blimit\s+(?:of\s+)?(?:one|1)\b"
+                       + _NOT_A_MEASURE +
+                       r"|\b(?:one|1)\b" + _NOT_A_MEASURE + r"(?:\s+[^\W\d_][\w-]*){0,3}?\s+(?:only|per|each)\b"
+                       r"|\b(?:single|sole)\b"
+                       r"|\b(?:(?:a\s+)?max(?:imum)?\.?|at\s+most|(?:no|not)\s+more\s+than)\s*(?:of\s+)?(?:one|1)\b"
+                       + _NOT_A_MEASURE, re.I)
+EXCLUSIVE = re.compile(r"\bexclusiv\w*|\bneither\b"
+                       r"|(?:\b(?:not|never|cannot)\b|n[’']t\b)\s+(?:be\s+)?(?:combined|used\s+together|"
+                       r"(?:ticked|selected|chosen|marked|recorded)\s+together)\b", re.I)
+BARE_COUNT = re.compile(r"\W*(?:please\s+)?(?:(?:just|only|exactly)\s+(?:one|1|a\s+single|single)|one|a\s+single|single)"
+                        r"(?:\s+only)?\W*", re.I)
+# "Tick one box for each symptom present", "one box per symptom": one box per ITEM, where the items may be several
+# of this question's answers. One per question, row, line or statement is a one-only limit instead.
+PER_ITEM = re.compile(r"\b(?:one|1|a)\s+(?:box|tick|mark|cross|answer|response)\s+(?:for\s+(?:each|every)|per|against\s+each)"
+                      r"\s+(?!(?:question|row|line|statement|section|part|page|patient|person|form)s?\b)\w", re.I)
+# Wording that only suggests several answers: a plural "(s)", "any / which / each of the ...", "that apply" without a
+# complete command, "multiple", "several", and a count phrase that is not a command ("one or more", "one or both",
+# "at least one", "1+", "any number", "more than one").
+UNCERTAIN_MANY = re.compile(r"\(e?s\)|\b(?:any|all|which|each)\s+of\s+(?:the|these|those|them)\b|\b(?:that|which)\s+"
+                            r"appl(?:y|ies)\b|\bmultiple\b|\bseveral\b|\b(?:one|1)\s*(?:or\s+more\b|\+)"
+                            r"|\bone\s*(?:/|\s+or\s+)\s*both\b|\bat\s+least\s+(?:one|1)\b|\bany\s+number\b"
+                            r"|\bmore\s+than\s+(?:one|1)\b|\b" + _TICK_VERB + r"\s+(?:any|all)\b", re.I)
+# A sentence printed after a question's own boxes that names a wider reach than that question ("tick one box only
+# for every question", "throughout this form", "for the question above") is not that question's own.
+WIDER_REACH = re.compile(r"\b(?:throughout|every\s+\w+|each\s+(?:question|section|part|page|item|row|line)s?|"
+                         r"all\s+(?:the\s+)?(?:questions|sections|parts|pages|items)|(?:this|the|whole|entire)\s+"
+                         r"(?:form|document|questionnaire|section|part|page)|above|below|following|preceding|previous|"
+                         r"next|other\s+questions?)\b", re.I)
+# Answer and box nouns: a limit that counts them is about selection wherever it is printed.
+SELECTION_NOUN = re.compile(r"(?:box|boxe|tick|cross|crosse|mark|answer|option|response|choice|categor(?:y|ie)|item|"
+                            r"selection|square|type|kind|sort|entry|entrie)s?", re.I)
+# Words that end a counted phrase ("one per patient", "only one may be ticked") or carry no subject of their own.
+_FUNCTION_WORDS = frozenset(
+    "a an the of per only may can could should must will would shall is are was were be been being at in on for to "
+    "and or nor from if where which that with by as than then so it its this these those they them their there here "
+    "each every any all more most no not never please do does did has have had allowed permitted".split())
+# Words too general to tie a limit to one question's subject.
+_GENERIC_WORDS = frozenset(
+    "please patient patients details detail information section part form page other date name yes no none not any "
+    "all each per used use given state record recorded list tick ticked box boxes question questions answer answers "
+    "below above following only one single".split())
+
+
+def _count(value):
+    value = (value or "").lower()
+    return int(value) if value.isdigit() else _COUNT_VALUE.get(value)
+
+
+def _bound_value(m):
+    """The largest count a COUNT_BOUND match names."""
+    return max(_count(v) or 0 for v in m.groups()[1:] if v)
+
+
+def _strip_counts(text, *, bounds):
+    """The text without its positive commands and open counts, and (bounds=True) without the counted bounds of two
+    or more that many_evidence judges against the question's own answers."""
+    # Open counts first: "one, some or all that apply" is an open count before its "all that apply" is a command.
+    for rx in (OPEN_COUNT, MANY_COMMAND):
+        text = rx.sub(" ", text)
+    if bounds:
+        text = COUNT_BOUND.sub(lambda m: " " if _bound_value(m) >= 2 else m.group(0), text)
+        text = COUNTED_ANSWERS.sub(lambda m: " " if (_count(m.group(1)) or 0) >= 2 else m.group(0), text)
+    return text
+
+
+def _clauses(text):
+    """Sentences and their bracketed or dash-separated clauses: a command in "(tick all that apply)" is its own clause."""
+    return [x for x in re.split(r"(?<=[.!?;:])\s+|[()\[\]]|\s[-–—]\s", text or "") if x.strip()]
+
+
+def negated_command(text):
+    """A negation before a positive command in the same clause: "Do not tick all that apply."."""
+    for clause in _clauses(text):
+        negation = _NEGATION.search(clause)
+        if negation and MANY_COMMAND.search(clause, negation.end()):
+            return True
+    return False
+
+
+def positive_command(text):
+    """A complete positive command in `text` that no negation in its clause turns into a limit."""
+    return any(MANY_COMMAND.search(clause) and not negated_command(clause) for clause in _clauses(text))
+
+
+def limit_language(sentence, *, local=False):
+    """One-only or limited-count language in one printed sentence (fail-closed): a selection command with a limit
+    (limited_selection), a negated count, a count with a recording verb or an answer noun, a bare count, a one-only
+    count with no verb, or exclusivity. Positive commands and open counts are never limits. A counted bound of two or
+    more ("up to 3", "tick 1-3") is a limit wherever it is printed, except in the question's own label and
+    instructions (local=True): many_evidence judges it there against the question's own answers. A complete
+    one-box-per-row rule for a table is about that table's rows."""
+    raw = (sentence or "").strip()
+    if TABLE_ROWS.fullmatch(re.sub(r"[\s.!:;]+$", "", raw)):
+        return False
+    text = NOT_A_QUANTITY.sub(" ", raw)
+    if NEGATED_MANY.search(text) or negated_command(text):
+        return True
+    text = _strip_counts(text, bounds=local)
+    if limited_selection(text) or EXCLUSIVE.search(text) or BARE_COUNT.fullmatch(text) or ONE_COUNT.search(text):
+        return True
+    acts = LIMIT_ACT.search(text) or ANSWER_NOUN.search(text)
+    return bool(acts and LIMIT_COUNT.search(text))
+
+
+def _words(text):
+    return re.findall(r"[^\W\d_][\w'’-]*", text or "")
+
+
+def _stem(word):
+    """A word's first five letters after its plural ending: "copies" and "copy", "therapies" and "therapy",
+    "treatments" and "treatment" share a stem."""
+    word = re.sub(r"[^a-z]", "", (word or "").lower())
+    if len(word) > 4 and word.endswith("ies"):
+        word = word[:-3] + "y"
+    elif len(word) > 4 and re.search(r"(?:[sxz]|[cs]h)es$", word):
+        word = word[:-2]
+    elif len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        word = word[:-1]
+    return word[:5]
+
+
+def subject_stems(*texts):
+    """The content-word stems of a question's own subject (its label, its answers, its heading chain)."""
+    return {_stem(x) for t in texts for x in _words(t)
+            if len(x) >= 3 and x.lower() not in _FUNCTION_WORDS and x.lower() not in _GENERIC_WORDS}
+
+
+_COUNT_CUE = re.compile(r"\b(?:(?:only|just|exactly)\s+)?(?:a\s+)?(?:one|1|single|sole)\b" + _NOT_A_MEASURE +
+                        r"|\bmore\s+than\s+(?:one|1)\b|\b(?:multiple|several)\b|" + NUMERAL_QUANTITY +
+                        r"|\b" + _COUNT_WORD + r"\b" + _NOT_A_MEASURE, re.I)
+
+
+def limit_targets(sentence):
+    """What a one-only or limited-count sentence counts: "*" when it names nothing of its own ("Just 1.", "Tick one.",
+    "These are mutually exclusive.", "record only the main one") or selects with a verb or a mark ("Only one letter
+    may be circled."), else the phrases it counts ("one letter per box" ->
+    (letter,), "Only one treatment per admission" -> (treatment,), "a single patient label" -> (patient, label)); for
+    exclusivity, the words it names ("Treatments may not be combined" -> (Treatments,)). limit_reaches reads them."""
+    text = _strip_counts(NOT_A_QUANTITY.sub(" ", sentence or ""), bounds=False)
+    if SELECTION_ACT.search(SELECTION_ATTRIBUTION.sub(" ", text)):
+        return "*"                  # a count with a selection verb or mark is about ticking, whatever it names
+    phrases = []
+    counted = False
+    for m in _COUNT_CUE.finditer(text):
+        counted = True
+        rest = re.sub(r"^\s*(?:of\s+)?(?:the\s+|these\s+|those\s+)?", "", text[m.end():])
+        words = []
+        for token in re.findall(r"[^\W\d_][\w'’-]*|\S", rest)[:4]:
+            if not re.match(r"[^\W\d_]", token) or token.lower() in _FUNCTION_WORDS:
+                break
+            words.append(token)
+        if not words:
+            return "*"
+        phrases.append(tuple(words))
+    if EXCLUSIVE.search(text) or not counted:
+        named = [x for x in _words(EXCLUSIVE.sub(" ", text))
+                 if x.lower() not in _FUNCTION_WORDS and x.lower() not in {"mutually", "combined", "together"}]
+        if not named:
+            return "*"
+        phrases.append(tuple(named))
+    return phrases or "*"
+
+
+# Nouns of form-filling mechanics: a count of them limits how the form is written, never which answers are chosen
+# ("one letter per box", "one emergency contact", "a single patient label", "one copy", "one page", R4-F10).
+_MECHANICS_NOUNS = frozenset(
+    "letter letters character characters digit digits capital capitals label labels sticker stickers barcode barcodes "
+    "contact contacts copy copies page pages sheet sheets form forms signature signatures initial initials witness "
+    "witnesses ink pen pens pencil pencils font fonts photo photos photograph photographs picture pictures attachment "
+    "attachments envelope envelopes stamp stamps email emails address addresses phone phones telephone telephones "
+    "visitor visitors".split())
+
+
+def limit_reaches(targets, stems):
+    """A limit printed elsewhere reaches a question unless everything it counts is form-filling mechanics (the head
+    noun of each counted phrase is a _MECHANICS_NOUNS word) that is not that question's own subject (`stems`,
+    subject_stems). Fail-closed: a limit that names nothing, counts answers or boxes, or counts any other thing
+    ("treatment", "intervention", "type") may govern it."""
+    if targets == "*":
+        return True
+    return any(phrase[-1].lower() not in _MECHANICS_NOUNS or any(_stem(x) in stems for x in phrase) for phrase in targets)
+
+
+_OPTION_VALUE = {"none": 0, "zero": 0, "nil": 0, "once": 1, "twice": 2, **_COUNT_VALUE}
+
+
+def scale_values(options):
+    """The value each answer prints first when every answer is a count or a scale point ("One / Two / Three" ->
+    1, 2, 3; "1 Never .. 5 Always" -> 1..5; "None / Once / Twice or more" -> 0, 1, 2), else None. A non-answer
+    ("Unknown", "N/A", "REFUSED") is no point of the scale and is left out; any other answer ("Other") ends it."""
+    values = []
+    for option in options or []:
+        if YESNO.match((option or "").strip()) or RESPONSE_EXTRA.fullmatch((option or "").strip()):
+            continue
+        m = re.match(r"\W*(\d{1,3}|[a-z]+)\b", option or "", re.I)
+        word = m.group(1).lower() if m else ""
+        value = int(word) if word.isdigit() else _OPTION_VALUE.get(word)
+        if value is None:
+            return None
+        values.append(value)
+    return values or None
+
+
+def many_evidence(texts, options):
+    """(positive, unrepresented, bounded, scale) for a question's own label and instructions. positive: a complete
+    command allows several answers (positive_command); a count never does. unrepresented: a printed count one choice
+    cannot satisfy ("at least two", "exactly 2", "tick 2-3", "2 answers"). bounded: a printed count that allows two or
+    more answers ("select up to 3", "tick 1-3", "pick one, two or three"): one choice cannot record it and several
+    choices cannot enforce it. scale: a printed range or bound that is the answers' own scale - every answer prints a
+    count or a scale point and every printed count spans exactly their values ("up to 3" over One / Two / Three,
+    "circle 1-5" over 1 Never .. 5 Always): a scale key, never a count of answers (R4-F4). "Up to 2" over answers
+    numbered 1 to 3 is still a count."""
+    values = scale_values(options)
+    scale = values is not None
+    positive, unrepresented, bounded = False, "", ""
+    for text in texts:
+        for sentence in _clauses(NOT_A_QUANTITY.sub(" ", text or "")):
+            if positive_command(sentence):
+                positive = True
+            for m in COUNT_BOUND.finditer(sentence):
+                printed = m.group(0).strip()
+                if m.group("upper"):
+                    high = _count(m.group(2))
+                    if high and high >= 2:
+                        bounded = bounded or printed
+                        scale = scale and high == max(values)
+                elif m.group("lower"):
+                    low = _count(m.group("low"))
+                    if low and low >= 2:
+                        unrepresented = unrepresented or printed
+                        scale = False
+                elif m.group("exact"):
+                    exact = _count(m.group("num"))
+                    if exact and exact >= 2:
+                        unrepresented = unrepresented or printed
+                        scale = False
+                elif m.group("first"):
+                    first, last = _count(m.group("first")), _count(m.group("last"))
+                    if first and last and last > first and last >= 2:
+                        if first >= 2:
+                            unrepresented = unrepresented or printed
+                        else:
+                            bounded = bounded or printed
+                        scale = scale and (first, last) == (min(values), max(values))
+                elif m.group("listed"):
+                    last = _count(m.group("listed"))
+                    if last and last >= 2:
+                        bounded = bounded or printed
+                        scale = scale and last == max(values)
+            bounds = [m.span() for m in COUNT_BOUND.finditer(sentence)]
+            for m in COUNTED_ANSWERS.finditer(sentence):
+                # "Select up to three diagnoses": the number is the bound's, already judged above.
+                if (_count(m.group(1)) or 0) >= 2 and not any(a <= m.start() < b for a, b in bounds):
+                    unrepresented = unrepresented or m.group(0).strip()
+                    scale = False
+    return positive, unrepresented, bounded, scale
 
 SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b|\bsign(?:ed)? here\b", re.I)
 INITIALS = re.compile(r"\binitials?\b|\binitial (?:the )?box", re.I)
@@ -1093,6 +1440,17 @@ def is_option_word(txt: str) -> bool:
     return bool(OPTION_WORD.match(txt.strip()))
 
 
+# Answer words printed as column headers beyond OPTION_WORD: a survey's non-answers and availability.
+RESPONSE_EXTRA = re.compile(r"(?:refused|declined|don[’']?t\s+know|do\s+not\s+know|not\s+sure|unsure|prefer\s+not\s+to\s+"
+                            r"(?:say|answer)|not\s+available|service\s+not\s+available|n/?k)\.?", re.I)
+
+
+def response_word(txt: str) -> bool:
+    """A column header that is itself an answer ('Yes', 'N/A or ND', 'UNKNOWN', 'REFUSED', 'DON'T KNOW')."""
+    txt = (txt or "").strip()
+    return is_option_word(txt) or bool(YESNO.match(txt)) or bool(RESPONSE_EXTRA.fullmatch(txt))
+
+
 class Detector:
     def __init__(self, package: Package, *, layout_proposal=False):
         self.package = package
@@ -1114,6 +1472,8 @@ class Detector:
         self._col_lists = {}
         self._pure = {}
         self._form_wide = None
+        self._form_wide_nodes = []        # keeps the guidance paragraphs alive: their ids key the scope reading
+        self._coded_problem = ""
         self._compute_headings()
 
     # -- cached reads ----------------------------------------------------------------------------------------------
@@ -1513,18 +1873,170 @@ class Detector:
             return "date"
         return "text"
 
-    def choice_kind(self, question: str, options: list, hint="") -> str:
-        pieces = [question or ""] + (list(hint) if isinstance(hint, (list, tuple)) else [hint or ""])
-        text = " ".join(pieces)
-        # Explicit one-only wording keeps the question single; "one or more", "1-3", "one/both" and "1+" are not
-        # one-only (a conflict with "all that apply" is refused by the checkbox-group reader, never narrowed here).
-        if one_only(pieces, question):
-            return "choice"
-        if options and all(YESNO.match((o or "").strip()) for o in options):
-            return "choice"
-        if CHECK_ALL.search(text) or re.search(r"\(s\)|\bapply\b", question or "", re.I):
-            return "multi_choice"
-        return "choice"
+    def cardinality(self, question, options, *, local=(), between=(), own=(), hint="", where="", context=""):
+        """The selection rule for one checkbox question (see MANY_COMMAND): {"kind": "choice" | "multi_choice",
+        "note": review note or "", "single": one answer is printed as the rule (a one-only instruction or Yes/No
+        answers)} or {"problem": why it is held}.
+
+        `question` is its printed label. `local` is the rest of its own source, where a positive command counts: the
+        text printed after its boxes, the other paragraphs of its own cells, its column header, a nested grid's parent
+        question and its own adjacent instructions. `between` holds the instructions printed next to it that it does
+        not own (printed between it and another question, or pointing elsewhere): a limit there governs it, a command
+        there never does (R4-F5). `own` is the ids of the w:p elements read here, never read again as guidance printed
+        elsewhere. `context` is its heading chain: with its label and answers, its subject, which keeps a limit printed
+        elsewhere on form-filling mechanics in reach when the question is about that thing (limit_reaches). `hint` is
+        the printed line of its first boxes."""
+        texts = [t for t in [question or "", *local] if t and t.strip()]
+        near = [t for t in between or () if t and t.strip()]
+        options = [o or "" for o in options or []]
+        printed = (question or "")[:200]
+        if options and all(YESNO.match(o.strip()) for o in options):
+            return {"kind": "choice", "note": "", "single": True}
+        clauses = [x for t in [*texts, *near] for x in _clauses(t)]
+        one = one_only([*texts, *near, hint or ""], [*texts, *near]) or any(limit_language(x, local=True) for x in clauses)
+        positive, unrepresented, bounded, scale = many_evidence(texts, options)
+        count = unrepresented or bounded
+        per_item = next((m.group(0) for t in [*texts, *near] for m in [PER_ITEM.search(t)] if m), "")
+        if positive:
+            if count:
+                return {"problem": "Checkbox question%s carries a printed selection count the form's choices cannot "
+                        "represent ('%s') beside its all-that-apply instruction: the printed cardinality instructions "
+                        "conflict; nothing was guessed. Printed question: %s" % (where, count, printed)}
+            if one or per_item:
+                return {"problem": "Checkbox question%s: the printed cardinality instructions conflict (one only and "
+                        "several selections); nothing was guessed. Printed question: %s" % (where, printed)}
+            elsewhere = self.scope_limit(own, subject_stems(question, context, *options))
+            if elsewhere:
+                return {"problem": "Checkbox question%s: its all-that-apply instruction conflicts with a limited "
+                        "selection instruction printed elsewhere in the form (%s: %s) whose reach is unresolved; "
+                        "nothing was guessed. Printed question: %s" % (where, elsewhere[0], elsewhere[1][:120], printed)}
+            return {"kind": "multi_choice", "note": "", "single": False}
+        if per_item:
+            return {"problem": "Checkbox question%s asks for one box per item ('%s'); whether several of its answers "
+                    "may be chosen is unresolved, so nothing was guessed. Printed question: %s"
+                    % (where, per_item.strip(), printed)}
+        if count and not scale:
+            # One choice cannot record the second answer the count allows, and several choices cannot enforce the
+            # count: held, never mapped to either (R4-F14).
+            return {"problem": "Checkbox question%s carries a printed selection count the form's choices cannot "
+                    "represent ('%s'); nothing was guessed. Printed question: %s" % (where, count, printed)}
+        if one:
+            return {"kind": "choice", "note": "", "single": True}
+        if count:
+            # A scale key: one choice, said so, because the same print could count answers numbered like a scale.
+            return {"kind": "choice", "single": True, "note": (
+                "Checkbox question%s keeps one choice: its printed range ('%s') is read as the scale of its own "
+                "numbered answers, not as a number of answers to choose; review it. Printed question: %s"
+                % (where, count, printed))}
+        pointed = next((t for t in near if positive_command(t)), "")
+        # A yes/no question ("Do you have more than one type of headache? [ ] No [ ] Yes - describe") has one answer
+        # whatever its subject counts.
+        yes_no = bool(options) and all(re.match(r"\W*(?:yes|no)\b", o, re.I) for o in options)
+        uncertain = "" if yes_no else next((m.group(0) for t in texts for m in [UNCERTAIN_MANY.search(t)] if m), "")
+        note = ""
+        if pointed:
+            note = ("Checkbox question%s keeps one choice: an all-that-apply instruction is printed near it ('%s') but "
+                    "not as its own instruction (it sits between it and another question), so which question it governs "
+                    "is unresolved; review it before relying on one answer. Printed question: %s"
+                    % (where, pointed[:120], printed))
+        elif uncertain:
+            note = ("Checkbox question%s keeps one choice: its printed wording ('%s') suggests several answers may "
+                    "apply, but no complete all-that-apply instruction governs it; review it before relying on one "
+                    "answer. Printed question: %s" % (where, uncertain, printed))
+        return {"kind": "choice", "note": note, "single": False}
+
+    def scope_limit(self, own, stems=frozenset()):
+        """An unowned one-only or limited-count instruction printed anywhere in the form outside `own` (w:p ids) that
+        may govern a question whose subject stems are `stems` (limit_reaches): (where, sentence), or None. Its reach
+        cannot be read, so it may govern any question unless all it counts is form-filling mechanics."""
+        for pid, owner, sentence, where, targets in self.selection_guidance():
+            if pid in own or owner is not None or not limit_reaches(targets, stems):
+                continue
+            return where, sentence
+        return None
+
+    def adjacent_instructions(self, slot):
+        """The printed instruction paragraphs directly above `slot` in its own container (body or cell): consecutive
+        plain paragraphs up to a heading, a table, another question (boxes or a blank) or the container's start; the
+        three nearest are read. They are the question's OWN instructions only when a heading, plain text or the
+        container's start is printed above them. Printed below another question's boxes or blank, or after a table
+        or a block control, they sit between two questions and belong to neither (R4-F5); so does one that points
+        back ("for the question above"). Returns (own texts, between texts, paragraph slots)."""
+        container = [s for s in (slot.parent.children if slot.parent is not None else self.index.roots)
+                     if s.part == slot.part]
+        if slot not in container:
+            return [], [], []
+        texts, slots, owned = [], [], True
+        for prior in reversed(container[:container.index(slot)]):
+            if prior.kind != "p":
+                owned = False
+                break
+            text = self.text(prior.el).strip()
+            if not text:
+                continue
+            if self.question_box_paragraph(prior.el)[0]:
+                break
+            if (BOX in self.ptext(prior.el)[0] or CHECKED in self.ptext(prior.el)[0]
+                    or self.blank_spans(*self.ptext(prior.el))):
+                owned = False
+                break
+            texts.insert(0, text)
+            slots.insert(0, prior)
+        texts, slots = texts[-3:], slots[-3:]
+        if not owned:
+            return [], texts, slots
+        back = [t for t in texts if re.search(r"\b(?:above|previous|preceding)\b", t, re.I)]
+        return [t for t in texts if t not in back], back, slots
+
+    def own_source_texts(self, paras, cells=()):
+        """A question's printed source read with it, never again as guidance printed elsewhere (R4-F12): (own, shared).
+        Its own: the text printed after its boxes on its own lines (past a wide gap, or in brackets) and the other
+        paragraphs of its own cells (its answer cell, its row label and column header cells) when they hold no other
+        question (no box of another question, no nested table). A cell that also holds other questions is shared: its
+        other paragraphs are near the question but not its own - a limit there governs it, a command there never
+        does. Answer words are answers, never instructions ("Pain in only one joint")."""
+        own, shared, seen = [], [], {id(p.el) for p in paras}
+        for p in paras:
+            for segment in re.split("[" + BOX + CHECKED + "]", self.ptext(p.el)[0])[1:]:
+                for n, piece in enumerate(re.split(r"\t{2,}| {4,}|\n", segment)):
+                    piece = piece.replace("\x00", " ").strip()
+                    if n:
+                        own.append(piece)
+                    else:
+                        # the answer itself is not read; what it prints in brackets or after its first sentence is
+                        own += [a or b for a, b in re.findall(r"\(([^()]*)\)|\[([^\[\]]*)\]", piece)]
+                        own += re.split(r"(?<=[.!?;])\s+", piece)[1:]
+        for cell in cells:
+            paragraphs = [x for x in cell.el.iter(q("w:p")) if id(x) not in seen]
+            alone = cell.el.find(".//" + q("w:tbl")) is None and not any(
+                BOX in paragraph_text(x)[0] or CHECKED in paragraph_text(x)[0] for x in paragraphs)
+            for x in paragraphs:
+                seen.add(id(x))
+                if BOX not in paragraph_text(x)[0] and CHECKED not in paragraph_text(x)[0]:
+                    (own if alone else shared).append(text_of(x, own=True))
+        return [t.strip() for t in own if t and t.strip()], [t.strip() for t in shared if t and t.strip()]
+
+    def question_cells(self, tbl_slot, row, col):
+        """The cells that print a table question's own source for the answer at (row, col): its row label (the
+        nearest label cell to the left, as row_label reads it) and its column header cells (the label row directly
+        above and the header rows over that column). Every other cell of the table stays in the question's scope."""
+        cells, rows = [], self.grid(tbl_slot)
+        label = None
+        for c in sorted(rows.get(row, []), key=lambda c: c.info["col"]):
+            if c.info["col"] >= col:
+                break
+            if self.is_label_cell(c):
+                label = c
+        cells += [label] if label is not None else []
+        above = [r for r in rows if r < row]
+        header_rows = [max(above)] if above and self.row_kind(tbl_slot, max(above)) == "label" else []
+        ht = self.header_table(tbl_slot)
+        for table, rr in [(tbl_slot, r) for r in header_rows] + [(ht, r) for r in self.header_rows(ht)]:
+            cells += [c for c in self.grid(table).get(rr, []) if c.info["col"] <= col < c.info["col"] + c.info["span"]]
+        return cells
+
+    def own_paragraph_ids(self, cells):
+        return {id(x) for c in cells for x in c.el.iter(q("w:p"))}
 
     # -- the rules -------------------------------------------------------------------------------------------------
     def detect(self):
@@ -2013,12 +2525,15 @@ class Detector:
         return False
 
     def coded_kind(self, label, options, context):
-        """A coded response row records one code per row. Only a literal instruction widens it; a plural label
-        ('Lesion(s)') or 'apply' is not one."""
-        text = label + " " + context
-        if CHECK_ONE.search(text) or all(YESNO.match((o or "").strip()) for o in options):
-            return "choice"
-        return "multi_choice" if CHECK_ALL.search(text) else "choice"
+        """A coded response row records ONE code per row: one choice, whatever its label, title or heading says (R4-F3).
+        A complete positive command in its label or its governing context (cell title, column headers, headings)
+        asks for several codes the row cannot record: held, never widened. Returns the kind, or None with the reason
+        in self._coded_problem."""
+        self._coded_problem = ""
+        if any(positive_command(text) for text in (label, context)):
+            self._coded_problem = "A check-all instruction governs coded rows that each record one response."
+            return None
+        return "choice"
 
     def rule_tab_columns(self):
         """Complete same-cell title + repeated header/response pairs, never numeric-code guessing."""
@@ -2101,6 +2616,8 @@ class Detector:
                     if re.search(r"\bselect up to\b", instructions, re.I):
                         complete = False;problem = "The governing cardinality includes an unrepresented selection limit.";break
                     kind = self.coded_kind(label, options, context)
+                    if kind is None:
+                        complete = False;problem = self._coded_problem;break
                     pending.append((header, row, Area("checkbox" if len(options) == 1 else kind, label, row,
                         {"type": "checkboxes", "boxes": refs}, context=context,
                         options=options, complete_source=True)))
@@ -2364,7 +2881,10 @@ class Detector:
                             "source": [{"part": p.part, "slot": p.path, "fingerprint": fingerprint(p.el),
                                         "starts": infos[p.id]["starts"] if p.id in infos else roles.get(p.id, [0])}
                                        for p in chain]}
-                area = Area(self.coded_kind(label, info["options"], context), label, row,
+                kind = self.coded_kind(label, info["options"], context)
+                if kind is None:
+                    return [], self._coded_problem
+                area = Area(kind, label, row,
                             {"type": "checkboxes", "boxes": refs, "column_sequence": relation},
                             context=context, options=list(info["options"]), complete_source=True)
                 pending.append((header, row, area))
@@ -2626,11 +3146,22 @@ class Detector:
                           + " Printed text: " + text + " Governing context: " + context)
 
     def selection_guidance(self):
-        """Every limited selection sentence printed in the form (body, table cells, text boxes, positioned frames,
-        page headers/footers, footnotes, endnotes), and every selection command in floating text, as (paragraph
-        id, owner, sentence, where). The owner is the block of a separate question whose label the sentence is:
-        only a paragraph's first sentence, only a label carrying a complete one-only command (label_instruction),
-        and only when that question's boxes follow the label directly (label_owner). Nothing else is owned."""
+        """Every one-only or limited-count sentence printed in the form (limit_language: body, table cells, text
+        boxes, positioned frames, page headers/footers, footnotes, endnotes), and every selection command in floating
+        text, as (paragraph id, owner, sentence, where, targets). `targets` is what the sentence limits
+        (limit_targets; "*" for a selection command in floating text). The owner is the question whose own source the
+        sentence is, and nothing else is owned:
+        - in a paragraph that prints a question's own boxes (boxed_guidance): the label printed directly before a run
+          of at least two of them ("Exclusively breastfed? [ ] Yes [ ] No") and the text printed after them on the
+          same line ("[ ] Y [ ] N [ ] NA (choose one)", "[ ] Neither", "[ ] Eye tearing in only ONE EYE"), unless it
+          names a wider reach (WIDER_REACH: "tick one box only for every question", "for the question above") or
+          starts a new label ("... [ ] No  Leave type (tick one):"). Text on an earlier line or after a line break is
+          not that question's (R4-F9);
+        - in a paragraph without boxes: its first sentence when it is a label carrying a complete one-only command
+          (label_instruction) and at least two of that question's own boxes follow directly (label_owner); and, in a
+          question of several sentences, its last sentence when it leads in to those boxes ("6. Investigator's
+          opinion of the relationship ... Check applicable box:") and nothing in the paragraph names a wider reach
+          ("Answer the questions below. Tick one box only:" governs more than the next boxes)."""
         if self._form_wide is None:
             found = []
             parts = self.package.content_parts() + [n for n in ("word/footnotes.xml", "word/endnotes.xml")
@@ -2641,41 +3172,137 @@ class Detector:
                     unit = next((a for a in p.iterancestors() if a.tag in (q("w:tc"), TXBX)), p)
                     framed = p.find("./" + q("w:pPr") + "/" + q("w:framePr")) is not None
                     floating = framed or unit.tag == TXBX
-                    printed = [x for x in re.split(r"(?<=[.!?;])\s+", text_of(p, own=True).strip()) if x]
-                    flags = [limited_selection(x) or floating and floating_selection(x) for x in printed]
-                    if not any(flags):
+                    printed = paragraph_text(p)[0]
+                    boxed = BOX in printed or CHECKED in printed
+                    if boxed:
+                        entries = self.boxed_guidance(p, printed)
+                    else:
+                        sentences = [x for x in re.split(r"(?<=[.!?;])\s+", text_of(p, own=True).strip()) if x]
+                        entries = [(x, "label" if i == 0 else "lead" if i == len(sentences) - 1 and x.rstrip().endswith(":")
+                                    else "") for i, x in enumerate(sentences)]
+                    flagged = []
+                    for sentence, role in entries:
+                        limit = limit_language(sentence)
+                        if limit or floating and floating_selection(sentence):
+                            flagged.append((sentence, role, limit))
+                    if not flagged:
                         continue
-                    owner = None if framed else self.label_owner(p, printed[0])
+                    self._form_wide_nodes.append(p)
                     where = ("a text box in " if unit.tag == TXBX else "a positioned frame in " if framed else "") + part
-                    for i, sentence in enumerate(printed):
-                        if flags[i]:
-                            found.append((id(p), owner if i == 0 else None, sentence, where))
+                    for sentence, role, limit in flagged:
+                        owner = None
+                        if framed:
+                            pass
+                        elif role is True:
+                            owner = p
+                        elif role == "label":
+                            owner = self.label_owner(p, sentence)
+                        elif role == "lead" and not WIDER_REACH.search(text_of(p, own=True)):
+                            owner = self.boxes_below(p)
+                        found.append((id(p), owner, sentence, where, limit_targets(sentence) if limit else "*"))
             self._form_wide = found
         return self._form_wide
 
+    def boxed_guidance(self, p, printed):
+        """(sentence, owned by the paragraph's own question) for every sentence of a paragraph that prints boxes
+        (see selection_guidance). The text after a question's box is that box's own answer or instruction ("[ ] Eye
+        tearing in only ONE EYE" is an answer, never guidance for another question); a label before the boxes is owned
+        only by a run of at least two of them (R3-F1: a lone box never owns "tick one")."""
+        answers = self.question_boxes(p, printed)
+        own = answers and self.box_run(p) >= 2
+        clean = lambda text: re.sub(r"\s+", " ", re.sub("[\x00" + BOX + CHECKED + "]", " ", text)).strip()
+        split = lambda text: [x for x in re.split(r"(?<=[.!?;])\s+", clean(text)) if x]
+        first = min(i for i, ch in enumerate(printed) if ch in (BOX, CHECKED))
+        out = []
+        head = printed[:first].split("\n")
+        for n, line in enumerate(head):
+            sentences = split(line)
+            for i, sentence in enumerate(sentences):
+                label = n == len(head) - 1 and i == len(sentences) - 1
+                out.append((sentence, own and label and not WIDER_REACH.search(sentence)))
+        def own(sentence, answer):
+            # A box's own answer text, or a trailing command that counts nothing of its own ("(choose one)"); a
+            # trailing sentence that counts its own subject ("... Only one treatment may be recorded.") may govern
+            # other questions too.
+            if not answers or WIDER_REACH.search(sentence) or re.search(r"[:?]\s*$", sentence):
+                return False
+            if answer or not limit_language(sentence):
+                return True
+            targets = limit_targets(sentence)
+            return targets == "*" or all(SELECTION_NOUN.fullmatch(x) for phrase in targets for x in phrase)
+        line, *later = printed[first:].split("\n")
+        for segment in re.split("[" + BOX + CHECKED + "]", line)[1:]:
+            answer, *tail = re.split(r"\t{2,}| {4,}", segment, maxsplit=1)
+            for i, sentence in enumerate(split(answer)):
+                out.append((sentence, own(sentence, i == 0)))
+            for sentence in split(tail[0] if tail else ""):
+                out.append((sentence, own(sentence, False)))
+        for sentence in (x for text in later for x in split(text)):
+            out.append((sentence, False))
+        return out
+
+    @staticmethod
+    def question_boxes(p, printed):
+        """The paragraph's boxes are a question's own answers: native boxes, or printed glyphs that start the line or
+        follow a label ending in ':', '?' or ')', each followed by its answer. Sample glyphs inside an instruction
+        ("Mark [x] one box only, leave the others [ ]") are not a question."""
+        if checkbox_nodes(p, own=True):
+            return True
+        parts = re.split("[" + BOX + CHECKED + "]", printed)
+        label = re.sub(r"[\s\[(]+$", "", parts[0])          # a bracketed box: "Sex: (choose one) [ ] M [ ] F"
+        return (not label.strip() or bool(re.search(r"\S\s*[:?)]$", label))) and all(x.strip(" \t])") for x in parts[1:])
+
+    @staticmethod
+    def box_run(p):
+        """The boxes printed in `p` and in the paragraphs directly around it that start with a box (one option per
+        line), counted up to two."""
+        count = sum(paragraph_text(p)[0].count(ch) for ch in (BOX, CHECKED))
+        for step in ("getprevious", "getnext"):
+            node = getattr(p, step)()
+            while count < 2 and node is not None and node.tag == q("w:p"):
+                text = paragraph_text(node)[0]
+                if not text.strip():
+                    node = getattr(node, step)()
+                    continue
+                if text.lstrip(" \t[(")[:1] not in (BOX, CHECKED):
+                    break
+                count += sum(text.count(ch) for ch in (BOX, CHECKED))
+                node = getattr(node, step)()
+        return count
+
     def label_owner(self, p, sentence):
-        """The block whose boxes the label `sentence` (the first sentence of paragraph `p`) introduces, or None:
-        `p` itself when its boxes follow the label directly ("Sex (tick one): [ ] Male [ ] Female"), or, when
-        nothing follows the label in `p`, the next printed block when it starts with a box (the label above its own
-        option lines, in a boxed cell, or beside the answer cell of its table row). Boxes printed after other text
-        answer a separately labelled question ("Leave type (tick one):" above "Escorted: [ ] Yes [ ] No")."""
+        """The block whose boxes the label `sentence` (the first sentence of paragraph `p`, which prints no box)
+        introduces, or None: the next printed block when it starts with a box (the label above its own option lines,
+        in a boxed cell, or beside the answer cell of its table row). A single box cannot satisfy "tick one" on its
+        own, so an owner needs at least two boxes of its own (R3-F1): a lone box ("[ ] No community leave taken")
+        never owns the command, which then may govern the next list."""
         cell = p.getparent()
         contained = cell is not None and cell.tag == q("w:tc") and bool(checkbox_nodes(cell, own=False))
         label = label_instruction(sentence, contained)
-        # The label starts the paragraph as printed: after a box it is an answer's text, not a question's label.
+        # The label starts the paragraph as printed.
         start = re.match(r"\s*" + re.escape(label) + r"[.\s]*[:?]?", paragraph_text(p)[0]) if label else None
-        if start is None:
+        if start is None or paragraph_text(p)[0][start.end():].strip():
             return None
-        after = paragraph_text(p)[0][start.end():]
-        if after.strip():
-            return p if after.lstrip()[0] in (BOX, CHECKED) else None
+        return self.boxes_below(p)
+
+    def boxes_below(self, p):
+        """The next printed block after `p` when it starts a run of at least two boxes of its own, else None."""
         block = self.next_printed(p)
-        return block if block is not None and self.starts_with_box(block) else None
+        if block is None or not self.starts_with_box(block):
+            return None
+        # Its own boxes: the run of printed blocks that each start with a box, directly below the label.
+        own, node = 0, block
+        while node is not None and self.starts_with_box(node) and own < 2:
+            own += sum(paragraph_text(para)[0].count(ch) for para in node.iter(q("w:p")) for ch in (BOX, CHECKED))
+            last = node if node.tag == q("w:p") else next(reversed(list(node.iter(q("w:p")))), None)
+            node = self.next_printed(last) if last is not None else None
+        return block if own >= 2 else None
 
     @staticmethod
     def next_printed(p):
         """The next paragraph, table or block control printed after `p` in its container (text or a box); after the
-        last one in a table cell, the next cell of its row."""
+        last one in a table cell, the next cell of its row, or, for a row that is that one cell (a question printed
+        across the table), the first cell of the next row."""
         node = p.getnext()
         while node is not None:
             if node.tag in (q("w:p"), q("w:tbl"), q("w:sdt")) and any(
@@ -2687,16 +3314,22 @@ class Detector:
             nxt = cell.getnext()
             while nxt is not None and nxt.tag != q("w:tc"):
                 nxt = nxt.getnext()
+            row = cell.getparent()
+            if nxt is None and row is not None and row.tag == q("w:tr") and len(row.findall(q("w:tc"))) == 1:
+                following = row.getnext()
+                while following is not None and following.tag != q("w:tr"):
+                    following = following.getnext()
+                nxt = following.find(q("w:tc")) if following is not None else None
             return nxt
         return None
 
     @staticmethod
     def starts_with_box(el):
-        """The first printed content of `el` is a box (a native control or a box glyph)."""
+        """The first printed content of `el` is a box (a native control or a box glyph, bracketed or not: "[ ]")."""
         for para in el.iter(q("w:p")):
             text = paragraph_text(para)[0]
             if text.strip():
-                return text.lstrip()[0] in (BOX, CHECKED)
+                return text.lstrip(" \t[(")[:1] in (BOX, CHECKED)
         return False
 
     @staticmethod
@@ -2709,16 +3342,12 @@ class Detector:
         parts = re.split("[" + BOX + CHECKED + "]", text_of(el))
         return len(parts) >= 3 and bool(re.search(r"\S\s*[:?)]\s*$", parts[0])) and all(x.strip() for x in parts[1:])
 
-    def limited_selection_elsewhere(self, sources):
-        """Limited selection guidance outside this list's own source that no separate question owns: (where,
-        sentence), or None. Its reach cannot be read, so it may govern this list. (A body label directly above the
-        list's own lines is part of its source and read there, never here.)"""
-        own = {id(s.el) for s in sources}
-        for pid, owner, sentence, where in self.selection_guidance():
-            if pid in own or owner is not None:
-                continue
-            return where, sentence
-        return None
+    def limited_selection_elsewhere(self, sources, stems=frozenset()):
+        """Limited selection guidance outside this list's own source that no separate question owns and that is about
+        this list (limit_reaches over its subject `stems`): (where, sentence), or None. Its reach cannot be read, so it
+        may govern this list. (A body label directly above the list's own lines is part of its source and read there,
+        never here.)"""
+        return self.scope_limit({id(s.el) for s in sources}, stems)
 
     def native_history_source(self, group, units, options, used_para):
         """A bounded completed-event list has independent native checkboxes.
@@ -2753,10 +3382,14 @@ class Detector:
         # completed", "Number of sessions attended", "Doses received: One /
         # Two / Three") have exactly one answer whatever is printed around
         # them: one choice, as before this rule, never held and never several.
+        # The reason is kept: beside an explicit all-that-apply command an exclusive answer ("None") does not make
+        # the list exclusive, while a single-answer question or count answers conflict with it (R4-F8).
         exclusive = any(YESNO.fullmatch(o) or OPTION_WORD.fullmatch(o)
                         or re.match(r"(?:yes|no|none|nil|not|n/?a|unknown)\b", o, re.I) for o in options)
-        if exclusive or (options and all(QUANTITY_OPTION.match(o) for o in options)) or SINGLE_QUANTITY.search(question):
-            return {"kind": "choice"}
+        if (options and all(QUANTITY_OPTION.match(o) for o in options)) or SINGLE_QUANTITY.search(question):
+            return {"kind": "choice", "single": "question"}
+        if exclusive:
+            return {"kind": "choice", "single": "answers"}
         problem = "The complete native-checkbox history source is unresolved."
         unresolved = "The native-checkbox history selection instruction is unresolved."
         if (len(question) > MAX_MAPPING_LABEL or any(not o for o in options)
@@ -2863,7 +3496,7 @@ class Detector:
                     for h in heading_context.split(" > ")]
         for text in (*headings, *instructions):
             for sentence in re.split(r"(?<=[.!?;])\s+", text.strip()):
-                if not history_selection(sentence) and not limited_selection(sentence):
+                if not history_selection(sentence) and not limit_language(sentence):
                     continue
                 command = re.sub(r"[.!:;]+$", "", sentence.strip()).strip()
                 wrapped = re.fullmatch(r"\((.*)\)", command)
@@ -2888,13 +3521,23 @@ class Detector:
         if (one and many or re.search(r"\b(?:up to|at most|at least|no more than|between|maximum|minimum)\b", scope, re.I)
                 or re.search(r"\bexactly\b", scope, re.I) and not one):
             return {"problem": "The native-checkbox history has conflicting or unrepresented selection limits."}
-        single = bool(re.search(r"\b(?:single|current|currently|latest|last|most recent|primary|main|sole)\b", scope, re.I))
+        # A single-answer word anywhere in the governing headings, the instructions or the owner ("Principal
+        # treatment", "Highest level of care", "Record the current treatment.") keeps one answer (R3-F7): the
+        # same vocabulary as a single-quantity owner question.
+        single = bool(SINGLE_QUANTITY.search(scope))
         kind = "choice" if one or single else "multi_choice"
+        stems = subject_stems(question, heading_context, *options)
         # Independence is never inferred past a limited selection instruction
         # printed anywhere else in the form (a parent heading, the section, the
         # preamble, a page header, a text box, below the list) that no separate
         # question owns: its reach cannot be read, so the list keeps one choice.
-        elsewhere = self.limited_selection_elsewhere(sources) if kind == "multi_choice" else None
+        # An explicit all-that-apply command beside such a limit is a conflict:
+        # never narrowed to one choice, never widened; it is held (R3-F9).
+        elsewhere = self.limited_selection_elsewhere(sources, stems) if kind == "multi_choice" else None
+        if elsewhere and many:
+            return {"problem": "The native-checkbox history's all-that-apply instruction conflicts with a limited "
+                    "selection instruction printed elsewhere in the form (" + elsewhere[0] + ": " + elsewhere[1][:120]
+                    + ") whose reach is unresolved; nothing was guessed."}
         if elsewhere:
             return {"kind": "choice", "note": "The native-checkbox history keeps one choice: a limited selection "
                     "instruction is printed elsewhere in the form (" + elsewhere[0] + ": " + elsewhere[1][:120]
@@ -2902,7 +3545,8 @@ class Detector:
         relation = {"relation": "native_checkbox_history", "question": question, "context": context,
                     "options": options, "cardinality": kind,
                     "sources": [{"part": s.part, "slot": s.path, "fingerprint": fingerprint(s.el)} for s in sources]}
-        return {"kind": kind, "question": question, "context": context, "relation": relation}
+        return {"kind": kind, "question": question, "context": context, "relation": relation,
+                "single": "question" if kind == "choice" else ""}
 
     @staticmethod
     def option_families(text):
@@ -3110,15 +3754,32 @@ class Detector:
                 s = self.index.by_id.get("%s#%s" % (b["part"], b["slot"]))
                 if s is not None and s is not anchor and s not in extra:
                     extra.append(s)
-            hint = ([question] + ([nested["cardinality"]] if nested else [])
-                    + [self.text(p.el) for p in g["paras"][:1]])
-            printed = " ".join([question or ""] + ([nested["cardinality"]] if nested else []))
-            if len(units) > 1 and one_only(printed, printed) and CHECK_ALL.search(printed):
-                # "Tick all that apply and indicate one as the main symptom": one
-                # answer and several at once. Neither is guessed: never narrowed
-                # to one choice, never widened past the one-only wording.
-                self.notes.append("Checkbox question at " + pslot.id + ": the printed cardinality instructions conflict "
-                                  "(one only and several); nothing was guessed. Printed question: " + (question or "")[:200])
+            decision = {"kind": "checkbox", "note": ""}
+            if len(units) > 1:
+                # The question's own source: its label, the lines of its boxes and what is printed after them, the
+                # other paragraphs of its own cells, the header of its column, a nested grid's parent question and its
+                # own adjacent instructions (the plain paragraphs directly above it, when they are not printed between
+                # it and another question).
+                local, between, local_slots = self.adjacent_instructions(used_para or pslot)
+                cell = self.host_cell(pslot)
+                cells = []
+                if cell is not None and self.owning_cell(pslot) is cell:
+                    cells = [cell, *self.question_cells(cell.parent, cell.info["row"], cell.info["col"])]
+                # (its column header is one of its question cells, read with the rest of its own source)
+                source, shared = self.own_source_texts(g["paras"] + ([used_para] if used_para is not None else []), cells)
+                local = ([nested["cardinality"]] if nested else []) + local + source
+                between = between + shared
+                own = {id(x.el) for x in [*g["paras"], *local_slots, *([used_para] if used_para is not None else []),
+                                          *(nested["source_slots"] if nested else [])]}
+                if cell is not None:
+                    own.update(self.own_paragraph_ids([cell, *self.question_cells(cell.parent, cell.info["row"],
+                                                                                    cell.info["col"])]))
+                decision = self.cardinality(question, options, local=local, between=between, own=own,
+                                            hint=self.text(g["paras"][0].el), where=" at " + pslot.id,
+                                            context=self.context_for(anchor))
+            if decision.get("problem"):
+                # Never narrowed to one choice, never widened past a limit: the source is left for manual mapping.
+                self.notes.append(decision["problem"])
                 for p in g["paras"]:
                     self.claimed.add(id(p.el))
                 if used_para is not None:
@@ -3132,10 +3793,23 @@ class Detector:
                 if question and options[0]:
                     area.context = (area.context + " > " + question).strip(" >")[:300]
             else:
-                area = Area(self.choice_kind(question, options, hint), question or "Choose", anchor, target,
+                area = Area(decision["kind"], question or "Choose", anchor, target,
                             context=self.context_for(anchor), options=[o or "(option %d)" % (i + 1) for i, o in enumerate(options)],
                             extra_slots=extra)
                 history = self.native_history_source(g, units, options, used_para)
+                if (history and not history.get("problem") and decision["kind"] == "multi_choice"
+                        and history["kind"] == "choice" and history.get("single") != "answers"):
+                    # An explicit all-that-apply command is never narrowed to one answer: beside a single-answer
+                    # question, count answers or a limit the history read, the list is held (R4-F8). An exclusive
+                    # answer ("None") does not make an all-that-apply list exclusive.
+                    history = {"problem": "Checkbox question at %s: its all-that-apply instruction conflicts with the "
+                               "single answer its native-checkbox history reads (%s); nothing was guessed."
+                               % (pslot.id, (question or "")[:120])}
+                if history and not history.get("problem") and decision["kind"] == "multi_choice":
+                    history = {k: v for k, v in history.items() if k != "note"}
+                    history["kind"] = "multi_choice"
+                    if "relation" in history:
+                        history["relation"] = dict(history["relation"], cardinality="multi_choice")
                 if history:
                     if history.get("problem"):
                         self.notes.append(history["problem"] + " Location: " + pslot.id)
@@ -3149,6 +3823,8 @@ class Detector:
                         area.kind = history["kind"]
                         if history.get("note"):
                             self.notes.append(history["note"] + " Location: " + pslot.id)
+                if area.kind == "choice" and decision.get("note") and not (history and history.get("note")):
+                    self.notes.append(decision["note"])
             if nested:
                 area.context, area.complete_source = nested["context"], True
                 for source_slot in nested["source_slots"]:
@@ -3267,10 +3943,20 @@ class Detector:
                         if 2 <= len(words) <= 6 and all(is_option_word(w) for w in words) and \
                                 (qtext.endswith(("?", ":", ".")) or re.search(r"\bcircle\b", qtext, re.I)):
                             opt_slot = paras[k]
-                            self.add(Area(self.choice_kind(qtext, words), clean_label(qtext), opt_slot,
-                                          {"type": "text_options", "options": words}, context=self.context_for(opt_slot),
-                                          options=words))
+                            local, between, local_slots = self.adjacent_instructions(q_slot)
+                            decision = self.cardinality(qtext, words, local=local, between=between,
+                                                        where=" at " + opt_slot.id, context=self.context_for(opt_slot),
+                                                        own={id(x.el) for x in [q_slot, opt_slot, *local_slots]})
+                            if decision.get("problem"):
+                                self.notes.append(decision["problem"])
+                            else:
+                                if decision["note"]:
+                                    self.notes.append(decision["note"])
+                                self.add(Area(decision["kind"], clean_label(qtext), opt_slot,
+                                              {"type": "text_options", "options": words}, context=self.context_for(opt_slot),
+                                              options=words))
                             self.claimed.add(id(q_slot.el))
+                            self.claimed.add(id(opt_slot.el))
                             i = k + 1
                             continue
                     # (b) lettered list items (or short numbered items) below a question
@@ -3305,9 +3991,18 @@ class Detector:
                             i = j
                             continue
                         words = [option_text(self.text(o.el)) for o in opts]
-                        self.add(Area(self.choice_kind(qtext, words), clean_label(qtext), opts[0],
-                                      {"type": "paragraph_options", "paragraphs": [o.path for o in opts]},
-                                      context=self.context_for(opts[0]), options=words, extra_slots=opts[1:]))
+                        local, between, local_slots = self.adjacent_instructions(q_slot)
+                        decision = self.cardinality(qtext, words, local=local, between=between,
+                                                    where=" at " + opts[0].id, context=self.context_for(opts[0]),
+                                                    own={id(x.el) for x in [q_slot, *opts, *local_slots]})
+                        if decision.get("problem"):
+                            self.notes.append(decision["problem"])
+                        else:
+                            if decision["note"]:
+                                self.notes.append(decision["note"])
+                            self.add(Area(decision["kind"], clean_label(qtext), opts[0],
+                                          {"type": "paragraph_options", "paragraphs": [o.path for o in opts]},
+                                          context=self.context_for(opts[0]), options=words, extra_slots=opts[1:]))
                         self.claimed.add(id(q_slot.el))
                         for o in opts:
                             self.claimed.add(id(o.el))
@@ -3475,6 +4170,18 @@ class Detector:
         return edges == {"top": True, "left": False, "bottom": False, "right": False} and \
             upper is not None and all(upper.values())
 
+    def spanned_response_columns(self, tslot, row, run):
+        """A header cell printed above the run's own column headers that spans exactly the run's columns ('RESPONSE
+        OPTIONS' over 'All of the Time' .. 'DON'T KNOW'): the form prints those columns as ONE set of answers to each
+        row's statement, which establishes the grid's orientation (R3-F6, R4-F6)."""
+        first = run[0][0].info["col"]
+        last = run[-1][0].info["col"] + run[-1][0].info["span"]
+        ht = self.header_table(tslot)
+        rows = [r for r in self.header_rows(ht) if ht is not tslot or r < row]
+        return any(c.info["vmerge"] != "continue" and c.info["span"] >= 2 and c.info["col"] == first
+                   and c.info["col"] + c.info["span"] == last and self.cell_text(c)
+                   for r in rows for c in self.grid(ht).get(r, []))
+
     def rule_tables(self):
         for tslot in [s for s in self.index.slots if s.kind == "tbl"]:
             rows = self.grid(tslot)
@@ -3502,7 +4209,16 @@ class Detector:
                                 filler.add(id(c))
             # (a) option grids: a row with a label and >=2 empty cells under short option headers -> one choice.
             #     Headers must be option words (Yes/No/N/A/0-4/...), or short, non-field-like and shared by >= 3 rows
-            #     (a 'Name | Date | Signature' row is three answers, never one choice).
+            #     (a 'Name | Date | Signature' row is three answers, never one choice). Printed boxes under longer
+            #     response headers ('All of the Time', 'Daily or Almost Daily') are one rating-grid row too (R3-F6),
+            #     but only when the form prints those columns as one set of answers: a header cell above them spanning
+            #     exactly those columns ('RESPONSE OPTIONS'). Without it the header shape alone does not establish the
+            #     grid's orientation ('Diagnosed by a doctor | Currently taking medication for it' are two facts, not
+            #     one answer): the boxes are left to the column rules, which hold a shared-row grid (R4-F6). Each
+            #     statement row is ONE choice across its response columns, whatever its statement says (R4-F2). A
+            #     column headed by a question ('Diagnosed?') is a question of its own.
+            def question_header(text):
+                return bool(re.search(r"[?:]", text) or SELECTION_ACT.search(text) or history_selection(text))
             candidates = []
             for r in ordered:
                 cells = [c for c in sorted(rows[r], key=lambda c: c.info["col"]) if c.info["vmerge"] != "continue"]
@@ -3511,27 +4227,41 @@ class Detector:
                     header = option_text(self.column_header(tslot, c.info["col"], r).strip("√✓✔*† "))
                     if id(c) in filler:
                         continue
-                    if self.is_option_cell(c) and header and len(header.split()) <= 3 and len(header) <= 24 and \
-                            (is_option_word(header) or not FIELDISH.search(header)):
-                        opt_cells.append((c, header))
+                    boxed = self.cell_text(c) in (BOX, CHECKED)
+                    short = len(header.split()) <= 3 and len(header) <= 24 and \
+                        (is_option_word(header) or not FIELDISH.search(header))
+                    response = boxed and len(header) <= 60 and not question_header(header)
+                    if self.is_option_cell(c) and header and (short or response):
+                        opt_cells.append((c, header, not short))
                 cur = []
-                for c, h in opt_cells:
+                for c, h, long in opt_cells:
                     if cur and cells.index(c) != cells.index(cur[-1][0]) + 1:
                         candidates.append((r, cur))
                         cur = []
-                    cur.append((c, h))
+                    cur.append((c, h, long))
                 if cur:
                     candidates.append((r, cur))
+            # A run under longer response headers is a rating-grid row only under a spanning response header.
+            candidates = [(r, [(c, h) for c, h, _ in run]) for r, run in candidates
+                          if not any(long for _, _, long in run) or self.spanned_response_columns(tslot, r, run)]
             shared = {}
             for r, run in candidates:
                 shared[tuple(h for _, h in run)] = shared.get(tuple(h for _, h in run), 0) + 1
+            accepted = []
             for r, run in candidates:
                 if len(run) < 2:
                     continue
                 headers = [h for _, h in run]
                 if len(set(h.lower() for h in headers)) < len(headers):
                     continue                  # the same header over several cells: separate answers, not one choice
-                optionish = all(is_option_word(h) for h in headers) or shared[tuple(headers)] >= 3
+                # Headers that are not all answer words establish a row reading for printed boxes only when the form
+                # prints them as answers: a spanning response header over them, or answer words among them ('Yes' /
+                # 'No' / 'UNKNOWN' / 'SERVICE NOT AVAILABLE', 'Agree' .. 'REFUSED'). 'Diagnosed | Medicated' over
+                # boxes are two facts about each row, never one answer (R4-F6): left to the column rules, which hold.
+                boxed_run = all(self.cell_text(c) in (BOX, CHECKED) for c, _ in run)
+                optionish = all(is_option_word(h) for h in headers) or shared[tuple(headers)] >= 3 and (
+                    not boxed_run or any(response_word(h) for h in headers)
+                    or self.spanned_response_columns(tslot, r, run))
                 # A pair of blank side columns records independent values. The
                 # printed axis alone does not instruct the author to choose a side.
                 source = self.text(tslot.el)
@@ -3541,17 +4271,52 @@ class Detector:
                     optionish = False
                 if not optionish:
                     continue
-                if True:
-                    label = self.row_label(tslot, r, run[0][0].info["col"])
-                    if not label:
-                        continue
+                label = self.row_label(tslot, r, run[0][0].info["col"])
+                if label:
+                    accepted.append((r, run, headers, label))
+            # A row whose printed boxes are not all one run (a second run of response columns, or a box under no
+            # header) has no established row/column orientation: its runs are held, never read as two questions.
+            held = set()
+            for r in {r for r, _, _, _ in accepted}:
+                cells = [c for c in sorted(rows[r], key=lambda c: c.info["col"]) if c.info["vmerge"] != "continue"]
+                runs = [run for rr, run, _, _ in accepted if rr == r]
+                segment, segments = [], []
+                for c in cells:
+                    if self.is_label_cell(c):
+                        segments.append(segment)
+                        segment = []
+                    elif BOX in self.cell_text(c) or CHECKED in self.cell_text(c) or checkbox_nodes(c.el, own=False):
+                        segment.append(c)
+                segments.append(segment)
+                for segment in segments:
+                    mine = [run for run in runs if any(c is run[0][0] for c in segment)]
+                    covered = {id(c) for run in mine for c, _ in run}
+                    stray = [c for c in segment if id(c) not in covered and not question_header(
+                        self.column_header(tslot, c.info["col"], r))]
+                    if mine and (len(mine) > 1 or stray):
+                        held.update(id(run[0][0]) for run in mine)
+            grid_own = self.adjacent_instructions(tslot)[0] if accepted else []
+            for r, run, headers, label in accepted:
+                if id(run[0][0]) in held:
+                    self.notes.append("Rating grid row '%s' at %s was left for manual mapping: its printed boxes are not "
+                                      "one run of headed response columns, so which answers the row offers is not "
+                                      "established." % (label[:60], run[0][0].id))
+                elif any(positive_command(text) for text in [label, *grid_own] + [
+                        self.cell_text(x) for c, _ in run for x in self.question_cells(tslot, r, c.info["col"])]):
+                    # A grid row reads one answer per row; a several-answers command in the row, over its columns or
+                    # in the grid's own instruction cannot be honoured.
+                    self.notes.append("Rating grid row '%s' at %s was left for manual mapping: its printed all-that-apply "
+                                      "instruction conflicts with the grid's one answer per row; nothing was guessed."
+                                      % (label[:60], run[0][0].id))
+                else:
                     boxes = [{"kind": "cell", "part": c.part, "slot": c.path} for c, _ in run]
-                    self.add(Area(self.choice_kind(label, headers), label, run[0][0], {"type": "checkboxes", "boxes": boxes},
-                                  context=self.context_for(run[0][0]), options=headers, extra_slots=[c for c, _ in run[1:]]))
-                    for c, _ in run:
-                        self.claimed.add(id(c.el))
-                        for x in c.el.iter():
-                            self.claimed.add(id(x))
+                    self.add(Area("choice", label, run[0][0], {"type": "checkboxes", "boxes": boxes},
+                                  context=self.context_for(run[0][0]), options=headers,
+                                  extra_slots=[c for c, _ in run[1:]]))
+                for c, _ in run:
+                    self.claimed.add(id(c.el))
+                    for x in c.el.iter():
+                        self.claimed.add(id(x))
             # (b) printed option cells to circle: 'Label | Y | N' (not a header row over empty option columns)
             for r in ordered:
                 cells = [c for c in sorted(rows[r], key=lambda c: c.info["col"]) if c.info["vmerge"] != "continue"]
@@ -3571,9 +4336,16 @@ class Detector:
                         if len(opts) >= 2 and not header_row:
                             words = [self.cell_text(o) for o in opts]
                             boxes = [{"kind": "cell_text", "part": o.part, "slot": o.path} for o in opts]
-                            self.add(Area(self.choice_kind(txt, words), clean_label(txt), opts[0],
-                                          {"type": "checkboxes", "boxes": boxes}, context=self.context_for(opts[0]),
-                                          options=words, extra_slots=opts[1:]))
+                            decision = self.cardinality(txt, words, own={id(x) for o in [c, *opts] for x in o.el.iter(q("w:p"))},
+                                                        where=" at " + opts[0].id, context=self.context_for(opts[0]))
+                            if decision.get("problem"):
+                                self.notes.append(decision["problem"])
+                            else:
+                                if decision["note"]:
+                                    self.notes.append(decision["note"])
+                                self.add(Area(decision["kind"], clean_label(txt), opts[0],
+                                              {"type": "checkboxes", "boxes": boxes}, context=self.context_for(opts[0]),
+                                              options=words, extra_slots=opts[1:]))
                             for o in opts:
                                 for x in o.el.iter():
                                     self.claimed.add(id(x))
@@ -3581,7 +4353,17 @@ class Detector:
                             continue
                     i += 1
             # (b2) a checklist down a column: box cells in >= 3 data rows under one question header, each row
-            #      labelled -> one multi-choice whose options are the row labels
+            #      labelled -> one question whose options are the row labels. Its boxes mark rows of independent
+            #      items, so neither reading is printed by the layout alone: it accepts several rows only by the
+            #      selection rule (Detector.cardinality: a complete all-that-apply command in its header or in its own
+            #      instruction printed directly above the table, and no limit in reach), and one row only by a
+            #      printed one-only rule. Anything else ('Continue', 'Mark (X) if continuing', 'Still taking') is held:
+            #      one choice would assert an exclusivity the form never prints (R4-F11). Box cells left in two or
+            #      more columns of the same rows are a grid whose rows the option-grid rule could not read: its
+            #      row/column orientation is not established, so it is held, never read as column-wise lists (R3-F6).
+            #      A table continuing a list takes that list's reading, held with it when it was held.
+            unclaimed = {col: {r for r, c in items if not self.cell_has_claim(c.el)} for col, items in box_cols.items()}
+            above_texts, above_between, above_slots = self.adjacent_instructions(tslot)
             for col, items in sorted(box_cols.items()):
                 items = [(r, c) for r, c in items if not self.cell_has_claim(c.el)]
                 if len(items) < 3:
@@ -3593,23 +4375,59 @@ class Detector:
                     continue
                 first = labelled[0][1]
                 boxes = [{"kind": "cell", "part": c.part, "slot": c.path} for _, c, _ in labelled]
-                existing = self._col_lists.get((id(ht), col)) if ht is not tslot else None
-                if existing is not None:
-                    existing.target["boxes"].extend(boxes)
-                    existing.options.extend(lbl for _, _, lbl in labelled)
-                    existing.extra_slots.extend(c for _, c, _ in labelled)
+                # Other box columns share this column's rows: a grid. Only a column headed by its own question
+                # ('Diagnosed?') is a column-wise question there; any other header is one of the rows' answers.
+                item_rows = {r for r, _ in items}
+                shares = any(other != col and item_rows & {r for r, _ in box_cols[other]} for other in box_cols)
+                if (any(other != col and unclaimed[other] & unclaimed[col] for other in unclaimed)
+                        or shares and not question_header(header)):
+                    self.notes.append("Checkbox grid at %s was left for manual mapping: boxes in several columns share its "
+                                      "rows, and which of them answer one row's question is not established. Column: %s"
+                                      % (tslot.id, clean_label(header)[:80]))
                     for _, c, _ in labelled:
                         for x in c.el.iter():
                             self.claimed.add(id(x))
+                    self._col_lists[(id(tslot), col)] = False
                     continue
-                self._col_lists[(id(tslot), col)] = None
-                self.add(Area(self.choice_kind(header, [], header + " all that apply"), clean_label(header), first,
-                              {"type": "checkboxes", "boxes": boxes}, context=self.context_for(first),
-                              options=[lbl for _, _, lbl in labelled], extra_slots=[c for _, c, _ in labelled[1:]]))
-                self._col_lists[(id(tslot), col)] = self.areas[-1]
+                existing = self._col_lists.get((id(ht), col)) if ht is not tslot else None
                 for _, c, _ in labelled:
                     for x in c.el.iter():
                         self.claimed.add(id(x))
+                if existing is False:
+                    # The list this table continues was held: its continuation is held with it.
+                    self.notes.append("Checkbox list continued at %s was left for manual mapping with the list it "
+                                      "continues. Column: %s" % (tslot.id, clean_label(header)[:80]))
+                    continue
+                if existing is not None:
+                    # Its reading was taken over the whole form: every limit printed in this continuation was in its
+                    # reach (scope_limit), and a printed count is never read against the number of rows.
+                    existing.target["boxes"].extend(boxes)
+                    existing.options.extend(lbl for _, _, lbl in labelled)
+                    existing.extra_slots.extend(c for _, c, _ in labelled)
+                    continue
+                own = self.own_paragraph_ids([c for _, c in items]
+                                             + [x for r, _ in items for x in self.question_cells(tslot, r, col)])
+                own.update(id(x.el) for x in above_slots)
+                options = [lbl for _, _, lbl in labelled]
+                decision = self.cardinality(header, options, local=above_texts, between=above_between, own=own,
+                                            where=" at " + first.id, context=self.context_for(first))
+                if decision.get("problem"):
+                    self.notes.append(decision["problem"])
+                    self._col_lists[(id(tslot), col)] = False
+                    continue
+                if decision["kind"] != "multi_choice" and not decision["single"]:
+                    self.notes.append("Checkbox column at %s was left for manual mapping: its boxes mark rows of "
+                                      "independent items, and nothing printed says whether one row or several may be "
+                                      "marked; one choice would assert an exclusivity the form does not print. Column: %s"
+                                      % (first.id, clean_label(header)[:80]))
+                    self._col_lists[(id(tslot), col)] = False
+                    continue
+                if decision["note"]:
+                    self.notes.append(decision["note"])
+                area = Area(decision["kind"], clean_label(header), first, {"type": "checkboxes", "boxes": boxes},
+                            context=self.context_for(first), options=options, extra_slots=[c for _, c, _ in labelled[1:]])
+                self.add(area)
+                self._col_lists[(id(tslot), col)] = area
             # (b3) narrow empty cells (no room for text): a tick box beside a printed option ('[ ] Male'), grouped
             #      down the column into one question; a narrow cell with no option beside it is a spacer
             ticks = {}
@@ -3643,7 +4461,20 @@ class Detector:
                         area = Area("checkbox", options[0], c0, {"type": "checkboxes", "boxes": boxes},
                                     context=(self.context_for(c0) + " > " + question).strip(" >")[:300], options=options)
                     else:
-                        area = Area(self.choice_kind(question, options), question or "Choose", c0,
+                        decision = self.cardinality(question, options, where=" at " + c0.id, context=self.context_for(c0),
+                                                    own=self.own_paragraph_ids(
+                                                        [cc for r, c, _ in g for cc in rows[r] if cc is c or cc.info["col"]
+                                                         == c.info["col"] + c.info["span"]]
+                                                        + [x for r, c, _ in g for x in self.question_cells(tslot, r, c.info["col"])]))
+                        if decision.get("problem"):
+                            self.notes.append(decision["problem"])
+                            for _, c, _ in g:
+                                for x in c.el.iter():
+                                    self.claimed.add(id(x))
+                            continue
+                        if decision["note"]:
+                            self.notes.append(decision["note"])
+                        area = Area(decision["kind"], question or "Choose", c0,
                                     {"type": "checkboxes", "boxes": boxes}, context=self.context_for(c0), options=options,
                                     extra_slots=[c for _, c, _ in g[1:]])
                     self.add(area)
