@@ -503,3 +503,87 @@ class QuestionBoxes(unittest.TestCase):
         self.assertIn('Part B > Social Supervisor > Supervision', fields[0]['context'])
         self.assertIn('Part C > Clinical Supervisor > Supervision', fields[1]['context'])
         self.assertEqual(len([n for n in result['notes'] if 'Unassigned answer box' in n]), 2)
+
+
+class NestedCheckboxOwnership(unittest.TestCase):
+    def form(self, *, heading='', subsection=False, spacer='plain', mixed=False, write_in=False):
+        doc = Document()
+        if heading: doc.add_paragraph(heading, style='Heading 1')
+        outer = doc.add_table(rows=1, cols=1).cell(0, 0)
+        outer.text = 'Which symptoms occur? Tick all that apply.'
+        if subsection: outer.add_paragraph('During exertion:')
+        blank = outer.add_paragraph()
+        if spacer == 'underline': blank.add_run('       ').underline = True
+        if spacer == 'other_question': blank.text = 'Which symptoms occurred last year?'
+        inner = outer.add_table(rows=1, cols=2)
+        inner.cell(0, 0).text = '☐ Tightness'
+        inner.cell(0, 1).text = ('☐ Weakness [☐ Right ☐ Left]' if mixed else
+                                '☐ Other: ______' if write_in else '☒ Nausea')
+        return doc
+
+    def test_full_nested_question_and_cardinality_preserve_scope_and_checked_state(self):
+        for heading, subsection in (('', False), ('Donor', False), ('Current visit', True)):
+            with self.subTest(heading=heading, subsection=subsection):
+                original = data(self.form(heading=heading, subsection=subsection))
+                result = w.inspect(original)
+                fields = [f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes']
+                self.assertEqual(len(fields), 1)
+                target = fields[0]
+                self.assertEqual(target['kind'], 'multi_choice')
+                self.assertEqual(target['label'], 'During exertion:' if subsection else
+                                 'Which symptoms occur? Tick all that apply.')
+                if heading: self.assertIn(heading, target['context'])
+                if subsection: self.assertIn('Which symptoms occur? Tick all that apply.', target['context'])
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+                self.assertEqual(target['printed_ticked'], [1])
+                blank = w.fill(original, result['fields'], {})
+                self.assertEqual(w.option_states(w.SlotIndex(w.open_package(blank)), target), [False, True])
+                filled = w.fill(original, result['fields'], {target['key']: ['Tightness', 'Nausea']})
+                self.assertEqual(w.option_states(w.SlotIndex(w.open_package(filled)), target), [True, True])
+                before = w.SlotIndex(w.open_package(original)); after = w.SlotIndex(w.open_package(filled))
+                for slot in before.slots:
+                    if slot.kind == 'p' and '/tbl[0]/tr[0]/tc[0]/tbl[0]/' not in slot.path:
+                        self.assertEqual(etree.tostring(slot.el), etree.tostring(after.by_id[slot.id].el))
+
+    def test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed(self):
+        for spacer in ('underline', 'other_question'):
+            with self.subTest(spacer=spacer):
+                result = w.inspect(data(self.form(spacer=spacer)))
+                self.assertFalse([f for f in result['fields'] if f['kind'] == 'multi_choice'])
+                self.assertTrue(any('Nested option' in note for note in result['notes']))
+
+    def test_nested_source_cannot_lose_local_subject_or_page_boundary(self):
+        for case in ('foreign_prefix', 'unpaired_subsection', 'page_break', 'long_question'):
+            with self.subTest(case=case):
+                doc = self.form()
+                owner = doc.tables[0].cell(0, 0)
+                if case == 'foreign_prefix':
+                    source = OxmlElement('w:p');run = OxmlElement('w:r');text = OxmlElement('w:t')
+                    text.text = 'Donor';run.append(text);source.append(run)
+                    owner.paragraphs[0]._p.addprevious(source)
+                elif case == 'unpaired_subsection':
+                    owner.paragraphs[1].text = 'Donor:'
+                    source = OxmlElement('w:p');run = OxmlElement('w:r');text = OxmlElement('w:t')
+                    text.text = 'During exertion:';run.append(text);source.append(run)
+                    owner.paragraphs[1]._p.addnext(source)
+                elif case == 'page_break':
+                    owner.paragraphs[1]._p.get_or_add_pPr().append(OxmlElement('w:pageBreakBefore'))
+                else:
+                    owner.paragraphs[0].text = 'Which symptoms occur? Tick all that apply. ' + 'Preserve this qualifier. ' * 20
+                result = w.inspect(data(doc))
+                groups = [f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes']
+                if case == 'long_question':
+                    self.assertEqual(len(groups), 1)
+                    self.assertEqual(groups[0]['label'], owner.paragraphs[0].text.strip())
+                else:
+                    self.assertFalse(groups)
+                    self.assertTrue(any('Nested option' in note for note in result['notes']))
+                    if case == 'foreign_prefix': self.assertTrue(any('Donor' in note for note in result['notes']))
+
+    def test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible(self):
+        mixed = w.inspect(data(self.form(mixed=True)))
+        self.assertFalse([f for f in mixed['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+        self.assertTrue(any('subordinate' in note and 'Right' in note and 'Left' in note for note in mixed['notes']))
+        write_in = w.inspect(data(self.form(write_in=True)))
+        self.assertTrue(any('Unassigned write-in' in note and 'Other' in note and '/tc[1]/p[0]' in note
+                            for note in write_in['notes']))

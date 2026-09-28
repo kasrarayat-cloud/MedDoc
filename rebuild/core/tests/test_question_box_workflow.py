@@ -171,3 +171,70 @@ class PairedCellWorkflow(QuestionBoxWorkflow):
     def check_mapping(self, version):
         self.assertEqual(len(version.fields), 2)
         self.assertTrue(all(f['locator']['target']['type'] == 'cell' for f in version.fields))
+
+
+@override_settings(**V3)
+class NestedCheckboxWorkflow(V3Fixture, TestCase):
+    target_slot = 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs'
+    question = 'Which symptoms occur? Tick all that apply.'
+    wanted_options = ['Tightness', 'Nausea']
+
+    def source(self):
+        from documents.test_question_boxes import NestedCheckboxOwnership
+        return data(NestedCheckboxOwnership().form())
+
+    def capture(self, mode, original, version, encounter, exported):
+        pass
+
+    def test_nested_choice_upload_review_worker_correction_finalize_download(self):
+        original = self.source()
+        template, version = self.uploaded(data=original, name='SYNTHETIC nested choice ownership')
+        target = next(f for f in version.fields if f['locator']['slot'] == self.target_slot)
+        self.assertEqual((target['label'], target['kind']), (self.question, 'multi_choice'))
+        self.assertEqual(b''.join(self.client.get(f'/templates/{template.pk}/original/').streaming_content), original)
+        self.assertContains(self.client.get(f'/templates/{template.pk}/'), self.question)
+        self.confirm(template, version)
+        for mode in ('missing', 'ordinary'):
+            notes = 'Administrative visit record.' if mode == 'missing' else 'The patient reports symptoms during a headache.'
+            self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+            encounter = Encounter.objects.latest('created_at')
+            answers = selected_answers(notes, version.fields, None if mode == 'missing' else target['key'])
+            self.assertEqual(answers[target['key']]['status'], 'missing' if mode == 'missing' else 'conflict')
+            # Ordinary option semantics still require a clinician decision. This is
+            # structural/application evidence, never automatic clinical success.
+            with patch('core.jobs.generation.generate', return_value=(answers, Decimal('0'), {}, {},
+                       'synthetic-unit-selection', '', True)) as provider:
+                self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
+                self.assertTrue(run_one())
+            provider.assert_called_once(); encounter.refresh_from_db()
+            self.assertEqual(Job.objects.get(encounter=encounter).state, 'succeeded')
+            usage = Usage.objects.get(job__encounter=encounter)
+            self.assertTrue(usage.simulated);self.assertEqual(usage.charged_cost, 0)
+            self.assertContains(self.client.get(f'/encounters/{encounter.pk}/'), 'data-v3-options')
+            payload = {'revision': encounter.revision}
+            for field in version.fields:
+                payload['answer_' + field['key']] = self.wanted_options if mode == 'ordinary' and field is target else ''
+                payload['reviewed_' + field['key']] = 'on'
+            self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/', payload).status_code, 302)
+            encounter.refresh_from_db()
+            if mode == 'ordinary':
+                self.assertEqual(encounter.answers[target['key']]['status'], 'edited')
+                self.assertEqual(encounter.answers[target['key']]['text'], '\n'.join(self.wanted_options))
+            self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/finalize/',
+                {'revision': encounter.revision, 'reviewed': 'on'}).status_code, 302)
+            encounter.refresh_from_db();self.assertEqual(encounter.status, 'finalized')
+            response = self.client.get(f'/encounters/{encounter.pk}/export/')
+            self.assertEqual(response.status_code, 200)
+            exported = b''.join(response.streaming_content)
+            self.assertEqual(hashlib.sha256(exported).hexdigest(), encounter.export_sha256)
+            self.assertEqual(private_path(template.original_path).read_bytes(), original)
+            before = w.SlotIndex(w.open_package(original));after = w.SlotIndex(w.open_package(exported))
+            expected = ([option in self.wanted_options for option in target['options']] if mode == 'ordinary'
+                        else w.option_states(before, target))
+            self.assertEqual(w.option_states(after, target), expected)
+            changed_paragraphs = {box['part']+'#'+box['slot'].rsplit('/glyphs',1)[0]
+                                  for box in target['locator']['target']['boxes']}
+            for slot in before.slots:
+                if slot.kind == 'p' and (mode == 'missing' or slot.id not in changed_paragraphs):
+                    self.assertEqual(etree.tostring(slot.el), etree.tostring(after.by_id[slot.id].el))
+            self.capture(mode, original, version, encounter, exported)
