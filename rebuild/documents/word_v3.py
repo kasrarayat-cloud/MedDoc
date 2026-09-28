@@ -736,23 +736,39 @@ ONE_LIMIT = re.compile(r"\bonly\s+(?:one|1)\b(?!\s*-)" + _NOT_A_MEASURE +
                        r"|\b(?:no|not)\s+more\s+than\s+(?:one|1)\b" + _NOT_A_MEASURE +
                        r"|\b(?:max(?:imum)?\.?|at\s+most)\s*(?:of\s+)?(?:one|1)\b" + _NOT_A_MEASURE +
                        r"|\bthe\s+(?:one|single)\b(?!\s*-)" + _NOT_A_MEASURE, re.I)
-# A following quantity turns "one" into a range or an open count: "one or more", "1-3", "1–3", "one/both", "1+",
-# "one, some or all", "one to three". Any other continuation ("pick one and give details", "pick 1 / see notes",
-# "indicate one to be reviewed") leaves the one-only reading standing.
-MORE_THAN_ONE_AFTER = re.compile(r"\s*\+|\s*(?:,|/|-|–|—|\bor\b|\band\b|\bto\b|\bnor\b)\s*(?:more|some|all|any|several|"
-                                 r"many|multiple|both|two|three|four|five|six|seven|eight|nine|ten|\d)", re.I)
+# A following quantity turns "one" into a range or an open count: "one or more", "one to three", "one/both", "1+",
+# "one, some or all", "1, 2 or 3", "1-3 that apply", "1–3:". Any other continuation ("pick one and give details",
+# "pick 1 / see notes", "indicate one to be reviewed") leaves the one-only reading standing, and so does a scale key or
+# a warning after a comma or a dash ("tick one - 1 = never, 5 = always", "tick one, all others blank", "tick one -
+# two ticks void the answer"): a comma needs a complete "X or Y" count, and a dash range needs an upper bound that
+# ends the phrase ("1-3:", "1-3 that apply") or, printed unspaced, names the answers ("1-3 boxes").
+_COUNT_WORD = r"(?:two|three|four|five|six|seven|eight|nine|ten)"
+_MANY_WORD = r"(?:more|some|all|any|several|many|multiple|both|" + _COUNT_WORD + r")"
+MORE_THAN_ONE_AFTER = re.compile(
+    r"\s*\+"
+    r"|\s*(?:\bor\b|\band\b|\bto\b|\bnor\b)\s*(?:" + _MANY_WORD + r"|\d)"
+    r"|\s*/\s*(?:" + _MANY_WORD + r"|[2-9])\b"
+    r"|\s*,\s*(?:some|several|" + _COUNT_WORD + r"|[2-9])\s*,?\s*(?:or|and)\s+(?:" + _MANY_WORD + r"|\d)"
+    r"|\s*[-–—]\s*(?:" + _COUNT_WORD + r"|\d{1,2})\b(?=\s*(?:$|[).:;,!?]|(?:that|which|of|as|if|from)\b))"
+    r"|[-–]\d{1,2}\b(?=\s+(?:boxes|options|answers|items|responses|categories|choices)\b)", re.I)
 # An open count ("one or more", "1+", "more than one", "one, some or all") is never a limit.
 OPEN_COUNT = re.compile(r"\b(?:one|1)\s*(?:or\s+more\b|\+)|\bmore\s+than\s+(?:one|1)\b|\bone\s*,\s*some\s+or\s+all\b"
                         r"|\bone\s*/\s*both\b|\bany\s+number\b", re.I)
 
 
-def one_only(text, question=""):
+def one_only(texts, questions=""):
     """Explicit one-only wording that is not the start of a range or an open count: the commands anywhere in the
-    printed text, the limits only in the question."""
-    for rx, value in ((CHECK_ONE, text or ""), (EXPLICIT_ONE, text or ""), (ONE_LIMIT, question or "")):
-        for m in rx.finditer(value):
-            if not MORE_THAN_ONE_AFTER.match(value, m.end()):
-                return True
+    printed text, the limits only in the question. Each printed piece (a question, its printed cardinality, its
+    paragraph) is read on its own: what follows "tick 1" is read in the same piece, never in the next piece a caller
+    joined on ("Symptom(s) - tick 1-3" followed by its own paragraph is still a range)."""
+    texts = [texts] if isinstance(texts, str) else list(texts)
+    questions = [questions] if isinstance(questions, str) else list(questions)
+    for rx, values in ((CHECK_ONE, texts), (EXPLICIT_ONE, texts), (ONE_LIMIT, questions)):
+        for value in values:
+            value = value or ""
+            for m in rx.finditer(value):
+                if not MORE_THAN_ONE_AFTER.match(value, m.end()):
+                    return True
     return False
 
 
@@ -832,35 +848,79 @@ SELECTION_ACT = re.compile(r"\b(?:tick(?:s|ed|ing)?|check(?:s|ed|ing)?|mark(?:s|
                            r"indicat(?:e|es|ed|ing))\b|[✓✔✗✘☑☒]|(?<![\w-])[Xx](?![\w-])", re.I)
 SELECTION_LIMIT = re.compile(r"\b(?:one|single|sole|two|three|four|five|six|seven|eight|nine|ten|only|either|neither|"
                              r"exclusive(?:ly)?)\b|" + NUMERAL_QUANTITY, re.I)
+# Wording that allows several boxes ("the appropriate box(es)", "box or boxes", "box/boxes") is not one answer.
+_NOT_PLURAL = (r"(?!\s*\(e?s\)|\s*/\s*(?:boxes|answers|options|responses|choices|categories|squares)\b"
+               r"|\s+or\s+(?:more|several|boxes|answers|options|responses|choices|categories|squares)\b)")
 ONE_ANSWER = re.compile(r"\b(?:(?:only\s+)?(?:one|1)|a\s+single|single)\s+(?:box|answer|option|response|choice|category|"
-                        r"square)s?\b(?:\s+only\b)?"
+                        r"square)s?\b" + _NOT_PLURAL + r"(?:\s+only\b)?"
                         r"|\b(?:appropriate|relevant|correct|applicable|right|best|suitable|matching|corresponding)\s+"
-                        r"(?:box|answer|option|response|category|square)\b"
+                        r"(?:box|answer|option|response|category|square)\b" + _NOT_PLURAL +
                         r"|\b(?:box|answer|option|response|category|square)\s+(?:that|which)\s+(?:best\s+)?"
                         r"(?:appl|describ|match|fit|correspond)", re.I)
-# Words that give a limited sentence a reach beyond the one question printed beside it.
-SELECTION_REACH = re.compile(r"\b(?:each|every|all|any|per|below|above|following|preceding|previous|next|throughout|"
-                             r"section|sections|form|document|questionnaire|page|pages|question|questions|list|lists)\b",
-                             re.I)
-# Guidance that names a table or grid never governs a list printed in body paragraphs.
-TABLE_SCOPE = re.compile(r"\b(?:table|tables|grid|grids|matrix|column|columns)\b", re.I)
+# A negated count is a limit, never an open count: "do not tick more than one box", "no more than one answer",
+# "never select multiple options".
+NEGATED_MANY = re.compile(r"(?:\b(?:no|not|never|nor|cannot)\b|n[’']t\b)[^.;!?]*?"
+                          r"(?:\bmore\s+than\s+(?:one|1|a\s+single)\b|\b(?:multiple|several)\b)", re.I)
+ANSWER_NOUN = re.compile(r"\b(?:box|boxes|answers?|options?|responses?|choices?|categor(?:y|ies)|squares?)\b", re.I)
+# Only a complete one-box-per-row rule for a table or grid is about a table ("Tick one box per row in the table
+# below."); any other sentence that mentions a column or a table ("tick one box in the column provided", "see table of
+# codes") is still a limit.
+TABLE_ROWS = re.compile(r"(?:in\s+the\s+(?:table|grid|matrix)(?:\s+(?:below|above))?\s*,\s*)?(?:please\s+)?"
+                        r"(?:check|tick|choose|select|mark|circle|pick|indicate|cross)\s+(?:only\s+)?(?:one|1)"
+                        r"(?:\s+(?:box|answer|option|response|cell))?(?:\s+only)?"
+                        r"\s+(?:per|in\s+each|for\s+each|on\s+each|in\s+every|for\s+every)\s+row"
+                        r"(?:\s+(?:of|in)\s+the\s+(?:table|grid|matrix)(?:\s+(?:below|above))?)?", re.I)
+# Selection wording in floating text (a text box or a positioned frame), whose printed place beside a list is
+# unknown: any selection command there may govern it. "Checked by:" names who checked; it is not a command.
+SELECTION_ATTRIBUTION = re.compile(r"\b(?:checked|ticked|marked|selected|chosen|picked|crossed|indicated|circled)\s+by\b",
+                                   re.I)
 
 
 def limited_selection(sentence):
-    text = OPEN_COUNT.sub(" ", NOT_A_QUANTITY.sub(" ", sentence or ""))
+    text = NOT_A_QUANTITY.sub(" ", sentence or "")
+    if NEGATED_MANY.search(text):
+        return bool(SELECTION_ACT.search(text) or ANSWER_NOUN.search(text))
+    text = OPEN_COUNT.sub(" ", text)
     return bool((SELECTION_ACT.search(text) and SELECTION_LIMIT.search(text) or ONE_ANSWER.search(text))
-                and not TABLE_SCOPE.search(text))
+                and not TABLE_ROWS.fullmatch(re.sub(r"[\s.!:;]+$", "", (sentence or "").strip())))
+
+
+def floating_selection(sentence):
+    return bool(SELECTION_ACT.search(SELECTION_ATTRIBUTION.sub(" ", NOT_A_QUANTITY.sub(" ", sentence or ""))))
+
+
+# A complete one-only command printed inside a question's own label ("(please tick one)", "- tick one box only",
+# "(tick one of the following)"), optionally pointing at notes ("- see page 3").
+LABEL_ONE = re.compile(r"(?:please\s+)?(?:(?:check|tick|choose|select|mark|circle|pick|indicate|cross)\s+"
+                       r"(?:(?:only|just|exactly)\s+)?(?:one|1|a\s+single)"
+                       r"(?:\s+(?:option|answer|response|item|box|category|choice))?(?:\s+only)?(?:\s+of\s+the\s+following)?"
+                       r"|(?:only\s+)?(?:one|1)(?:\s+(?:option|answer|response|item|box|category|choice))?\s+only"
+                       r"|only\s+one(?:\s+(?:option|answer|response|item|box|category|choice))?)"
+                       r"(?:\s*[-–—,]\s*see\s+(?:page|p\.|notes?|overleaf|annex|appendix|guidance(?:\s+notes)?)"
+                       r"(?:\s+[\w.]{1,6})?)?", re.I)
 
 
 def label_instruction(sentence):
-    """A limited instruction printed inside a question's own label ("Type of discharge applied for (please tick
-    one):", "Sex (tick one): [ ] Male [ ] Female"): the label before ':' or '?' still names the question once its
-    parenthesised instruction is removed. A standalone "Tick one box only." is not part of any one label."""
-    m = re.match(r"([^:?]*[^:?\s])\s*[:?]", sentence or "")
-    if not m:
-        return False
-    name = re.sub(r"\([^()]*\)", " ", m.group(1))
-    return bool(re.search(r"[^\W\d_]{2,}", name)) and not limited_selection(name)
+    """The label of a separate question whose only selection wording is a complete one-only command printed inside
+    it ("Type of discharge applied for (please tick one):", "Sex (tick one):", "Smoking status (tick one)", "Type -
+    please tick one"), or None. The name before the command is not itself a limit, and nothing after the label is. A standalone command ("Tick one box only."), a notice ("Please note: only one box may be
+    ticked.") and a command that says more ("tick one box for leave and one for treatment", "tick one box only
+    throughout this form") are not part of any one question's label."""
+    m = re.fullmatch(r"\s*([^:?]*[^:?\s])\s*(?:[:?](.*))?", sentence or "", re.S)
+    if not m or limited_selection(m.group(2) or ""):
+        return None
+    label = m.group(1).rstrip(".")
+    commands = re.findall(r"\(([^()]*)\)", label)
+    name = re.sub(r"\([^()]*\)", " ", label)
+    dash = re.search(r"\s[-–—]\s", name)
+    if dash:
+        commands.append(name[dash.end():])
+        name = name[:dash.start()]
+    commands = [c.strip() for c in commands if history_selection(c) or limited_selection(c)]
+    if (commands and all(LABEL_ONE.fullmatch(re.sub(r"[.!:;]+$", "", c).strip()) for c in commands)
+            and re.search(r"[^\W\d_]{2,}", name) and not limited_selection(name)):
+        return label
+    return None
 
 
 SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b|\bsign(?:ed)? here\b", re.I)
@@ -1370,11 +1430,12 @@ class Detector:
             return "date"
         return "text"
 
-    def choice_kind(self, question: str, options: list, hint: str = "") -> str:
-        text = " ".join([question or "", hint or ""])
+    def choice_kind(self, question: str, options: list, hint="") -> str:
+        pieces = [question or ""] + (list(hint) if isinstance(hint, (list, tuple)) else [hint or ""])
+        text = " ".join(pieces)
         # Explicit one-only wording keeps the question single; "one or more", "1-3", "one/both" and "1+" are not
         # one-only (a conflict with "all that apply" is refused by the checkbox-group reader, never narrowed here).
-        if one_only(text, question):
+        if one_only(pieces, question):
             return "choice"
         if options and all(YESNO.match((o or "").strip()) for o in options):
             return "choice"
@@ -2030,11 +2091,10 @@ class Detector:
 
     def selection_guidance(self):
         """Every limited selection sentence printed in the form (body, table cells, text boxes, positioned frames,
-        page headers/footers, footnotes, endnotes) as (paragraph id, owner, sentence, where). The owner is the block
-        of a separate question that holds its own boxes: the table cell, table row, text box or paragraph the
-        sentence is printed in, or, for an ordinary body paragraph, the next printed block when that block holds the
-        boxes. Only an instruction inside that question's label is owned ("Type of discharge (please tick one):"),
-        and never one that names a wider reach ("each", "below", "this section", "question", ...)."""
+        page headers/footers, footnotes, endnotes), and every selection command in floating text, as (paragraph
+        id, owner, sentence, where). The owner is the block of a separate question whose label the sentence is:
+        only a paragraph's first sentence, only a label carrying a complete one-only command (label_instruction),
+        and only when that question's boxes follow the label directly (label_owner). Nothing else is owned."""
         if self._form_wide is None:
             found = []
             parts = self.package.content_parts() + [n for n in ("word/footnotes.xml", "word/endnotes.xml")
@@ -2042,30 +2102,64 @@ class Detector:
             for part in parts:
                 root = self.package.tree(part)
                 for p in root.iter(q("w:p")):
-                    sentences = [x for x in re.split(r"(?<=[.!?;])\s+", text_of(p, own=True).strip()) if limited_selection(x)]
-                    if not sentences:
-                        continue
                     unit = next((a for a in p.iterancestors() if a.tag in (q("w:tc"), TXBX)), p)
                     framed = p.find("./" + q("w:pPr") + "/" + q("w:framePr")) is not None
-                    owner = unit if self.owns_boxes(unit) else None
-                    row = unit.getparent() if unit.tag == q("w:tc") else None
-                    if owner is None and row is not None and row.tag == q("w:tr") \
-                            and any(self.owns_boxes(c) or self.glyph_option_line(c) for c in row.iterchildren(q("w:tc"))):
-                        owner = row                     # "Type (tick one): | [ ] A [ ] B" in one table row
-                    if owner is None and unit is p and not framed and p.getparent() is not None \
-                            and p.getparent().tag == q("w:body"):
-                        after = p.getnext()
-                        while (after is not None and after.tag == q("w:p") and not text_of(after, own=False).strip()
-                               and not checkbox_nodes(after, own=False)):
-                            after = after.getnext()
-                        if after is not None and after.tag in (q("w:p"), q("w:tbl"), q("w:sdt")) and (
-                                self.owns_boxes(after) or after.tag == q("w:p") and self.glyph_option_line(after)):
-                            owner = after
+                    floating = framed or unit.tag == TXBX
+                    printed = [x for x in re.split(r"(?<=[.!?;])\s+", text_of(p, own=True).strip()) if x]
+                    flags = [limited_selection(x) or floating and floating_selection(x) for x in printed]
+                    if not any(flags):
+                        continue
+                    owner = self.label_owner(p, printed[0]) if flags[0] and not framed else None
                     where = ("a text box in " if unit.tag == TXBX else "a positioned frame in " if framed else "") + part
-                    for sentence in sentences:
-                        found.append((id(p), owner if label_instruction(sentence) else None, sentence, where))
+                    for i, sentence in enumerate(printed):
+                        if flags[i]:
+                            found.append((id(p), owner if i == 0 else None, sentence, where))
             self._form_wide = found
         return self._form_wide
+
+    def label_owner(self, p, sentence):
+        """The block whose boxes the label `sentence` (the first sentence of paragraph `p`) introduces, or None:
+        `p` itself when its boxes follow the label directly ("Sex (tick one): [ ] Male [ ] Female"), or, when
+        nothing follows the label in `p`, the next printed block when it starts with a box (the label above its own
+        option lines, in a boxed cell, or beside the answer cell of its table row). Boxes printed after other text
+        answer a separately labelled question ("Leave type (tick one):" above "Escorted: [ ] Yes [ ] No")."""
+        label = label_instruction(sentence)
+        # The label starts the paragraph as printed: after a box it is an answer's text, not a question's label.
+        start = re.match(r"\s*" + re.escape(label) + r"[.\s]*[:?]?", paragraph_text(p)[0]) if label else None
+        if start is None:
+            return None
+        after = paragraph_text(p)[0][start.end():]
+        if after.strip():
+            return p if after.lstrip()[0] in (BOX, CHECKED) else None
+        block = self.next_printed(p)
+        return block if block is not None and self.starts_with_box(block) else None
+
+    @staticmethod
+    def next_printed(p):
+        """The next paragraph, table or block control printed after `p` in its container; after the last one in a
+        table cell, the next cell of its row."""
+        node = p.getnext()
+        while node is not None:
+            if node.tag in (q("w:p"), q("w:tbl"), q("w:sdt")) and (text_of(node, own=False).strip()
+                                                                  or checkbox_nodes(node, own=False)):
+                return node
+            node = node.getnext()
+        cell = p.getparent()
+        if cell is not None and cell.tag == q("w:tc"):
+            nxt = cell.getnext()
+            while nxt is not None and nxt.tag != q("w:tc"):
+                nxt = nxt.getnext()
+            return nxt
+        return None
+
+    @staticmethod
+    def starts_with_box(el):
+        """The first printed content of `el` is a box (a native control or a box glyph)."""
+        for para in el.iter(q("w:p")):
+            text = paragraph_text(para)[0]
+            if text.strip():
+                return text.lstrip()[0] in (BOX, CHECKED)
+        return False
 
     @staticmethod
     def owns_boxes(el):
@@ -2077,11 +2171,6 @@ class Detector:
         parts = re.split("[" + BOX + CHECKED + "]", text_of(el))
         return len(parts) >= 3 and bool(re.search(r"\S\s*[:?)]\s*$", parts[0])) and all(x.strip() for x in parts[1:])
 
-    @staticmethod
-    def glyph_option_line(el):
-        """A paragraph or cell that starts with a box glyph and its answer ("[ ] Conditional")."""
-        return bool(re.match(r"\s*[" + BOX + CHECKED + r"]\s*\S", text_of(el)))
-
     def limited_selection_elsewhere(self, sources):
         """Limited selection guidance outside this list's own source that no separate question owns: (where,
         sentence), or None. Its reach cannot be read, so it may govern this list."""
@@ -2089,7 +2178,7 @@ class Detector:
         for pid, owner, sentence, where in self.selection_guidance():
             if pid in own:
                 continue
-            if owner is not None and not any(owner is s.el for s in sources) and not SELECTION_REACH.search(sentence):
+            if owner is not None and not any(owner is s.el for s in sources):
                 continue
             return where, sentence
         return None
@@ -2237,7 +2326,7 @@ class Detector:
                     for h in heading_context.split(" > ")]
         for text in (*headings, *instructions):
             for sentence in re.split(r"(?<=[.!?;])\s+", text.strip()):
-                if not history_selection(sentence):
+                if not history_selection(sentence) and not limited_selection(sentence):
                     continue
                 command = re.sub(r"[.!:;]+$", "", sentence.strip()).strip()
                 wrapped = re.fullmatch(r"\((.*)\)", command)
@@ -2336,10 +2425,11 @@ class Detector:
                 s = self.index.by_id.get("%s#%s" % (b["part"], b["slot"]))
                 if s is not None and s is not anchor and s not in extra:
                     extra.append(s)
-            hint = " ".join([question] + ([nested["cardinality"]] if nested else [])
-                            + [self.text(p.el) for p in g["paras"][:1]])
-            printed = " ".join([question or ""] + ([nested["cardinality"]] if nested else []))
-            if len(units) > 1 and one_only(printed, printed) and CHECK_ALL.search(printed):
+            hint = ([question] + ([nested["cardinality"]] if nested else [])
+                    + [self.text(p.el) for p in g["paras"][:1]])
+            pieces = [question or ""] + ([nested["cardinality"]] if nested else [])
+            printed = " ".join(pieces)
+            if len(units) > 1 and one_only(pieces, pieces) and CHECK_ALL.search(printed):
                 # "Tick all that apply and indicate one as the main symptom": one
                 # answer and several at once. Neither is guessed: never narrowed
                 # to one choice, never widened past the one-only wording.

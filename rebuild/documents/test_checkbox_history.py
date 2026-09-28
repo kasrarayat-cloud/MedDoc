@@ -847,7 +847,7 @@ class SelectionLimitRound2(unittest.TestCase):
     def test_f1_negated_open_counts_and_floating_selection_wording_never_grant_two(self):
         for sentence in ('Please do not tick more than one box for each question.', 'Never tick more than 1 box per question.',
                          'No more than one box may be ticked.', 'Do not select more than one option.',
-                         'Do not select multiple options.'):
+                         'Do not select multiple options.', 'No more than one answer per question.'):
             for where, build in (('preamble', self.preamble), ('page header', self.header)):
                 with self.subTest(where=where, sentence=sentence):
                     self.assertNeverTwo(data(build(sentence)), 'Treatments received')
@@ -873,6 +873,11 @@ class SelectionLimitRound2(unittest.TestCase):
                 with self.subTest(question=question, control=control):
                     self.assertOneChoice(data(inline_question(question, options, control)), question.split(' ')[0],
                                          chosen, expected)
+        # Controls: a dash range that ends the phrase, or is printed unspaced before the answers, is still a range.
+        for question in ('Symptom(s) - tick 1–3:', 'Symptom(s) - tick 1-3 boxes:'):
+            for control in ('glyph', 'ff'):
+                with self.subTest(range=question, control=control):
+                    self.assertMulti(data(inline_question(question, symptoms, control)), 'Symptom(s)')
 
     # F3: a note, or an instruction on a line of its own, is not a separate question's label.
     def test_f3_a_standalone_instruction_is_not_owned_by_the_question_below_it(self):
@@ -892,6 +897,24 @@ class SelectionLimitRound2(unittest.TestCase):
         doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Community leave: only one box may be ticked.')
         boxed_question(doc, 'Escorted?', ('Yes', 'No')); doc.add_paragraph('')
         cases.append(('above a boxed question', 'Community leave taken', native_list(doc)))
+        # A question's own tick-one label with a second limit printed after its boxes.
+        doc = Document(); doc.add_heading('Leave', 1); yes_no(doc, 'Escorted (tick one): ', tail='Leave type (tick one box only):')
+        cases.append(('second limit after the boxes', 'Community leave taken', native_list(doc)))
+        # A positioned frame prints elsewhere on the page: never the label of the box lines that follow it in the file.
+        doc = Document(); doc.add_heading('Leave', 1); frame = doc.add_paragraph('Leave type (tick one only):')
+        frame._p.get_or_add_pPr().append(parse_xml(
+            '<w:framePr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            'w:w="2400" w:hAnchor="page" w:vAnchor="page" w:x="8000" w:y="3000"/>'))
+        for i, option in enumerate(('Escorted', 'Unescorted')):
+            p = doc.add_paragraph(); ff_field(p, 'checkbox', name='E%d' % i); p.add_run(' ' + option)
+        doc.add_heading('Clinical history', 1)
+        cases.append(('framed label above box lines', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
+        # A tick-one printed after a box is that answer's text, not the label of the box lines below it.
+        doc = Document(); doc.add_heading('Leave', 1)
+        for i, option in enumerate(('Escort required (tick one only):', 'Yes', 'No')):
+            p = doc.add_paragraph(); ff_field(p, 'checkbox', name='E%d' % i); p.add_run(' ' + option)
+        doc.add_heading('Clinical history', 1)
+        cases.append(('tick-one after a box', 'Treatments received', native_list(doc, 'Treatments received', TREATMENTS)))
         for name, label, doc in cases:
             with self.subTest(case=name):
                 self.assertNeverTwo(data(doc), label)
@@ -917,6 +940,13 @@ class SelectionLimitRound2(unittest.TestCase):
                       'Escorted (tick one box only throughout this form):'):
             with self.subTest(label=label):
                 doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph(label); yes_no(doc)
+                self.assertNeverTwo(data(native_list(doc, 'Treatments received', TREATMENTS)), 'Treatments received')
+        # The same in a boxed question that owns its boxes, and a label whose name is itself a limit.
+        for label in ('Escorted (tick one box only throughout this form):',
+                      'Please tick one box for each question in this section (one only):'):
+            with self.subTest(boxed=label):
+                doc = Document(); doc.add_heading('Clinical history', 1); boxed_question(doc, label, ('Yes', 'No'))
+                doc.add_paragraph('')
                 self.assertNeverTwo(data(native_list(doc, 'Treatments received', TREATMENTS)), 'Treatments received')
 
     # F6: a singular "the answer/response/category that best ..." directly above the list.
@@ -948,6 +978,12 @@ class SelectionLimitRound2(unittest.TestCase):
             ff_field(cell, 'checkbox', name='S%d' % i); cell.add_run(' ' + option + ' ')
         doc.add_paragraph(''); raw = data(native_list(doc, 'Treatments received', TREATMENTS))
         self.assertMulti(raw, 'Treatments received')
+        # A question name that is a selection verb but not a limit still owns its own tick-one.
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        boxed_question(doc, 'Select a treatment plan (tick one):', ('Standard', 'Intensive')); doc.add_paragraph('')
+        raw = data(native_list(doc, 'Treatments received', TREATMENTS))
+        self.assertMulti(raw, 'Treatments received')
+        self.assertOneChoice(raw, 'Select a treatment plan', 'Intensive', [False, True])
 
     # F8: wording that permits several boxes is not a one-answer limit; the singular wording still is.
     def test_f8_plural_box_wording_elsewhere_keeps_the_history_multiple(self):
