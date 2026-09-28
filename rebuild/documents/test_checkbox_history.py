@@ -1105,3 +1105,269 @@ class SelectionLimitRound2(unittest.TestCase):
 
     def assertUnresolved(self, raw, note='selection'):
         CheckboxHistory.assertUnresolved(self, raw, note)
+
+
+REASONS = ('Pain', 'Swelling', 'Fever')
+
+
+def boxes_after(p, options, control, prefix='B'):
+    """Boxes (native FORMCHECKBOX or printed glyphs) appended to python-docx paragraph `p`, one per option."""
+    for i, option in enumerate(options):
+        if control == 'ff': ff_field(p, 'checkbox', name='%s%d' % (prefix, i))
+        else: p.add_run('☐')
+        p.add_run(' ' + option + '   ')
+    return p
+
+
+def box_question(doc, question, options, control, *, inline=True):
+    """An ordinary checkbox question: inline (question and boxes in one paragraph) or its label on its own line above
+    one box line per option."""
+    if inline:
+        return boxes_after(doc.add_paragraph(question + ' '), options, control)
+    doc.add_paragraph(question)
+    for i, option in enumerate(options):
+        boxes_after(doc.add_paragraph(), (option,), control, prefix='L%d' % i)
+    return doc
+
+
+def rating_grid(doc, prompt, headers, statements):
+    """A D28-shaped rating grid (synthetic): 'QUESTION | RESPONSE OPTIONS' spanning the response columns, a row
+    naming each response column, then one statement per row with a printed box under every response column."""
+    table = doc.add_table(rows=2 + len(statements), cols=1 + len(headers))
+    table.cell(0, 0).text = 'QUESTION'
+    table.cell(0, 1).merge(table.cell(0, len(headers))).text = 'RESPONSE OPTIONS'
+    table.cell(1, 0).text = prompt
+    for k, header in enumerate(headers):
+        table.cell(1, k + 1).text = header
+    for n, statement in enumerate(statements):
+        table.cell(2 + n, 0).text = statement
+        for k in range(len(headers)):
+            table.cell(2 + n, k + 1).text = '☐'
+    return table
+
+
+K6 = ('All of the Time', 'Most of the Time', 'Some of the Time', 'A Little of the Time', 'None of the Time',
+      'REFUSED', 'DON’T KNOW')
+USE = ('Never', 'Once or Twice', 'Weekly', 'Daily or Almost Daily', 'REFUSED', 'DON’T KNOW')
+
+
+class SelectionCardinalityRound3(unittest.TestCase):
+    """Refuter inputs R3-F1..F12 against bf8f7b78. A question accepts several answers only with explicit positive
+    local evidence and no one-only or limited-count language anywhere in its reachable scope."""
+    fields, ticks = SelectionLimitRefutations.fields, SelectionLimitRefutations.ticks
+    assertNeverTwo = SelectionLimitRefutations.assertNeverTwo
+    assertOneChoice = SelectionLimitRefutations.assertOneChoice
+    assertMulti = SelectionLimitRefutations.assertMulti
+
+    def assertNotTwo(self, raw, label):
+        """One choice or held; never a field that takes two answers."""
+        fields = self.fields(raw, label)
+        self.assertLessEqual(len(fields), 1)
+        for field in fields:
+            self.assertEqual(field['kind'], 'choice')
+            with self.assertRaises(w.V3Failure):
+                w.fill(raw, [field], {field['key']: field['options'][:2]})
+
+    # R3-F1: a lone box never owns a tick-one label, so the command still reaches the list below.
+    def test_r3_f1_a_lone_box_never_owns_a_tick_one_label(self):
+        cases = []
+        for control in ('ff', 'glyph'):
+            doc = d31_shape('Type of discharge applied for (please tick one):')
+            leave = next(p for p in doc.paragraphs if p.text.startswith('Community leave taken'))
+            leave.insert_paragraph_before('Community leave (please tick one):')
+            boxes_after(leave.insert_paragraph_before(''), ('No community leave taken',), control, prefix='N')
+            cases.append(('D31 shape, lone ' + control, 'Community leave taken', doc))
+            for separate in (False, True):
+                doc = Document(); doc.add_heading('Treatment', 1); doc.add_paragraph('Treatment (tick one):')
+                boxes_after(doc.add_paragraph(), ('No treatment required',), control, prefix='N')
+                if separate:
+                    doc.add_paragraph('Treatments received:')
+                    for i, option in enumerate(TREATMENTS):
+                        p = doc.add_paragraph(); ff_field(p, 'checkbox', name='T%d' % i); p.add_run(' ' + option)
+                else:
+                    native_list(doc, 'Treatments received', TREATMENTS)
+                cases.append(('synthetic, lone %s, separate label %s' % (control, separate), 'Treatments received', doc))
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        cell = doc.add_table(rows=1, cols=1).cell(0, 0); cell.paragraphs[0].text = 'Treatment type: please tick one'
+        p = cell.add_paragraph(); ff_field(p, 'checkbox', name='G0'); p.add_run(' I have read the guidance notes')
+        doc.add_paragraph(''); cases.append(('table cell with one native box', 'Treatments received',
+                                             native_list(doc, 'Treatments received', TREATMENTS)))
+        for name, label, doc in cases:
+            with self.subTest(case=name):
+                self.assertNeverTwo(data(doc), label)
+
+    # R3-F2: one-only and limited-count sentences with no selection verb, printed anywhere in the form.
+    def test_r3_f2_verbless_limits_anywhere_in_the_form_never_grant_two(self):
+        sentences = ('Not more than 1 treatment may be recorded.', 'Do not record more than 1.', 'Record 1 treatment.',
+                     'Just 1.', 'Never record more than one treatment.', 'No more than one treatment per patient.',
+                     'Where more than one applies, record only the main one.', 'These are mutually exclusive.',
+                     'Do not record more than 1 leave type.', 'Only one type of leave may be recorded.')
+        for sentence in sentences:
+            later = Document(); later.add_heading('Clinical history', 1)
+            native_list(later, 'Treatments received', TREATMENTS); later.add_heading('Notes', 1); later.add_paragraph(sentence)
+            floating = Document(); floating.add_heading('Clinical history', 1)._p.append(parse_xml(TEXTBOX % sentence))
+            native_list(floating, 'Treatments received', TREATMENTS)
+            for where, doc in (('preamble', SelectionLimitRound2.preamble(sentence)),
+                               ('page header', SelectionLimitRound2.header(sentence)),
+                               ('text box', floating), ('under a later heading', later)):
+                with self.subTest(where=where, sentence=sentence):
+                    self.assertNeverTwo(data(doc), 'Treatments received')
+        for sentence in ('Do not record more than 1 leave type.', 'Only one type of leave may be recorded.'):
+            doc = d31_shape('Type of discharge applied for (please tick one):')
+            doc.paragraphs[0].insert_paragraph_before(sentence)
+            with self.subTest(d31_shape=sentence):
+                self.assertNeverTwo(data(doc), 'Community leave taken')
+
+    # R3-F3: a printed one-only command outside the question text governs an ordinary '(s)' question.
+    def test_r3_f3_an_outside_one_only_command_beats_a_plural_question(self):
+        cases = []
+        for control in ('glyph', 'ff'):
+            for heading in ('Select one', 'Referral (tick one)'):
+                doc = Document(); doc.add_heading(heading, 1); box_question(doc, 'Reason(s) for referral:', REASONS, control)
+                cases.append(('heading %s, %s' % (heading, control), doc))
+            for inline in (True, False):
+                doc = Document(); doc.add_heading('Referral', 1); doc.add_paragraph('Tick one box only.')
+                box_question(doc, 'Reason(s) for referral:', REASONS, control, inline=inline)
+                cases.append(('above, inline %s, %s' % (inline, control), doc))
+                doc = Document(); doc.add_heading('Referral', 1)
+                box_question(doc, 'Reason(s) for referral:', REASONS, control, inline=inline)
+                doc.add_paragraph('Tick one box only.'); cases.append(('below, inline %s, %s' % (inline, control), doc))
+            doc = Document(); doc.add_heading('Referral', 1); table = doc.add_table(rows=2, cols=2)
+            table.cell(0, 1).text = 'Tick one box only'; table.cell(1, 0).text = 'Reason(s) for referral'
+            boxes_after(table.cell(1, 1).paragraphs[0], REASONS, control)
+            cases.append(('column header, %s' % control, doc))
+        for name, doc in cases:
+            with self.subTest(case=name):
+                self.assertNotTwo(data(doc), 'Reason(s)')
+
+    # R3-F4: one-box commands that CHECK_ONE / EXPLICIT_ONE could not parse.
+    def test_r3_f4_cross_ring_and_placed_marks_in_one_box_keep_one_choice(self):
+        for question in ('Reason(s) for referral (please cross one box):', 'Reason(s) for referral (put a tick in one box):',
+                         'Reason(s) for referral (place an X in one box):', 'Reason(s) for referral (✓ one):',
+                         'Reason(s) for referral (ring one):', 'Which of these apply? Cross one box.'):
+            for control in ('glyph', 'ff'):
+                with self.subTest(question=question, control=control):
+                    self.assertOneChoice(data(inline_question(question, REASONS, control)), question.split(' ')[0],
+                                         'Swelling', [False, True, False])
+
+    # R3-F5: 'tick one - 1: never' is a scale key, not the range 'one to 1'.
+    def test_r3_f5_a_scale_key_after_tick_one_is_not_a_range(self):
+        scale = ('1', '2', '3', '4', '5')
+        for question in ('How much do these apply to you? Tick one – 1: never, 5: always:',
+                         'How much do these apply to you? Tick one - 1, never; 5, always:',
+                         'How much do these apply to you? Tick one – 1. Never 5. Always:',
+                         'How strongly does each apply? Circle one - 1: not at all - 5: completely:',
+                         'Pain rating(s) (tick one – 1: none, 5: worst):'):
+            for control in ('glyph', 'ff'):
+                with self.subTest(question=question, control=control):
+                    self.assertOneChoice(data(inline_question(question, scale, control)), question.split(' ')[0],
+                                         '4', [False, False, False, True, False])
+
+    # R3-F6: each statement row of a rating grid is one choice across every response column.
+    def grid_fields(self, raw, table_index):
+        prefix = 'b/tbl[%d]/' % table_index
+        return [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'checkboxes'
+                and any(b['slot'].startswith(prefix) for b in f['locator']['target']['boxes'])]
+
+    def test_r3_f6_each_rating_grid_row_is_one_choice_across_all_response_columns(self):
+        for prompt, headers, statements in (
+                ('During the past 30 days, about how often did you feel…', K6, ('nervous?', 'hopeless?', 'restless or fidgety?')),
+                ('In the past 30 days, how often have you used…', USE, ('a. tobacco products?', 'b. alcoholic beverages?',
+                                                                       'c. cannabis?'))):
+            with self.subTest(prompt=prompt):
+                doc = Document(); doc.add_heading('Wellbeing', 1); rating_grid(doc, prompt, headers, statements)
+                raw = data(doc); fields = self.grid_fields(raw, 0)
+                self.assertEqual(len(fields), len(statements))
+                for n, (statement, field) in enumerate(zip(statements, fields)):
+                    self.assertEqual((field['label'], field['kind'], field['options']), (statement, 'choice', list(headers)))
+                    self.assertEqual({b['slot'].split('/tc[')[0] for b in field['locator']['target']['boxes']},
+                                     {'b/tbl[0]/tr[%d]' % (2 + n)})
+                    self.assertEqual(self.ticks(raw, field, headers[3]), [h == headers[3] for h in headers])
+                    with self.assertRaises(w.V3Failure):
+                        w.fill(raw, [field], {field['key']: list(headers[:2])})
+
+    def test_r3_f6_a_grid_whose_orientation_is_not_established_is_held(self):
+        doc = Document(); doc.add_heading('Wellbeing', 1)
+        table = rating_grid(doc, 'During the past 30 days, about how often did you feel…', K6, ('nervous?', 'hopeless?', 'worthless?'))
+        table.cell(1, 3).text = ''          # one response column prints no header: which answer it is is unknown
+        raw = data(doc)
+        for field in self.grid_fields(raw, 0):
+            self.assertEqual(len({b['slot'].split('/tc[')[0] for b in field['locator']['target']['boxes']}), 1)
+            self.assertEqual(field['kind'], 'choice')
+        rows = {}
+        for field in self.grid_fields(raw, 0):
+            for b in field['locator']['target']['boxes']:
+                rows.setdefault(b['slot'].split('/tc[')[0], set()).add(field['key'])
+        self.assertTrue(all(len(keys) <= 1 for keys in rows.values()))
+        self.assertTrue(any('grid' in n for n in w.inspect(raw)['notes']))
+
+    # R3-F7: the full single-answer vocabulary in a heading or an instruction keeps a history to one answer.
+    def test_r3_f7_single_answer_words_in_the_heading_or_instruction_keep_one_choice(self):
+        cases = [('instruction principal', form(instruction='Record the principal treatment.'), 'Treatments received'),
+                 ('heading principal', form(heading='Principal treatment'), 'Treatments received'),
+                 ('heading highest', form(heading='Highest level of care'), 'Treatments received'),
+                 ('heading main', form(heading='Main treatment'), 'Treatments received'),
+                 ('instruction current', form(instruction='Record the current treatment.'), 'Treatments received')]
+        doc = Document(); doc.add_heading('Highest qualification', 1)
+        cases.append(('heading highest over a list', native_list(doc, 'Qualifications completed', ('GCSE', 'A-level', 'Degree')),
+                      'Qualifications completed'))
+        for name, doc, label in cases:
+            with self.subTest(case=name):
+                self.assertNotTwo(data(doc), label)
+
+    # R3-F8: controls in which only the pointer guards can hold the list.
+    def test_r3_f8_only_the_pointer_guard_holds_a_list_named_from_further_away(self):
+        for sentence in ('In the list below, record only one treatment.', 'For the treatments below, only one may be recorded.',
+                         'For the list below, tick as the ward instructs.'):
+            doc = Document(); doc.add_heading('Clinical history', 1); doc.add_paragraph(sentence)
+            doc.add_table(rows=1, cols=1).cell(0, 0).text = 'Name:'
+            with self.subTest(below=sentence):
+                self.assertNeverTwo(data(native_list(doc, 'Treatments received', TREATMENTS)), 'Treatments received')
+        for sentence in ('In the list above, record only one treatment.', 'For the list above, tick as the ward instructs.'):
+            doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, 'Treatments received', TREATMENTS)
+            doc.add_table(rows=1, cols=1).cell(0, 0).text = 'Name:'; doc.add_paragraph(sentence)
+            with self.subTest(above=sentence):
+                self.assertNeverTwo(data(doc), 'Treatments received')
+
+    # R3-F9: an explicit local all-that-apply list is never narrowed to one by a limit printed elsewhere.
+    def test_r3_f9_an_explicit_all_that_apply_list_is_never_narrowed_to_one(self):
+        for sentence in ('Tick one answer for every question in Part 2.', 'Please tick one box for each statement.',
+                         'Please tick one box on each row.'):
+            doc = Document(); doc.add_heading('Part 1: Clinical history', 1); doc.add_paragraph('Tick all that apply.')
+            native_list(doc, 'Treatments received', TREATMENTS)
+            doc.add_paragraph(''); box_question(doc, 'Treatment(s) - tick all that apply:', ('Surgery', 'Medication', 'Dressings'), 'glyph')
+            doc.add_heading('Part 2: Wellbeing', 1); doc.add_paragraph(sentence)
+            grid = doc.add_table(rows=3, cols=3)
+            for r, statement in enumerate(('I sleep well', 'I eat well', 'I feel calm')):
+                grid.cell(r, 0).text = statement
+                for k, answer in enumerate(('Yes', 'No')):
+                    p = grid.cell(r, k + 1).paragraphs[0]; ff_field(p, 'checkbox', name='W%d%d' % (r, k)); p.add_run(' ' + answer)
+            raw = data(doc); notes = w.inspect(raw)['notes']
+            for label in ('Treatments received', 'Treatment(s)'):
+                with self.subTest(sentence=sentence, label=label):
+                    fields = self.fields(raw, label)
+                    self.assertFalse([f for f in fields if f['kind'] == 'choice'])
+                    if fields:
+                        self.assertMulti(raw, label)
+                    else:
+                        self.assertTrue(any('conflict' in n for n in notes))
+
+    # R3-F10: 'tick one box for each <item> present' is never narrowed to one choice without a stated reason.
+    def test_r3_f10_one_box_per_item_is_not_silently_narrowed_to_one(self):
+        for question in ('Symptom(s) present (tick one box for each symptom present):',
+                         'Symptom(s) (tick one box for each that applies):', 'Symptom(s) – tick one box per symptom present:'):
+            for control in ('ff', 'glyph'):
+                with self.subTest(question=question, control=control):
+                    raw = data(inline_question(question, REASONS, control)); fields = self.fields(raw, 'Symptom(s)')
+                    self.assertFalse([f for f in fields if f['kind'] == 'choice'])
+                    if not fields:
+                        self.assertTrue(any('one box per item' in n for n in w.inspect(raw)['notes']))
+
+    # R3-F11: a question whose wording suggests several answers, with no complete command, keeps one choice and says so.
+    def test_r3_f11_plural_wording_without_a_command_keeps_one_choice_with_a_review_note(self):
+        doc = Document(); doc.add_heading('Headache questionnaire', 1)
+        doc.add_paragraph('18. Provoking factors. Please indicate if any of the factors below are triggers for your headaches.')
+        box_question(doc, 'Stress:', ('Work', 'Family', 'Money'), 'glyph')
+        raw = data(doc)
+        self.assertOneChoice(raw, 'Stress', 'Family', [False, True, False])
+        self.assertTrue(any('Stress' in n and 'review' in n for n in w.inspect(raw)['notes']))
