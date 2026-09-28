@@ -1,0 +1,90 @@
+[
+  {
+    "case": "inner_scope_headers_neutral_parent",
+    "fields": [
+      {
+        "label": "Which findings apply? Tick all that apply.",
+        "context": "",
+        "kind": "multi_choice",
+        "options": [
+          "Abnormal",
+          "Abnormal (2)"
+        ],
+        "write_protected": null
+      }
+    ],
+    "notes": [],
+    "selected": [
+      "Abnormal (2)"
+    ],
+    "physical_paragraphs": [
+      "Which findings apply? Tick all that apply.",
+      "",
+      "Donor",
+      "Recipient",
+      "\u2610 Abnormal",
+      "\u2612 Abnormal",
+      ""
+    ],
+    "original_sha256": "01575a71f8b214038372e009f20a65a3b72d0ba7aff91cbf19641ffa45038c82",
+    "export_sha256": "b768213f34ab94242e067694a5bdaf84988609c26472cfe6a8cfecc9d9e27882"
+  },
+  {
+    "case": "consent_scope_specific",
+    "fields": [
+      {
+        "label": "Which procedures are authorized? Tick all that apply.",
+        "context": "Participant consent for optional procedures",
+        "kind": "multi_choice",
+        "options": [
+          "Blood sampling",
+          "Tissue storage"
+        ],
+        "write_protected": null
+      }
+    ],
+    "notes": [],
+    "selected": [
+      "Tissue storage"
+    ],
+    "physical_paragraphs": [
+      "Participant consent for optional procedures",
+      "Which procedures are authorized? Tick all that apply.",
+      "",
+      "\u2610 Blood sampling",
+      "\u2612 Tissue storage",
+      ""
+    ],
+    "original_sha256": "f3b5f9707f136b3753206d547dd0d241adff867417ae0b8379e5d4cf30bc8e5a",
+    "export_sha256": "cd5bf16c529f2316a107ee7aeadd792a4bb75df34397542ff1ee81ce200543d0"
+  },
+  {
+    "case": "signature_scope_specific",
+    "fields": [
+      {
+        "label": "Which procedures are authorized? Tick all that apply.",
+        "context": "Signed declaration",
+        "kind": "multi_choice",
+        "options": [
+          "Blood sampling",
+          "Tissue storage"
+        ],
+        "write_protected": null
+      }
+    ],
+    "notes": [],
+    "selected": [
+      "Tissue storage"
+    ],
+    "physical_paragraphs": [
+      "Signed declaration",
+      "Which procedures are authorized? Tick all that apply.",
+      "",
+      "\u2610 Blood sampling",
+      "\u2612 Tissue storage",
+      ""
+    ],
+    "original_sha256": "19b675ee9cf8ef086b19cbe56c3592aa10faea20c1e030098c65799da99bd67d",
+    "export_sha256": "5fc35512f26a45026759101cb2490402fc9d54a31763a3a387f10aa7fb8e33af"
+  }
+]

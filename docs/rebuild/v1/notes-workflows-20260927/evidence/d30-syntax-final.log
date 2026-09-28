@@ -1,0 +1,20 @@
+Using existing test database for alias 'default' ('test_quillmd_ci')...
+test_original_authorized_D30_A35 (__main__.D30SyntaxWorkflow.test_original_authorized_D30_A35) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+
+----------------------------------------------------------------------
+Ran 1 test in 5.836s
+
+OK
+Preserving test database for alias 'default' ('test_quillmd_ci')...
+Found 1 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

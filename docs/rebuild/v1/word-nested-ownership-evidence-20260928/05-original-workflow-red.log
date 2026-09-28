@@ -1,0 +1,20 @@
+d03_workflow (unittest.loader._FailedTest.d03_workflow) ... ERROR
+
+======================================================================
+ERROR: d03_workflow (unittest.loader._FailedTest.d03_workflow)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: d03_workflow
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/unittest/loader.py", line 137, in loadTestsFromName
+    module = __import__(module_name)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'd03_workflow'
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+FAILED (errors=1)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

@@ -1,0 +1,42 @@
+[
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/.runtime/notes-workflows-20260927/capture-D30-A35-subject-final/exported.docx",
+    "bytes": 82848,
+    "sha256": "363449a19a8a0e1fe27183ec91ba131658c30c55a98aa8e6d17786d548d036c1"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/.runtime/notes-workflows-20260927/capture-D30-A35-subject-final/final-page.html",
+    "bytes": 52985,
+    "sha256": "b912f115d15126e758014e728fe4d4c439a2fb46bdc143e5f6f9a8e2d04226a6"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/.runtime/notes-workflows-20260927/capture-D30-A35-subject-final/original.docx",
+    "bytes": 88646,
+    "sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/.runtime/notes-workflows-20260927/capture-D30-A35-subject-final/result.json",
+    "bytes": 2995,
+    "sha256": "816bc777aab75d25b38468137078edd24cdb8cb776c09e9e5a0ff68a1d838a61"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/.runtime/notes-workflows-20260927/capture-actual-D30-subject-final/94f86cd111c1/draft-page.html",
+    "bytes": 120534,
+    "sha256": "82d1ac20f1af7409a87e69c8a0f536cac59c6ba1a5949607abf7f7667a702dee"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/.runtime/notes-workflows-20260927/capture-actual-D30-subject-final/94f86cd111c1/exported.docx",
+    "bytes": 82848,
+    "sha256": "363449a19a8a0e1fe27183ec91ba131658c30c55a98aa8e6d17786d548d036c1"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/.runtime/notes-workflows-20260927/capture-actual-D30-subject-final/94f86cd111c1/original.docx",
+    "bytes": 88646,
+    "sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f"
+  },
+  {
+    "path": "/opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/.runtime/notes-workflows-20260927/capture-actual-D30-subject-final/94f86cd111c1/result.json",
+    "bytes": 1674,
+    "sha256": "fb2ac1d9046d15791e6d9b1c3f1b08d93f3c6b0821a61131c42541ba60ac529d"
+  }
+]

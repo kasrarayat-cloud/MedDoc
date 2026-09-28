@@ -1,0 +1,17 @@
+test_clinically_related_assessment_does_not_release_allergy_medication_or_smoker (core.tests.test_v3_history_context.HistoryContextContract.test_clinically_related_assessment_does_not_release_allergy_medication_or_smoker) ... ok
+test_existing_hardguards_veto_forged_context_only_and_actor_shortcuts (core.tests.test_v3_history_context.HistoryContextContract.test_existing_hardguards_veto_forged_context_only_and_actor_shortcuts) ... ok
+test_identical_occurrences_keep_order_and_separate_evidence (core.tests.test_v3_history_context.HistoryContextContract.test_identical_occurrences_keep_order_and_separate_evidence) ... ok
+test_original_five_history_targets_gain_without_changing_original_picks (core.tests.test_v3_history_context.HistoryContextContract.test_original_five_history_targets_gain_without_changing_original_picks) ... ok
+test_partition_is_complete_closed_and_bound_to_exact_output (core.tests.test_v3_history_context.HistoryContextContract.test_partition_is_complete_closed_and_bound_to_exact_output) ... ok
+test_request_and_reservation_are_versioned_bounded_and_disable_before_sending (core.tests.test_v3_history_context.HistoryContextContract.test_request_and_reservation_are_versioned_bounded_and_disable_before_sending) ... ok
+test_required_qualifier_contrary_and_unknown_context_cannot_be_omitted (core.tests.test_v3_history_context.HistoryContextContract.test_required_qualifier_contrary_and_unknown_context_cannot_be_omitted) ... ok
+test_same_role_aliases_scoped_fields_and_source_capacity_get_no_new_contract (core.tests.test_v3_history_context.HistoryContextContract.test_same_role_aliases_scoped_fields_and_source_capacity_get_no_new_contract) ... ok
+test_stored_relation_is_invalid_after_notes_mapping_text_evidence_or_flag_change (core.tests.test_v3_history_context.HistoryContextContract.test_stored_relation_is_invalid_after_notes_mapping_text_evidence_or_flag_change) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 2.528s
+
+OK
+Found 9 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

@@ -177,3 +177,15 @@ Root combined-source proof:49 actual affected application tests passed (40 in a4
 ### Exact33759 CI completed with one stale schema assertion
 
 Run36354278599:core2,047tests/1035.245s/**one failure** (301-character label rejection expected by an old test); required aggregate failed. Support211documents/1,155operations passed with four explicit host/historical skips;90 adapter/kernel and20 reviewer-SSH controls passed, dependency audit clear. Browser15/WM9/input8, marketing andsecrets passed. Test-only91db0eb7 aligns the boundary to1,000/1,001, adds ASCII/astral positive and negative cases, and preserves all other assertions. Local3-test RED and4-test PASS retained. Application bytes are unchanged; later required CI must be reported separately. See `ci-recovery-20260927/exact-33759/`.
+
+
+### September28 reviewed workflow continuation
+
+See `V1-WORKFLOW-CONTINUATION-20260928.md` for the current consolidated boundary. Reviewed integration
+passes96focused checks on its first scope, then85application and30document checks after the history/nested
+union; these overlapping runs are separate evidence, not a total. D30/D31 selected routes, A10 long90/90
+rendered sentences and D03 assisted choices are genuine authenticated application/download paths with mocked
+providers. None is a whole-document automatic qualification or native Word result. Preservation28unique and
+nested19independent controls close their demonstrated bounded findings. Source-context semantic counterexamples
+remain open; its feature is off. ActualSonnet5 generation/served migration and independent60-file qualification
+remain unrun. Saved4caa exactCI36355693407/secrets36355693409 succeeded; new candidate CI is separately pending.

@@ -1,0 +1,276 @@
+{
+  "base": "4caa34431a60e6ce3409ecadbbb6989b50659d7b",
+  "candidate": "a921dfc312acbd6b9ad08b198720a08253481301",
+  "source_hashes": {
+    "base": "3f2ca5136a876d153b045e5c8dd37b8b8b24b303833263966664c63290a3b856",
+    "candidate": "9a25be7e3fd947e2069fc0be6cc6bc3c3bb964fe26dbb3ec52daf011fab67bd1"
+  },
+  "cases": [
+    {
+      "kind": "plain",
+      "source_sha256": "254fb8358f52fc110297658e1c21ae79a0ecf371ba796bfcde26ad33e781cbe4",
+      "base": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          },
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      },
+      "candidate": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      }
+    },
+    {
+      "kind": "paragraph_shading",
+      "source_sha256": "9ebd74ec949bfebfce1088800db2b8100bcfde08a82928dc97bda778c24d36c4",
+      "base": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          },
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      },
+      "candidate": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      }
+    },
+    {
+      "kind": "paragraph_highlight",
+      "source_sha256": "ec0194e39d8bfb388d44c308ddb384cc6d335b53e29c4a46371b95c608de6346",
+      "base": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          },
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      },
+      "candidate": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      }
+    },
+    {
+      "kind": "numbered",
+      "source_sha256": "ef41003cca35c1943f6ba7b33e4f89f80e560db771818a4851ed2f2657f9370e",
+      "base": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          },
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      },
+      "candidate": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      }
+    },
+    {
+      "kind": "bullet",
+      "source_sha256": "6f676ba4ba06a6193fb6e8040d92a4a2e6eaa34ca4e8062bef1d390e284391c7",
+      "base": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          },
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      },
+      "candidate": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      }
+    },
+    {
+      "kind": "paragraph_shading_inherited",
+      "source_sha256": "a1c1b7934e24dcd21e744bb2db0d5b6c24fbb7c2dba68d3fa2575b9c43514b43",
+      "base": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          },
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      },
+      "candidate": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      }
+    },
+    {
+      "kind": "underlined",
+      "source_sha256": "54bd15907db9f841625e914b438c6736653758a856d444a1610655f2aed93daa",
+      "base": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          },
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      },
+      "candidate": {
+        "fields": [
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+            "target": {
+              "type": "paragraph"
+            }
+          },
+          {
+            "label": "Past medical history",
+            "slot": "b/tbl[0]/tr[0]/tc[1]",
+            "target": {
+              "type": "cell"
+            }
+          }
+        ],
+        "warnings": null,
+        "notes": []
+      }
+    }
+  ]
+}

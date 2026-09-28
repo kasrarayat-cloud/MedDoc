@@ -1,0 +1,2205 @@
+{
+  "base_generation_sha256": "a7bbe3d9efd0db5247dccebeba0cb97137786312b03f22994c394cdfb744a81b",
+  "candidate": {
+    "generation": "bdb7304bbb2a51b4c2e80d18613c02c560a09c8a517a4a0855f6efe8419dcee9",
+    "syntax": "44bb30eda9405fb38fcbea2eefc3450505443f71d71aed9ed522f1642c30e2b8"
+  },
+  "cases": [
+    {
+      "case": "positive",
+      "notes": "The patient attends an art class every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class every Monday.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class every Monday.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attends an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient attends an art class every Monday.",
+                "start": 0,
+                "end": 46
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "The patient attends an art class every Monday.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class every Monday.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class every Monday.",
+              "start": 0,
+              "end": 46
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "attends"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "advocate",
+      "notes": "The patient advocate attends an art class every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient advocate attends an art class every Monday.",
+              "start": 0,
+              "end": 55
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient advocate attends an art class every Monday.",
+              "start": 0,
+              "end": 55
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient advocate attends an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient advocate attends an art class every Monday.",
+                "start": 0,
+                "end": 55
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "The patient advocate attends an art class every Monday.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient advocate attends an art class every Monday.",
+              "start": 0,
+              "end": 55
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient advocate attends an art class every Monday.",
+              "start": 0,
+              "end": 55
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "advocate"
+        },
+        {
+          "text": "patient",
+          "pos": "ADJ",
+          "tag": "JJ",
+          "dep": "amod",
+          "head": "advocate"
+        },
+        {
+          "text": "advocate",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "attends"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "coordinator",
+      "notes": "The patient care coordinator attends an art class every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient care coordinator attends an art class every Monday.",
+              "start": 0,
+              "end": 63
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient care coordinator attends an art class every Monday.",
+              "start": 0,
+              "end": 63
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient care coordinator attends an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient care coordinator attends an art class every Monday.",
+                "start": 0,
+                "end": 63
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "The patient care coordinator attends an art class every Monday.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient care coordinator attends an art class every Monday.",
+              "start": 0,
+              "end": 63
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient care coordinator attends an art class every Monday.",
+              "start": 0,
+              "end": 63
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "coordinator"
+        },
+        {
+          "text": "patient",
+          "pos": "ADJ",
+          "tag": "JJ",
+          "dep": "compound",
+          "head": "care"
+        },
+        {
+          "text": "care",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "coordinator"
+        },
+        {
+          "text": "coordinator",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "attends"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "caregiver",
+      "notes": "The patient caregiver attends an art class every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient caregiver attends an art class every Monday.",
+              "start": 0,
+              "end": 56
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient caregiver attends an art class every Monday.",
+              "start": 0,
+              "end": 56
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient caregiver attends an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient caregiver attends an art class every Monday.",
+                "start": 0,
+                "end": 56
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "The patient caregiver attends an art class every Monday.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient caregiver attends an art class every Monday.",
+              "start": 0,
+              "end": 56
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient caregiver attends an art class every Monday.",
+              "start": 0,
+              "end": 56
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "caregiver"
+        },
+        {
+          "text": "patient",
+          "pos": "ADJ",
+          "tag": "JJ",
+          "dep": "amod",
+          "head": "caregiver"
+        },
+        {
+          "text": "caregiver",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "attends"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "pluralpatients",
+      "notes": "The patient and her father attend art classes.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient and her father attend art classes.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient and her father attend art classes.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient and her father attend art classes.",
+            "evidence": [
+              {
+                "quote": "The patient and her father attend art classes.",
+                "start": 0,
+                "end": 46
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient and her father attend art classes.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient and her father attend art classes.",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient and her father attend art classes.",
+            "evidence": [
+              {
+                "quote": "The patient and her father attend art classes.",
+                "start": 0,
+                "end": 46
+              }
+            ],
+            "context": [
+              {
+                "quote": "The patient and her father attend art classes.",
+                "start": 0,
+                "end": 46,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true
+              }
+            ],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attend"
+        },
+        {
+          "text": "and",
+          "pos": "CCONJ",
+          "tag": "CC",
+          "dep": "cc",
+          "head": "patient"
+        },
+        {
+          "text": "her",
+          "pos": "PRON",
+          "tag": "PRP$",
+          "dep": "poss",
+          "head": "father"
+        },
+        {
+          "text": "father",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "conj",
+          "head": "patient"
+        },
+        {
+          "text": "attend",
+          "pos": "VERB",
+          "tag": "VBP",
+          "dep": "ROOT",
+          "head": "attend"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "classes"
+        },
+        {
+          "text": "classes",
+          "pos": "NOUN",
+          "tag": "NNS",
+          "dep": "dobj",
+          "head": "attend"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attend"
+        }
+      ]
+    },
+    {
+      "case": "possessive",
+      "notes": "The patient's father attends an art class every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient's father attends an art class every Monday.",
+              "start": 0,
+              "end": 55
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient's father attends an art class every Monday.",
+              "start": 0,
+              "end": 55
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient's father attends an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient's father attends an art class every Monday.",
+                "start": 0,
+                "end": 55
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient's father attends an art class every Monday.",
+              "start": 0,
+              "end": 55
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient's father attends an art class every Monday.",
+              "start": 0,
+              "end": 55
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient's father attends an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient's father attends an art class every Monday.",
+                "start": 0,
+                "end": 55
+              }
+            ],
+            "context": [
+              {
+                "quote": "The patient's father attends an art class every Monday.",
+                "start": 0,
+                "end": 55,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true
+              }
+            ],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "poss",
+          "head": "father"
+        },
+        {
+          "text": "'s",
+          "pos": "PART",
+          "tag": "POS",
+          "dep": "case",
+          "head": "patient"
+        },
+        {
+          "text": "father",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "attends"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "conditional",
+      "notes": "The patient attends an art class if symptoms improve.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class if symptoms improve.",
+              "start": 0,
+              "end": 53
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class if symptoms improve.",
+              "start": 0,
+              "end": 53
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attends an art class if symptoms improve.",
+            "evidence": [
+              {
+                "quote": "The patient attends an art class if symptoms improve.",
+                "start": 0,
+                "end": 53
+              }
+            ],
+            "context": [
+              {
+                "quote": "The patient attends an art class if symptoms improve.",
+                "start": 0,
+                "end": 53,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class if symptoms improve.",
+              "start": 0,
+              "end": 53
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class if symptoms improve.",
+              "start": 0,
+              "end": 53
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attends an art class if symptoms improve.",
+            "evidence": [
+              {
+                "quote": "The patient attends an art class if symptoms improve.",
+                "start": 0,
+                "end": 53
+              }
+            ],
+            "context": [
+              {
+                "quote": "The patient attends an art class if symptoms improve.",
+                "start": 0,
+                "end": 53,
+                "after": false,
+                "same": true
+              }
+            ],
+            "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a correction). Type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "if",
+          "pos": "SCONJ",
+          "tag": "IN",
+          "dep": "mark",
+          "head": "improve"
+        },
+        {
+          "text": "symptoms",
+          "pos": "NOUN",
+          "tag": "NNS",
+          "dep": "nsubj",
+          "head": "improve"
+        },
+        {
+          "text": "improve",
+          "pos": "VERB",
+          "tag": "VBP",
+          "dep": "advcl",
+          "head": "attends"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "modal",
+      "notes": "The patient should attend an art class.",
+      "base": {
+        "answer": {
+          "text": "The patient should attend an art class.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient should attend an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient should attend an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "The patient should attend an art class.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient should attend an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient should attend an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attend"
+        },
+        {
+          "text": "should",
+          "pos": "AUX",
+          "tag": "MD",
+          "dep": "aux",
+          "head": "attend"
+        },
+        {
+          "text": "attend",
+          "pos": "VERB",
+          "tag": "VB",
+          "dep": "ROOT",
+          "head": "attend"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attend"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attend"
+        }
+      ]
+    },
+    {
+      "case": "fragment",
+      "notes": "The patient attending an art class every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attending an art class every Monday.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attending an art class every Monday.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attending an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient attending an art class every Monday.",
+                "start": 0,
+                "end": 48
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attending an art class every Monday.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attending an art class every Monday.",
+              "start": 0,
+              "end": 48
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attending an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient attending an art class every Monday.",
+                "start": 0,
+                "end": 48
+              }
+            ],
+            "context": [
+              {
+                "quote": "The patient attending an art class every Monday.",
+                "start": 0,
+                "end": 48,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true
+              }
+            ],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "ROOT",
+          "head": "patient"
+        },
+        {
+          "text": "attending",
+          "pos": "VERB",
+          "tag": "VBG",
+          "dep": "acl",
+          "head": "patient"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attending"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "attending"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "patient"
+        }
+      ]
+    },
+    {
+      "case": "embedded",
+      "notes": "The patient hopes to attend an art class every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient hopes to attend an art class every Monday.",
+              "start": 0,
+              "end": 54
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient hopes to attend an art class every Monday.",
+              "start": 0,
+              "end": 54
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient hopes to attend an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient hopes to attend an art class every Monday.",
+                "start": 0,
+                "end": 54
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient hopes to attend an art class every Monday.",
+              "start": 0,
+              "end": 54
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient hopes to attend an art class every Monday.",
+              "start": 0,
+              "end": 54
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient hopes to attend an art class every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient hopes to attend an art class every Monday.",
+                "start": 0,
+                "end": 54
+              }
+            ],
+            "context": [
+              {
+                "quote": "The patient hopes to attend an art class every Monday.",
+                "start": 0,
+                "end": 54,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true
+              }
+            ],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "hopes"
+        },
+        {
+          "text": "hopes",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "hopes"
+        },
+        {
+          "text": "to",
+          "pos": "PART",
+          "tag": "TO",
+          "dep": "aux",
+          "head": "attend"
+        },
+        {
+          "text": "attend",
+          "pos": "VERB",
+          "tag": "VB",
+          "dep": "xcomp",
+          "head": "hopes"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attend"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "attend"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "hopes"
+        }
+      ]
+    },
+    {
+      "case": "question",
+      "notes": "The patient attends an art class every Monday?",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class every Monday?",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class every Monday?",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attends an art class every Monday?",
+            "evidence": [
+              {
+                "quote": "The patient attends an art class every Monday?",
+                "start": 0,
+                "end": 46
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class every Monday?",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class every Monday?",
+              "start": 0,
+              "end": 46
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attends an art class every Monday?",
+            "evidence": [
+              {
+                "quote": "The patient attends an art class every Monday?",
+                "start": 0,
+                "end": 46
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "attends"
+        },
+        {
+          "text": "?",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "negative",
+      "notes": "The patient never attends an art class.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient never attends an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient never attends an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient never attends an art class.",
+            "evidence": [
+              {
+                "quote": "The patient never attends an art class.",
+                "start": 0,
+                "end": 39
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "The patient never attends an art class.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient never attends an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient never attends an art class.",
+              "start": 0,
+              "end": 39
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "never",
+          "pos": "ADV",
+          "tag": "RB",
+          "dep": "neg",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "preservedcoordination",
+      "notes": "The patient attends an art class and swims every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class and swims every Monday.",
+              "start": 0,
+              "end": 56
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class and swims every Monday.",
+              "start": 0,
+              "end": 56
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attends an art class and swims every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient attends an art class and swims every Monday.",
+                "start": 0,
+                "end": 56
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "The patient attends an art class and swims every Monday.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class and swims every Monday.",
+              "start": 0,
+              "end": 56
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class and swims every Monday.",
+              "start": 0,
+              "end": 56
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "and",
+          "pos": "CCONJ",
+          "tag": "CC",
+          "dep": "cc",
+          "head": "attends"
+        },
+        {
+          "text": "swims",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "conj",
+          "head": "attends"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "swims"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "attends"
+        }
+      ]
+    },
+    {
+      "case": "foreignconjunction",
+      "notes": "The patient attends an art class and her father swims every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class and her father swims every Monday.",
+              "start": 0,
+              "end": 67
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class and her father swims every Monday.",
+              "start": 0,
+              "end": 67
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attends an art class and her father swims every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient attends an art class and her father swims every Monday.",
+                "start": 0,
+                "end": 67
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "The patient attends an art class and her father swims every Monday.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "The patient attends an art class and her father swims every Monday.",
+              "start": 0,
+              "end": 67
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attends an art class and her father swims every Monday.",
+              "start": 0,
+              "end": 67
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "attends"
+        },
+        {
+          "text": "attends",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "attends"
+        },
+        {
+          "text": "an",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "class"
+        },
+        {
+          "text": "art",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "compound",
+          "head": "class"
+        },
+        {
+          "text": "class",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "attends"
+        },
+        {
+          "text": "and",
+          "pos": "CCONJ",
+          "tag": "CC",
+          "dep": "cc",
+          "head": "attends"
+        },
+        {
+          "text": "her",
+          "pos": "PRON",
+          "tag": "PRP$",
+          "dep": "poss",
+          "head": "father"
+        },
+        {
+          "text": "father",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "swims"
+        },
+        {
+          "text": "swims",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "conj",
+          "head": "attends"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "swims"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "swims"
+        }
+      ]
+    },
+    {
+      "case": "passive",
+      "notes": "The patient attended by a caregiver every Monday.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attended by a caregiver every Monday.",
+              "start": 0,
+              "end": 49
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attended by a caregiver every Monday.",
+              "start": 0,
+              "end": 49
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attended by a caregiver every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient attended by a caregiver every Monday.",
+                "start": 0,
+                "end": 49
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "The patient attended by a caregiver every Monday.",
+              "start": 0,
+              "end": 49
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "The patient attended by a caregiver every Monday.",
+              "start": 0,
+              "end": 49
+            }
+          ],
+          "held_candidate": {
+            "text": "The patient attended by a caregiver every Monday.",
+            "evidence": [
+              {
+                "quote": "The patient attended by a caregiver every Monday.",
+                "start": 0,
+                "end": 49
+              }
+            ],
+            "context": [
+              {
+                "quote": "The patient attended by a caregiver every Monday.",
+                "start": 0,
+                "end": 49,
+                "after": false,
+                "same": true,
+                "syntax_incomplete": true
+              }
+            ],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "The",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "patient"
+        },
+        {
+          "text": "patient",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "ROOT",
+          "head": "patient"
+        },
+        {
+          "text": "attended",
+          "pos": "VERB",
+          "tag": "VBN",
+          "dep": "acl",
+          "head": "patient"
+        },
+        {
+          "text": "by",
+          "pos": "ADP",
+          "tag": "IN",
+          "dep": "agent",
+          "head": "attended"
+        },
+        {
+          "text": "a",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "caregiver"
+        },
+        {
+          "text": "caregiver",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "pobj",
+          "head": "by"
+        },
+        {
+          "text": "every",
+          "pos": "DET",
+          "tag": "DT",
+          "dep": "det",
+          "head": "Monday"
+        },
+        {
+          "text": "Monday",
+          "pos": "PROPN",
+          "tag": "NNP",
+          "dep": "npadvmod",
+          "head": "caregiver"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "patient"
+        }
+      ]
+    },
+    {
+      "case": "nounphrase",
+      "notes": "Patient education improves sleep.",
+      "base": {
+        "answer": {
+          "text": "",
+          "status": "conflict",
+          "evidence": [
+            {
+              "quote": "Patient education improves sleep.",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Patient education improves sleep.",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "held_candidate": {
+            "text": "Patient education improves sleep.",
+            "evidence": [
+              {
+                "quote": "Patient education improves sleep.",
+                "start": 0,
+                "end": 33
+              }
+            ],
+            "context": [],
+            "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank \u2014 reviewed\"."
+          }
+        },
+        "finalization_governed": []
+      },
+      "candidate": {
+        "answer": {
+          "text": "Patient education improves sleep.",
+          "status": "supported",
+          "evidence": [
+            {
+              "quote": "Patient education improves sleep.",
+              "start": 0,
+              "end": 33
+            }
+          ],
+          "reviewed": false,
+          "own_evidence": [
+            {
+              "quote": "Patient education improves sleep.",
+              "start": 0,
+              "end": 33
+            }
+          ]
+        },
+        "finalization_governed": []
+      },
+      "parse": [
+        {
+          "text": "Patient",
+          "pos": "ADJ",
+          "tag": "JJ",
+          "dep": "amod",
+          "head": "education"
+        },
+        {
+          "text": "education",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "nsubj",
+          "head": "improves"
+        },
+        {
+          "text": "improves",
+          "pos": "VERB",
+          "tag": "VBZ",
+          "dep": "ROOT",
+          "head": "improves"
+        },
+        {
+          "text": "sleep",
+          "pos": "NOUN",
+          "tag": "NN",
+          "dep": "dobj",
+          "head": "improves"
+        },
+        {
+          "text": ".",
+          "pos": "PUNCT",
+          "tag": ".",
+          "dep": "punct",
+          "head": "improves"
+        }
+      ]
+    }
+  ]
+}

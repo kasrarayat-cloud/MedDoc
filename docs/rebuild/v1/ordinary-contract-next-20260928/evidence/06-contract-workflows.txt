@@ -1,0 +1,30 @@
+Using existing test database for alias 'default' ('test_quillmd_ci')...
+test_forced_supported_context_cases_stay_held_on_page_unchanged_save_and_finalize (core.tests.test_v3_history_context.HistoryContextWorkflow.test_forced_supported_context_cases_stay_held_on_page_unchanged_save_and_finalize) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_existing_hardguards_veto_forged_context_only_and_actor_shortcuts (core.tests.test_v3_history_context.HistoryContextContract.test_existing_hardguards_veto_forged_context_only_and_actor_shortcuts) ... ok
+test_original_five_history_targets_gain_without_changing_original_picks (core.tests.test_v3_history_context.HistoryContextContract.test_original_five_history_targets_gain_without_changing_original_picks) ... ok
+test_partition_is_complete_closed_and_bound_to_exact_output (core.tests.test_v3_history_context.HistoryContextContract.test_partition_is_complete_closed_and_bound_to_exact_output) ... ok
+test_request_and_reservation_are_versioned_bounded_and_disable_before_sending (core.tests.test_v3_history_context.HistoryContextContract.test_request_and_reservation_are_versioned_bounded_and_disable_before_sending) ... ok
+test_required_qualifier_contrary_and_unknown_context_cannot_be_omitted (core.tests.test_v3_history_context.HistoryContextContract.test_required_qualifier_contrary_and_unknown_context_cannot_be_omitted) ... ok
+test_same_role_aliases_scoped_fields_and_source_capacity_get_no_new_contract (core.tests.test_v3_history_context.HistoryContextContract.test_same_role_aliases_scoped_fields_and_source_capacity_get_no_new_contract) ... ok
+test_stored_relation_is_invalid_after_notes_mapping_text_evidence_or_flag_change (core.tests.test_v3_history_context.HistoryContextContract.test_stored_relation_is_invalid_after_notes_mapping_text_evidence_or_flag_change) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 10.008s
+
+OK
+Preserving test database for alias 'default' ('test_quillmd_ci')...
+Found 9 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

@@ -1,0 +1,90 @@
+test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) ... 
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='character') ... FAIL
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='inherited_character') ... FAIL
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='unknown_character') ... FAIL
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='cyclic_character') ... FAIL
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='default_character') ... FAIL
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='default_table') ... FAIL
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='inherited_default_table') ... FAIL
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='unknown_default_table_parent') ... FAIL
+  test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='multiple_default_tables') ... FAIL
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='character')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='inherited_character')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='unknown_character')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='cyclic_character')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='default_character')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='default_table')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='inherited_default_table')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='unknown_default_table_parent')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+======================================================================
+FAIL: test_paired_spacing_requires_resolved_run_and_table_styles (documents.test_question_boxes.QuestionBoxes.test_paired_spacing_requires_resolved_run_and_table_styles) (case='multiple_default_tables')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-word-workflows/rebuild/documents/test_question_boxes.py", line 138, in test_paired_spacing_requires_resolved_run_and_table_styles
+    self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+AssertionError: False != True
+
+----------------------------------------------------------------------
+Ran 1 test in 0.888s
+
+FAILED (failures=9)
+Found 1 test(s).
+Skipping setup of unused database(s): default.
+System check identified no issues (0 silenced).

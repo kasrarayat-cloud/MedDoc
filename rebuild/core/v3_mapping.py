@@ -97,6 +97,29 @@ def label_of(field):
     return str(field.get('label') or field.get('key') or 'this question')
 
 
+def question_parts(field):
+    """Printed question segments for review, never inferred coverage or new destinations."""
+    if field.get('kind') not in ('text', 'long_text'):
+        return []
+    label = str(field.get('label') or '')
+    parts, start = [], 0
+    for index, char in enumerate(label):
+        if char not in '?？':
+            continue
+        end = index + 1
+        while end < len(label) and label[end] in ')）]\"\'”’':
+            end += 1
+        part = label[start:end]
+        if any(character.isalnum() for character in part):
+            parts.append(part)
+            start = end
+    if len(parts) < 2:
+        return []
+    # Preserve trailing instructions, punctuation and all original wording.
+    parts[-1] += label[start:]
+    return parts
+
+
 def option_for(options, text):
     """The one printed option `text` names: equal after trimming, ignoring case. None when it names no option, or
     when two printed options would both match (then the text does not identify one).

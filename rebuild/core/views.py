@@ -1,3 +1,4 @@
+from .retention import cleanup_file
 import bisect
 import hashlib
 import json
@@ -380,7 +381,7 @@ def template_upload(request):
             if contract:messages.info(request,f'QuillMD found {len(info["fields"])} answer areas automatically. Check every one against your form, correct the mapping, and confirm it before creating a document.')
             return redirect('template_detail',pk=t.pk)
         except (ValidationError,DocumentError) as exc:
-            if relative:private_path(relative).unlink(missing_ok=True)
+            if relative:cleanup_file(private_path(relative))
             form.add_error(None,error_message(exc))
             # The engine's wording names an adapter the doctor cannot choose. Add what they CAN do,
             # keyed on the refusal's own text, without changing the refusal itself.
@@ -777,6 +778,7 @@ def encounter_detail(request,pk):
             # What the export does with this answer, in the page's words (the export sets every box of an answered
             # option field, unticks a reviewed checkbox left unticked, and keeps an unanswered choice as printed).
             row['v3_note']=v3_mapping.review_note(row)
+            row['question_parts']=v3_mapping.question_parts(row)
             row['blank_note']=v3_mapping.blank_note(row)
             row['v3_final']=v3_mapping.finalized_note(row,row)
             row['v3_context']=(row.get('review_reason') if row.get('write_protected') else
@@ -1483,7 +1485,7 @@ def voice(request,pk):
                 'length':seconds_text(over.quote['seconds']),'fits':seconds_text(over.quote['fits_seconds']),
                 'standard_limit':Decimal(over.quote['standard_limit']),
                 'affordable':available_balance(request.user,e.department)>=Decimal(over.quote['charge_limit'])},status=409)
-        if job.input_path!=relative:private_path(relative).unlink(missing_ok=True)
+        if job.input_path!=relative:cleanup_file(private_path(relative),encounter_id=e.pk)
         if getattr(job,'reused',False):
             # The identical recording already holds this request key; the redundant upload was just
             # removed above. Nothing was sent to the provider and nothing was charged again.
@@ -1491,7 +1493,7 @@ def voice(request,pk):
         else:
             messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
-        if relative:private_path(relative).unlink(missing_ok=True)
+        if relative:cleanup_file(private_path(relative))
         messages.error(request,error_message(exc))
     return redirect('encounter_detail',pk=pk)
 
@@ -1524,7 +1526,7 @@ def voice_approve(request,pk):
             if Job.objects.filter(input_path=relative).exists():
                 messages.info(request,'This recording was already approved and queued; its request is listed below.')
                 return redirect('encounter_detail',pk=pk)
-            path.unlink(missing_ok=True)
+            cleanup_file(path,encounter_id=e.pk)
         messages.info(request,'Nothing was sent. Upload a shorter segment: recordings that fit the displayed limit are processed straight away.')
         return redirect('encounter_detail',pk=pk)
     try:
@@ -1533,7 +1535,7 @@ def voice_approve(request,pk):
         if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=data.get('sha256'):
             raise ValidationError('The quoted recording is no longer available. Upload it again; nothing was sent.')
         job=enqueue(e,request.user,'transcription',relative,config=data['config'],approved_limit=data['charge_limit'],expected_revision=data['revision'])
-        if job.input_path!=relative:path.unlink(missing_ok=True)
+        if job.input_path!=relative:cleanup_file(path,encounter_id=e.pk)
         audit(request.user,'voice.limit_approved',job.pk,department=e.department,charge_limit=str(data['charge_limit']))
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")
     except ValidationError as exc:

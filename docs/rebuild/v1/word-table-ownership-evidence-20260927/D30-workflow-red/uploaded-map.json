@@ -1,0 +1,1102 @@
+[
+  {
+    "key": "v3_1",
+    "kind": "text",
+    "label": "For enquiries about conditions, supervision requirements or general questions then please contact",
+    "context": "General enquiries",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/p[12]",
+      "target": {
+        "end": 98,
+        "type": "span",
+        "shape": "after_label",
+        "start": 98
+      },
+      "contract": "v3",
+      "fingerprint": "e0d504936485bfe8d8fb2757dc8ca766dd73a403ae07b3d380c70504e200283a"
+    }
+  },
+  {
+    "key": "v3_2",
+    "kind": "text",
+    "label": "Full Name of Patient",
+    "context": "Patient’s Details > Full Name of Patient",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "5d65905750a74c1335ef40b9f8affe6c7ed418a1575c3535a6612770af91be4c"
+    }
+  },
+  {
+    "key": "v3_3",
+    "kind": "text",
+    "label": "MHCS Reference Number",
+    "context": "Patient’s Details > MHCS Reference Number",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "c2052719541adba9b8fec635a213a02daa0e818265febde3e25f378c97e60536"
+    }
+  },
+  {
+    "key": "v3_4",
+    "kind": "text",
+    "label": "Gender",
+    "context": "Patient’s Details > Gender",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[2]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "bee7548db00ffe9127531948c46d4e49a606d71600fc1fc2bc8ad4320377ab05"
+    }
+  },
+  {
+    "key": "v3_5",
+    "kind": "text",
+    "label": "Nationality",
+    "context": "Patient’s Details > Nationality",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[3]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "07a30868009f6b722de83cd269d1f0f5df35261bab6f3a00788e2f060f61ed20"
+    }
+  },
+  {
+    "key": "v3_6",
+    "kind": "text",
+    "label": "Ethnicity",
+    "context": "Patient’s Details > Ethnicity",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[4]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "a181b42e0bde5b37ca6d1face4df42cd930fbb8bcaa991c454909edd6cab342a"
+    }
+  },
+  {
+    "key": "v3_7",
+    "kind": "date",
+    "label": "Date of Birth",
+    "context": "Patient’s Details",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[5]/tc[0]/p[2]",
+      "target": {
+        "type": "paragraph"
+      },
+      "contract": "v3",
+      "fingerprint": "cec53843335c4c2f3468bdd0cb97c6bdd0738e48b54fc47f36809ca674060cdc"
+    }
+  },
+  {
+    "key": "v3_8",
+    "kind": "date",
+    "label": "Date of Birth",
+    "context": "Patient’s Details > Date of Birth",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[5]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "a721de24621aaa0de34c26906591bc2742c5c4f24d133dab2753dce6999cd097"
+    }
+  },
+  {
+    "key": "v3_9",
+    "kind": "date",
+    "label": "Date of Conditional Discharge",
+    "context": "Patient’s Details",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[6]/tc[0]/p[2]",
+      "target": {
+        "type": "paragraph"
+      },
+      "contract": "v3",
+      "fingerprint": "c237ee00c662f0119ef290e0be65086ac48be1827b797f12f6028c0c7f4e0219"
+    }
+  },
+  {
+    "key": "v3_10",
+    "kind": "date",
+    "label": "Date of Conditional Discharge",
+    "context": "Patient’s Details > Date of Conditional Discharge",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[6]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "5ba432efc5f2c345973f6eae0e60fd3d3573eb8a2ac08848bfb0d910e1e85bbe"
+    }
+  },
+  {
+    "key": "v3_11",
+    "kind": "text",
+    "label": "Diagnosis",
+    "context": "Patient’s Details > Diagnosis",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[7]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "b39675543fece0776148acaf8911864b4d727aa613f69a5c480f39969fddada0"
+    }
+  },
+  {
+    "key": "v3_12",
+    "kind": "text",
+    "label": "Current Discharge Conditions (Including patient’s current residential address)",
+    "context": "Patient’s Details > Current Discharge Conditions (Including patient’s current residential address)",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[8]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "a7dbcf1ccc786b4207a8acc0175f52efd23f234b3057d1f46ece1fce4c409095"
+    }
+  },
+  {
+    "key": "v3_13",
+    "kind": "date",
+    "label": "Deprivation of Liberty Safeguards (DOLS): set out date of Order and details of any restrictions and safeguards (if applicable)",
+    "context": "Patient’s Details > Deprivation of Liberty Safeguards (DOLS): set out date of Order and details of any restrictions and safeguards (if appli",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[9]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "769e41c102d355196c3b77722f3b6303126fea09e71d847bab150eb4b5716469"
+    }
+  },
+  {
+    "key": "v3_14",
+    "kind": "text",
+    "label": "Index Offence(s)",
+    "context": "Patient’s Details > Index Offence(s)",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[10]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "0589e8976ee916c9a370d2a118c7d7f4a64e533eb7d0946bb694b42b97519f1d"
+    }
+  },
+  {
+    "key": "v3_15",
+    "kind": "long_text",
+    "label": "Details of any further offending or convictions since the patient was discharged",
+    "context": "Patient’s Details > Details of any further offending or convictions since the patient was discharged",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[11]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "7aa58387452b0a908a084414a75de00f0822610fe64b880d38d52470796da3cc"
+    }
+  },
+  {
+    "key": "v3_16",
+    "kind": "text",
+    "label": "Victim Liaison Officer’s Name, email address and telephone number",
+    "context": "Patient’s Details > Victim Liaison Officer’s Name, email address and telephone number",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[12]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "df739a68b9cadfd298e489bef2505125f3049250c9012b3594c7dc3162fa6cce"
+    }
+  },
+  {
+    "key": "v3_17",
+    "kind": "long_text",
+    "label": "MAPPA status – Indicate eligibility, the level and last review if a Level 2 or 3, with contacts of the relevant MAPPA(for category 4 patients, we will need details of any other agencies involved, no matter the level)",
+    "context": "Patient’s Details > MAPPA status – Indicate eligibility, the level and last review if a Level 2 or 3, with contacts of the relevant MAPPA(fo",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[13]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "3fc1e9cc3850ada3c5faab5f7bcdfe6b6b0ddba0e5455b8cd549f2b9c6963ec1"
+    }
+  },
+  {
+    "key": "v3_18",
+    "kind": "text",
+    "label": "Is the patient entered on Sex Offenders’ Register or subject to a Sexual Offences/Sexual Harm Prevention Order or any other criminal or civil orders of a court which are relevant? Whether the patient is a ViSOR nominal?",
+    "context": "Patient’s Details > Is the patient entered on Sex Offenders’ Register or subject to a Sexual Offences/Sexual Harm Prevention Order or any ot",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[14]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "11fc7c487ce32ce293dbc2ce25a06f1620ac708e8288c134d39e4e5b86ccbed9"
+    }
+  },
+  {
+    "key": "v3_19",
+    "kind": "long_text",
+    "label": "Details of the MDT members and organisations involved in supporting the patient, name, role and contact details",
+    "context": "Patient’s Details > Details of the MDT members and organisations involved in supporting the patient, name, role and contact details",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[15]/tc[1]",
+      "target": {
+        "all": true,
+        "type": "cell_replace"
+      },
+      "contract": "v3",
+      "fingerprint": "b153216e46e813dbc328274ad7491ec2c0292f2930d2cf60e2a2e2446bfffa5e"
+    }
+  },
+  {
+    "key": "v3_20",
+    "kind": "long_text",
+    "label": "Set out any changes since the previous report or since the patient has been discharged where there are concerns about changes in the patient’s mental state or risk profile? Please use the relevant section to elaborate further.",
+    "context": "Part B > Social Supervisor’s Report",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "51365fd5a3090506b1db15113c7aa7400126012c63de0d110a7b40cf4285a881"
+    }
+  },
+  {
+    "key": "v3_21",
+    "kind": "long_text",
+    "label": "When was the last time you saw the patient and was this in person? Where did you last see the patient? How often do you or other members of the team see the patient and has contact been more frequent or less frequent over the reporting period?",
+    "context": "Part B > Social Supervisor’s Report > Supervision",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[2]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "9ef640089031923a11a23c619a66e2cdd10e03a52a33f69aae1f4db8943c3e1c"
+    }
+  },
+  {
+    "key": "v3_22",
+    "kind": "long_text",
+    "label": "Does the patient cooperate with supervision? Can the cooperation with supervision be described as active or are they passively engaging with supervision? Have they historically cooperated and what have been the barriers to effective supervision either now or in the past?",
+    "context": "Part B > Social Supervisor’s Report > Supervision",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[3]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "2ebe1b3d2884aefac58673d2bcd78ce1f047666c4609f73ef4064c9295795b56"
+    }
+  },
+  {
+    "key": "v3_23",
+    "kind": "long_text",
+    "label": "Set out the suitability of the accommodation and its appropriateness for monitoring of compliance with treatment and risk?",
+    "context": "Part B > Social Supervisor’s Report > Accommodation",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[5]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "cd56a1849fd886662a3717eaf8b238fd29c7b4137f8579353e245cc8f540690c"
+    }
+  },
+  {
+    "key": "v3_24",
+    "kind": "long_text",
+    "label": "If accommodation is being changed, please set out the reasons for the changes and what level of support the new accommodation will entail? Please also detail any specific risk assessment/review activity and any changes to risk mitigations. Has there been formal notification through the following process Submit a conditional discharge report or request a change of discharge conditions - GOV.UK (www.gov.uk)?",
+    "context": "Part B > Social Supervisor’s Report > Accommodation",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[6]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "10b3a71d79e65e1ef71c557433c00f2ccef7f885080fd37c5952b9fa77973e6e"
+    }
+  },
+  {
+    "key": "v3_25",
+    "kind": "long_text",
+    "label": "Have there been any changes in the relationships which are significant to the patient, and which may affect their stability? Are any changes likely to take place before the next report is due?",
+    "context": "Part B > Social Supervisor’s Report > Relationships",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[7]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "f18da7688efe9cf128f1338c45c945e3fbce17287ba7f54e9c50d4a32ac849b7"
+    }
+  },
+  {
+    "key": "v3_26",
+    "kind": "long_text",
+    "label": "If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+    "context": "Part B > Social Supervisor’s Report > Relationships",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[8]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "5d51576b21a635a7129ae967388a057203bcdc924f8a964d8ea5bc639daf25e6"
+    }
+  },
+  {
+    "key": "v3_27",
+    "kind": "long_text",
+    "label": "Please report any changes or variation of the patient’s mental state and behaviour which have increased your concerns about the appropriateness of the conditional discharge continuing? Please include if the case has been referred to MAPPA or a MARAC has been arranged.",
+    "context": "Part B > Social Supervisor’s Report > Behaviour and Risks",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[10]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "aa32fad16774b0c933ce3c6aaa5c17fee83a51f2234fd808077091ccd5cdede6"
+    }
+  },
+  {
+    "key": "v3_28",
+    "kind": "long_text",
+    "label": "Please set out the patient’s historical risks, how they are being managed now and what has been done to manage them in the past?",
+    "context": "Part B > Social Supervisor’s Report > Behaviour and Risks",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[11]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "96f6c2bd9dc6cc814b1e34f363aa443815b065cff1248ce22fd96112b0a70376"
+    }
+  },
+  {
+    "key": "v3_29",
+    "kind": "long_text",
+    "label": "Has the patient displayed any signs of extremist / terrorist risk ideology or behaviour and if so, how is this being managed? Has the patient been referred to Prevent or are other agencies engaged with managing this risk?",
+    "context": "Part B > Social Supervisor’s Report > Behaviour and Risks",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[12]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "ccae79a96ded6f5977ca815c9b2a0e440cdea44120f7b8e4f98cd52a4d901f67"
+    }
+  },
+  {
+    "key": "v3_30",
+    "kind": "long_text",
+    "label": "Have there been any recent issues of concern relating to drug or alcohol use by the patient? Is the patient being targeted by local drug users or dealers? If so, please detail the action taken to address any increased risks which may occur because of this.",
+    "context": "Part B > Social Supervisor’s Report > Substance Misuse Risks",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[13]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "d92fd87d3bd4481b1ece2a054c7c0c2989f241614c5858935c687f29019c8207"
+    }
+  },
+  {
+    "key": "v3_31",
+    "kind": "long_text",
+    "label": "Is the patient a habitual user of controlled drugs? If, yes how is this risk managed?",
+    "context": "Part B > Social Supervisor’s Report > Substance Misuse Risks",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[14]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "a68424e6b71b6b9b02f08b3b6c811cf9c6391a573c94a85fb118fc00b4dabcdc"
+    }
+  },
+  {
+    "key": "v3_32",
+    "kind": "long_text",
+    "label": "Historically does the patient pose a risk to specific individuals or groups? Are those risks likely to re-emerge on discharge?",
+    "context": "Part B > Social Supervisor’s Report > Past and Potential Victims",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[15]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "184872e2e6333276c43702824baac58af97caceb567b898bb5d34d7afe3729c9"
+    }
+  },
+  {
+    "key": "v3_33",
+    "kind": "long_text",
+    "label": "Has the patient been adhering to any victim related conditions, such as non-contact conditions or exclusion zones? Have they sought changes to victim related conditions? Are you in contact with the Victim Liaison Officer?",
+    "context": "Part B > Social Supervisor’s Report > Past and Potential Victims",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[16]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "8e9807081edf7fdb4934fc0b755f2bd76b5f96b050e733246a57fb65f7d04e68"
+    }
+  },
+  {
+    "key": "v3_34",
+    "kind": "long_text",
+    "label": "Is the patient financially independent or are they reliant on third parties for financial support, such as family or friends? Is the patient in any danger of being financially exploited by others?",
+    "context": "Part B > Social Supervisor’s Report > Financial Risk",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[17]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "531fc2b98daa4e63b4f892df94ef4830a2fd362c82bf979ffc07f242c5c7d16d"
+    }
+  },
+  {
+    "key": "v3_35",
+    "kind": "long_text",
+    "label": "What structured activities does the patient partake in including employment, study, or other interests? If the patient has no structured activity, how do they occupy their time and will this pose a problem from a risk perspective in the long term? Have they been supported in disclosure of their offending history (where appropriate?)",
+    "context": "Part B > Social Supervisor’s Report > Activities and Employment",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[18]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "669c0231b684827ed141142857e7cb1a9744a60b59d904826c5d5fd7fbad63fd"
+    }
+  },
+  {
+    "key": "v3_36",
+    "kind": "long_text",
+    "label": "Provide any further comments or any colleague involved in the patient’s supervision.",
+    "context": "Part B > Social Supervisor’s Report > Further Comments",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[19]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "c7cc47d516bfd841b1b88027b294dcb84062d965c33e73f7d0e6d2249147d976"
+    }
+  },
+  {
+    "key": "v3_37",
+    "kind": "signature",
+    "label": "Signature",
+    "context": "Further Comments",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[20]/tr[0]/tc[0]/p[2]",
+      "target": {
+        "type": "paragraph"
+      },
+      "contract": "v3",
+      "fingerprint": "da9fd0d8d4345629586532d84a5927ace1a7901efc23540320015e6eeeafe650"
+    }
+  },
+  {
+    "key": "v3_38",
+    "kind": "signature",
+    "label": "Signature",
+    "context": "Further Comments > Signature",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[20]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "622f8b9261b6a2b888241f9cfc3f69628e244ff580e5fce8d8d6c9b13d8e39d0"
+    }
+  },
+  {
+    "key": "v3_39",
+    "kind": "text",
+    "label": "Email address and Telephone number",
+    "context": "Further Comments > Email address and Telephone number",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[20]/tr[1]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "b425d76b6add2a524080b3abbb0ae032a06c01e028c757371dd19659e4d8f12e"
+    }
+  },
+  {
+    "key": "v3_40",
+    "kind": "date",
+    "label": "Date of Report",
+    "context": "Further Comments",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[20]/tr[2]/tc[0]/p[2]",
+      "target": {
+        "type": "paragraph"
+      },
+      "contract": "v3",
+      "fingerprint": "0e9e690c9fd266cca70db5fdbfed1cbffa959c9ec3c0676e681ad5f8706249fe"
+    }
+  },
+  {
+    "key": "v3_41",
+    "kind": "date",
+    "label": "Date of Report",
+    "context": "Further Comments > Date of Report",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[20]/tr[2]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "7d464f7819973a98b7716d9a6db419363ecb00779bfeedcfa33d63e0e73d2bc8"
+    }
+  },
+  {
+    "key": "v3_42",
+    "kind": "signature",
+    "label": "Signature",
+    "context": "Line Manager Comments",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[22]/tr[0]/tc[0]/p[2]",
+      "target": {
+        "type": "paragraph"
+      },
+      "contract": "v3",
+      "fingerprint": "6ff989db9adf2ad4b088faf43d6e81f6f14950d893517c3c4f36ad9946e500e6"
+    }
+  },
+  {
+    "key": "v3_43",
+    "kind": "signature",
+    "label": "Signature",
+    "context": "Line Manager Comments > Signature",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[22]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "3980d6608d36de6ba990802b5e1bf3f278d85a453c43ed446c50a7876f61d739"
+    }
+  },
+  {
+    "key": "v3_44",
+    "kind": "text",
+    "label": "Email address and Telephone number",
+    "context": "Line Manager Comments > Email address and Telephone number",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[22]/tr[1]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "888193643d93782b891a244c1a452f8b31fbf30743df3bbd239c6ee86b9a2045"
+    }
+  },
+  {
+    "key": "v3_45",
+    "kind": "date",
+    "label": "Date of Report",
+    "context": "Line Manager Comments",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[22]/tr[2]/tc[0]/p[2]",
+      "target": {
+        "type": "paragraph"
+      },
+      "contract": "v3",
+      "fingerprint": "4e89898398e983fb4427afff3b928c5eaf4f7fde31003ca919a7a17981c794eb"
+    }
+  },
+  {
+    "key": "v3_46",
+    "kind": "date",
+    "label": "Date of Report",
+    "context": "Line Manager Comments > Date of Report",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[22]/tr[2]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "4c4bd2c553855f6dfb109bd830c5c8bf5084e5aa334eb37b70e9311b8c27ecd6"
+    }
+  },
+  {
+    "key": "v3_47",
+    "kind": "long_text",
+    "label": "Please set out any clinical changes or concerns around risk since the previous report (or, in the case of the initial report, in the four weeks since the patient was discharged)? Please use the relevant section to elaborate further.",
+    "context": "Part C > Clinical Supervisor’s Report",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[23]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "3a261aef968303a22f47576a8cd64977aeefb79ec5066a39c24b551d3a865a46"
+    }
+  },
+  {
+    "key": "v3_48",
+    "kind": "long_text",
+    "label": "What is the patient’s diagnosis? Has this changed over the course of their time in the community?",
+    "context": "Part C > Clinical Supervisor’s Report > Diagnosis",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[24]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "832834d0b7947ad782e89119d2d0fd3d4285c1886591e5904a362d55d984b612"
+    }
+  },
+  {
+    "key": "v3_49",
+    "kind": "long_text",
+    "label": "What are the primary factors that affect the stability of the patient’s mental state and how does this effect their risk?",
+    "context": "Part C > Clinical Supervisor’s Report > Diagnosis",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[25]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "be3953671eeafef4dda2a5418d4a358b977fe423033f13da1e775b05d5e3ffd7"
+    }
+  },
+  {
+    "key": "v3_50",
+    "kind": "long_text",
+    "label": "Please set out the medication prescribed to the patient to treat their mental disorder and how this is administered and monitored?",
+    "context": "Part C > Clinical Supervisor’s Report > Treatment",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[26]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "164264a1a1dc326175004788996f07484abfc5a6245b922e732fe16b06fe9178"
+    }
+  },
+  {
+    "key": "v3_51",
+    "kind": "long_text",
+    "label": "Does the patient self-medicate? Has there been any change to the dosage or type of medication being prescribed and what insight does the patient have?",
+    "context": "Part C > Clinical Supervisor’s Report > Treatment",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[27]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "3c2d47d54741cdbb033d0dea1aa80a17e2df7f9f9c2ff14904ead61df5ff8617"
+    }
+  },
+  {
+    "key": "v3_52",
+    "kind": "long_text",
+    "label": "Has the patient fully complied with treatment including taking prescribed medication? If not, please detail the action taken to address this.",
+    "context": "Part C > Clinical Supervisor’s Report > Treatment",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[28]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "e2f7b12071553015de85be1d41e2e8cf275af150bd42a0cb1b4bc4492cf1ce6a"
+    }
+  },
+  {
+    "key": "v3_53",
+    "kind": "long_text",
+    "label": "Has the Care Plan changed or are there any plans to change it as a result of increased/decreased concerns?",
+    "context": "Part C > Clinical Supervisor’s Report > Treatment",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[29]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "0965e9ee4ba5501eea5692a92b8caa410eeddcb0002a742fa2cd5c0d95dd5780"
+    }
+  },
+  {
+    "key": "v3_54",
+    "kind": "long_text",
+    "label": "Have there been any physical illnesses, or change in existing physical condition, which has impacted upon the patient’s mental health or compliance with treatment?",
+    "context": "Part C > Clinical Supervisor’s Report > Physical Health",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[30]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "313dec99d7ab3ec4f1c15de9633a61d4b9615ee737db039a2a16e5e06b0d3e28"
+    }
+  },
+  {
+    "key": "v3_55",
+    "kind": "long_text",
+    "label": "Please set out any recent events or behaviours which have required interventions or raised concerns with supervisors?",
+    "context": "Part C > Clinical Supervisor’s Report > Risk Concerns",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[31]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "08e989b255fbb97aec4e1a7633abb6b4d82828d6394bc9c0abe3ba558a4dbe23"
+    }
+  },
+  {
+    "key": "v3_56",
+    "kind": "long_text",
+    "label": "Has the patient had any informal admissions to hospital or admissions under the Mental Health Act 1983 (including s2 and s3)? What were the circumstances and outcome?",
+    "context": "Part C > Clinical Supervisor’s Report > Admissions to hospital",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[32]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "cc53a41c63a8ee4cdc37e29d0256a9cbd653b274ccc5b7d2b8470e343db2c419"
+    }
+  },
+  {
+    "key": "v3_57",
+    "kind": "long_text",
+    "label": "When was the patient last seen by you or by another clinical professional (e.g. Locum, CPN)? Please give dates of the last CPA or professionals meeting in relation to the patient, inclusive of MAPPA meetings.",
+    "context": "Part C > Clinical Supervisor’s Report > Supervision",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[33]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "5f25bec0e5e9fae587bde1c95842311a1600dcfae51bb74d1741dfd847852023"
+    }
+  },
+  {
+    "key": "v3_58",
+    "kind": "long_text",
+    "label": "Provide details of any other interventions the patient is undertaking, why these interventions are necessary and how they affect risk?",
+    "context": "Part C > Clinical Supervisor’s Report > Supervision",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[34]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "4e5411c05d324d2b739df61503928ca930bbd59aea3f428be6f3db34e4164761"
+    }
+  },
+  {
+    "key": "v3_59",
+    "kind": "choice",
+    "label": "If you are seeking advice or requesting any of the following",
+    "context": "Consideration for further action",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/p[242]",
+      "extra": [
+        {
+          "part": "word/document.xml",
+          "slot": "b/p[243]",
+          "fingerprint": "9c95e59e0d9bbf2c72cb9bc5c9be56f91bd8480e4e4d5b05a13e23aff70d00e5"
+        },
+        {
+          "part": "word/document.xml",
+          "slot": "b/p[244]",
+          "fingerprint": "59dde655f19a6c5b26f3d207918470cd3d111036570535d0b22487699c417a72"
+        }
+      ],
+      "target": {
+        "type": "paragraph_options",
+        "paragraphs": [
+          "b/p[242]",
+          "b/p[243]",
+          "b/p[244]"
+        ]
+      },
+      "contract": "v3",
+      "fingerprint": "b05a149792fe05e3752106b4bb0f6f2f34ee535cedf699b93818baa8c1bc956a"
+    },
+    "options": [
+      "Request Absolute Discharge/Lifting of restrictions",
+      "Change of conditions",
+      "Request a reduction in reporting frequency"
+    ]
+  },
+  {
+    "key": "v3_60",
+    "kind": "text",
+    "label": "Then please refer to our guidance and application forms at",
+    "context": "Request a reduction in reporting frequency",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/p[246]",
+      "target": {
+        "end": 59,
+        "type": "span",
+        "shape": "after_label",
+        "start": 59
+      },
+      "contract": "v3",
+      "fingerprint": "bf13984aed2dcaf39096d87368f3afa44daff017a50b601347bb678fb132a7a0"
+    }
+  },
+  {
+    "key": "v3_61",
+    "kind": "signature",
+    "label": "Clinical Supervisor’s Signature",
+    "context": "Request a reduction in reporting frequency",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[35]/tr[0]/tc[0]/p[2]",
+      "target": {
+        "type": "paragraph"
+      },
+      "contract": "v3",
+      "fingerprint": "b612e227f7d096f0d1685271d8bcef493a964f6541eaabe89d8b4aa670002d3b"
+    }
+  },
+  {
+    "key": "v3_62",
+    "kind": "signature",
+    "label": "Clinical Supervisor’s Signature",
+    "context": "Request a reduction in reporting frequency > Clinical Supervisor’s Signature",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[35]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "14b109ef4d749b42def09b1f88067f68cd0c05c58ef561f2ec634192b6d0f8ec"
+    }
+  },
+  {
+    "key": "v3_63",
+    "kind": "text",
+    "label": "Email address and Telephone number",
+    "context": "Request a reduction in reporting frequency > Email address and Telephone number",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[35]/tr[1]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "c21418434c602e402dd1f9f0be5f1b19544fec4e6f8c1609d164f60940ea79ec"
+    }
+  },
+  {
+    "key": "v3_64",
+    "kind": "date",
+    "label": "Date of Report",
+    "context": "Request a reduction in reporting frequency",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[35]/tr[2]/tc[0]/p[2]",
+      "target": {
+        "type": "paragraph"
+      },
+      "contract": "v3",
+      "fingerprint": "3d5b5dea121f4e2885a7eb313bf272f74d748312e10de1fdb27195bd17b100ce"
+    }
+  },
+  {
+    "key": "v3_65",
+    "kind": "date",
+    "label": "Date of Report",
+    "context": "Request a reduction in reporting frequency > Date of Report",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[35]/tr[2]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "11f5cf051e8e8d4e7ee06435c14109602aa872975ace10ccda3a216eba51406a"
+    }
+  },
+  {
+    "key": "v3_66",
+    "kind": "text",
+    "label": "The completed report should be submitted to the Mental Health Casework Section by email to",
+    "context": "Request a reduction in reporting frequency",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/p[252]",
+      "target": {
+        "end": 118,
+        "type": "span",
+        "shape": "hint",
+        "start": 92
+      },
+      "contract": "v3",
+      "fingerprint": "2e8759d1a5be1672e612a4b106c11494ab74f0eb7ba0d40d2197ce269719da25"
+    }
+  },
+  {
+    "key": "v3_67",
+    "kind": "long_text",
+    "label": "Annex: Patient’s comments to support this report",
+    "context": "Request a reduction in reporting frequency",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/p[269]",
+      "target": {
+        "end": 50,
+        "type": "span",
+        "shape": "after_label",
+        "start": 49
+      },
+      "contract": "v3",
+      "fingerprint": "8bcc3455adce1558a4f31937145869d1cb6d33a2da7801bcc8668f3952910132"
+    }
+  },
+  {
+    "key": "v3_68",
+    "kind": "long_text",
+    "label": "Explain what progress you think that you have you made since your discharge or since the last report submitted to the Ministry of Justice.",
+    "context": "Annex: Patient’s comments to support this report > Explain what progress you think that you have you made since your discharge or since the last report submitted to the Mi",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[36]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "4727469e13f1b63ae96eb5d00a2e147a7e23ac5f35a3f5b601b52d6f226f2e1a"
+    }
+  },
+  {
+    "key": "v3_69",
+    "kind": "text",
+    "label": "How do you think you have complied with your treatment and your risks have reduced since your discharge from hospital?",
+    "context": "Annex: Patient’s comments to support this report > How do you think you have complied with your treatment and your risks have reduced since your discharge from hospital?",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[37]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "f762ceeb875d13f67b845df2faf0f006adfd6eba8e5dbe0d2a165c021e00acb0"
+    }
+  },
+  {
+    "key": "v3_70",
+    "kind": "text",
+    "label": "Anything else you like to tell Ministry of Justice (MoJ)",
+    "context": "Annex: Patient’s comments to support this report > Anything else you like to tell Ministry of Justice (MoJ)",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[38]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "9b57647760fd4451b3679c71bd51388f3c59f5c1e003cd75c271193fca3710a7"
+    }
+  },
+  {
+    "key": "v3_71",
+    "kind": "long_text",
+    "label": "Please confirm that the patient has had sight of this report and/or had an opportunity to add their comments, if appropriate or necessary.",
+    "context": "Annex: Patient’s comments to support this report > Please confirm that the patient has had sight of this report and/or had an opportunity to add their comments, if appropr",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[39]/tr[0]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "48e0a443e58b78dedc5641191226b85794c4fe2b81a526ff481a581ead13b11e"
+    }
+  }
+]

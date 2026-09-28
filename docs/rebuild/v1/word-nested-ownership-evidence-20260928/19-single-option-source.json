@@ -1,0 +1,35 @@
+{
+  "engine_sha256": "02c25c15110a9af367dae24e925f598a2e9aeeb6ffec4afee63357a009fdc235",
+  "result": {
+    "contract": "v3",
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "Other",
+        "kind": "checkbox",
+        "context": "",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              }
+            ]
+          },
+          "fingerprint": "7619b0aedcb30662c5a1d3c41b9c1f88fa7183fc9bef45c65336ff644626c341"
+        },
+        "options": [
+          "Other"
+        ]
+      }
+    ],
+    "notes": []
+  }
+}

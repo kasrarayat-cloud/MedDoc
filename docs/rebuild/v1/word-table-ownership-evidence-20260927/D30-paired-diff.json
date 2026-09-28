@@ -1,0 +1,125 @@
+{
+  "removed": [
+    {
+      "key": "v3_7",
+      "label": "Date of Birth",
+      "kind": "date",
+      "context": "Patient’s Details",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[5]/tc[0]/p[2]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "cec53843335c4c2f3468bdd0cb97c6bdd0738e48b54fc47f36809ca674060cdc"
+      }
+    },
+    {
+      "key": "v3_9",
+      "label": "Date of Conditional Discharge",
+      "kind": "date",
+      "context": "Patient’s Details",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[6]/tc[0]/p[2]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "c237ee00c662f0119ef290e0be65086ac48be1827b797f12f6028c0c7f4e0219"
+      }
+    },
+    {
+      "key": "v3_37",
+      "label": "Signature",
+      "kind": "signature",
+      "context": "Further Comments",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[20]/tr[0]/tc[0]/p[2]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "da9fd0d8d4345629586532d84a5927ace1a7901efc23540320015e6eeeafe650"
+      }
+    },
+    {
+      "key": "v3_40",
+      "label": "Date of Report",
+      "kind": "date",
+      "context": "Further Comments",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[20]/tr[2]/tc[0]/p[2]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "0e9e690c9fd266cca70db5fdbfed1cbffa959c9ec3c0676e681ad5f8706249fe"
+      }
+    },
+    {
+      "key": "v3_42",
+      "label": "Signature",
+      "kind": "signature",
+      "context": "Line Manager Comments",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[22]/tr[0]/tc[0]/p[2]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "6ff989db9adf2ad4b088faf43d6e81f6f14950d893517c3c4f36ad9946e500e6"
+      }
+    },
+    {
+      "key": "v3_45",
+      "label": "Date of Report",
+      "kind": "date",
+      "context": "Line Manager Comments",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[22]/tr[2]/tc[0]/p[2]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "4e89898398e983fb4427afff3b928c5eaf4f7fde31003ca919a7a17981c794eb"
+      }
+    },
+    {
+      "key": "v3_61",
+      "label": "Clinical Supervisor’s Signature",
+      "kind": "signature",
+      "context": "Request a reduction in reporting frequency",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[35]/tr[0]/tc[0]/p[2]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "b612e227f7d096f0d1685271d8bcef493a964f6541eaabe89d8b4aa670002d3b"
+      }
+    },
+    {
+      "key": "v3_64",
+      "label": "Date of Report",
+      "kind": "date",
+      "context": "Request a reduction in reporting frequency",
+      "locator": {
+        "contract": "v3",
+        "part": "word/document.xml",
+        "slot": "b/tbl[35]/tr[2]/tc[0]/p[2]",
+        "target": {
+          "type": "paragraph"
+        },
+        "fingerprint": "3d5b5dea121f4e2885a7eb313bf272f74d748312e10de1fdb27195bd17b100ce"
+      }
+    }
+  ],
+  "added": []
+}

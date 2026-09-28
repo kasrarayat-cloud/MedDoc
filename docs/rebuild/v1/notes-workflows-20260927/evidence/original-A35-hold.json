@@ -1,0 +1,49 @@
+{
+  "notes": "The patient attends an art class every Monday.",
+  "field": {
+    "key": "v3_35",
+    "label": "What structured activities does the patient partake in including employment, study, or other interests? If the patient has no structured activity, how do they occupy their time and will this pose a problem from a risk perspective in the long term? Have they been supported in disclosure of their offending history (where appropriate?)",
+    "kind": "long_text",
+    "context": "Part B > Social Supervisor’s Report > Activities and Employment",
+    "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[18]/tr[0]/tc[0]",
+      "target": {
+        "type": "cell"
+      },
+      "fingerprint": "669c0231b684827ed141142857e7cb1a9744a60b59d904826c5d5fd7fbad63fd"
+    }
+  },
+  "actual": {
+    "text": "",
+    "status": "conflict",
+    "evidence": [
+      {
+        "quote": "The patient attends an art class every Monday.",
+        "start": 0,
+        "end": 46
+      }
+    ],
+    "reviewed": false,
+    "own_evidence": [
+      {
+        "quote": "The patient attends an art class every Monday.",
+        "start": 0,
+        "end": 46
+      }
+    ],
+    "held_candidate": {
+      "text": "The patient attends an art class every Monday.",
+      "evidence": [
+        {
+          "quote": "The patient attends an art class every Monday.",
+          "start": 0,
+          "end": 46
+        }
+      ],
+      "context": [],
+      "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or another sentence next to it in the notes may change what it means. Read it in the full note, then type your own answer, or choose \"Leave blank — reviewed\"."
+    }
+  }
+}

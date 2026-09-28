@@ -1,0 +1,38 @@
+{
+  "identity": "D31",
+  "original_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+  "export_sha256": "89b3427a5083af082d8c71367a9bc4f8bb50f739e47cecac404e785740fbebe2",
+  "target": {
+    "key": "v3_21",
+    "kind": "text",
+    "label": "Report on leave",
+    "context": "Conditional Discharge Proposal > Report on leave",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[19]/tr[0]/tc[1]",
+      "target": {
+        "all": true,
+        "type": "cell_replace"
+      },
+      "contract": "v3",
+      "fingerprint": "730ce10b45bd2b1890dd982fd36583c94dd675f1a4c0b7ed34e281e59a41d07f"
+    }
+  },
+  "notes": "Administrative visit record.",
+  "answer": {
+    "text": "",
+    "status": "missing",
+    "evidence": [],
+    "reviewed": true,
+    "edited_by": null,
+    "accepted_by": null,
+    "reviewed_by": "167d6036-16f0-41d1-8cb3-4aaeaa906bb1",
+    "accepted_suggestion": false
+  },
+  "state": "finalized",
+  "original_download_identical": true,
+  "export_download_identical": true,
+  "all_outside_target_slots_unchanged": true,
+  "automatic_document_success": false,
+  "provider": "mocked-selection; full source-unit validation; no API call"
+}

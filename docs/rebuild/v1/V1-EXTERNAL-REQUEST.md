@@ -1,6 +1,6 @@
 # V1 — consolidated external dependencies
 
-Updated 2026-09-27 during the Astra continuation. **This is a prepared request, not approval or a new
+Updated 2026-09-28 during the Astra continuation. **This is a prepared request, not approval or a new
 allowance.** Engineering repairs, WM narrative integration and offline mapping work continue independently.
 The V1 Word gate is unchanged. No contract was accepted, infrastructure bought or provider generation sent.
 
@@ -77,22 +77,28 @@ engineering qualification → account/contract/budget admission → isolated tar
 alert/payment/security/native-Word acceptance → reviewed cutover → invited real-patient admission. Independent
 preparation continues while external inputs are pending; no launch switch relaxes the Word or clinical gates.
 
-## 5. Corpus rights dependency established after the bounded local audit
+## 5. Independent corpus and permissions still required
 
-The existing inventory was exhausted as a feasibility review, without buying or acquiring more files.
-Its 158 originals divide into four qualification-source aliases, 51 records without the required
-applicable exact-file rights proof (including explicit restrictions), and 103 from one source capped
-at eight. Even granting every unresolved intrinsic requirement optimistically, eight cannot supply
-the ten additional independent development lineages. This is not eight already qualified forms.
+A separate authorized40-development/20-qualification corpus is still needed, with exact-source permissions,
+independent authorship/derivation and source separation established before admission. Existing60 files
+represent44 declared lineages; the offline-supported development subset is33 files across25 declared groups,
+not a proven independent40. The bounded investigation added **one** independently authored licensed blank
+DOCX lineage, currently unallocated. No corpus was replaced or rescored.
 
-Applicable commercial adaptation rights for at least two source-disjoint existing lineages would
-remove that particular ceiling; a complete development supplement still needs ten exact authorized
-blank originals with independent lineage, blankness and source separation established. Authorized
-clinic-supplied originals and their reuse authority can also supply the missing evidence. See
-`corpus-development-inventory-adjudication-20260927.md`. This adds the proven dependency to the same
-consolidated request; it authorizes no acquisition campaign or denominator replacement. The original
-60-file manifest and every first-pass result remain unchanged.
+The source-capped conditional DEV project can contribute at most8 cases, subject to internal original/rights/
+independence checks that continue without owner file relay. If the new licensed item is assigned to
+qualification, eligible inventory is4/20 across2sources and DEV still has at most8 conditional additions.
+If assigned to DEV, there is1 admitted addition and at most9 including the8 conditional cases, while
+qualification has3/20 from1source. These are alternative allocations, not jointly available counts.
+The ten-addition DEV premise also assumes all30 original declared groups are independently cleared;
+current offline-supported originals offer at most25 groups. Even the optimistic25+9 is only34/40.
 
+Applicable rights/lineage evidence or genuinely new authorized source material must fill the remaining gaps.
+Clinic-supplied blank originals with explicit reuse/adaptation authority can contribute. Cosmetic variants,
+relabeling frozen unseen cases, and moving a source between DEV and qualification do not qualify.
+See `corpus-independent-renewal-final-20260928.md` for exact joint bounds, audit seals and remaining internal
+checks. The original60 and every first pass remain unchanged. The preserved frozenN20 has three legacy
+`.doc` refusals; it is not replaced or admitted for a doomed attempt. No new acquisition spending is requested.
 
 ## Human dictation acceptance detail (same pending request)
 
@@ -108,3 +114,17 @@ synthetic-content human Deepgram transcription**, leaving at most$9.70 for its S
 checks. This does not increase the $40 total or authorize retries. Exact account/rate and displayed
 hold must fit before sending; otherwise the case stays unrun. Preserve original audio, as-spoken
 review, raw transcript, corrections and final Word evidence. No real patient data is permitted.
+
+
+## Current engineering and execution boundary
+
+The continuation has made no new provider generation, token-count, payment, activation or infrastructure
+purchase. The installed financial aggregate was reconciled at2026-09-27T23:41:52Z:27 settled reservations,
+26 provider receipts, no queued/running/unknown jobs. Historical Anthropic rows remain Sonnet4.6.
+The old Stage1 grant remains ineligible; the40USD/Stripe request above remains unapproved.
+
+Legal-hold preservation, archived-file recovery checks and administration are now implemented and independently
+reviewed on the local candidate. This does not close retention: disposition approvals, tombstones, general
+purge and external/backup reconciliation remain engineering work, alongside counsel's schedule. Ordinary-note
+usefulness and full-document completeness also remain engineering/qualification gates. Buying hosting or
+signing agreements does not close those gates. Updated local repairs are not installed.

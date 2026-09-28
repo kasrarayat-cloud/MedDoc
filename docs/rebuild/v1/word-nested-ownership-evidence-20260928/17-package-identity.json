@@ -1,0 +1,16 @@
+{
+  "missing": {
+    "sha256": "fdfca49601684ebac5183e4c54fed81442b1e00d29835dfa1c2f3a1516eb887a",
+    "package_parts": 15,
+    "changed_parts": [],
+    "all_other_parts_byte_identical": true
+  },
+  "ordinary": {
+    "sha256": "8706b71c5e9461b2b0b23fdc39d31bc1a69f84a598bb07f83cd45fd4260521e4",
+    "package_parts": 15,
+    "changed_parts": [
+      "word/document.xml"
+    ],
+    "all_other_parts_byte_identical": true
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "identity": "D30",
+  "original_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "export_sha256": "0148e7ca2f8e81b4a1b5cd9a613f70b895871833626d7910cb7bd1a07d17d627",
+  "target": {
+    "key": "v3_7",
+    "kind": "date",
+    "label": "Date of Birth",
+    "context": "Patient’s Details > Date of Birth",
+    "locator": {
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[5]/tc[1]",
+      "target": {
+        "type": "cell"
+      },
+      "contract": "v3",
+      "fingerprint": "a721de24621aaa0de34c26906591bc2742c5c4f24d133dab2753dce6999cd097"
+    }
+  },
+  "notes": "The patient was born on January 1, 1980.",
+  "answer": {
+    "text": "SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing. SYNTHETIC birth-record verification details retained for export stress testing.",
+    "status": "edited",
+    "evidence": [
+      {
+        "end": 40,
+        "quote": "The patient was born on January 1, 1980.",
+        "start": 0
+      }
+    ],
+    "reviewed": true,
+    "edited_by": "b477c663-d33f-4211-96a1-95c61b27b1d5",
+    "accepted_by": null,
+    "reviewed_by": "b477c663-d33f-4211-96a1-95c61b27b1d5",
+    "own_evidence": [
+      {
+        "end": 40,
+        "quote": "The patient was born on January 1, 1980.",
+        "start": 0
+      }
+    ],
+    "accepted_suggestion": false
+  },
+  "state": "finalized",
+  "original_download_identical": true,
+  "export_download_identical": true,
+  "all_outside_target_slots_unchanged": true,
+  "automatic_document_success": false,
+  "provider": "mocked-selection; full source-unit validation; no API call"
+}

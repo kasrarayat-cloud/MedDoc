@@ -1,0 +1,20 @@
+[
+  {
+    "id": "D30",
+    "bound_reason": "Measured header/footer glyph positions and visibly inspected page continuations; no answer region excluded",
+    "bottom": 70,
+    "top_margin": 100,
+    "full_answer_present": true,
+    "expected_sentences": 75,
+    "complete_sentence_count": 75
+  },
+  {
+    "id": "D31",
+    "bound_reason": "Measured header/footer glyph positions and visibly inspected page continuations; no answer region excluded",
+    "bottom": 40,
+    "top_margin": 50,
+    "full_answer_present": true,
+    "expected_sentences": 90,
+    "complete_sentence_count": 90
+  }
+]

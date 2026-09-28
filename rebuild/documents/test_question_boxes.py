@@ -31,6 +31,174 @@ def data(doc):
 
 
 class QuestionBoxes(unittest.TestCase):
+    def test_paired_cell_label_spacing_is_not_a_second_answer(self):
+        for layout in ('ordinary', 'merged', 'multicolumn', 'nested'):
+            with self.subTest(layout=layout):
+                doc = Document()
+                owner = doc if layout != 'nested' else doc.add_table(rows=1, cols=1).cell(0, 0)
+                table = owner.add_table(rows=1, cols=4 if layout == 'multicolumn' else 3 if layout == 'merged' else 2)
+                label = table.cell(0, 0)
+                if layout == 'merged': label = label.merge(table.cell(0, 1))
+                label.text = 'Date of Birth'
+                label.add_paragraph()
+                label.add_paragraph()
+                if layout == 'multicolumn':
+                    table.cell(0, 2).text = 'Date of Visit'
+                    table.cell(0, 2).add_paragraph()
+                result = w.inspect(data(doc))
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+                self.assertEqual(len([f for f in result['fields'] if f['locator']['target']['type'] == 'cell']),
+                                 2 if layout == 'multicolumn' else 1)
+
+    def test_paired_cell_keeps_explicit_and_independent_answer_lines(self):
+        for marker in ('underline', 'border', 'inherited_border', 'table_border', 'default_border',
+                       'unknown_style', 'standalone'):
+            with self.subTest(marker=marker):
+                doc = Document()
+                table = doc.add_table(rows=1, cols=1 if marker == 'standalone' else 2)
+                label = table.cell(0, 0)
+                label.text = 'Date of Birth'
+                blank = label.add_paragraph()
+                if marker == 'underline': blank.add_run('     ').underline = True
+                elif marker in ('border', 'inherited_border', 'table_border', 'default_border'):
+                    border = OxmlElement('w:pBdr');edge = OxmlElement('w:bottom')
+                    edge.set(qn('w:val'), 'single');border.append(edge)
+                    if marker == 'border': blank._p.get_or_add_pPr().append(border)
+                    elif marker == 'inherited_border':
+                        style = doc.styles.add_style('Answer Line', WD_STYLE_TYPE.PARAGRAPH)
+                        style.element.get_or_add_pPr().append(border);blank.style = style
+                    elif marker == 'table_border':
+                        style = doc.styles.add_style('Answer Table', WD_STYLE_TYPE.TABLE)
+                        condition = OxmlElement('w:tblStylePr');condition.set(qn('w:type'), 'firstCol')
+                        props = OxmlElement('w:pPr');props.append(border);condition.append(props)
+                        style.element.append(condition);table.style = style
+                    else:
+                        defaults = doc.styles.element.find(qn('w:docDefaults'))
+                        props = defaults.find(qn('w:pPrDefault')).find(qn('w:pPr'))
+                        props.append(border)
+                elif marker == 'unknown_style':
+                    ref = OxmlElement('w:pStyle');ref.set(qn('w:val'), 'UnavailableAnswerStyle')
+                    blank._p.get_or_add_pPr().append(ref)
+                result = w.inspect(data(doc))
+                self.assertTrue([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+
+    def test_paired_spacing_requires_resolved_run_and_table_styles(self):
+        cases = ('character', 'inherited_character', 'unknown_character', 'cyclic_character',
+                 'default_character', 'default_table', 'inherited_default_table',
+                 'unknown_default_table_parent', 'multiple_default_tables', 'explicit_table_override',
+                 'explicit_nil_run_override', 'plain_character')
+        for case in cases:
+            with self.subTest(case=case):
+                doc = Document()
+                table = doc.add_table(rows=1, cols=2)
+                table.cell(0, 0).text = 'Date of Birth'
+                paragraph = table.cell(0, 0).add_paragraph()
+                run = paragraph.add_run('        ')
+                if 'table' in case:
+                    kind = WD_STYLE_TYPE.TABLE
+                    style = doc.styles.add_style('Answer Table', kind)
+                    if case != 'multiple_default_tables':
+                        for candidate in doc.styles.element:
+                            if candidate.get(qn('w:type')) == 'table':
+                                candidate.attrib.pop(qn('w:default'), None)
+                    style.element.set(qn('w:default'), '1')
+                    if case in ('inherited_default_table', 'unknown_default_table_parent'):
+                        parent = doc.styles.add_style('Answer Table Parent', kind)
+                        parent.font.underline = True
+                        style.base_style = parent
+                        if case == 'unknown_default_table_parent':
+                            style.element.find(qn('w:basedOn')).set(qn('w:val'), 'MissingTableParent')
+                    else:
+                        style.font.underline = True
+                    if case == 'explicit_table_override':
+                        table.style = doc.styles.add_style('Plain Explicit Table', kind)
+                else:
+                    style = doc.styles.add_style('Answer Character', WD_STYLE_TYPE.CHARACTER)
+                    if case == 'inherited_character':
+                        parent = doc.styles.add_style('Answer Character Parent', WD_STYLE_TYPE.CHARACTER)
+                        parent.font.underline = True
+                        style.base_style = parent
+                    elif case != 'plain_character':
+                        style.font.underline = True
+                    if case == 'default_character':
+                        for candidate in doc.styles.element:
+                            if candidate.get(qn('w:type')) == 'character':
+                                candidate.attrib.pop(qn('w:default'), None)
+                        style.element.set(qn('w:default'), '1')
+                    else:
+                        run.style = style
+                    if case == 'unknown_character':
+                        run._r.rPr.find(qn('w:rStyle')).set(qn('w:val'), 'MissingAnswerCharacter')
+                    if case == 'cyclic_character':
+                        style.base_style = style
+                    if case == 'explicit_nil_run_override':
+                        run.underline = False  # Conservative retention is permitted; never erase a marked area.
+                result = w.inspect(data(doc))
+                paragraphs = [f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph']
+                self.assertEqual(bool(paragraphs), case not in ('plain_character', 'explicit_table_override'))
+                self.assertEqual(len([f for f in result['fields'] if f['locator']['target']['type'] == 'cell']), 1)
+
+    def test_paired_spacing_keeps_shading_lists_and_run_answer_marks(self):
+        for marker in ('shading', 'inherited_shading', 'highlight', 'number', 'bullet',
+                       'run_border', 'strike', 'double_strike', 'leader_tab'):
+            with self.subTest(marker=marker):
+                doc = Document()
+                table = doc.add_table(rows=1, cols=2)
+                table.cell(0, 0).text = 'Past medical history:'
+                blank = table.cell(0, 0).add_paragraph()
+                if marker in ('shading', 'inherited_shading'):
+                    shade = OxmlElement('w:shd');shade.set(qn('w:fill'), 'D9D9D9')
+                    if marker == 'shading': blank._p.get_or_add_pPr().append(shade)
+                    else:
+                        style = doc.styles.add_style('Shaded Answer', WD_STYLE_TYPE.PARAGRAPH)
+                        style.element.get_or_add_pPr().append(shade);blank.style = style
+                elif marker in ('number', 'bullet'):
+                    blank.style = 'List Number' if marker == 'number' else 'List Bullet'
+                else:
+                    run = blank.add_run('        ')
+                    if marker == 'leader_tab': run.add_tab()
+                    else:
+                        tag = {'highlight': 'highlight', 'run_border': 'bdr',
+                               'strike': 'strike', 'double_strike': 'dstrike'}[marker]
+                        mark = OxmlElement('w:' + tag)
+                        mark.set(qn('w:val'), 'yellow' if marker == 'highlight' else 'single' if marker == 'run_border' else '1')
+                        run._r.get_or_add_rPr().append(mark)
+                result = w.inspect(data(doc))
+                self.assertEqual(len(result['fields']), 2)
+                self.assertTrue(any(f['locator']['target']['type'] == 'paragraph' for f in result['fields']))
+
+    def test_paired_cell_spacing_does_not_claim_controls_or_textboxes(self):
+        from .test_word_v3 import _sdt, ff_field
+        doc = Document()
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = 'Date of Birth'
+        table.cell(0, 0).add_paragraph()
+        p = doc.add_paragraph('Laterality: ')
+        p._p.append(_sdt('dropdown', options=['Choose an item.', 'Left', 'Right']))
+        p = doc.add_paragraph('Reviewed ')
+        ff_field(p, 'checkbox', checked=True)
+        p = doc.add_paragraph()
+        pict = OxmlElement('w:pict')
+        shape = etree.SubElement(pict, '{urn:schemas-microsoft-com:vml}shape')
+        shape.set('style', 'width:200pt;height:70pt')
+        textbox = etree.SubElement(shape, '{urn:schemas-microsoft-com:vml}textbox')
+        content = OxmlElement('w:txbxContent');textbox.append(content)
+        inner = OxmlElement('w:p');content.append(inner)
+        run = OxmlElement('w:r');inner.append(run)
+        text = OxmlElement('w:t');text.text = 'Textbox comments: ______';run.append(text)
+        p.add_run()._r.append(pict)
+        original = data(doc)
+        result = w.inspect(original)
+        self.assertEqual(len([f for f in result['fields'] if f['locator']['target']['type'] == 'sdt_choice']), 1)
+        self.assertTrue(any('/txbx[' in f['locator']['slot'] and f['label'] == 'Textbox comments' for f in result['fields']))
+        self.assertTrue(any(f['locator']['target']['type'] == 'checkboxes' for f in result['fields']))
+        target = next(f for f in result['fields'] if f['locator']['slot'] == 'b/tbl[0]/tr[0]/tc[1]')
+        exported = w.fill(original, result['fields'], {target['key']: 'SYNTHETIC date'})
+        before = w.SlotIndex(w.open_package(original));after = w.SlotIndex(w.open_package(exported))
+        for slot in before.roots:
+            if slot.kind != 'tbl':
+                self.assertEqual(etree.tostring(slot.el), etree.tostring(after.by_id[slot.id].el))
+
     def test_complete_long_question_and_section_are_retained(self):
         doc = Document()
         context = 'Clinical section ' + 'complete context ' * 25
@@ -335,3 +503,125 @@ class QuestionBoxes(unittest.TestCase):
         self.assertIn('Part B > Social Supervisor > Supervision', fields[0]['context'])
         self.assertIn('Part C > Clinical Supervisor > Supervision', fields[1]['context'])
         self.assertEqual(len([n for n in result['notes'] if 'Unassigned answer box' in n]), 2)
+
+
+class NestedCheckboxOwnership(unittest.TestCase):
+    def form(self, *, heading='', subsection=False, spacer='plain', mixed=False, write_in=False):
+        doc = Document()
+        if heading: doc.add_paragraph(heading, style='Heading 1')
+        outer = doc.add_table(rows=1, cols=1).cell(0, 0)
+        outer.text = 'Which symptoms occur? Tick all that apply.'
+        if subsection: outer.add_paragraph('During exertion:')
+        blank = outer.add_paragraph()
+        if spacer == 'underline': blank.add_run('       ').underline = True
+        if spacer == 'other_question': blank.text = 'Which symptoms occurred last year?'
+        inner = outer.add_table(rows=1, cols=2)
+        inner.cell(0, 0).text = '☐ Tightness'
+        inner.cell(0, 1).text = ('☐ Weakness [☐ Right ☐ Left]' if mixed else
+                                '☐ Other: ______' if write_in else '☒ Nausea')
+        return doc
+
+    def test_full_nested_question_and_cardinality_preserve_scope_and_checked_state(self):
+        for heading, subsection in (('', False), ('Donor', False), ('Current visit', True)):
+            with self.subTest(heading=heading, subsection=subsection):
+                original = data(self.form(heading=heading, subsection=subsection))
+                result = w.inspect(original)
+                fields = [f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes']
+                self.assertEqual(len(fields), 1)
+                target = fields[0]
+                self.assertEqual(target['kind'], 'multi_choice')
+                self.assertEqual(target['label'], 'During exertion:' if subsection else
+                                 'Which symptoms occur? Tick all that apply.')
+                if heading: self.assertIn(heading, target['context'])
+                if subsection: self.assertIn('Which symptoms occur? Tick all that apply.', target['context'])
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'paragraph'])
+                self.assertEqual(target['printed_ticked'], [1])
+                blank = w.fill(original, result['fields'], {})
+                self.assertEqual(w.option_states(w.SlotIndex(w.open_package(blank)), target), [False, True])
+                filled = w.fill(original, result['fields'], {target['key']: ['Tightness', 'Nausea']})
+                self.assertEqual(w.option_states(w.SlotIndex(w.open_package(filled)), target), [True, True])
+                before = w.SlotIndex(w.open_package(original)); after = w.SlotIndex(w.open_package(filled))
+                for slot in before.slots:
+                    if slot.kind == 'p' and '/tbl[0]/tr[0]/tc[0]/tbl[0]/' not in slot.path:
+                        self.assertEqual(etree.tostring(slot.el), etree.tostring(after.by_id[slot.id].el))
+
+    def test_nested_marked_spacer_and_competing_questions_are_not_silently_claimed(self):
+        for spacer in ('underline', 'other_question'):
+            with self.subTest(spacer=spacer):
+                result = w.inspect(data(self.form(spacer=spacer)))
+                self.assertFalse([f for f in result['fields'] if f['kind'] == 'multi_choice'])
+                self.assertTrue(any('Nested option' in note for note in result['notes']))
+
+    def test_nested_source_cannot_lose_local_subject_or_page_boundary(self):
+        for case in ('foreign_prefix', 'unpaired_subsection', 'page_break', 'long_question'):
+            with self.subTest(case=case):
+                doc = self.form()
+                owner = doc.tables[0].cell(0, 0)
+                if case == 'foreign_prefix':
+                    source = OxmlElement('w:p');run = OxmlElement('w:r');text = OxmlElement('w:t')
+                    text.text = 'Donor';run.append(text);source.append(run)
+                    owner.paragraphs[0]._p.addprevious(source)
+                elif case == 'unpaired_subsection':
+                    owner.paragraphs[1].text = 'Donor:'
+                    source = OxmlElement('w:p');run = OxmlElement('w:r');text = OxmlElement('w:t')
+                    text.text = 'During exertion:';run.append(text);source.append(run)
+                    owner.paragraphs[1]._p.addnext(source)
+                elif case == 'page_break':
+                    owner.paragraphs[1]._p.get_or_add_pPr().append(OxmlElement('w:pageBreakBefore'))
+                else:
+                    owner.paragraphs[0].text = 'Which symptoms occur? Tick all that apply. ' + 'Preserve this qualifier. ' * 20
+                result = w.inspect(data(doc))
+                groups = [f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes']
+                if case == 'long_question':
+                    self.assertEqual(len(groups), 1)
+                    self.assertEqual(groups[0]['label'], owner.paragraphs[0].text.strip())
+                else:
+                    self.assertFalse(groups)
+                    self.assertTrue(any('Nested option' in note for note in result['notes']))
+                    if case == 'foreign_prefix': self.assertTrue(any('Donor' in note for note in result['notes']))
+
+    def test_nested_subordinate_boxes_refuse_and_write_in_is_explicitly_visible(self):
+        mixed = w.inspect(data(self.form(mixed=True)))
+        self.assertFalse([f for f in mixed['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+        self.assertTrue(any('subordinate' in note and 'Right' in note and 'Left' in note for note in mixed['notes']))
+        write_in = w.inspect(data(self.form(write_in=True)))
+        self.assertTrue(any('Unassigned write-in' in note and 'Other' in note and '/tc[1]/p[0]' in note
+                            for note in write_in['notes']))
+
+    def test_single_nested_option_keeps_its_complete_question_and_subsection(self):
+        for subsection in (False, True):
+            with self.subTest(subsection=subsection):
+                doc = Document()
+                doc.add_paragraph('Current visit', style='Heading 1')
+                outer = doc.add_table(rows=1, cols=1).cell(0, 0)
+                outer.text = 'Which finding concerns the donor? Tick all that apply.'
+                if subsection: outer.add_paragraph('During exertion:')
+                outer.add_paragraph()
+                outer.add_table(rows=1, cols=1).cell(0, 0).text = '☐ Other'
+                result = w.inspect(data(doc))
+                group = next(f for f in result['fields'] if f['kind'] == 'checkbox')
+                self.assertEqual(group['label'], 'Other')
+                self.assertIn(outer.paragraphs[0].text, group['context'])
+                self.assertIn('Current visit', group['context'])
+                if subsection: self.assertIn('During exertion:', group['context'])
+                self.assertEqual(group['options'], ['Other'])
+
+    def test_nested_grid_cannot_drop_internal_headers_or_governing_signing_context(self):
+        for case in ('headers', 'consent', 'signature'):
+            with self.subTest(case=case):
+                doc = Document()
+                if case != 'headers':
+                    doc.add_paragraph('Consent' if case == 'consent' else 'Signed declaration', style='Heading 1')
+                outer = doc.add_table(rows=1, cols=1).cell(0, 0)
+                outer.text = 'Which procedures are authorized? Tick all that apply.'
+                outer.add_paragraph()
+                grid = outer.add_table(rows=2 if case == 'headers' else 1, cols=2)
+                if case == 'headers':
+                    grid.cell(0, 0).text = 'Donor';grid.cell(0, 1).text = 'Recipient'
+                grid.cell(len(grid.rows)-1, 0).text = '☐ Abnormal' if case == 'headers' else '☐ Blood sampling'
+                grid.cell(len(grid.rows)-1, 1).text = '☐ Abnormal' if case == 'headers' else '☐ Tissue storage'
+                result = w.inspect(data(doc))
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes'])
+                self.assertTrue(any('Nested option' in note for note in result['notes']))
+                if case == 'headers':
+                    self.assertTrue(any('Donor' in note and 'Recipient' in note for note in result['notes']))

@@ -1,0 +1,36 @@
+{
+  "engine_sha256": "7d2296ea679c7e804bdb8ea88a7a539c01cb7654527f1b0b65dc87f3ee42c2a6",
+  "all_D03_fields_and_warnings_unchanged": true,
+  "cases": {
+    "inner_scope_headers_neutral_parent": {
+      "source_sha256": "01575a71f8b214038372e009f20a65a3b72d0ba7aff91cbf19641ffa45038c82",
+      "result": {
+        "contract": "v3",
+        "fields": [],
+        "notes": [
+          "Nested option grid at word/document.xml#b/tbl[0]/tr[0]/tc[0]/tbl[0]: The grid contains separate printed headers, context or answer areas whose ownership is unresolved. Printed source: Which findings apply? Tick all that apply. Options: DonorRecipient\u2610 Abnormal\u2610 Abnormal"
+        ]
+      }
+    },
+    "consent_scope_specific": {
+      "source_sha256": "f3b5f9707f136b3753206d547dd0d241adff867417ae0b8379e5d4cf30bc8e5a",
+      "result": {
+        "contract": "v3",
+        "fields": [],
+        "notes": [
+          "Nested option grid at word/document.xml#b/tbl[0]/tr[0]/tc[0]/tbl[0]: The complete source contains signing/consent instructions. Governing context: Participant consent for optional procedures Printed source: Which procedures are authorized? Tick all that apply. Options: \u2610 Blood sampling\u2610 Tissue storage"
+        ]
+      }
+    },
+    "signature_scope_specific": {
+      "source_sha256": "19b675ee9cf8ef086b19cbe56c3592aa10faea20c1e030098c65799da99bd67d",
+      "result": {
+        "contract": "v3",
+        "fields": [],
+        "notes": [
+          "Nested option grid at word/document.xml#b/tbl[0]/tr[0]/tc[0]/tbl[0]: The complete source contains signing/consent instructions. Governing context: Signed declaration Printed source: Which procedures are authorized? Tick all that apply. Options: \u2610 Blood sampling\u2610 Tissue storage"
+        ]
+      }
+    }
+  }
+}

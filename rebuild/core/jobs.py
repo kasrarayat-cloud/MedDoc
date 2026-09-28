@@ -1,3 +1,4 @@
+from .retention import begin_private_file,cleanup_file
 from datetime import timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import hashlib
@@ -483,11 +484,13 @@ def prepare_submission(job):
             relative=f'submissions/{secrets.token_hex(24)}{suffix}'
             destination=private_path(relative)
             destination.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+            begin_private_file(destination)
             # Created at 0600 BEFORE ffmpeg opens it: ffmpeg truncates an existing file rather than creating one, so
             # the artifact is never briefly readable at the process umask.
             destination.touch(mode=0o600,exist_ok=False)
             produced=normalise_submission(source,destination,upload,floor_seconds=floor,ceiling_seconds=ceiling,
-                                          deadline=SUBMISSION_BUDGET_SECONDS-(time.monotonic()-started))
+                                          deadline=SUBMISSION_BUDGET_SECONDS-(time.monotonic()-started),
+                                          cleanup=lambda path:cleanup_file(path,encounter_id=job.encounter_id))
             artifact=destination
         except NotNormalised as error: raise refuse(error.kind,error.detail,job)
         # Anything else out of the remux is still a stop, not a fallback. An unexpected exception class is exactly the
@@ -515,7 +518,7 @@ def prepare_submission(job):
               submitted_bytes=submitted['submission_bytes'],sha256=submitted['submission_sha256'])
         return raw,artifact,submitted
     except BaseException:
-        if destination is not None: destination.unlink(missing_ok=True)
+        if destination is not None: cleanup_file(destination,encounter_id=job.encounter_id)
         raise
 
 
@@ -584,7 +587,7 @@ def transcribe(job):
         return submit_transcription(job,raw,key,submitted,params)
     finally:
         # The artifact is transient by design; its sha256 and measured duration on the job are what survive.
-        if artifact is not None: artifact.unlink(missing_ok=True)
+        if artifact is not None: cleanup_file(artifact,encounter_id=job.encounter_id)
 
 
 def submit_transcription(job,raw,key,submitted,params=None):
@@ -752,8 +755,8 @@ def reap_abandoned_voice_uploads():
         if not UPLOAD_NAME.fullmatch(relative) or Job.objects.filter(input_path=relative).exists(): continue
         path=private_path(relative)
         if path.is_file():
-            path.unlink(missing_ok=True); removed+=1
-            audit(None,'voice.over_limit_upload_removed',event.target,department=event.department,path=relative)
+            removed+=int(cleanup_file(path,encounter_id=event.target,department_id=event.department_id))
+            if not path.exists():audit(None,'voice.over_limit_upload_removed',event.target,department=event.department,path=relative)
     return removed+reap_stray_submissions()
 
 
@@ -773,8 +776,9 @@ def reap_stray_submissions():
         if not SUBMISSION_NAME.fullmatch(relative) or not path.is_file(): continue
         try:
             if path.stat().st_mtime>=cutoff: continue
-            path.unlink(missing_ok=True)
+            deleted=cleanup_file(path)
         except OSError: continue
+        if not deleted:continue
         removed+=1
         audit(None,'voice.stray_submission_removed','',path=relative)
     return removed

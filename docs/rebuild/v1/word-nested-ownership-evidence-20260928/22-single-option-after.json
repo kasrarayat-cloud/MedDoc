@@ -1,0 +1,35 @@
+{
+  "engine_sha256": "b3174ffd4027b4bab7a1741a39a361ce2dc455a26f82a403b68f6c3117d461f9",
+  "result": {
+    "contract": "v3",
+    "fields": [
+      {
+        "key": "v3_1",
+        "label": "Other",
+        "kind": "checkbox",
+        "context": "Which finding concerns the donor? Tick all that apply.",
+        "locator": {
+          "contract": "v3",
+          "part": "word/document.xml",
+          "slot": "b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+          "target": {
+            "type": "checkboxes",
+            "boxes": [
+              {
+                "kind": "glyph",
+                "part": "word/document.xml",
+                "slot": "b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]/p[0]/glyphs",
+                "glyph": 0
+              }
+            ]
+          },
+          "fingerprint": "7619b0aedcb30662c5a1d3c41b9c1f88fa7183fc9bef45c65336ff644626c341"
+        },
+        "options": [
+          "Other"
+        ]
+      }
+    ],
+    "notes": []
+  }
+}

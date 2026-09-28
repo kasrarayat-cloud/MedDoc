@@ -1169,12 +1169,15 @@ class Detector:
             return "signature"
         if INITIALS.search(label) and not DATE_LABEL.search(label):
             return "initials"
+        # A free-text destination asking for description keeps the whole
+        # answer even when its printed question also mentions a date or time.
+        # Dedicated native date controls are typed by their own OOXML rule.
+        if LONG_LABEL.search(label):
+            return "long_text"
         if TIME_LABEL.search(label) and not DATE_LABEL.search(label):
             return "time"
         if DATE_LABEL.search(label) or re.search(r"\bdated\s*$", label, re.I):
             return "date"
-        if LONG_LABEL.search(label):
-            return "long_text"
         return "text"
 
     def choice_kind(self, question: str, options: list, hint: str = "") -> str:
@@ -1488,6 +1491,88 @@ class Detector:
             out.append(cur)
         return out
 
+    def nested_checkbox_source(self, group):
+        """One complete nested option grid belongs to its printed source question.
+
+        Only a full-width outer cell of a body table participates. Subsection
+        labels can inherit one explicit parent question, never a neighbouring
+        row's question or a guessed subordinate-control relationship.
+        """
+        cell = self.host_cell(group["paras"][0])
+        if cell is None:
+            return None
+        table, outer = cell.parent, cell.parent.parent
+        if outer is None or outer.kind != "tc" or outer.parent.parent is not None:
+            return None
+        if outer.part != "word/document.xml" or len(self.grid(outer.parent).get(outer.info["row"], [])) != 1:
+            return None
+        before = [slot for slot in outer.children if slot.seq < table.seq]
+        paragraphs = [slot for slot in before if slot.kind == "p" and self.text(slot.el).strip()]
+        if not paragraphs:
+            return None
+        sources = [self.text(slot.el).strip() for slot in paragraphs]
+        source = " ".join(sources)
+        problem = ""
+        explicit = [slot for slot in paragraphs if "?" in self.text(slot.el)
+                    or CHECK_ALL.search(self.text(slot.el)) or CHECK_ONE.search(self.text(slot.el))]
+        if len(explicit) != 1:
+            problem = "There is not one complete printed parent question."
+        question = explicit[0] if len(explicit) == 1 else paragraphs[-1]
+        label_slot = paragraphs[-1]
+        subsection = label_slot is not question
+        if not problem and not subsection and paragraphs != [question]:
+            problem = "Additional source text has no proven relationship to this question."
+        if not problem and subsection and (paragraphs[0] is not question or any(
+                slot is not question and (not self.text(slot.el).strip().endswith(":")
+                or len(self.text(slot.el).strip()) > 100 or self.blank_spans(*self.ptext(slot.el)))
+                for slot in paragraphs)):
+            problem = "The intervening text does not establish one subsection."
+        if not problem and subsection:
+            sequence = [slot.kind for slot in before if slot.kind != "p" or self.text(slot.el).strip()][1:]
+            if sequence and sequence[0] == "tbl":
+                sequence = sequence[1:]  # The first grid can belong to the parent question itself.
+            if not sequence or sequence != ["p", "tbl"] * (len(sequence) // 2) + ["p"]:
+                problem = "An intervening source label has no separate answer grid; its scope cannot be dropped."
+        if not problem and any(slot.kind == "p" and not self.text(slot.el).strip()
+                               and not self.plain_spacing_paragraph(slot) for slot in before):
+            problem = "A marked or unresolved answer paragraph separates this source."
+        for slot in (item for item in before if item.kind == "p"):
+            _, _, issue = self.question_box_paragraph(slot.el)
+            if issue or self.blank_spans(*self.ptext(slot.el)) or any(
+                    ch in self.ptext(slot.el)[0] for ch in (BOX, CHECKED, "\x00")):
+                problem = "The complete source or its layout boundary is unresolved."
+        grid_source = [slot for slot in self.index.slots if slot.kind == "p"
+                       and (owner := self.host_cell(slot)) is not None and owner.parent is table]
+        grid_paras = [slot for slot in grid_source if self.box_units(slot)]
+        if any((self.ptext(slot.el)[0].strip() or not self.plain_spacing_paragraph(slot))
+               for slot in grid_source if slot not in grid_paras) or any(
+                slot.kind == "tbl" and slot.parent is not None and slot.parent.parent is table
+                for slot in self.index.slots):
+            problem = "The grid contains separate printed headers, context or answer areas whose ownership is unresolved."
+        if {slot.id for slot in grid_paras} != {slot.id for slot in group["paras"]}:
+            problem = "The grid contains separate option groups whose ownership is unresolved."
+        if any(len(self.box_units(slot)) != 1 for slot in grid_paras):
+            problem = "Parent and subordinate boxes share a paragraph; they cannot be flattened into one choice."
+        context, issue = self.question_box_context(outer.parent)
+        if issue:
+            problem = issue
+        raw_question, label = self.text(question.el).strip(), self.text(label_slot.el).strip()
+        context = " > ".join(x for x in (context, raw_question if subsection else "") if x)
+        if len(group["units"]) == 1:
+            # A checkbox keeps its printed option as label; its question still
+            # governs that option, including a local subject or subsection.
+            context = " > ".join(x for x in (context, label) if x)
+        if len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT:
+            problem = "The complete question or context exceeds limits."
+        if any(self.question_box_signing(value) for value in sources + [context]):
+            problem = "The complete source contains signing/consent instructions. Governing context: " + context
+        if problem:
+            return {"problem": "Nested option grid at " + table.id + ": " + problem
+                    + " Printed source: " + source + " Options: " + self.text(table.el, own=False)}
+        return {"label": label, "context": context, "cardinality": raw_question,
+                "source_slots": paragraphs + [slot for slot in before if slot.kind == "p"
+                    and not self.text(slot.el).strip()], "option_paras": grid_paras}
+
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
         for units in self.split_inline_groups(g):
@@ -1497,6 +1582,14 @@ class Detector:
             host = pslot
             used_para = None
             row_question = False
+            nested = self.nested_checkbox_source(g) if not question else None
+            if nested and nested.get("problem"):
+                self.notes.append(nested["problem"])
+                for paragraph in g["paras"]:
+                    self.claimed.add(id(paragraph.el))
+                continue
+            if nested:
+                question = nested["label"]
             if not question:
                 cell = self.host_cell(pslot)
                 if cell is not None and next(iter(self.own_paragraphs(cell)), None) is pslot:
@@ -1538,7 +1631,8 @@ class Detector:
                 s = self.index.by_id.get("%s#%s" % (b["part"], b["slot"]))
                 if s is not None and s is not anchor and s not in extra:
                     extra.append(s)
-            hint = " ".join([question] + [self.text(p.el) for p in g["paras"][:1]])
+            hint = " ".join([question] + ([nested["cardinality"]] if nested else [])
+                            + [self.text(p.el) for p in g["paras"][:1]])
             if len(units) == 1:
                 label = options[0] or question or "Checkbox"
                 area = Area("checkbox", label, anchor, target, context=self.context_for(anchor), options=[options[0]] if options[0] else [])
@@ -1548,6 +1642,14 @@ class Detector:
                 area = Area(self.choice_kind(question, options, hint), question or "Choose", anchor, target,
                             context=self.context_for(anchor), options=[o or "(option %d)" % (i + 1) for i, o in enumerate(options)],
                             extra_slots=extra)
+            if nested:
+                area.context, area.complete_source = nested["context"], True
+                for source_slot in nested["source_slots"]:
+                    self.claimed.add(id(source_slot.el))
+                for option_para in nested["option_paras"]:
+                    if self.blank_spans(*self.ptext(option_para.el)):
+                        self.notes.append("Unassigned write-in beside a nested option at " + option_para.id
+                                          + ". Review this separate answer area. Printed text: " + self.text(option_para.el))
             self.add(area)
             for p in g["paras"]:
                 self.claimed.add(id(p.el))
@@ -2127,6 +2229,72 @@ class Detector:
         return ""
 
     # 6. a label followed by empty paragraph(s): the answer goes on those lines ------------------------------------
+    def plain_spacing_paragraph(self, slot):
+        """Only unmarked spacing can yield to a separately mapped destination."""
+        text, pieces = self.ptext(slot.el)
+        if text.strip() or self.blank_spans(text, pieces):
+            return False
+        markers = {q("w:sdt"), FLDCHAR, q("w:instrText"), TXBX, q("w:drawing"), q("w:pict"),
+                   q("w:object"), q("w:pBdr"), q("w:framePr"), q("w:u"), q("w:br"), q("w:sectPr"), q("w:tabs"),
+                   q("w:tab"), q("w:shd"), q("w:highlight"), q("w:numPr"), q("w:bdr"), q("w:strike"), q("w:dstrike")}
+        if any(node.tag in markers for node in slot.el.iter()):
+            return False
+        if "word/styles.xml" in self.package.names:
+            defaults = self.package.tree("word/styles.xml").find(q("w:docDefaults"))
+            if defaults is not None and any(node.tag in markers for node in defaults.iter()):
+                return False
+        def unmarked_style(refs, kind):
+            # An explicit style replaces that type's implicit default, but all
+            # ancestors still participate. Unknown or duplicate references cannot
+            # prove that an empty-looking paragraph has no drawn answer area.
+            if len(refs) > 1:
+                return False
+            if refs:
+                name = refs[0].get(q("w:val"))
+            else:
+                defaults = [s for s in self.package.tree("word/styles.xml").findall(q("w:style"))
+                            if s.get(q("w:type")) == kind and s.get(q("w:default")) in ("1", "true", "on")] \
+                    if "word/styles.xml" in self.package.names else []
+                if len(defaults) > 1:
+                    return False
+                if not defaults:
+                    return True
+                name = defaults[0].get(q("w:styleId"))
+            styles, problem = self.question_box_style_chain(name, kind)
+            return not problem and not any(node.tag in markers for style in styles for node in style.iter())
+
+        if not unmarked_style(slot.el.findall("./" + q("w:pPr") + "/" + q("w:pStyle")), "paragraph"):
+            return False
+        for run in slot.el.iter(R):
+            if not unmarked_style(run.findall("./" + q("w:rPr") + "/" + q("w:rStyle")), "character"):
+                return False
+        parent = slot.parent
+        while parent is not None:
+            if parent.kind == "tbl" and not unmarked_style(
+                    parent.el.findall("./" + q("w:tblPr") + "/" + q("w:tblStyle")), "table"):
+                return False
+            parent = parent.parent
+        return True
+
+    def mapped_beside_label(self, slot):
+        """A sole plain cell label already has a directly adjacent mapped answer cell.
+
+        This does not infer ownership from an empty neighbour alone, and never
+        borrows an outer table's destination for a nested control or text box.
+        """
+        cell = self.host_cell(slot)
+        if cell is None or slot.parent is not cell or any(c.kind != "p" for c in cell.children):
+            return False
+        named = [p for p in cell.children if self.text(p.el).strip()]
+        if named != [slot] or self.blank_spans(*self.ptext(slot.el)) or "\x00" in self.ptext(slot.el)[0]:
+            return False
+        right = next((c for c in self.grid(cell.parent).get(cell.info["row"], [])
+                      if c.info["col"] == cell.info["col"] + cell.info["span"]
+                      and c.info["vmerge"] != "continue"), None)
+        if right is None or self.row_label(cell.parent, cell.info["row"], right.info["col"]) != clean_label(self.text(slot.el)):
+            return False
+        return any(a.slot is right and a.target.get("type") in ("cell", "cell_replace") for a in self.areas)
+
     def rule_lines_below_label(self):
         containers = [s for s in self.index.slots if s.kind in ("tc", "txbx")]
         seqs = [[c for c in s.children if c.kind == "p"] for s in containers]
@@ -2164,6 +2332,8 @@ class Detector:
                     if not in_container and len(blanks) >= 1:
                         break
                 if not blanks:
+                    continue
+                if in_container and self.mapped_beside_label(ps) and all(self.plain_spacing_paragraph(b) for b in blanks):
                     continue
                 kind = "long_text" if len(blanks) >= 2 and not signing else self.kind_for(label)
                 self.add(Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "D30",
+    "slot": "b/tbl[0]/tr[5]/tc[1]",
+    "note": "The patient was born on January 1, 1980.",
+    "answer": {
+      "text": "The patient was born on January 1, 1980.",
+      "status": "supported",
+      "evidence": [
+        {
+          "quote": "The patient was born on January 1, 1980.",
+          "start": 0,
+          "end": 40
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient was born on January 1, 1980.",
+          "start": 0,
+          "end": 40
+        }
+      ]
+    }
+  },
+  {
+    "id": "D31",
+    "slot": "b/tbl[19]/tr[0]/tc[1]",
+    "note": "The patient reports supervised leave every Monday.",
+    "answer": {
+      "text": "The patient reports supervised leave every Monday.",
+      "status": "supported",
+      "evidence": [
+        {
+          "quote": "The patient reports supervised leave every Monday.",
+          "start": 0,
+          "end": 50
+        }
+      ],
+      "reviewed": false,
+      "own_evidence": [
+        {
+          "quote": "The patient reports supervised leave every Monday.",
+          "start": 0,
+          "end": 50
+        }
+      ]
+    }
+  }
+]

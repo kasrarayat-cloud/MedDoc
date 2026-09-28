@@ -1,0 +1,782 @@
+{
+  "template": "dev/originals/D31-f730aa53671a.docx",
+  "sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+  "role": "reviewer",
+  "pages": 9,
+  "form_title": "Discharge Application for Restricted Patients",
+  "answer_areas": [
+    {
+      "id": "A1",
+      "label": "Type of discharge applied for (please tick one):",
+      "context": "Page 1 > Type of discharge applied for",
+      "kind": "choice",
+      "slots": [
+        "word/document.xml#b/tbl[2]/tr[0]/tc[0]/p[2]/ff[0]",
+        "word/document.xml#b/tbl[2]/tr[0]/tc[0]/p[4]/ff[0]",
+        "word/document.xml#b/tbl[2]/tr[0]/tc[0]/p[6]/ff[0]"
+      ],
+      "location": "form_field",
+      "duplicate_label": false,
+      "notes": "Three legacy FORMCHECKBOX fields (all unchecked by default), one per paragraph inside a single-cell bordered box; 'please tick one' = mutually exclusive. The choice decides which of sections 3/4/5 apply.",
+      "options": [
+        "Conditional (detained patients only)",
+        "Lifting Restrictions (detained patients only – to discharge the s41 Restriction Order only)",
+        "Absolute (detained patients or those already conditionally discharged)"
+      ]
+    },
+    {
+      "id": "A2",
+      "label": "Full name of patient:",
+      "context": "1. Patient’s Details > a) Full name of patient",
+      "kind": "text",
+      "slots": [
+        "word/document.xml#b/tbl[4]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Guidance asks to include any aliases or previous names."
+    },
+    {
+      "id": "A3",
+      "label": "Date of birth:",
+      "context": "1. Patient’s Details > b) Date of birth",
+      "kind": "date",
+      "slots": [
+        "word/document.xml#b/tbl[5]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Table has a third 172-twip spacer column (tc[2]) that is not an answer area."
+    },
+    {
+      "id": "A4",
+      "label": "MHCS reference:",
+      "context": "1. Patient’s Details > c) MHCS reference",
+      "kind": "text",
+      "slots": [
+        "word/document.xml#b/tbl[6]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Spacer column tc[2] is not an answer area."
+    },
+    {
+      "id": "A5",
+      "label": "Detention Authority:",
+      "context": "1. Patient’s Details > d) Detention Authority",
+      "kind": "text",
+      "slots": [
+        "word/document.xml#b/tbl[7]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Type of S37/41 order (and legislation) to be specified; may name more than one Order. Spacer column tc[2] is not an answer area."
+    },
+    {
+      "id": "A6",
+      "label": "Full name:",
+      "context": "2. Applicant’s Details > a) Full name (applicant)",
+      "kind": "text",
+      "slots": [
+        "word/document.xml#b/tbl[8]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Applicant's own name (guidance 'Your name'), not the patient's."
+    },
+    {
+      "id": "A7",
+      "label": "Relationship to Patient",
+      "context": "2. Applicant’s Details > b) Relationship to Patient",
+      "kind": "text",
+      "slots": [
+        "word/document.xml#b/tbl[9]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. e.g. patient, legal representative/IMHA, or Responsible Clinician."
+    },
+    {
+      "id": "A8",
+      "label": "Address:",
+      "context": "2. Applicant’s Details > c) Address",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[10]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Applicant's full (multi-line) address."
+    },
+    {
+      "id": "A9",
+      "label": "Telephone number:",
+      "context": "2. Applicant’s Details > d) Telephone number",
+      "kind": "text",
+      "slots": [
+        "word/document.xml#b/tbl[11]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Spacer column tc[2] is not an answer area."
+    },
+    {
+      "id": "A10",
+      "label": "Email address:",
+      "context": "2. Applicant’s Details > e) Email address",
+      "kind": "text",
+      "slots": [
+        "word/document.xml#b/tbl[12]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Secure email address."
+    },
+    {
+      "id": "A11",
+      "label": "Please give details of the discharge proposal including:",
+      "context": "3. Conditional Discharge Proposal > a) details of the discharge proposal",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[14]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": true,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Covers discharge plan and timeframe, community treatment/medication, risk and emergency management, missing-patient contingency plan. Near-identical label recurs at 4c (differs only by a comma)."
+    },
+    {
+      "id": "A12",
+      "label": "Discharge Address",
+      "context": "3. Conditional Discharge Proposal > b) Discharge Address",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[15]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Full address of the proposed discharge unit plus type of accommodation and level of support."
+    },
+    {
+      "id": "A13",
+      "label": "Suggested Conditions",
+      "context": "3. Conditional Discharge Proposal > c) Suggested Conditions",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[16]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Conditions are to be selected/tailored from the Annex B example list (Annex B itself is reference text, not an answer area)."
+    },
+    {
+      "id": "A14",
+      "label": "Details of the Community Care Team (including contact details)",
+      "context": "3. Conditional Discharge Proposal > d) Community Care Team",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[17]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Responsible Clinician, Social Supervisor and other team members, each with employing organisation/contact details."
+    },
+    {
+      "id": "A15",
+      "label": "Community leave taken:",
+      "context": "3. Conditional Discharge Proposal > e) Community leave taken",
+      "kind": "multi_choice",
+      "slots": [
+        "word/document.xml#b/p[27]/ff[0]",
+        "word/document.xml#b/p[27]/ff[1]",
+        "word/document.xml#b/p[29]/ff[0]",
+        "word/document.xml#b/p[29]/ff[1]",
+        "word/document.xml#b/p[31]/ff[0]",
+        "word/document.xml#b/p[31]/ff[1]",
+        "word/document.xml#b/p[33]/ff[0]",
+        "word/document.xml#b/p[33]/ff[1]",
+        "word/document.xml#b/p[35]/ff[0]"
+      ],
+      "location": "form_field",
+      "duplicate_label": false,
+      "notes": "Nine legacy FORMCHECKBOX fields (unchecked) laid out in body paragraphs as two tab-separated columns (day | overnight) plus a final single option; several may be ticked. The label shares paragraph b/p[27] with the first two checkboxes.",
+      "options": [
+        "Compassionate (day)",
+        "Compassionate (overnight)",
+        "Medical (day)",
+        "Medical (overnight)",
+        "Escorted (day)",
+        "Escorted (overnight)",
+        "Unescorted community (day)",
+        "Unescorted community (overnight)",
+        "Long Term Escorted Leave of Absence"
+      ]
+    },
+    {
+      "id": "A16",
+      "label": "Other:",
+      "context": "3. Conditional Discharge Proposal > f) Other (leave)",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[18]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Other leave: within hospital grounds (secure perimeter vs public access), leave to attend Court."
+    },
+    {
+      "id": "A17",
+      "label": "Report on leave:",
+      "context": "3. Conditional Discharge Proposal > g) Report on leave",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[19]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A18",
+      "label": "If leave has previously been suspended or rescinded (by either the RC or the Secretary of State) please state why:",
+      "context": "3. Conditional Discharge Proposal > h) leave suspended or rescinded",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[20]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A19",
+      "label": "Explain the control measures which will be put in place to address the risks to victims (see section 8 below):",
+      "context": "3. Conditional Discharge Proposal > i) control measures for risks to victims",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[21]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A20",
+      "label": "Supervision",
+      "context": "3. Conditional Discharge Proposal > j) Supervision",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[22]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A21",
+      "label": "Why do you think this patient should be absolutely discharged?",
+      "context": "4. Absolute Discharge Proposal > a) reasons for absolute discharge",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[24]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A22",
+      "label": "Is the patient currently conditionally discharged?",
+      "context": "4. Absolute Discharge Proposal > b) currently conditionally discharged",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[25]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Implicit yes/no with no printed options; guidance asks for the date of discharge and an outline of community management since then."
+    },
+    {
+      "id": "A23",
+      "label": "Please give details of the discharge proposal, including:",
+      "context": "4. Absolute Discharge Proposal > c) details of the discharge proposal",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[26]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": true,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Near-identical label to 3a (differs only by a comma); disambiguated by section 4."
+    },
+    {
+      "id": "A24",
+      "label": "Aftercare Arrangements",
+      "context": "4. Absolute Discharge Proposal > d) Aftercare Arrangements",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[27]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": true,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Same label also at 5b."
+    },
+    {
+      "id": "A25",
+      "label": "Please give details of the proposal, including:",
+      "context": "5. Lifting s41 Restrictions > a) details of the proposal",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[29]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Why the Restriction Order can be lifted."
+    },
+    {
+      "id": "A26",
+      "label": "Aftercare Arrangements",
+      "context": "5. Lifting s41 Restrictions > b) Aftercare Arrangements",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[30]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": true,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Same label also at 4d; here: where the patient will continue to be treated under the Hospital Order."
+    },
+    {
+      "id": "A27",
+      "label": "Please describe the patient’s mental disorder, including:",
+      "context": "6. Patient’s Mental Disorder > a) mental disorder",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[32]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Diagnosis(es), secondary conditions, current symptoms, duration of presentation, prescribed medication."
+    },
+    {
+      "id": "A28",
+      "label": "Please describe the patient’s attitude and behaviour in hospital and/or the community, including any incidents of:",
+      "context": "6. Patient’s Mental Disorder > b) attitude and behaviour / incidents",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[33]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. The bulleted incident types (aggression, substance abuse, self-harm, sexual disinhibition, seclusion, other offending, security level changes) are prompts, not checkboxes."
+    },
+    {
+      "id": "A29",
+      "label": "State what effect these have had on the patient and how they have been addressed:",
+      "context": "6. Patient’s Mental Disorder > c) effect and how addressed",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[34]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A30",
+      "label": "Describe the patient’s attitude to treatment (and see annex A):",
+      "context": "6. Patient’s Mental Disorder > d) attitude to treatment",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[35]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A31",
+      "label": "Detail any history of discharge and recall to hospital:",
+      "context": "6. Patient’s Mental Disorder > e) discharge and recall history",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[36]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A32",
+      "label": "Please describe any physical medical conditions or disabilities which may impact upon their mental health:",
+      "context": "6. Patient’s Mental Disorder > f) physical conditions/disabilities",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[37]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A33",
+      "label": "Capacity Issues:",
+      "context": "6. Patient’s Mental Disorder > g) Capacity Issues",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[38]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Includes lack of capacity, independent capacity assessment, DoLS order and date last authorised."
+    },
+    {
+      "id": "A34",
+      "label": "Index offence(s):",
+      "context": "7. Managing Risk > a) Index offence(s)",
+      "kind": "text",
+      "slots": [
+        "word/document.xml#b/tbl[40]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. As recorded on the Hospital Order or other detention authority."
+    },
+    {
+      "id": "A35",
+      "label": "Details of index offence(s):",
+      "context": "7. Managing Risk > b) Details of index offence(s)",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[41]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Brief description of offence(s) and whether they gained publicity."
+    },
+    {
+      "id": "A36",
+      "label": "Describe the patient’s key risks factors/indicators:",
+      "context": "7. Managing Risk > c) key risk factors/indicators",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[42]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A37",
+      "label": "Describe how these risks are these being addressed:",
+      "context": "7. Managing Risk > d) how risks are being addressed",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[43]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A38",
+      "label": "Describe the patient’s community leave history",
+      "context": "7. Managing Risk > e) community leave history",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[44]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Include escape/abscond history."
+    },
+    {
+      "id": "A39",
+      "label": "Please confirm that this patient is subject to Multi-Agency Public Protection Arrangements (MAPPA):",
+      "context": "7. Managing Risk > f) MAPPA status",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[45]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Confirmation plus MAPPA category and management level; the guidance contains a hyperlink ('MAPPA Website') that is part of the overwritable blue text."
+    },
+    {
+      "id": "A40",
+      "label": "Please give the name and contact details of the MAPPA coordinator",
+      "context": "7. Managing Risk > g) MAPPA coordinator",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[46]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Also whether MAPPA agencies were notified, their concerns, requested conditions, Prevent involvement."
+    },
+    {
+      "id": "A41",
+      "label": "Victim Liaison Officer (VLO) name and contact details:",
+      "context": "8. Victims > a) VLO name and contact details",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[48]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Includes date of last discussion/contact with the VLO."
+    },
+    {
+      "id": "A42",
+      "label": "Details of conditions requested by victim(s):",
+      "context": "8. Victims > b) conditions requested by victim(s)",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[49]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A43",
+      "label": "If there is no VLO or victim contact, are there any victim concerns which you think should be taken into account",
+      "context": "8. Victims > c) victim concerns where no VLO/victim contact",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[50]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A44",
+      "label": "Please consider the following:",
+      "context": "Additional Comments > a) other information",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[52]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell."
+    },
+    {
+      "id": "A45",
+      "label": "For patients whose s37/41 order was made after a finding of unfit to plead (under s24 of the Domestic Violence, Crime and Victims Act 2004) only",
+      "context": "Additional Comments > b) fitness to plead (unfit-to-plead s37/41 patients only)",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[53]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Answer cell is a bordered box pre-filled with blue (0070C0) bulleted guidance text; the form states 'The text in blue can be overwritten', so the answer replaces that guidance in the cell. Conditional (detained, unfit-to-plead patients only); implicit yes/no opinion on current fitness to plead with no printed options."
+    },
+    {
+      "id": "A46",
+      "label": "Applicant’s signature",
+      "context": "Additional Comments > c) Applicant’s signature",
+      "kind": "signature",
+      "slots": [
+        "word/document.xml#b/tbl[54]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Signature box (blue guidance 'An electronic signature is acceptable'); cell is vertically merged with b/tbl[54]/tr[1]/tc[1] (vMerge restart/continue). Never auto-fill with an invented signature."
+    },
+    {
+      "id": "A47",
+      "label": "Date:",
+      "context": "Additional Comments > c) Applicant’s signature > Date",
+      "kind": "date",
+      "slots": [
+        "word/document.xml#b/tbl[54]/tr[0]/tc[3]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Date the application was submitted to MHCS; blue guidance in the cell is overwritten. Row 1 cells of this 4-column table (b/tbl[54]/tr[1]/tc[*]) are merge continuations/border residue, not answer areas."
+    },
+    {
+      "id": "A48",
+      "label": "Explain what progress you think that you have you made towards your discharge",
+      "context": "Annex A: Patient’s comments > For the patient > progress towards discharge",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[56]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Annex A answer cell pre-filled with blue guidance ('Please detail any other information or views you consider to be relevant to the application', identical in all three patient rows) to be overwritten. Completed by/for the patient in their own words."
+    },
+    {
+      "id": "A49",
+      "label": "How do you think your risks have reduced since your admission?",
+      "context": "Annex A: Patient’s comments > For the patient > risk reduction since admission",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[57]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Annex A answer cell pre-filled with blue guidance ('Please detail any other information or views you consider to be relevant to the application', identical in all three patient rows) to be overwritten. Completed by/for the patient in their own words."
+    },
+    {
+      "id": "A50",
+      "label": "What would you like the Ministry of Justice (MoJ) to take into consideration when deciding whether to grant this leave request?",
+      "context": "Annex A: Patient’s comments > For the patient > what MoJ should consider",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[58]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "Annex A answer cell pre-filled with blue guidance ('Please detail any other information or views you consider to be relevant to the application', identical in all three patient rows) to be overwritten. Completed by/for the patient in their own words. Label says 'leave request' although this is a discharge application (template wording carried over)."
+    },
+    {
+      "id": "A51",
+      "label": "Please confirm that the patient has had sight of this application and had an opportunity to add their comments",
+      "context": "Annex A: Patient’s comments > For the RC > patient sight/comment confirmation",
+      "kind": "long_text",
+      "slots": [
+        "word/document.xml#b/tbl[59]/tr[0]/tc[1]"
+      ],
+      "location": "table",
+      "duplicate_label": false,
+      "notes": "RC confirmation; the cell's blue guidance (third-party/victim information and MAPPA caveat) is overwritten. Implicit confirmation with no printed tick box."
+    }
+  ],
+  "preserve": [
+    {
+      "what": "logo",
+      "slots": [
+        "word/document.xml#b/p[1]"
+      ],
+      "notes": "Two inline pictures in body paragraph 1: Ministry of Justice crest/wordmark and HM Prison & Probation Service crest/wordmark."
+    },
+    {
+      "what": "letterhead",
+      "slots": [
+        "word/document.xml#b/tbl[0]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[0]/tr[0]/tc[1]"
+      ],
+      "notes": "Title table: 'Discharge Application for Restricted Patients' / 'Mental Health Casework Section (MHCS)'; tc[1] is an empty borderless layout cell, not an answer area."
+    },
+    {
+      "what": "other",
+      "slots": [
+        "word/header2.xml#hf/p[0]",
+        "word/header1.xml#hf/p[0]",
+        "word/header3.xml#hf/p[0]",
+        "word/footer1.xml#hf/p[0]"
+      ],
+      "notes": "Protective marking 'OFFICIAL – SENSITIVE (when complete)' in the default header on every page; even/first headers and the footer are empty. No PAGE/NUMPAGES field exists."
+    },
+    {
+      "what": "instructions",
+      "slots": [
+        "word/document.xml#b/tbl[1]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[3]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[13]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[23]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[28]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[31]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[39]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[47]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[51]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[55]/tr[0]/tc[0]"
+      ],
+      "notes": "Red and yellow-shaded (FFF2CC) instruction boxes, incl. 'The text in blue can be overwritten' and 'Please send the completed form to: MHCSmailbox@justice.gov.uk'."
+    },
+    {
+      "what": "instructions",
+      "slots": [
+        "word/document.xml#b/tbl[60]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[60]/tr[1]/tc[0]",
+        "word/document.xml#b/p[105]"
+      ],
+      "notes": "Annex B: Possible Discharge Conditions — reference list of example conditions (blue text with [specify …] brackets) that section 3c points to; not an answer area and should not be filled in place."
+    },
+    {
+      "what": "instructions",
+      "slots": [
+        "word/document.xml#b/p[93]",
+        "word/document.xml#b/p[95]",
+        "word/document.xml#b/p[100]"
+      ],
+      "notes": "Annex A headings ('Annex A: Patient’s comments to support this application', 'For the patient:', 'For the RC:')."
+    },
+    {
+      "what": "signature block",
+      "slots": [
+        "word/document.xml#b/tbl[54]/tr[0]/tc[0]",
+        "word/document.xml#b/tbl[54]/tr[0]/tc[1]",
+        "word/document.xml#b/tbl[54]/tr[0]/tc[2]"
+      ],
+      "notes": "Applicant's signature block: 'Applicant’s signature' label, the signature box (blue guidance 'An electronic signature is acceptable'; vMerge with b/tbl[54]/tr[1]/tc[1]) and the 'Date:' label. The signature must never be auto-generated. The Date answer cell b/tbl[54]/tr[0]/tc[3] is deliberately NOT listed here: it is a fillable answer area (A47), not preserved content."
+    },
+    {
+      "what": "existing check state",
+      "slots": [
+        "word/document.xml#b/tbl[2]/tr[0]/tc[0]/p[2]/ff[0]",
+        "word/document.xml#b/tbl[2]/tr[0]/tc[0]/p[4]/ff[0]",
+        "word/document.xml#b/tbl[2]/tr[0]/tc[0]/p[6]/ff[0]",
+        "word/document.xml#b/p[27]/ff[0]",
+        "word/document.xml#b/p[27]/ff[1]",
+        "word/document.xml#b/p[29]/ff[0]",
+        "word/document.xml#b/p[29]/ff[1]",
+        "word/document.xml#b/p[31]/ff[0]",
+        "word/document.xml#b/p[31]/ff[1]",
+        "word/document.xml#b/p[33]/ff[0]",
+        "word/document.xml#b/p[33]/ff[1]",
+        "word/document.xml#b/p[35]/ff[0]"
+      ],
+      "notes": "All 12 legacy FORMCHECKBOX fields default to unchecked (w:default 0); only the ticked ones should change."
+    },
+    {
+      "what": "other",
+      "slots": [
+        "word/document.xml#b/p[2]/ff[0]",
+        "word/document.xml#b/p[2]/ff[1]",
+        "word/document.xml#b/p[60]/ff[0]",
+        "word/document.xml#b/p[60]/ff[1]",
+        "word/document.xml#b/p[62]/ff[0]",
+        "word/document.xml#b/p[62]/ff[1]",
+        "word/document.xml#b/p[69]/ff[0]",
+        "word/document.xml#b/p[69]/ff[1]",
+        "word/document.xml#b/p[69]/ff[2]",
+        "word/document.xml#b/p[89]/ff[0]"
+      ],
+      "notes": "Ten legacy FORMTEXT fields that are NOT answer areas: 1pt font (sz=2), maxLength 1, default ' ', invisible in the render; they are tab-navigation/accessibility stubs whose statusText carries help such as 'Press TAB to move from field to field' and 'You have reached the end of the form'. Leave untouched."
+    },
+    {
+      "what": "other",
+      "slots": [
+        "word/document.xml#b/tbl[5]/tr[0]/tc[2]",
+        "word/document.xml#b/tbl[6]/tr[0]/tc[2]",
+        "word/document.xml#b/tbl[7]/tr[0]/tc[2]",
+        "word/document.xml#b/tbl[11]/tr[0]/tc[2]",
+        "word/document.xml#b/tbl[54]/tr[1]/tc[0]",
+        "word/document.xml#b/tbl[54]/tr[1]/tc[1]",
+        "word/document.xml#b/tbl[54]/tr[1]/tc[2]",
+        "word/document.xml#b/tbl[54]/tr[1]/tc[3]"
+      ],
+      "notes": "Layout-only empty cells: 172-twip spacer columns and the second (merge-continuation / border residue) row of the signature table. Not answer areas."
+    }
+  ],
+  "families_observed": [
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F9"
+  ],
+  "difficulties": "Almost every answer area is a bordered right-hand table cell pre-filled with blue (0070C0), bulleted guidance text that the form says may be overwritten: a filler must REPLACE that guidance (and its bullet list numbering) rather than append to it, and must not treat the guidance as a label or as already-filled content. Ten invisible 1pt legacy FORMTEXT stubs (maxLength 1) sit between sections as keyboard-navigation/accessibility helpers; a field-counting parser will take them for answer areas. Checkboxes are legacy FORMCHECKBOX fields: 3 mutually exclusive discharge types in a table cell, and 9 multi-select leave types laid out in body paragraphs as tab-separated two-column rows with the label in the same paragraph as the first pair. Label cells are auto-numbered (a), b) …) under auto-numbered section headings, and near-duplicate labels recur ('Aftercare Arrangements' at 4d and 5b; 'Please give details of the discharge proposal(,) including:' at 3a and 4c), so section context is essential. Sections 3, 4 and 5 are alternatives selected by the page-1 tick box; several questions are implicit yes/no (4b, Additional Comments b, MAPPA confirmation) with no printed options. Annex A mixes patient-authored answers (three rows with identical guidance text) and an RC confirmation; its third question says 'leave request' although this is a discharge form. The signature table is 4 columns x 2 rows with vertical merges and a residual second row; signature must not be synthesised. Several 3-column rows carry a narrow empty spacer column. Sections run across page breaks (3, 6, 7, 8).",
+  "unsupportable": "None strictly unsupportable. The Applicant's signature (Additional Comments c) cannot be supplied by a filler and must be left for the applicant (an electronic signature is acceptable). Annex A patient-comment rows require the patient's own words and should not be composed from clinical notes.",
+  "review_changes": [
+    {
+      "change": "modified",
+      "area": "preserve: signature block (b/tbl[54])",
+      "why": "The annotator's signature-block preserve entry listed the Date answer cell b/tbl[54]/tr[0]/tc[3], which is also answer area A47 (date the application was submitted). A slot cannot be both preserved and filled; narrowed the entry to the signature label, signature box and 'Date:' label, and noted why tc[3] is excluded."
+    }
+  ]
+}

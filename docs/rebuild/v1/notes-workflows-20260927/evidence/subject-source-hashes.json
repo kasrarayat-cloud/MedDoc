@@ -1,0 +1,5 @@
+{
+  "rebuild/core/generation.py": "9fca62e396dba349c32821fd2a23c5bd01f07b80fe7369943cb5dbd6750d0ac7",
+  "rebuild/core/v3_syntax.py": "61ffd082f4267ce059affe67def3c37b180eda2dacf6fd12adf3d3a78efbef8d",
+  "rebuild/core/tests/test_v3_sentence_syntax.py": "947d7dd5bcf4ff7c0266b3dbeaa80e1fa461ee77803c4889a0ef22b3f55c2b3f"
+}

@@ -1,0 +1,10 @@
+{
+  "parts": [
+    "What structured activities does the patient partake in including employment, study, or other interests?",
+    " If the patient has no structured activity, how do they occupy their time and will this pose a problem from a risk perspective in the long term?",
+    " Have they been supported in disclosure of their offending history (where appropriate?)"
+  ],
+  "checkbox_checked": true,
+  "mobile_horizontal_overflow": false,
+  "network": "blocked; actual fixture-rendered HTML with existing local app CSS"
+}

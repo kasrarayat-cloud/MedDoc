@@ -21,7 +21,7 @@ and the live endpoint and live state root are refused, so the tool cannot be poi
 
     python3 ops/production_restore_check.py --database-host <drill endpoint> \
         --state-root /mnt/quillmd-drill-20261101t0300 --credentials <role credential file> \
-        --expected-triggers 17
+        --expected-triggers 39
 """
 import argparse
 import hashlib
@@ -44,6 +44,13 @@ DRILL_STAMP = r'[0-9]{8}t[0-9]{4}'
 TRIGGERS = integrity_contract.CATALOG
 TABLES = '''SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname='public' AND c.relkind='r' ORDER BY c.relname'''
+PRESERVATION_FILES = [('preserved','SELECT storage_key,sha256 FROM core_preservedfile')]
+for _path,_hash in [('input_path',None),('result_path','result_sha256'),
+                    ('original_path','sha256'),('export_path','export_sha256')]:
+    _expected="COALESCE(prior_record->>'"+_hash+"','')" if _hash else "''"
+    PRESERVATION_FILES.append(('archived_'+_path,
+        "SELECT prior_record->>'"+_path+"',"+_expected+" FROM core_preservedrecord WHERE COALESCE(prior_record->>'"+_path+"','')<>''"))
+FILE_QUERIES=backup.FILE_QUERIES+PRESERVATION_FILES
 
 
 class CheckError(RuntimeError):
@@ -82,7 +89,7 @@ def check(query, state_root, expected_triggers):
     trigger_report = integrity_contract.assess(triggers, query(integrity_contract.CONTEXT), expected_triggers)
     invariants = {name: query(statement)[0][0] for name, statement in backup.INVARIANTS.items()}
     references = {}
-    for _, statement in backup.FILE_QUERIES:
+    for _, statement in FILE_QUERIES:
         for relative, expected in query(statement):
             backup.safe_relative(relative)
             previous = references.get(relative, '')

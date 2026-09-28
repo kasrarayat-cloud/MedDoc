@@ -1,0 +1,21 @@
+Using existing test database for alias 'default' ('test_quillmd_ci')...
+test_three_original_notes_worker_review_no_history_edit_finalize_download (core.tests.test_v3_history_context.HistoryContextWorkflow.test_three_original_notes_worker_review_no_history_edit_finalize_download) ... /opt/meddoc-pro/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-notes-workflows/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_request_and_reservation_are_versioned_bounded_and_disable_before_sending (core.tests.test_v3_history_context.HistoryContextContract.test_request_and_reservation_are_versioned_bounded_and_disable_before_sending) ... ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 9.623s
+
+OK
+Preserving test database for alias 'default' ('test_quillmd_ci')...
+Found 2 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

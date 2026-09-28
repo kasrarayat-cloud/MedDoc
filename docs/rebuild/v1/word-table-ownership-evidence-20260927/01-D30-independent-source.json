@@ -1,0 +1,1360 @@
+{
+  "original_sha": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+  "expected_sha": "9328d7dbbe820f11f00e6c76f99f2f38e7c01fc971b3bc2789ef71ab3cb14b53",
+  "source": [
+    {
+      "expected": {
+        "id": "A1",
+        "label": "Full Name of Patient",
+        "context": "Part A > Patient’s Details",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[0]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": ""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[0]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Full Name of Patient"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A2",
+        "label": "MHCS Reference Number",
+        "context": "Part A > Patient’s Details",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[1]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": ""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "MHCS Reference Number"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A3",
+        "label": "Gender",
+        "context": "Part A > Patient’s Details",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[2]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "free-text cell; no options printed"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Gender"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A4",
+        "label": "Nationality",
+        "context": "Part A > Patient’s Details",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[3]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": ""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Nationality"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A5",
+        "label": "Ethnicity",
+        "context": "Part A > Patient’s Details",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[4]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": ""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Ethnic ity"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A6",
+        "label": "Date of Birth",
+        "context": "Part A > Patient’s Details",
+        "kind": "date",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[5]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": ""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Date of Birth"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A7",
+        "label": "Date of Conditional Discharge",
+        "context": "Part A > Patient’s Details",
+        "kind": "date",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[6]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": ""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Date of Conditional Discharge  "
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A8",
+        "label": "Diagnosis",
+        "context": "Part A > Patient’s Details",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[7]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "Part A demographic diagnosis cell; Part C has a separate narrative diagnosis question (tbl[24]) under a heading also printed \"Diagnosis\""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Diagnosis"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A9",
+        "label": "Current Discharge Conditions (Including patient’s current residential address)",
+        "context": "Part A > Patient’s Details",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[8]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "label cell carries the parenthetical sub-label on a separate paragraph; answer must include the residential address"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Current Discharge Conditions  (Including patient’s current  residential  address)"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A10",
+        "label": "Deprivation of Liberty Safeguards (DOLS): set out date of Order and details of any restrictions and safeguards (if applicable)",
+        "context": "Part A > Patient’s Details",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[9]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "composite answer: date of Order plus details of restrictions/safeguards; may be \"not applicable\""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": " Deprivation of Liberty Safeguards (DOLS): set out date of Order and details of any restrictions and safeguards (if applicable)"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A11",
+        "label": "Index Offence(s)",
+        "context": "Part A > Patient’s Details",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[10]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": ""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Index Offence ( s)"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A12",
+        "label": "Details of any further offending or convictions since the patient was discharged",
+        "context": "Part A > Patient’s Details",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[11]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": ""
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Details of any further offending or convictions since the patient was discharged"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A13",
+        "label": "Victim Liaison Officer’s Name, email address and telephone number",
+        "context": "Part A > Patient’s Details",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[12]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "composite contact entry (name + email + telephone) in one cell"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Victim Liaison Officer’s Name, email address and telephone number"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A14",
+        "label": "MAPPA status – Indicate eligibility, the level and last review if a Level 2 or 3, with contacts of the relevant MAPPA (for category 4 patients, we will need details of any other agencies involved, no matter the level)",
+        "context": "Part A > Patient’s Details",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[13]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "label cell contains a second parenthetical instruction paragraph"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "MAPPA status – Indicate eligibility , the  level  and last review  if a Level 2  or 3 , with contacts of the relevant MAPP A (for category 4 patients, we will need details of any other agencies involved, no matter the level)"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A15",
+        "label": "Is the patient entered on Sex Offenders’ Register or subject to a Sexual Offences/Sexual Harm Prevention Order or any other criminal or civil orders of a court which are relevant? Whether the patient is a ViSOR nominal?",
+        "context": "Part A > Patient’s Details",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[14]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "yes/no-shaped question answered in a free-text cell (no Yes/No options printed); details expected"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Is the patient  en tered on Sex Offenders’ Register or subject to a Sexual Offences /Sexual Harm  Prevention Order  or any other criminal or civil orders of a court which  are relevant?  Whether the patient is a  ViSOR  nominal?"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A16",
+        "label": "Details of the MDT members and organisations involved in supporting the patient, name, role and contact details",
+        "context": "Part A > Patient’s Details",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[0]/tr[15]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer cell is NOT empty: it holds blue (2E74B5) guidance text \"Include here.\" plus a bulleted prompt list (who is MHA responsible Authority?; other MDT members including care coordinator or community nurse; support provider; GP; IMHA; Court of Protection Rule 1.2 representative; Legal representatives) in p[0]-p[7]. The filler must write the MDT details into this cell and decide whether the guidance prompts are replaced or kept; the cell spans the bottom of page 3"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[0]/tr[15]/tc[1]",
+          "existing_text": "Include  here.   who is MHA responsible  Authority? other MDT members including care coordinator or community  nurse. support provider GP IMHA Court of Protection Rule 1.2 representative Legal representatives",
+          "previous_sibling_text": "Details of the MDT members and organisations involved in supporting the patient, name, role and contact details"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A17",
+        "label": "Set out any changes since the previous report or since the patient has been discharged where there are concerns about changes in the patient’s mental state or risk profile? Please use the relevant section to elaborate further.",
+        "context": "Part B > Social Supervisor’s Report > (opening question)",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[1]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[1]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A18",
+        "label": "When was the last time you saw the patient and was this in person? Where did you last see the patient? How often do you or other members of the team see the patient and has contact been more frequent or less frequent over the reporting period?",
+        "context": "Part B > Social Supervisor’s Report > Supervision",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[2]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; Part C also has a \"Supervision\" heading with a different question (tbl[33])"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[2]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A19",
+        "label": "Does the patient cooperate with supervision? Can the cooperation with supervision be described as active or are they passively engaging with supervision? Have they historically cooperated and what have been the barriers to effective supervision either now or in the past?",
+        "context": "Part B > Social Supervisor’s Report > Supervision",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[3]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[3]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A20",
+        "label": "What type of accommodation is the patient’s residence:",
+        "context": "Part B > Social Supervisor’s Report > Accommodation",
+        "kind": "multi_choice",
+        "slots": [
+          "word/document.xml#b/p[73]",
+          "word/document.xml#b/p[74]",
+          "word/document.xml#b/p[75]",
+          "word/document.xml#b/p[76]",
+          "word/document.xml#b/p[77]",
+          "word/document.xml#b/p[78]",
+          "word/document.xml#b/p[79]",
+          "word/document.xml#b/p[80]"
+        ],
+        "location": "body",
+        "duplicate_label": false,
+        "notes": "options are plain bulleted list paragraphs (hollow \"o\" Courier New list bullets; numId 23 = first four accommodation types, numId 24 = own flat/house, with family, with partner, other), NOT checkboxes or glyph runs: there is no tick target, so the selection must be shown by marking/keeping the chosen option paragraph(s) (e.g. highlight/bold or removing the others). Reviewer: multi_choice because the options mix accommodation type with tenure/co-residence and several can be true at once (e.g. own flat/house + with partner; Local Authority accommodation + with family). \"other (please specify)\" is specified in the box that follows (tbl[4], area A21). List spans the page 4/5 break",
+        "options": [
+          "24-hour supported accommodation",
+          "Care Home",
+          "9-5 staffed accommodation",
+          "Local Authority accommodation",
+          "own flat/house",
+          "with family",
+          "with partner",
+          "other (please specify)"
+        ]
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/p[73]",
+          "existing_text": "24-hour supported accommodation  ",
+          "previous_sibling_text": "What type of accommodation is  the patient’s residence :"
+        },
+        {
+          "slot": "word/document.xml#b/p[74]",
+          "existing_text": "Care Home",
+          "previous_sibling_text": "24-hour supported accommodation  "
+        },
+        {
+          "slot": "word/document.xml#b/p[75]",
+          "existing_text": "9-5 staffed accommodation  ",
+          "previous_sibling_text": "Care Home"
+        },
+        {
+          "slot": "word/document.xml#b/p[76]",
+          "existing_text": "Local Authority  accommodation  ",
+          "previous_sibling_text": "9-5 staffed accommodation  "
+        },
+        {
+          "slot": "word/document.xml#b/p[77]",
+          "existing_text": "own flat/house  ",
+          "previous_sibling_text": "Local Authority  accommodation  "
+        },
+        {
+          "slot": "word/document.xml#b/p[78]",
+          "existing_text": "with family  ",
+          "previous_sibling_text": "own flat/house  "
+        },
+        {
+          "slot": "word/document.xml#b/p[79]",
+          "existing_text": "with partner",
+          "previous_sibling_text": "with family  "
+        },
+        {
+          "slot": "word/document.xml#b/p[80]",
+          "existing_text": "other (please specify)  ",
+          "previous_sibling_text": "with partner"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A21",
+        "label": "other (please specify)",
+        "context": "Part B > Social Supervisor’s Report > Accommodation > What type of accommodation is the patient’s residence",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[4]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "the unlabelled box directly after the accommodation option list; it is the specify blank for \"other\" and may also be used for accommodation details"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[4]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A22",
+        "label": "Set out the suitability of the accommodation and its appropriateness for monitoring of compliance with treatment and risk?",
+        "context": "Part B > Social Supervisor’s Report > Accommodation",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[5]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[5]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A23",
+        "label": "If accommodation is being changed, please set out the reasons for the changes and what level of support the new accommodation will entail? Please also detail any specific risk assessment/review activity and any changes to risk mitigations. Has there been formal notification through the following process Submit a conditional discharge report or request a change of discharge conditions - GOV.UK (www.gov.uk)?",
+        "context": "Part B > Social Supervisor’s Report > Accommodation",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[6]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; question contains a hyperlink that must be preserved; conditional (may be \"not applicable\")"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[6]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": ""
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A24",
+        "label": "Have there been any changes in the relationships which are significant to the patient, and which may affect their stability? Are any changes likely to take place before the next report is due?",
+        "context": "Part B > Social Supervisor’s Report > Relationships",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[7]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[7]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A25",
+        "label": "If the case has a specific condition relating to relationships or reporting relationships how is this condition monitored?",
+        "context": "Part B > Social Supervisor’s Report > Relationships",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[8]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; box sits immediately under the question with no spacer paragraph"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[8]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A26",
+        "label": "In relation to the above question have you asked the patient directly about relationships and what was the response? How do you vary your supervision to monitor compliance with this condition outside of self-reporting?",
+        "context": "Part B > Social Supervisor’s Report > Relationships",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[9]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[9]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": ""
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A27",
+        "label": "Please report any changes or variation of the patient’s mental state and behaviour which have increased your concerns about the appropriateness of the conditional discharge continuing? Please include if the case has been referred to MAPPA or a MARAC has been arranged.",
+        "context": "Part B > Social Supervisor’s Report > Behaviour and Risks",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[10]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; heading \"Behaviour and Risks\" is at the foot of page 5 and the question/box on page 6"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[10]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A28",
+        "label": "Please set out the patient’s historical risks, how they are being managed now and what has been done to manage them in the past?",
+        "context": "Part B > Social Supervisor’s Report > Behaviour and Risks",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[11]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[11]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A29",
+        "label": "Has the patient displayed any signs of extremist / terrorist risk ideology or behaviour and if so, how is this being managed? Has the patient been referred to Prevent or are other agencies engaged with managing this risk?",
+        "context": "Part B > Social Supervisor’s Report > Behaviour and Risks",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[12]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[12]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": ""
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A30",
+        "label": "Have there been any recent issues of concern relating to drug or alcohol use by the patient? Is the patient being targeted by local drug users or dealers? If so, please detail the action taken to address any increased risks which may occur because of this.",
+        "context": "Part B > Social Supervisor’s Report > Substance Misuse Risks",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[13]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[13]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A31",
+        "label": "Is the patient a habitual user of controlled drugs? If, yes how is this risk managed?",
+        "context": "Part B > Social Supervisor’s Report > Substance Misuse Risks",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[14]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; yes/no-shaped question with free-text box, no Yes/No options printed"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[14]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A32",
+        "label": "Historically does the patient pose a risk to specific individuals or groups? Are those risks likely to re-emerge on discharge?",
+        "context": "Part B > Social Supervisor’s Report > Past and Potential Victims",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[15]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[15]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A33",
+        "label": "Has the patient been adhering to any victim related conditions, such as non-contact conditions or exclusion zones? Have they sought changes to victim related conditions? Are you in contact with the Victim Liaison Officer?",
+        "context": "Part B > Social Supervisor’s Report > Past and Potential Victims",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[16]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; the box straddles the page 6/7 break in the render"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[16]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A34",
+        "label": "Is the patient financially independent or are they reliant on third parties for financial support, such as family or friends? Is the patient in any danger of being financially exploited by others?",
+        "context": "Part B > Social Supervisor’s Report > Financial Risk",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[17]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[17]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A35",
+        "label": "What structured activities does the patient partake in including employment, study, or other interests? If the patient has no structured activity, how do they occupy their time and will this pose a problem from a risk perspective in the long term? Have they been supported in disclosure of their offending history (where appropriate?)",
+        "context": "Part B > Social Supervisor’s Report > Activities and Employment",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[18]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[18]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A36",
+        "label": "Provide any further comments or any colleague involved in the patient’s supervision.",
+        "context": "Part B > Social Supervisor’s Report > Further Comments",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[19]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[19]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A37",
+        "label": "Signature",
+        "context": "Part B > Social Supervisor’s Report > Social Supervisor sign-off",
+        "kind": "signature",
+        "slots": [
+          "word/document.xml#b/tbl[20]/tr[0]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "social supervisor’s signature; never auto-fill with an invented signature; also listed under preserve"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[20]/tr[0]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Signature"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A38",
+        "label": "Email address and Telephone number",
+        "context": "Part B > Social Supervisor’s Report > Social Supervisor sign-off",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[20]/tr[1]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "social supervisor’s contact details (composite email + telephone)"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[20]/tr[1]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Email address and Telephone number"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A39",
+        "label": "Date of Report",
+        "context": "Part B > Social Supervisor’s Report > Social Supervisor sign-off",
+        "kind": "date",
+        "slots": [
+          "word/document.xml#b/tbl[20]/tr[2]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "social supervisor’s report date"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[20]/tr[2]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Date of Report"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A40",
+        "label": "Line Manager Comments (This section is for the line manager of the social supervisor to add any comments or highlight any concerns that have arisen out of this report.)",
+        "context": "Part B > Social Supervisor’s Report > Line Manager Comments",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[21]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "completed by the social supervisor’s line manager, not the clinician; box begins at the top of page 8 after the heading on page 7"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[21]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": ""
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A41",
+        "label": "Signature",
+        "context": "Part B > Social Supervisor’s Report > Line Manager Comments > Line Manager sign-off",
+        "kind": "signature",
+        "slots": [
+          "word/document.xml#b/tbl[22]/tr[0]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "line manager’s signature (unlabelled as to whose: context is the Line Manager Comments section); never auto-fill; also listed under preserve"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[22]/tr[0]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Signature"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A42",
+        "label": "Email address and Telephone number",
+        "context": "Part B > Social Supervisor’s Report > Line Manager Comments > Line Manager sign-off",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[22]/tr[1]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "line manager’s contact details"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[22]/tr[1]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Email address and Telephone number"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A43",
+        "label": "Date of Report",
+        "context": "Part B > Social Supervisor’s Report > Line Manager Comments > Line Manager sign-off",
+        "kind": "date",
+        "slots": [
+          "word/document.xml#b/tbl[22]/tr[2]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "line manager’s date"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[22]/tr[2]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Date of Report"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A44",
+        "label": "Please set out any clinical changes or concerns around risk since the previous report (or, in the case of the initial report, in the four weeks since the patient was discharged)? Please use the relevant section to elaborate further.",
+        "context": "Part C > Clinical Supervisor’s Report > (opening question)",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[23]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[23]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A45",
+        "label": "What is the patient’s diagnosis? Has this changed over the course of their time in the community?",
+        "context": "Part C > Clinical Supervisor’s Report > Diagnosis",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[24]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; section heading \"Diagnosis\" duplicates the Part A row label \"Diagnosis\" (tbl[0]/tr[7]) but the printed question differs; box straddles the page 8/9 break"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[24]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A46",
+        "label": "What are the primary factors that affect the stability of the patient’s mental state and how does this effect their risk?",
+        "context": "Part C > Clinical Supervisor’s Report > Diagnosis",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[25]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[25]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A47",
+        "label": "Please set out the medication prescribed to the patient to treat their mental disorder and how this is administered and monitored?",
+        "context": "Part C > Clinical Supervisor’s Report > Treatment",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[26]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[26]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A48",
+        "label": "Does the patient self-medicate? Has there been any change to the dosage or type of medication being prescribed and what insight does the patient have?",
+        "context": "Part C > Clinical Supervisor’s Report > Treatment",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[27]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[27]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A49",
+        "label": "Has the patient fully complied with treatment including taking prescribed medication? If not, please detail the action taken to address this.",
+        "context": "Part C > Clinical Supervisor’s Report > Treatment",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[28]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[28]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A50",
+        "label": "Has the Care Plan changed or are there any plans to change it as a result of increased/decreased concerns?",
+        "context": "Part C > Clinical Supervisor’s Report > Treatment",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[29]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; a stray printed \".\" paragraph (p[203]) precedes the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[29]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A51",
+        "label": "Have there been any physical illnesses, or change in existing physical condition, which has impacted upon the patient’s mental health or compliance with treatment?",
+        "context": "Part C > Clinical Supervisor’s Report > Physical Health",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[30]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[30]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A52",
+        "label": "Please set out any recent events or behaviours which have required interventions or raised concerns with supervisors?",
+        "context": "Part C > Clinical Supervisor’s Report > Risk Concerns",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[31]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[31]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A53",
+        "label": "Has the patient had any informal admissions to hospital or admissions under the Mental Health Act 1983 (including s2 and s3)? What were the circumstances and outcome?",
+        "context": "Part C > Clinical Supervisor’s Report > Admissions to hospital",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[32]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[32]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A54",
+        "label": "When was the patient last seen by you or by another clinical professional (e.g. Locum, CPN)? Please give dates of the last CPA or professionals meeting in relation to the patient, inclusive of MAPPA meetings.",
+        "context": "Part C > Clinical Supervisor’s Report > Supervision",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[33]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question; heading \"Supervision\" also used in Part B for different questions"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[33]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A55",
+        "label": "Provide details of any other interventions the patient is undertaking, why these interventions are necessary and how they affect risk?",
+        "context": "Part C > Clinical Supervisor’s Report > Supervision",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[34]/tr[0]/tc[0]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "answer goes in the empty single-cell bordered table (box) below the question"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[34]/tr[0]/tc[0]",
+          "existing_text": "",
+          "previous_sibling_text": null
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A56",
+        "label": "Clinical Supervisor’s Signature",
+        "context": "Part C > Clinical Supervisor’s Report > Clinical Supervisor sign-off",
+        "kind": "signature",
+        "slots": [
+          "word/document.xml#b/tbl[35]/tr[0]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "clinical supervisor’s signature; never auto-fill; also listed under preserve; table is on page 11 after the \"Consideration for further action\" guidance"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[35]/tr[0]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Clinical Supervisor’s Signature"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A57",
+        "label": "Email address and Telephone number",
+        "context": "Part C > Clinical Supervisor’s Report > Clinical Supervisor sign-off",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[35]/tr[1]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "clinical supervisor’s contact details"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[35]/tr[1]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Email address and Telephone number"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A58",
+        "label": "Date of Report",
+        "context": "Part C > Clinical Supervisor’s Report > Clinical Supervisor sign-off",
+        "kind": "date",
+        "slots": [
+          "word/document.xml#b/tbl[35]/tr[2]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": true,
+        "notes": "clinical supervisor’s report date"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[35]/tr[2]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Date of Report"
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A59",
+        "label": "Explain what progress you think that you have you made since your discharge or since the last report submitted to the Ministry of Justice.",
+        "context": "Annex: Patient’s comments to support this report > For the patient",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[36]/tr[0]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "patient-authored answer (the patient’s own words, completed with a supervisor’s support); a filler must not invent patient statements; answer goes in the right-hand bordered cell tc[1]"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[36]/tr[0]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Explain what progress you think that you have you made since your  discharge  or since  the last report submitted to the Ministry of Justice.  "
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A60",
+        "label": "How do you think you have complied with your treatment and your risks have reduced since your discharge from hospital?",
+        "context": "Annex: Patient’s comments to support this report > For the patient",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[37]/tr[0]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "patient-authored answer (the patient’s own words, completed with a supervisor’s support); a filler must not invent patient statements; answer goes in the right-hand bordered cell tc[1]"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[37]/tr[0]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "How do you think you  have complied with your treatment and your  risks have reduced since your  discharge from hospital ?   "
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A61",
+        "label": "Anything else you like to tell Ministry of Justice (MoJ)",
+        "context": "Annex: Patient’s comments to support this report > For the patient",
+        "kind": "long_text",
+        "slots": [
+          "word/document.xml#b/tbl[38]/tr[0]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "patient-authored answer (the patient’s own words, completed with a supervisor’s support); a filler must not invent patient statements; answer goes in the right-hand bordered cell tc[1]"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[38]/tr[0]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Anything else  you like  to tell  Ministry of Justice (MoJ)    "
+        }
+      ]
+    },
+    {
+      "expected": {
+        "id": "A62",
+        "label": "Please confirm that the patient has had sight of this report and/or had an opportunity to add their comments, if appropriate or necessary.",
+        "context": "Annex: Patient’s comments to support this report > For the social and clinical supervisors",
+        "kind": "text",
+        "slots": [
+          "word/document.xml#b/tbl[39]/tr[0]/tc[1]"
+        ],
+        "location": "table",
+        "duplicate_label": false,
+        "notes": "supervisor confirmation entered as free text in a bordered box (no checkbox or Yes/No options printed)"
+      },
+      "source": [
+        {
+          "slot": "word/document.xml#b/tbl[39]/tr[0]/tc[1]",
+          "existing_text": "",
+          "previous_sibling_text": "Please confirm that the patient has  had sight of this  report  and /or  had an opportunity to add their comments , if appropriate or necessary.         "
+        }
+      ]
+    }
+  ]
+}
