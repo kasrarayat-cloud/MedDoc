@@ -73,7 +73,11 @@ LEGACY_FIELDS = [{'key': 'symptoms', 'label': 'Symptoms', 'kind': 'text', 'locat
 
 class ReversingTheV3MappingReviewMigration(TransactionTestCase):
     """The verifier's MIG-2 input: two contract v3 mappings, A confirmed (one MappingConfirmation row) and B never
-    confirmed, beside a legacy mapping; then `migrate core 0020`."""
+    confirmed, beside a legacy mapping; then `migrate core 0020`.
+
+    Since R1, 0031 refuses the same evidence first, at the leaf, with nothing reversed (next class). To exercise 0021's
+    own guard, each evidence test first reverses 0031 while no evidence exists and writes its rows at 0030, as this code
+    would there; the reverse then reaches 0021, which must still refuse."""
 
     def setUp(self):
         self.user = User.objects.create_user(username='mig2', email='mig2@synthetic.invalid', verified_at=timezone.now())
@@ -90,6 +94,12 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
 
     def version(self, template, fields, **extra):
         return TemplateVersion.objects.create(template=template, number=1, fields=fields, created_by=self.user, **extra)
+
+    @staticmethod
+    def at_0030():
+        """Reverse 0031 while no v3 evidence exists (allowed), so the rows written next reach 0021's own guard."""
+        MigrationExecutor(connection).migrate([BEFORE_0031])
+        assert not gate_installed() and BEFORE_0031 in applied() and ('core', '0031_previous_release_mapping_writes') not in applied()
 
     @staticmethod
     def evidence():
@@ -109,6 +119,7 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
     def test_reproduce_MIG2_confirmed_and_unconfirmed_v3_mappings_refuse_the_reverse(self):
         """Reproduce: A confirmed, B unconfirmed, then migrate core 0020. Before the repair this printed 'OK', dropped the
         confirmation and both contracts, and after re-applying B no longer needed confirmation (RED: no refusal)."""
+        self.at_0030()
         a = self.version(self.templates[0], v3_fields('pain', 'side'), contract='v3')
         b = self.version(self.templates[1], v3_fields('pain', 'side'), contract='v3')
         self.version(self.templates[2], LEGACY_FIELDS)
@@ -121,6 +132,10 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
             self.assertNotIn(private, str(refused.exception))
         # Refused inside 0021's own transaction: the database stands at 0021 with every row and column intact.
         self.assertEqual(self.evidence(), (True, True, 1, 2))
+        # And the message says what the executor did before it (R1): every later migration is reversed, and stays so.
+        self.assertEqual(max(key[1] for key in applied()), MIGRATION_0021[1])
+        self.assertIn('has already been reversed and stays reversed: run migrate forward', str(refused.exception))
+        self.assertNotIn('Nothing was changed', str(refused.exception))
         to_leaf()
         a, b = TemplateVersion.objects.get(pk=a.pk), TemplateVersion.objects.get(pk=b.pk)
         self.assertEqual((a.contract, b.contract), ('v3', 'v3'))
@@ -133,23 +148,27 @@ class ReversingTheV3MappingReviewMigration(TransactionTestCase):
         self.assertTrue(self.evidence()[0])
 
     def test_an_unconfirmed_v3_mapping_alone_refuses(self):
+        self.at_0030()
         self.version(self.templates[1], v3_fields('pain'), contract='v3')
         self.refused(r'0 mapping confirmation\(s\) and 1 mapping version\(s\)')
 
     def test_recorded_corrections_alone_refuse(self):
         # Corrections are recorded only on v3 versions; a row carrying them would still be erased by the reverse.
+        self.at_0030()
         self.version(self.templates[2], LEGACY_FIELDS, corrections={'base_version': 1, 'removed': [], 'added': ['x'],
                                                                     'kind_changed': {}, 'renamed': []})
         self.refused(r'0 mapping confirmation\(s\) and 1 mapping version\(s\)')
 
     def test_a_confirmation_alone_refuses(self):
+        self.at_0030()
         MappingConfirmation.objects.create(version=self.version(self.templates[2], LEGACY_FIELDS), confirmed_by=self.user)
         self.refused(r'1 mapping confirmation\(s\) and 0 mapping version\(s\)')
 
     def test_a_database_without_v3_evidence_still_reverses_and_reapplies(self):
         """Positive control: only legacy mappings (contract '', no corrections, no confirmation) lose nothing, so the
-        reverse runs and re-applying restores the same rows."""
+        reverse runs from the leaf (0031's guard included) and re-applying restores the same rows."""
         legacy = self.version(self.templates[2], LEGACY_FIELDS)
+        self.assertTrue(gate_installed())
         MigrationExecutor(connection).migrate(BEFORE_0021)
         self.assertEqual(self.evidence(), (False, False, None, None))
         to_leaf()
@@ -307,6 +326,7 @@ class ARefusedRollbackKeepsTheConfirmationGate(TransactionTestCase):
             lambda: MigrationExecutor(connection).migrate([PREVIOUS_RELEASE]),
             r'0 mapping confirmation\(s\) and 1 mapping version\(s\)')
         self.assertNotIn('Nothing was changed', message)
+        self.assertIn('0031_previous_release_mapping_writes cannot be reversed', message)
         # The previous release's draft on that mapping is refused exactly as at the leaf.
         with self.assertRaisesMessage(DatabaseError, GATE), transaction.atomic():
             release_encounter(unconfirmed, self.patient, self.user)
@@ -330,6 +350,19 @@ class ARefusedRollbackKeepsTheConfirmationGate(TransactionTestCase):
         self.assert_refused_with_nothing_reversed(
             lambda: call_command('migrate', 'core', PREVIOUS_RELEASE[1], verbosity=0, interactive=False),
             r'1 mapping confirmation\(s\) and 1 mapping version\(s\)')
+
+    def test_recorded_corrections_alone_refuse_at_the_leaf(self):
+        TemplateVersion.objects.create(template=self.template, number=1, fields=LEGACY_FIELDS, created_by=self.user,
+                                       corrections={'base_version': 1, 'removed': [], 'added': ['x'], 'kind_changed': {},
+                                                    'renamed': []})
+        self.assert_refused_with_nothing_reversed(lambda: MigrationExecutor(connection).migrate([PREVIOUS_RELEASE]),
+                                                  r'0 mapping confirmation\(s\) and 1 mapping version\(s\)')
+
+    def test_a_confirmation_alone_refuses_at_the_leaf(self):
+        legacy = TemplateVersion.objects.create(template=self.template, number=1, fields=LEGACY_FIELDS, created_by=self.user)
+        MappingConfirmation.objects.create(version=legacy, confirmed_by=self.user)
+        self.assert_refused_with_nothing_reversed(lambda: MigrationExecutor(connection).migrate([PREVIOUS_RELEASE]),
+                                                  r'1 mapping confirmation\(s\) and 0 mapping version\(s\)')
 
     def test_reproduce_R1_a_draft_started_while_the_gate_was_missing_cannot_be_finalized(self):
         """The window, made the only way it can still be made: 0031 reversed while no v3 mapping exists, then an

@@ -688,6 +688,9 @@ class ReversingThePaymentModeMigration(SyntheticFixture, TransactionTestCase):
                 MigrationExecutor(connection).migrate(self.BEFORE_0020)
             for private in (live.stripe_session, 'pi_live_rb', 'evt_live_rb', str(live.pk), self.user.email):
                 self.assertNotIn(private, str(refused.exception))
+            # It says what the executor did before reaching it (R1): the later migrations are reversed, not unchanged.
+            self.assertIn('has already been reversed and stays reversed: run migrate forward', str(refused.exception))
+            self.assertNotIn('Nothing was changed', str(refused.exception))
             self.assertIn(('core', '0020_payment_livemode'), MigrationRecorder(connection).applied_migrations())
             self.assertEqual(self.schema(), (2, 5, 3))
             self.assertIs(Payment.objects.get(pk=live.pk).livemode, True)
