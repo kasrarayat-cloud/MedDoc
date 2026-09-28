@@ -199,17 +199,24 @@ _MODIFIERS = ('amod', 'compound', 'nmod', 'poss')
 # unrecognised role still withholds.
 _NOMINAL = ('NOUN', 'PROPN', 'PRON', 'NUM')
 _ARGUMENTS = ('nsubj', 'nsubjpass', 'dobj', 'iobj', 'dative', 'pobj', 'agent')
-# Dependants that may place a clause at another time than its tense alone.
-_TIMED = ('advmod', 'npadvmod', 'advcl', 'tmod', 'obl')
+# Dependants that may place a clause at another time than its tense alone (the
+# pinned parser's labels: it has no "tmod" or "obl").
+_TIMED = ('advmod', 'npadvmod', 'advcl')
 _FUNCTION = ('ADP', 'DET', 'PRON', 'CCONJ', 'SCONJ', 'PART', 'AUX', 'PUNCT', 'SPACE', 'INTJ')
 _READINGS = 64
 _ANSWERS = 'quillmd.v3_literal_facts.answers'
 _CLAIMS = 'quillmd.v3_literal_facts.claims'
 _PREFIX = 4    # letters of a prefix that may reverse a word ("un", "non", "dis", "semi")
 _ACRONYM = 10  # most words one acronym is read as standing for
+# Roles of a written prefix the parser splits off as its own word ("non smoker",
+# "semi conscious"); a determiner, negation or case marker is none.
+_PREFIX_ROLES = ('compound', 'amod', 'advmod', 'nmod', 'npadvmod', 'dep')
 
 
 _HYPHENS = frozenset('\u002d\u2010\u2011')
+# Every dash that may join a written word: Unicode's Pd category and the minus sign.
+_DASHES = ('\u002d\u058a\u05be\u1400\u1806\u2010\u2011\u2012\u2013\u2014\u2015\u2e17\u2e1a\u2e3a\u2e3b\u2e40'
+           '\u2e5d\u301c\u3030\u30a0\ufe31\ufe32\ufe58\ufe63\uff0d\U00010ead\u2212')
 
 
 def _dash(text):
@@ -240,12 +247,31 @@ def _singular(word):
 
 def _surface(token):
     """The whole written word the token belongs to, without its dashes: the
-    tokenizer splits "non-allergic" into three tokens that are one word."""
+    tokenizer splits "non-allergic" or "non\u2013smoker" into tokens that are one
+    word, and keeps "non\u2212compliant" as one token. A short word the parser links
+    directly to it just before it ("non smoker", "semi conscious", "Non allergic")
+    is read as a prefix written apart; that only relates it as a prefixed form,
+    which withholds whatever the prefix means."""
     doc = token.doc; start = end = token.i
-    joined = lambda t: t.text.isalpha() or bool(t.text) and set(t.text) <= _HYPHENS
+    joined = lambda t: t.text.isalpha() or _dash(t.text)
     while start > 0 and not doc[start - 1].whitespace_ and joined(doc[start - 1]): start -= 1
     while end + 1 < len(doc) and not doc[end].whitespace_ and joined(doc[end + 1]): end += 1
-    return _singular(''.join(c for t in doc[start:end + 1] for c in t.text if c not in _HYPHENS).casefold())
+    word = ''.join(c for t in doc[start:end + 1] for c in t.text if not _dash(c))
+    before = start - 1
+    while before >= 0 and _dash(doc[before].text): before -= 1
+    if before >= 0 and before != token.i:
+        prefix = doc[before]
+        if (prefix.text.isalpha() and len(prefix.text) <= _PREFIX
+                and (prefix.head.i == token.i and prefix.dep_ in _PREFIX_ROLES
+                     or token.head.i == prefix.i and prefix.pos_ in _NOMINAL + ('ADJ', 'ADV', 'X'))):
+            word = prefix.text + word
+    return _singular(word.casefold())
+
+
+def _wordlike(token):
+    """A written word, whether or not a dash is written inside it ("non\u2212compliant")."""
+    return token.is_alpha or (any(c.isalpha() for c in token.text)
+                              and all(c.isalpha() or _dash(c) for c in token.text))
 
 
 def _related(a, b):
@@ -336,7 +362,9 @@ def _cover(small, large):
     """Whether every word of ``small`` is a word of ``large``. An acronym stands for
     the run of words whose initials it spells, in either reading ("MAPPA" and
     "Multi-Agency Public Protection Arrangements"), whether or not the note
-    states the apposition itself."""
+    states the apposition itself. A word right after an acronym that begins with
+    the acronym's final letter may restate the word it ends with ("MAPPA
+    arrangements", "HIV virus"), so it is the acronym's own word too."""
     words = {w for w, _ in large}
     missing = [i for i, (w, _) in enumerate(small) if w not in words]
     if not missing: return True
@@ -347,6 +375,8 @@ def _cover(small, large):
             for j in range(i + 2, min(len(small), i + _ACRONYM) + 1):
                 if ''.join(w[0] for w, _ in small[i:j]) in acronyms: covered.update(range(i, j))
     missing = [i for i in missing if i not in covered]
+    if not missing: return True
+    missing = [i for i in missing if not (i > 0 and small[i - 1][1] and small[i - 1][0][-1] == small[i][0][0])]
     if not missing: return True
     if not all(small[i][1] for i in missing): return False
     runs = _initials(large)
@@ -393,7 +423,8 @@ def _conjunct_chain(token):
 
 
 def _negations(tokens):
-    return sum(c.dep_ == 'neg' for t in tokens for c in t.children)
+    # Each token once: the same token may reach the spine by two roles.
+    return sum(c.dep_ == 'neg' for t in {t.i: t for t in tokens}.values() for c in t.children)
 
 
 def _elided(verb):
@@ -406,24 +437,69 @@ def _elided(verb):
         c.dep_ in _PREDICATES + _INDIRECT + ('dobj',) for c in t.children)]
 
 
+def _predicate_prep(token):
+    """The preposition that is the predicate of a copula ("is on MAPPA", "is not at
+    risk of falls") or of a telegraphic subject ("Patient not on methadone"), when
+    the token names its object: the object head, a conjunct or renaming of it, or a
+    noun naming it with the head ("on methadone treatment"); or with the subject
+    and copula omitted ("Not on methadone.", "No longer on methadone."). Beside
+    another complement of the copula it is that complement's part, as _parts reads
+    it ("is tender over the knee"), not a predicate. Returns the preposition, the
+    coordinated preposition heading it ("on MAPPA or on ...") and the object head,
+    or three Nones."""
+    t = token
+    while t.dep_ in ('compound', 'nmod', 'appos', 'conj') and t.head.i != t.i:
+        t = t.head
+    if t.dep_ != 'pobj' or t.head.i == t.i:
+        return None, None, None
+    prep = top = t.head
+    while top.dep_ == 'conj' and top.head.i != top.i and top.head.pos_ == 'ADP':
+        top = top.head
+    if top.dep_ == 'ROOT':
+        return prep, top, t
+    owner = top.head
+    if top.dep_ != 'prep' or owner.i == top.i:
+        return None, None, None
+    if (owner.pos_ == 'AUX' and owner.dep_ not in ('aux', 'auxpass')
+            and not any(c.dep_ in _PREDICATES for c in owner.children)
+            or owner.pos_ in _NOMINAL + ('ADV',) and _conjunct_chain(owner)[-1].dep_ == 'ROOT'):
+        return prep, top, t
+    return None, None, None
+
+
 def _occurrence(token, limit, nested=False):
     """Polarity, time and actor of one predicate occurrence, by syntax only.
 
     Returns None only when the occurrence is provably no claim about the
-    predicate's subject: an attributive modifier of another noun, or a
-    restrictor of a plural class. A noun as an ordinary argument is marked, and
-    opposes only while it carries the selected predicate's own complement. A
+    predicate's subject: a restrictor of a plural class. A modifier of another
+    noun states that noun's property at a polarity only the governing verb's
+    meaning fixes, so it never agrees. A noun as an ordinary argument is marked,
+    and opposes only while it carries the selected predicate's own complement. A
     label, a question or an inverted clause asserts no polarity, whatever the
     word's role.
     """
     chain = _conjunct_chain(token)
     head = chain[-1]
     governor = head.head if head.head.i != head.i else None
-    verb = actor = passive = None
+    verb = actor = passive = modifier = None
     uncertain = argument = extras = False
     unasserted = _label(token) or _question(token)
     spine = list(chain)
-    if head.dep_ in _PREDICATES + _INDIRECT and governor is not None and governor.pos_ in ('AUX', 'VERB'):
+    prep, top, anchor = _predicate_prep(token)
+    if prep is not None:
+        # A prepositional predicate: the copula's (or telegraphic subject's)
+        # polarity, read on the preposition too ("Patient not on methadone").
+        spine += [prep, top]
+        owner = top.head if top.head.i != top.i else None
+        if owner is None:
+            pass  # "Not on methadone.": subject and copula omitted
+        elif owner.pos_ == 'AUX':
+            verb = owner
+        elif owner.pos_ == 'ADV':
+            spine.append(owner)  # "No longer on methadone."
+        else:
+            actor = owner
+    elif head.dep_ in _PREDICATES + _INDIRECT and governor is not None and governor.pos_ in ('AUX', 'VERB'):
         verb = governor
     elif head.dep_ == 'ROOT':
         actor = next((c for c in head.children if c.dep_ in SUBJECTS), None)
@@ -447,10 +523,13 @@ def _occurrence(token, limit, nested=False):
             actor = noun  # "the suicidal patient"
         elif noun.dep_ in _PREDICATES and noun.head.i != noun.i:
             actor, uncertain = _clause_subject(noun.head), True  # "she is a suicidal risk"
-        elif not unasserted:
-            return None  # attributive modifier of another noun: "suicidal ideation"
         else:
-            uncertain = True
+            # A modifier of another noun ("suicidal ideation") states that noun's
+            # property, at a polarity only the governing verb's meaning fixes
+            # ("reports" or "denies"): never agreement. Its actor is the noun's
+            # possessor ("her mother's suicidal ideation" is another person's).
+            actor = next((c for c in noun.children if c.dep_ == 'poss'), None)
+            uncertain, modifier = True, 'adjectival' if head.dep_ == 'amod' else 'nominal'
     elif head.dep_ in _ADVERBIAL and governor is not None and not nested:
         # An adverb of another predicate ("well controlled", "eating well") has that
         # predicate's polarity, at a time never proven different.
@@ -458,7 +537,8 @@ def _occurrence(token, limit, nested=False):
         if base is None:
             uncertain = True
         else:
-            base.update(extras=True, tense=None, argument=False, verb=None)
+            base.update(extras=True, tense=None, argument=False, verb=None, anchor=token, skip=frozenset(),
+                        prep=None, modifier=None, adverbial=True)
             base['uncertain'] = base['uncertain'] or unasserted
             return base
     elif token.pos_ in _NOMINAL and head.dep_ in _ARGUMENTS:
@@ -482,7 +562,7 @@ def _occurrence(token, limit, nested=False):
         uncertain, argument = True, False
     tense = passive
     if verb is not None:
-        embedded = head.dep_ not in _PREDICATES or not _main_clause(verb)
+        embedded = (head.dep_ not in _PREDICATES and prep is None) or not _main_clause(verb)
         uncertain = uncertain or embedded
         actor = _clause_subject(verb)
         auxiliaries = [c for c in verb.children if c.dep_ in ('aux', 'auxpass')]
@@ -496,9 +576,11 @@ def _occurrence(token, limit, nested=False):
         # overlap, and reported speech shifts tense ("she said she was not").
         if not embedded and not auxiliaries and 'Fin' in verb.morph.get('VerbForm') and len(value) == 1:
             tense = value[0]
-    extras = extras or any(c.dep_ in _TIMED for t in chain + ([verb] if verb is not None else []) for c in t.children)
     return {'negative': negative, 'uncertain': uncertain, 'tense': tense, 'extras': extras,
-            'patient': _possible_patient(actor), 'argument': argument, 'verb': verb}
+            'patient': _possible_patient(actor), 'argument': argument, 'verb': verb,
+            'anchor': anchor if anchor is not None else token,
+            'skip': frozenset(t.i for t in (prep, top) if t is not None),
+            'prep': prep.text.casefold() if prep is not None else None, 'modifier': modifier, 'adverbial': False}
 
 
 def _answers(doc):
@@ -528,14 +610,16 @@ def _question(token):
     return token.i in _answers(token.doc)[1]
 
 
-def _parts(token, verb, limit):
+def _parts(token, verb, limit, skip=frozenset()):
     """Each prepositional complement, keyed by its preposition, whether the parser
-    attaches it to the predicate or to the copula ("tender over the knee")."""
+    attaches it to the predicate or to the copula ("tender over the knee"). The
+    predicate's own preposition (``skip``: "is on MAPPA") is the predicate, not a part."""
     doc = token.doc; parts = {}
     for owner in [token] + ([verb] if verb is not None else []):
         for prep in owner.children:
-            if prep.dep_ != 'prep' or prep.i >= limit: continue
-            part = parts.setdefault(prep.text.casefold(), {'readings': set(), 'indices': set(), 'wild': False})
+            if prep.dep_ != 'prep' or prep.i >= limit or prep.i in skip: continue
+            part = parts.setdefault(prep.text.casefold(), {'readings': set(), 'indices': set(), 'wild': False,
+                                                           'heads': set()})
             readings = {tuple(i for i in r if i != prep.i) for r in _topic_readings(prep, limit, nested=True)}
             inner = [t for t in prep.subtree if t.dep_ == 'prep' and t.i != prep.i and t.i < limit]
             # Each reading records the prepositions of the qualifiers it leaves out: one
@@ -543,6 +627,8 @@ def _parts(token, verb, limit):
             part['readings'] |= {(_words(doc, r), frozenset(t.text.casefold() for t in inner
                                   if t.i not in r and (t.head.i in r or t.head.i == prep.i))) for r in readings}
             part['indices'] |= set().union(*readings)
+            # The object it names (an acronym renaming it is read by its spelling).
+            part['heads'] |= {_singular(o.text.casefold()) for o in prep.children if o.dep_ == 'pobj' and o.i < limit}
             if len(part['readings']) > _READINGS: raise _Unbounded()
             # "allergic to any medication", "subject to no arrangements"
             part['wild'] |= any(_quantifier(t) for t in prep.subtree if t.i < limit)
@@ -553,17 +639,33 @@ def _parts(token, verb, limit):
     return parts
 
 
+def _bare(token, verb, anchor, skip, extras):
+    """Whether a clause states nothing beyond its predicate: no elided clause, no
+    adverbial anywhere in it ("today", "no longer", "when discharged"), and no
+    prepositional phrase other than the predicate's own complements, so none
+    nested inside them ("MAPPA as of this week") or coordinated with them ("or to
+    a curfew at today's review"). Only such a past proves another time."""
+    chain = _conjunct_chain(token)
+    direct = {t.i for t in chain} | {anchor.i} | ({verb.i} if verb is not None else set())
+    clause = list((verb if verb is not None else chain[-1]).subtree)
+    return (not extras and not any(t.dep_ in _TIMED for t in clause)
+            and all(t.head.i in direct or t.i in skip for t in clause if t.dep_ == 'prep' or t.pos_ == 'ADP'))
+
+
 def _claim(token):
     doc = token.doc
     limit = _limit(token)
     occurrence = _occurrence(token, limit)
     if occurrence is None: return None
     verb = occurrence.pop('verb')
+    anchor = occurrence.pop('anchor')  # the token, or the object head of a prepositional predicate
+    skip = occurrence.pop('skip')      # the predicate's own preposition, never a part
+    occurrence['bare'] = occurrence['tense'] is not None and _bare(token, verb, anchor, skip, occurrence['extras'])
     # The claim's own clause: its subtree without its coordinated heads (each is
     # its own occurrence), and the copula's other dependants, subject included.
     chain = {t.i for t in _conjunct_chain(token)}
-    coordinated = {t.i for c in token.children if c.dep_ == 'conj' for t in c.subtree}
-    scope = [t for t in token.subtree if t.i not in coordinated]
+    coordinated = {t.i for c in anchor.children if c.dep_ == 'conj' for t in c.subtree}
+    scope = [t for t in anchor.subtree if t.i not in coordinated]
     if verb is not None:
         scope += [t for c in verb.children if c.dep_ != 'conj' and c.i not in chain for t in c.subtree]
     if any(_quantifier(t) or t.dep_ == 'preconj' for t in scope if t.i < limit):
@@ -571,11 +673,16 @@ def _claim(token):
         # a claim over a neither/either coordination ("Neither the patient nor ...").
         occurrence['uncertain'] = True
     try:
-        core = {tuple(i for i in r if i != token.i) for r in _topic_readings(token, limit, top=True)}
-        parts = _parts(token, verb, limit)
+        core = {tuple(i for i in r if i != token.i) for r in _topic_readings(anchor, limit, top=True)}
+        parts = _parts(anchor, verb, limit, skip)
     except _Unbounded:
         core = parts = None  # compared by its head word alone, which only withholds
-    claim = {'word': _surface(token), **occurrence}
+    # A nominal predicate by its role, never its tag (the tagger calls "tender" a noun):
+    # a noun complement ("is a smoker") or a prepositional predicate's object.
+    nominal = bool(skip) or _conjunct_chain(token)[-1].dep_ == 'attr'
+    claim = {'word': _surface(token), 'nominal': nominal, **occurrence}
+    claim['heads'] = frozenset({claim['word'], _singular(anchor.text.casefold())}
+                               | set().union(*(part['heads'] for part in (parts or {}).values())))
     if core is None:
         claim.update(core=None, core_full=(), parts={}, vocabulary=(), content=())
         return claim
@@ -611,24 +718,31 @@ def _covered(small, large):
 
 
 def _different_time(a, b):
-    """Two simple tenses are two times only when the past one is bare: a time
-    adverbial ("today ... was not"), a qualifier the present one lacks ("at
-    today's review", "until May") or an elided clause ("but is not now") may
-    place it now."""
+    """Two simple tenses are two times only when the past one is bare (see _bare):
+    a time adverbial anywhere in it ("today ... was not", "on the ward today"), a
+    nested or coordinated qualifier ("MAPPA as of this week"), a qualifier the
+    present one lacks ("at today's review") or an elided clause ("but is not now")
+    may place it now."""
     if a['tense'] is None or b['tense'] is None or a['tense'] == b['tense']: return False
     past, present = (a, b) if a['tense'] == 'Past' else (b, a)
-    return past['tense'] == 'Past' and not past['extras'] and set(past['parts']) <= set(present['parts'])
+    return past['tense'] == 'Past' and past['bare'] and set(past['parts']) <= set(present['parts'])
 
 
 def _opposes(selected, other):
     relation = _related(selected['word'], other['word'])
     if relation is None or not (selected['patient'] and other['patient']):
         return False
+    if relation == 'prefixed' and other['adverbial']:
+        return False  # an adverb of another predicate ("less severe") is no form of this word
+    if relation == 'same' and other['modifier'] == 'nominal' and selected['nominal']:
+        return False  # a noun classifying another noun ("Smoker status") predicates nothing
     uncertain = selected['uncertain'] or other['uncertain'] or relation == 'prefixed'
+    if selected['prep'] and other['prep'] and selected['prep'] != other['prep']:
+        return False  # another preposition is another predicate ("off methadone")
     if other['argument']:
         # A noun used as an ordinary argument states no predicate, unless it carries
         # the selected predicate's own complement (an inverted predicate misread).
-        if not set(selected['parts']) & set(other['parts']): return False
+        if selected['prep'] or not set(selected['parts']) & set(other['parts']): return False
         uncertain = True
     if not uncertain and selected['negative'] == other['negative']:
         return False
@@ -641,39 +755,54 @@ def _opposes(selected, other):
 
 
 def _segments(doc, answered=False):
-    """Label text before a separator or an interjection answer, a question before
-    its mark, and a whole unit answered by the next one ("MAPPA." then "No."):
-    the answer is not read here."""
+    """Label text before a separator or an interjection answer, with the answer
+    after it; a question before its mark, with what follows it; and a whole unit
+    answered by the next one ("MAPPA." then "No."), whose answer is not read here."""
     for sentence in doc.sents:
         start = sentence.start
-        for t in sentence:
-            if _answered(t) or '?' in t.text:
-                yield doc[start:t.i]
-                start = t.i + 1
+        marks = [t.i for t in sentence if _answered(t) or '?' in t.text]
+        for n, i in enumerate(marks):
+            yield doc[start:i], doc[i + 1:marks[n + 1] if n + 1 < len(marks) else sentence.end]
+            start = i + 1
     if answered:
-        yield doc[:]
+        yield doc[:], None
 
 
-def _names_topic(segment, claim):
-    """A label or question whose content words, outside its subject, are all the
-    selected predicate's own ("MAPPA: No.", "Is the patient on MAPPA? No.")."""
+def _value(answer):
+    """A plain nonzero number ("MAPPA level: 2"): the only answer read after a label."""
+    words = [t for t in answer if not (t.is_punct or t.is_space)] if answer is not None else []
+    return bool(words) and all(t.text.isascii() and t.text.isdigit() for t in words) and any(
+        int(t.text) for t in words)
+
+
+def _names_topic(segment, answer, claim):
+    """A label or question about the selected predicate: its content words, outside
+    its subject, are all the predicate's own ("MAPPA: No.", "Is the patient on
+    MAPPA? No."), or it names the predicate or its object with a word of its own
+    ("MAPPA status: none."), whose answer only that word's meaning reads, unless
+    the answer is a plain nonzero number ("MAPPA level: 2")."""
     # The subject names who is asked about; a phrase the parser hangs on it is
     # still asked ("Is the patient on MAPPA?").
     subject = {i for s in segment if s.dep_ in SUBJECTS
                for i in [s.i, *(t.i for c in s.children if c.dep_ != 'prep' for t in c.subtree)]}
     words = tuple((_singular(t.text.casefold()), len(t.text) > 1 and t.text.isalpha() and t.text.isupper())
                   for t in segment if (t.is_alpha or t.like_num) and t.pos_ not in _FUNCTION and t.i not in subject)
-    return bool(words) and _cover(words, claim['vocabulary'])
+    if not words: return False
+    if _cover(words, claim['vocabulary']): return True
+    named = any(w in claim['heads'] or acronym and _cover(((w, True),), claim['vocabulary']) for w, acronym in words)
+    return named and not _value(answer)
 
 
 def _selected_claims(doc):
     """Every copular complement of the selected statement, read by its role."""
     claims = []
     for token in doc:
-        if not token.is_alpha: continue
+        if not _wordlike(token): continue
         head = _conjunct_chain(token)[-1]
         governor = head.head
         if ((head.dep_ in _PREDICATES and governor.i != head.i and governor.pos_ in ('AUX', 'VERB'))
+                # a prepositional predicate's object, or a conjunct or renaming of it
+                or (token.dep_ not in ('compound', 'nmod') and _predicate_prep(token)[0] is not None)
                 or (head.dep_ == 'ROOT' and token.pos_ == 'ADJ')
                 # the tagger reads "is oriented" as a passive participle, "is orientated" as acomp
                 or (head.dep_ == 'ROOT' and token.pos_ == 'VERB' and any(c.dep_ == 'auxpass' for c in head.children))
@@ -688,7 +817,7 @@ def _occurrences(doc, words):
     shared by every field that revalidates against this source."""
     cache = doc.user_data.setdefault(_CLAIMS, {})
     if None not in cache:
-        cache[None] = tuple(_surface(t) if t.is_alpha else '' for t in doc)
+        cache[None] = tuple(_surface(t) if _wordlike(t) else '' for t in doc)
     surfaces = cache[None]
     for token in doc:
         if surfaces[token.i] and any(_related(w, surfaces[token.i]) for w in words):
@@ -701,7 +830,14 @@ _WORD = re.compile(r'[^\W\d_]+(?:[\u002d\u2010\u2011][^\W\d_]+)*')
 _SPACED_DASH = re.compile(r'[\u2012-\u2015]|(?:^|\s)[\u002d\u2010\u2011\u2212]|[\u002d\u2010\u2011\u2212](?:\s|$)')
 
 
-_ANSWER = 64  # longest unit read as a bare answer to the unit before it ("No.")
+
+def _fragment(doc):
+    """A unit with a word or number but no clause of its own: no subject and no
+    finite verb ("None.", "Not applicable.", "Denied.", "N/A.", "0."), whatever the
+    tagger calls its words. After a unit, it may be that unit's answer."""
+    return (any(not (t.is_punct or t.is_space) for t in doc)
+            and not any(t.dep_ in SUBJECTS + ('expl', 'csubj', 'csubjpass') for t in doc)
+            and not any('Fin' in t.morph.get('VerbForm') for t in doc))
 
 
 def _stems(words):
@@ -779,16 +915,21 @@ def opposed_ids(selected, reading):
                 if not claims: continue
                 words = {c['word'] for c in claims}
                 vocabulary = {w for c in claims for w, _ in c['content']}
+                # and each acronym the predicate's words spell ("MAPPA status: none." against
+                # "subject to Multi-Agency Public Protection Arrangements")
+                vocabulary |= {run for c in claims for run in _initials(c['vocabulary'])}
                 units = reading['units']
                 following = {u['id']: units[n + 1] for n, u in enumerate(units[:-1])}
 
                 def answered(u):
-                    # A unit answered by a bare interjection unit ("Subject to MAPPA." then
-                    # "No.") is a prompt: its own syntax asserts no polarity.
+                    # A unit followed by a fragment ("Subject to MAPPA." then "No.", "None.",
+                    # "Not applicable." or "Denied.") is a prompt: its own syntax asserts no
+                    # polarity. A following unit too long to read may be one as well.
                     after = following.get(u['id'])
-                    return after is not None and 0 < len(after['quote']) <= _ANSWER and any(
-                        any(t.pos_ == 'INTJ' for t in doc) and all(t.pos_ in ('INTJ', 'PUNCT', 'SPACE') for t in doc)
-                        for doc in parsed(readings_of(after['quote'])))
+                    if after is None or not after['quote']: return False
+                    texts = readings_of(after['quote'])
+                    return (any(len(t) > syntax.MAX_CHARACTERS for t in texts)
+                            or any(_fragment(doc) for doc in parsed(texts)))
                 others = []
                 for u in units:
                     if u['id'] == unit['id']: continue
@@ -805,7 +946,7 @@ def opposed_ids(selected, reading):
                         if prompt:
                             occurrences = [dict(c, uncertain=True, argument=False) for c in occurrences]
                         if (any(_opposes(claim, other) for other in occurrences for claim in claims)
-                                or any(_names_topic(segment, claim) for segment in _segments(doc, prompt)
+                                or any(_names_topic(segment, answer, claim) for segment, answer in _segments(doc, prompt)
                                        for claim in claims)):
                             held.add(unit['id']); break
                     if unit['id'] in held: break

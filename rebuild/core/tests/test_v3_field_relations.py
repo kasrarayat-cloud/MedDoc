@@ -408,18 +408,11 @@ class OrdinaryFieldRelations(SimpleTestCase):
             self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
 
     def test_attributive_adverbial_and_different_site_uses_keep_ordinary_answers_useful(self):
-        # FH-1: an adjective modifying another noun is no claim about the patient.
-        for selected, other in (('The patient is not suicidal.', 'She denies suicidal ideation.'),
-                                ('The patient is not suicidal.', 'No suicidal ideation was reported.'),
-                                ('The patient is not suicidal.', 'She has no suicidal thoughts.'),
-                                ('The patient is not psychotic.', 'No psychotic symptoms were elicited.'),
-                                ('The patient is not depressed.', 'Depressed mood was not observed.'),
-                                ('The patient is not homeless.', 'The homeless outreach team closed his case.'),
-                                ('The patient is not febrile.', 'A febrile illness last month was treated by the GP.'),
-                                ('The patient is not violent.', 'He has a history of violent offending.'),
-                                ('The patient is not diabetic.', 'Diabetic eye screening letters were sent in error.')):
-            self.assert_useful(selected, other, 'Risk assessment')
+        # FH-1: a restrictor of a plural class and another person's possessed noun are
+        # no claim about the patient. (An attributive use of the same word otherwise
+        # withholds, whichever way its verb reads it: see R2-1 below.)
         self.assert_useful('The patient is not subject to MAPPA.', 'Patients subject to MAPPA are reviewed monthly.', self.MAPPA)
+        self.assert_useful('The patient is not suicidal.', "Her mother's suicidal ideation was discussed.", 'Risk assessment')
         # FH-2: an adverb of another verb with the same polarity, or a noun modifier, is no opposite.
         for other in ('Blood glucose is well controlled.', 'The wound is well healed.', 'She is eating and drinking well.',
                       'She tolerated the procedure well.', 'The patient is well known to the service.',
@@ -466,7 +459,7 @@ class OrdinaryFieldRelations(SimpleTestCase):
             self.assert_opposed('The patient is subject to MAPPA level 2.', other, self.MAPPA)
         # Positive controls: a label or a negative that adds its own words, a bare past,
         # and a different object stay useful.
-        for other in ('MAPPA coordinator: Jane Smith.', 'MAPPA level: 2.', 'The patient is not subject to MAPPA level 3.',
+        for other in ('MAPPA level: 2.', 'The patient is not subject to MAPPA level 3.',
                       'Her partner is not subject to MAPPA.', 'The patient was not subject to MAPPA.'):
             self.assert_useful(self.FULL, other, self.MAPPA)
         self.assert_useful('The patient is not subject to Multi-Agency Public Protection Arrangements (MAPPA).',
@@ -494,6 +487,26 @@ class OrdinaryFieldRelations(SimpleTestCase):
                                 ('The patient is not febrile.', 'A febrile episode occurred this morning.'),
                                 ('The patient is not homeless.', 'She sleeps rough as a homeless person.')):
             self.assert_opposed(selected, other, self.RISK)
+        # The same syntax with an agreeing verb is no different to the reader: "denies",
+        # "not observed", a negative determiner or a classifying use ("outreach team")
+        # would each need a word's meaning to agree, and no word list decides that.
+        # These were useful at 050fa1da (FH-1) and are held again, as at c8f22ac6.
+        for selected, other in (('The patient is not suicidal.', 'She denies suicidal ideation.'),
+                                ('The patient is not suicidal.', 'No suicidal ideation was reported.'),
+                                ('The patient is not suicidal.', 'She has no suicidal thoughts.'),
+                                ('The patient is not psychotic.', 'No psychotic symptoms were elicited.'),
+                                ('The patient is not depressed.', 'Depressed mood was not observed.'),
+                                ('The patient is not homeless.', 'The homeless outreach team closed his case.'),
+                                ('The patient is not febrile.', 'A febrile illness last month was treated by the GP.'),
+                                ('The patient is not violent.', 'He has a history of violent offending.'),
+                                ('The patient is not diabetic.', 'Diabetic eye screening letters were sent in error.'),
+                                ('The patient is suicidal.', 'No suicidal ideation was reported.'),
+                                ('The patient is not suicidal.', 'Her suicidal ideation persists.'),
+                                # an adjective modifier of a nominal predicate's word, and a noun
+                                # modifier of an adjectival one (the role decides, not the tag)
+                                ('The patient is not a diabetic.', 'Diabetic retinopathy was found.'),
+                                ('The patient is not tender over the knee.', 'Tender points were examined over the knee.')):
+            self.assert_opposed(selected, other, self.RISK)
 
     def test_a_prepositional_copular_predicate_is_a_claim(self):
         # R2-2: "is on MAPPA" / "is not on MAPPA" is the same copular claim with a
@@ -509,6 +522,31 @@ class OrdinaryFieldRelations(SimpleTestCase):
                                  'The patient is not under the care of the community team.'),
                                 ('The patient is on methadone.', 'The patient is not on methadone.')):
             self.assert_opposed(selected, other, self.MAPPA)
+        # Telegraphic, contracted, adverbial, labelled and more specific spellings of it.
+        for selected, other in (('The patient is on methadone.', 'Patient not on methadone.'),
+                                ('The patient is on methadone.', "The patient isn't on methadone."),
+                                ('The patient is on MAPPA.', 'The patient is no longer on MAPPA.'),
+                                ('The patient is on MAPPA.', 'On MAPPA: no.'),
+                                ('The patient is on MAPPA.', 'The patient is not on MAPPA at present.'),
+                                ('The patient is not on methadone.', 'The patient is on methadone treatment.'),
+                                ('The patient is not on the child protection register.',
+                                 'The patient is on the CP register.'),
+                                # subject and copula omitted, and a coordinated preposition
+                                ('The patient is on methadone.', 'Not on methadone.'),
+                                ('The patient is on methadone.', 'No longer on methadone.'),
+                                ('The patient is on MAPPA.', 'The patient is not on a curfew or on MAPPA.')):
+            self.assert_opposed(selected, other, self.MAPPA)
+        # Positive controls: another object or preposition, an ordinary argument or a
+        # classifying noun, a bare past and an agreeing coordination stay useful. A
+        # preposition beside another complement is that complement's part ("tender
+        # over the lateral epicondyle", above), not a predicate.
+        for other in ('The patient is not on diazepam.', 'Methadone was collected from the pharmacy.',
+                      'Methadone dose was reviewed.', 'The patient was not on methadone.',
+                      'The patient is not off methadone.', 'The patient is on methadone and diazepam.',
+                      'Methadone 60 ml daily.'):
+            self.assert_useful('The patient is on methadone.', other, self.MAPPA)
+        for other in ('The patient is not at risk of self-harm.', 'Risk of falls was discussed at the meeting.'):
+            self.assert_useful('The patient is at risk of falls.', other, self.MAPPA)
 
     def test_a_one_word_answer_in_the_next_unit_is_an_answer_whatever_its_tag(self):
         # R2-3: the tagger reads "None." as a noun and "Denied." as a verb, not an interjection.
@@ -517,6 +555,18 @@ class OrdinaryFieldRelations(SimpleTestCase):
         # "A. The patient ..." is read as one unit, so only the refuter's order applies.
         self.assert_opposed(self.FULL, 'Subject to MAPPA. N/A.', self.MAPPA,
                             orders=[self.FULL + ' Subject to MAPPA. N/A.'])
+        for answer in ('Yes.', '0.'):
+            self.assert_opposed(self.FULL, 'Subject to MAPPA. ' + answer, self.MAPPA)
+        # A following unit too long to read may be the answer too.
+        long = 'The patient attends the clinic and ' * 30 + 'is well.'
+        self.assertGreater(len(long), 1000)
+        self.assert_opposed(self.FULL, 'Subject to MAPPA. ' + long, self.MAPPA,
+                            orders=[self.FULL + ' Subject to MAPPA. ' + long])
+        # A telegraphic agreeing statement, alone or before a clause with a subject or
+        # a finite verb of its own, is no prompt.
+        for other in ('Subject to MAPPA.', 'Subject to MAPPA. The patient attends monthly reviews.',
+                      'Subject to MAPPA. Attends monthly reviews.', 'Subject to MAPPA. Officer to attend reviews.'):
+            self.assert_useful(self.FULL, other, self.MAPPA)
 
     def test_a_time_phrase_nested_in_the_predicate_is_not_a_bare_past(self):
         # R2-4: the parser hangs the time phrase inside the complement's own phrase.
@@ -525,21 +575,44 @@ class OrdinaryFieldRelations(SimpleTestCase):
             self.assert_opposed(self.FULL, other, self.MAPPA)
         self.assert_opposed('The patient is not agitated.', 'The patient was agitated and aggressive on the ward today.',
                             'Mental state')
+        # An adverbial anywhere in the past clause, a subordinate clause included.
+        for other in ('The patient was subject to MAPPA today.', 'The patient was subject to MAPPA when she was discharged.'):
+            self.assert_opposed('The patient is not subject to MAPPA.', other, self.MAPPA)
+        self.assert_opposed(self.FULL, 'The patient was not subject to MAPPA, having been discharged.', self.MAPPA)
+        # An elided present clause ("but is not") is no bare past either.
+        self.assert_opposed(self.FULL, 'The patient was subject to MAPPA but is not.', self.MAPPA)
 
     def test_a_prefix_written_with_a_space_or_any_dash_is_a_prefixed_form(self):
-        # R2-5: "non smoker", "non–smoker" and "non−compliant" are the prefixed words of CL-8.
+        # R2-5: "non smoker", "non\u2013smoker" and "non\u2212compliant" are the prefixed words of CL-8.
         for selected, other, label in (
                 ('The patient is allergic to penicillin.', 'The patient is non allergic to penicillin.', 'Allergies'),
                 ('The patient is a smoker.', 'The patient is a non smoker.', 'Smoking status'),
                 ('The patient is a smoker.', 'Non smoker.', 'Smoking status'),
-                ('The patient is a smoker.', 'The patient is a non–smoker.', 'Smoking status'),
+                ('The patient is a smoker.', 'The patient is a non\u2013smoker.', 'Smoking status'),
                 ('The patient is tender over the left knee.', 'The patient is non tender over the left knee.',
                  'Examination findings'),
                 ('The patient is compliant with medication.', 'The patient is non compliant with medication.',
                  'Clinical observation'),
-                ('The patient is compliant with medication.', 'The patient is non−compliant with medication.',
-                 'Clinical observation')):
+                ('The patient is compliant with medication.', 'The patient is non\u2212compliant with medication.',
+                 'Clinical observation'),
+                ('The patient is a smoker.', 'The patient is an ex smoker.', 'Smoking status'),
+                ('The patient is conscious.', 'The patient is semi conscious.', 'Clinical observation'),
+                ('The patient is allergic to penicillin.', 'Non allergic to penicillin.', 'Allergies'),
+                ('The patient is a smoker.', 'The patient is a non \u2013 smoker.', 'Smoking status'),
+                # the parser leaves "non" unlinked: only the written word joins them
+                ('The patient is allergic to penicillin.', 'The patient is non\u2013allergic to penicillin.', 'Allergies')):
             self.assert_opposed(selected, other, label)
+        # An adverb of the copula, or a longer word before the predicate, is no prefix.
+        for selected, other, label in (
+                ('The patient is allergic to penicillin.', 'The patient is also allergic to latex.', 'Allergies'),
+                ('The patient is a smoker.', 'The patient is a cigarette smoker.', 'Smoking status'),
+                ('The patient is stable.', 'She is now stable.', 'Clinical observation')):
+            self.assert_useful(selected, other, label)
+        # Every dash that may join a word: Unicode's Pd category and the minus sign.
+        import unicodedata
+        from core import v3_literal_facts as literal
+        self.assertEqual(set(literal._DASHES), {chr(c) for c in range(0x110000)
+                                                if unicodedata.category(chr(c)) == 'Pd'} | {'\u2212'})
 
     def test_an_acronym_followed_by_the_word_it_ends_with_is_the_acronym(self):
         # R2-6: "MAPPA arrangements" restates the final word MAPPA stands for.
@@ -547,12 +620,30 @@ class OrdinaryFieldRelations(SimpleTestCase):
                             self.MAPPA)
         self.assert_opposed('The patient is not subject to MAPPA arrangements.', 'The patient is subject to MAPPA.',
                             self.MAPPA)
+        # A word the acronym does not end with, or one after a word that is no acronym,
+        # stays another topic.
+        self.assert_useful('The patient is subject to MAPPA.', 'The patient is not subject to MAPPA level 3.', self.MAPPA)
+        self.assert_useful('The patient is subject to the order.', 'The patient is not subject to the order restrictions.',
+                           'Status under the order')
 
     def test_a_label_naming_the_topic_with_an_unread_answer_withholds(self):
         # R2-7: a label word that names no value of its own ("status") does not make
         # the answer after it another topic.
         for other in ('MAPPA status: none.', 'MAPPA status: not applicable.'):
             self.assert_opposed(self.FULL, other, self.MAPPA)
+        # Only a plain nonzero number is read as a value after such a label: a name
+        # or any word may carry the polarity ("Nil", "Case Closed"), so it withholds.
+        for other in ('MAPPA coordinator: Jane Smith.', 'MAPPA coordinator: none.', 'MAPPA level: 0.',
+                      'MAPPA status: none now.'):
+            self.assert_opposed(self.FULL, other, self.MAPPA)
+        # The acronym the predicate's own words spell names it too.
+        for other in ('MAPPA status: none.', 'MAPPA: No.'):
+            self.assert_opposed('The patient is subject to Multi-Agency Public Protection Arrangements.', other,
+                                self.MAPPA)
+        for other in ('MAPPA level: 2.', 'Child protection plan: none.'):
+            self.assert_useful(self.FULL, other, self.MAPPA)
+        self.assert_useful('The patient is subject to Multi-Agency Public Protection Arrangements.',
+                           'MAPPA level: 2.', self.MAPPA)
 
     def test_an_adverb_of_another_predicate_is_not_a_prefixed_form(self):
         # R2-8: "less" in "less severe" qualifies "severe"; it is no reading of "homeless".
