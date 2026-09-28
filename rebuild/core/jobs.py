@@ -221,9 +221,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if kind=='generation' and generation_batch.needed(encounter.template_version.fields, encounter.notes,
                                                       config or generation.configuration(encounter.template_version.fields)):
         return batch_jobs.enqueue(encounter,user,config or generation.configuration(encounter.template_version.fields),expected_revision)
-    e=Encounter.objects.select_for_update().get(pk=encounter.pk)
-    from .disposition_execution import require_access
-    require_access(e.pk)
+    from .disposition_execution import lock_available
+    e=lock_available(encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
     if expected_revision is not None and e.revision!=expected_revision:

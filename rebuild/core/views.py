@@ -41,6 +41,12 @@ def error_message(exc):
     return '; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc)
 
 
+def unavailable(exc):
+    """A refusal because the document itself is gone (disposed of while the request ran): its page would be a 404."""
+    from .disposition_execution import DocumentUnavailable
+    return isinstance(exc,DocumentUnavailable)
+
+
 def document_backend(info):
     if not info.get('backend'):return {}
     result={key:info.get(key) for key in ('backend','source_sha256','mapping_digest')}
@@ -1044,7 +1050,9 @@ def generate_view(request,pk):
             messages.info(request,'These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.')
         else:
             messages.success(request,'Generation queued. Refresh this page to view the result.')
-    except ValidationError as exc:messages.error(request,error_message(exc))
+    except ValidationError as exc:
+        messages.error(request,error_message(exc))
+        if unavailable(exc):return redirect('dashboard')
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -1526,6 +1534,7 @@ def voice(request,pk):
     except ValidationError as exc:
         if relative:cleanup_file(private_path(relative))
         messages.error(request,error_message(exc))
+        if unavailable(exc):return redirect('dashboard')
     except DatabaseError:
         # enqueue is one transaction, so a database failure (a lock timeout, a deadlock victim, a lost connection) rolled
         # all of it back: nothing was queued, held, sent or charged. The stored recording has no owner; remove it (RF-1).
@@ -1580,6 +1589,10 @@ def voice_approve(request,pk):
         messages.success(request,f"Transcription queued with your approved limit of ${data['charge_limit']}.")
     except ValidationError as exc:
         messages.error(request,error_message(exc))
+        if unavailable(exc):
+            # The document is gone, so nothing can ever approve this recording: remove it now, not at the reaper's window.
+            cleanup_file(path)
+            return redirect('dashboard')
     except OSError:
         messages.error(request,'The quoted recording is no longer available. Upload it again; nothing was sent.')
     return redirect('encounter_detail',pk=pk)
