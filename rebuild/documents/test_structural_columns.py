@@ -155,7 +155,7 @@ class CodedColumnSequences(unittest.TestCase):
                     ('Heart palpation', ['Normal', 'Abnormal']),
                     ('Carotid artery Auscultation/Pain (systolic bruit)', ['Absent', 'Present']),
                     ('Abdominal artery auscultation (bruit)', ['Absent', 'Present']),
-                    ('Cervical Posterior', ['Normal', 'Enlarged', 'Tender']),
+                    ('Posterior', ['Normal', 'Enlarged', 'Tender']),
                     ('Anterior', ['Normal', 'Enlarged', 'Tender']),
                     ('Axillary', ['Normal', 'Enlarged', 'Tender'])])
                 self.assertTrue(all('Cervical' in f['context'] for f in fields[3:]))
@@ -494,3 +494,108 @@ class WitnessOwnsItsRendering(unittest.TestCase):
         typed = next(f for f in proposal['fields'] if f['label'] == 'Palpation' and not f.get('layout_candidate'))
         prepared, _, _ = layout_source.prepare(raw, mapping=proposal['fields'], answers={typed['key']: '1 ☐ 2 ☐'})
         self.assertEqual(prepared['manifest']['candidates'][0]['rendered_source']['source_occurrences'], 2)
+
+
+class CodedSourceScope(unittest.TestCase):
+    """Refutation 2026-09-28 A2-A5, B2, B4: what a coded source may and may not name."""
+
+    def proposal(self, raw):
+        proposal, _, _ = layout_source.prepare(raw)
+        return [f for f in proposal['fields'] if f.get('layout_candidate')], proposal
+
+    def test_a_code_before_each_box_is_a_coded_row_and_never_supplies_options(self):
+        cases = {
+            'trailing option text': ['4.\tThyroid', '\tNormal\tAbnormal\tNot done', 'Finding\t1 ☐\t2 ☐\t9 ☐ Other'],
+            'space separated': ['4.\tThyroid', '\tNormal\tAbnormal\tNot done', 'Edema   1 ☐   2 ☐   3 ☐ Not examined'],
+            'parenthesised codes': ['4.\tThyroid', '\tNormal\tAbnormal\tNot done', 'Finding\t(1) ☐\t(2) ☐\t(3) ☐'],
+            'missing code': ['4.\tThyroid', '\tNormal\tAbnormal', 'Size\t1 ☐\t2 ☐', '', 'Shape\t☐\t2 ☐'],
+            'duplicate code': ['4.\tThyroid', '\tNormal\tAbnormal', 'Size\t1 ☐\t2 ☐', '', 'Shape\t1 ☐\t1 ☐'],
+        }
+        for control in ('glyph', 'ff'):
+            for name, cell in cases.items():
+                with self.subTest(control=control, case=name):
+                    raw = data(coded_form(cell, control=control))
+                    result = w.inspect(raw)
+                    boxes = [f for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes']
+                    self.assertEqual([(f['label'], f['options']) for f in boxes], [])
+                    self.assertTrue(any('response codes are not option labels' in n for n in result['notes']))
+        # Positive controls: numbers printed after their boxes are the options, and a question that ends in a
+        # number keeps its own printed option words.
+        for line, label, options in (('Pain\t☐ 0\t☐ 1\t☐ 2', 'Pain', ['0', '1', '2']),
+                                     ('Over 65\t☐ Yes\t☐ No', 'Over 65', ['Yes', 'No'])):
+            with self.subTest(line=line):
+                doc = Document(); doc.add_table(rows=1, cols=1).cell(0, 0).text = line
+                result = w.inspect(data(doc))
+                self.assertEqual([(f['label'], f['options']) for f in result['fields'] if f.get('options')],
+                                 [(label, options)])
+
+    def test_a_row_question_printed_in_the_cell_to_its_left_is_never_replaced_by_the_cell_title(self):
+        rows = []
+        for question, options in (('Heart sounds', ['Normal', 'Abnormal']), ('Pericardial rub', ['Absent', 'Present']),
+                                  ('Peripheral edema', ['None', 'Pitting', 'Non-pitting'])):
+            stops = tuple(2160 + 1440 * i for i in range(len(options)))
+            rows.append([[question], ['Findings', '', ('\t' + '\t'.join(options), stops),
+                                      ('\t' + '\t'.join('%d ☐' % (i + 1) for i in range(len(options))), stops), '']])
+        for offset in (0, 20):
+            with self.subTest(offset=offset):
+                if offset:  # rule_tab_columns refuses offset stops; the coded rule reads the same cells
+                    for row in rows:
+                        line = row[1][3]; row[1][3] = (line[0], tuple(p + offset for p in line[1]))
+                detector, _, _ = detect(data(stopped_form(rows, (2880, 6480))))
+                areas = [a for _, _, a in detector.layout_candidates]
+                # The question printed in the row's own label cell names it; the cell title is context.
+                self.assertEqual([a.label for a in areas], ['Heart sounds', 'Pericardial rub', 'Peripheral edema'])
+                self.assertTrue(all('Findings' in a.context for a in areas))
+        # A cell to the right (fixed details, comments) is not the row's question: the title still names it.
+        raw = data(stopped_form([[['Head summary', '', ('\tNormal\tAbnormal', (2880, 4320)), ('\t1 ☐\t2 ☐', (2880, 4320))],
+                                  ['Fixed details']]], (6480, 2880)))
+        detector, _, _ = detect(raw)
+        self.assertEqual([a.label for _, _, a in detector.layout_candidates], ['Head summary'])
+
+    def test_a_sub_heading_or_group_label_over_several_rows_is_never_scoped_to_one(self):
+        pulses = ['13.\tPulses', '\tPresent\tAbsent', 'Right side', 'Radial\t1 ☐\t2 ☐', 'Femoral\t1 ☐\t2 ☐', '',
+                  'Left side', 'Radial\t1 ☐\t2 ☐', 'Dorsalis pedis\t1 ☐\t2 ☐']
+        asymmetric = ['13.\tPulses', '\tPresent\tAbsent', 'Right side', 'Radial\t1 ☐\t2 ☐', 'Femoral\t1 ☐\t2 ☐', '',
+                      'Left side', 'Dorsalis pedis\t1 ☐\t2 ☐', 'Posterior tibial\t1 ☐\t2 ☐']
+        carotid = ['11.\tArteries', '\tNormal\tAbnormal', 'Heart palpation\t1 ☐\t2 ☐', '', 'Carotid artery',
+                   'Auscultation\tAbsent\tPresent', '(systolic bruit)', 'Left\t1 ☐\t2 ☐', 'Right\t1 ☐\t2 ☐']
+        grouped = ['13.\tPulses', 'Right\tPresent\tAbsent', 'Radial\t1 ☐\t2 ☐', 'Femoral\t1 ☐\t2 ☐', '',
+                   'Left\tPresent\tAbsent', 'Dorsalis pedis\t1 ☐\t2 ☐', 'Posterior tibial\t1 ☐\t2 ☐']
+        for name, cell in (('sub-headings', pulses), ('asymmetric sub-headings', asymmetric),
+                           ('lead over two rows', carotid), ('group labels in one cell', grouped)):
+            with self.subTest(name):
+                _, coded, notes = detect(data(coded_form(cell)))
+                self.assertEqual([a.label for a in coded], [])
+                self.assertTrue(any(n.startswith('Coded column sequence at ') for n in notes))
+
+    def test_a_single_group_label_is_context_for_all_its_rows_or_none(self):
+        fields, _ = self.proposal(data(coded_form(LYMPH)))
+        self.assertEqual([f['label'] for f in fields], ['Posterior', 'Anterior', 'Axillary'])
+        self.assertTrue(all('Cervical' in f['context'] for f in fields))
+
+    def test_a_coded_row_records_one_response_whatever_its_label_or_section_says(self):
+        skin = ['15.\tSkin', '\tAbsent\tPresent', 'Lesion(s)\t1 ☐\t2 ☐', '', 'Rash\t1 ☐\t2 ☐']
+        fields, _ = self.proposal(data(coded_form(skin)))
+        self.assertEqual([(f['label'], f['kind']) for f in fields], [('Lesion(s)', 'choice'), ('Rash', 'choice')])
+        single = ['15.\tSkin', ('\tAbsent\tPresent', (2880, 4320)), ('Lesion(s)\t1 ☐\t2 ☐', (2880, 4320))]
+        fields, _ = self.proposal(data(stopped_form([[single, ['']]], (6480, 2880))))
+        self.assertEqual([(f['label'], f['kind']) for f in fields], [('Lesion(s)', 'choice')])
+        # A check-all instruction over coded single-response rows is a conflict: noted, never multi-choice.
+        _, coded, notes = detect(data(coded_form(skin, heading='Findings (check all that apply)')))
+        self.assertEqual([a.label for a in coded], [])
+        self.assertTrue(any(n.startswith('Coded column sequence at ') for n in notes))
+
+    def test_a_single_labelled_row_refused_by_the_tab_pair_contract_is_read_as_a_coded_sequence(self):
+        for cell, label, options in ((['12b.\tLiver', '', '\tNo\tYes', 'Palpable\t1 ☐\t2 ☐', ''], 'Palpable', ['No', 'Yes']),
+                                     (['9.\tChest', '', '\tNormal\tAbnormal', 'Shape\t\t1 ☐\t2 ☐', '', ''], 'Shape',
+                                      ['Normal', 'Abnormal']),
+                                     (['7.\tNose', '\tNormal\tAbnormal', 'Nasal mucosa\t1 ☐\t2 ☐', '', ''], 'Nasal mucosa',
+                                      ['Normal', 'Abnormal'])):
+            with self.subTest(label):
+                raw = data(coded_form(cell))
+                fields, proposal = self.proposal(raw)
+                self.assertEqual([(f['label'], f['options']) for f in fields], [(label, options)])
+                # Its title and spacers are claimed: nothing inside the coded cell is a free-text destination.
+                self.assertFalse([f for f in proposal['fields'] if '/tc[0]' in f['locator']['slot']
+                                  and f['locator']['target']['type'] != 'checkboxes'])
+                self.assertFalse([n for n in proposal['warnings'] if n.startswith('Tab-column options at ')])
