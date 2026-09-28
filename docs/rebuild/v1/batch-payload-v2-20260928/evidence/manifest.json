@@ -1,0 +1,21 @@
+{
+  "base": "5a36e75276397c19175c5de8dc43a976329a3e2e",
+  "source_sha256": {
+    "rebuild/core/generation_batch.py": "0d9400c9e2d6f27fd5b63e76a2ab601e4b1e3dfcb1df159619f3416e2526d63f",
+    "rebuild/core/tests/test_batch_payload.py": "b9a59ebb47155f5d23b4f3020b34d2e01adb01cde324b37da4cf3e7b9c170c67",
+    "rebuild/core/tests/fixtures/batch_v1_plan.json": "cbe186b2a9ac569756f3e4b1da1e1d6328eb10855feb27d71e6294676a49b97e"
+  },
+  "evidence_sha256": {
+    "compiler-before.py": "408f381e8e4aa87071fa8a0e886ba3642b9ec1f0f1d2bb6faadbefbd4f4cb9c2",
+    "compiler-before.json": "0e8e758cce83f2d8284769a2ac172c11e642dd3b922cdc71ffffb0e3e3935dd7",
+    "01-compiler-before.log": "1cace639edd9ab760bdf01431de2ca184f54c01b3b1561a84671aec68f51f724",
+    "capture-legacy.py": "174cde11d666e2fa3a995778397326a330c412582251768800a7d7dd2efcba0a",
+    "02-legacy-before.log": "846d45e4275b730ea9a865d4eb72bb1705fc66f042c2ca5db5b8c799d0d557eb",
+    "03-affected.log": "f94aa35cb6ed70e43d6ed4700f35f5c0450ceedd5281dbddbc17a9a7dad3139e",
+    "compiler-after.py": "408f381e8e4aa87071fa8a0e886ba3642b9ec1f0f1d2bb6faadbefbd4f4cb9c2",
+    "compiler-after.json": "755ccb9e78977155532e7415451652f367c3d6b06cc80165d4c9487ec620b9d8",
+    "04-compiler-after.log": "4ba8195270abc79a024ccc0ca9b353c6df1585e3b8f0f891ef53a8d8e6569f19"
+  },
+  "result": "5PASS8.364s; original16compiler cases8admitted/8refused, v2same16admitted76compiledchildren; zero provider calls",
+  "scope": "Compiler capacity and mocked101workflow, not real800field or model qualification"
+}

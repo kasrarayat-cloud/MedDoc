@@ -15,7 +15,8 @@ from pydantic import ConfigDict
 
 from . import generation as g, v3_mapping
 
-CONTRACT = 'v3-generation-batch-v1'
+LEGACY_CONTRACT = 'v3-generation-batch-v1'
+CONTRACT = 'v3-generation-batch-v2'
 CONSTRAINTS = 'v3-form-constraints-v1'
 MAX_PARTS = 8
 MAX_FIELDS = 100
@@ -183,10 +184,19 @@ def partitions(fields):
 def request(plan, ordinal):
     config = plan['config']
     ids = plan['parts'][ordinal - 1]['field_ids']
-    payload = {'contract': CONTRACT, 'questions': plan['asked'], 'full_catalogue': plan['fields'],
+    contract = plan.get('contract')
+    if contract not in (LEGACY_CONTRACT, CONTRACT) or config.get('generation_batch_contract') != contract:
+        refuse('The stored batch request contract is unknown or inconsistent.')
+    payload = {'contract': contract, 'full_catalogue': plan['fields'],
         'context_labels': plan['context_labels'], 'requirements': plan['requirements'],
         'form_constraints': plan['constraints'], 'notes': plan['notes'], 'source_units': plan['units'],
         'requested_field_ids': ids}
+    if contract == LEGACY_CONTRACT:
+        # Reconstruct immutable v1 attempts exactly. New authorizations require
+        # CONTRACT in require_config; reconstruction is not permission to send.
+        payload['questions'] = plan['asked']
+    # v2 carries each original field once. asked is a subset of fields without
+    # added interpretation; requested IDs identify this child's output subset.
     schema, instructions = BatchSelections, INSTRUCTIONS
     if plan['history_targets']:
         from . import v3_history_context as history
