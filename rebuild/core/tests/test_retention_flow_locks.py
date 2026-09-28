@@ -564,18 +564,21 @@ class DispositionAgainstClinicianRequests(ExecutionFixture, TransactionTestCase)
         self.assertContains(doctor.get(response['Location']), 'no longer available')
 
     def test_queueing_on_a_document_disposed_after_it_was_read_is_a_refusal_not_a_crash(self):
-        """The two enqueue doors lock the row the caller read earlier; a disposed row is a refusal (ValidationError),
-        never Encounter.DoesNotExist."""
+        """Both enqueue routes lock the row the caller read earlier; a disposed row is a refusal (ValidationError),
+        never Encounter.DoesNotExist. The complete-form route is reached through jobs.enqueue, its only caller."""
         from django.core.exceptions import ValidationError
         from core import batch_jobs
         from core.jobs import enqueue
         row, instruction = self.approved()
         stale = m.Encounter.objects.get(pk=row.pk)
         x.execute(self.admin, instruction.pk, self.genesis)
-        for name, door in (('jobs.enqueue', lambda: enqueue(stale, self.scope[0])),
-                           ('batch_jobs.enqueue', lambda: batch_jobs.enqueue(stale, self.scope[0], {}))):
-            with self.subTest(door=name), self.assertRaisesMessage(ValidationError, 'no longer available'):
-                door()
+        with self.subTest(route='single request'), self.assertRaisesMessage(ValidationError, 'no longer available'):
+            enqueue(stale, self.scope[0])
+        with self.subTest(route='complete-form batch'), patch('core.generation_batch.needed', return_value=True), \
+                patch.object(batch_jobs, 'enqueue', wraps=batch_jobs.enqueue) as batch:
+            with self.assertRaisesMessage(ValidationError, 'no longer available'):
+                enqueue(stale, self.scope[0])
+            batch.assert_not_called()
         self.assertFalse(m.Job.objects.exists())
 
     def test_positive_control_an_undisposed_draft_still_queues_its_recording(self):

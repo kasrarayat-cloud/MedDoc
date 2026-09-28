@@ -38,8 +38,9 @@ def event(batch, kind, *, part=None, details=None):
 @transaction.atomic
 def enqueue(encounter, user, config, expected_revision=None):
     from .views import clinician_decided
-    from .disposition_execution import lock_available
-    e = lock_available(encounter.pk)
+    e = Encounter.objects.select_for_update().get(pk=encounter.pk)
+    from .disposition_execution import require_access
+    require_access(e.pk)
     membership(user, e.department)
     if e.status == 'finalized' or clinician_decided(e):
         b.refuse('A finalized or clinician-reviewed document cannot be replaced.')

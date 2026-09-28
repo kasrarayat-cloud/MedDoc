@@ -218,11 +218,13 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
 @transaction.atomic
 def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None):
     from . import generation_batch, batch_jobs
+    from .disposition_execution import lock_available
+    # Both routes lock the document first, the batch route included (batch_jobs.enqueue re-locks the same row in
+    # this transaction): a document disposed of since the caller read it is a refusal, never DoesNotExist (RF-3).
+    e=lock_available(encounter.pk)
     if kind=='generation' and generation_batch.needed(encounter.template_version.fields, encounter.notes,
                                                       config or generation.configuration(encounter.template_version.fields)):
         return batch_jobs.enqueue(encounter,user,config or generation.configuration(encounter.template_version.fields),expected_revision)
-    from .disposition_execution import lock_available
-    e=lock_available(encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
     if expected_revision is not None and e.revision!=expected_revision:
