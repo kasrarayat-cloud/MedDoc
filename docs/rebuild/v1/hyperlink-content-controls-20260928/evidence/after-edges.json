@@ -1,0 +1,117 @@
+{
+  "source": "/opt/meddoc-pro/.worktrees/v1-hyperlink-content-controls",
+  "word_v3_sha256": "8d9df73582a61b0aa1bdc80ca54c4c2f17cc0cd9c72ad0182eddab4bfb5a37c3",
+  "cases": [
+    {
+      "case": "ordinary-glyph-linked-option",
+      "before_links": [
+        {
+          "text": "Send copies",
+          "visible_text": "Send copies",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>Send copies</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Send copies",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]/glyphs",
+            "target": {
+              "type": "checkboxes",
+              "boxes": [
+                {
+                  "kind": "glyph",
+                  "part": "word/document.xml",
+                  "slot": "b/p[0]/glyphs",
+                  "glyph": 0
+                }
+              ]
+            },
+            "fingerprint": "62a9b23950d14f160aca8ba374b3bb6549e3c75f595ff228a388eca613d0bbbc"
+          },
+          "options": [
+            "Send copies"
+          ]
+        }
+      ],
+      "notes": [],
+      "after_links": [
+        {
+          "text": "Send copies",
+          "visible_text": "Send copies",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>Send copies</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "hyperlinks_changed": false
+    },
+    {
+      "case": "ordinary-glyph-adjacent-link",
+      "before_links": [
+        {
+          "text": "Clinic instructions",
+          "visible_text": "Clinic instructions",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>Clinic instructions</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Send copies",
+          "kind": "checkbox",
+          "context": "Clinic instructions",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]/glyphs",
+            "target": {
+              "type": "checkboxes",
+              "boxes": [
+                {
+                  "kind": "glyph",
+                  "part": "word/document.xml",
+                  "slot": "b/p[0]/glyphs",
+                  "glyph": 0
+                }
+              ]
+            },
+            "fingerprint": "4753d60c587a140edd75d233a8fe97ace29dfc9f6e3dc4321993ac0c30e2a444"
+          },
+          "options": [
+            "Send copies"
+          ]
+        }
+      ],
+      "notes": [],
+      "after_links": [
+        {
+          "text": "Clinic instructions",
+          "visible_text": "Clinic instructions",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>Clinic instructions</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "hyperlinks_changed": false
+    },
+    {
+      "case": "direct-sdt-with-link-ancestor",
+      "before_links": [
+        {
+          "text": "Enter name",
+          "visible_text": "Enter name",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:sdt><w:sdtPr><w:alias w:val=\"Clinical report\"/><w:showingPlcHdr/></w:sdtPr><w:sdtContent><w:r><w:t>Enter name</w:t></w:r></w:sdtContent></w:sdt></w:hyperlink>"
+        }
+      ],
+      "fields": [],
+      "notes": [],
+      "exception": {
+        "type": "V3Failure",
+        "message": "This mapping would change a fixed hyperlink in a content control. Review the original answer area.",
+        "code": "protected_hyperlink"
+      }
+    }
+  ]
+}

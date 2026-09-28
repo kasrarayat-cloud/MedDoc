@@ -121,3 +121,11 @@ remain in the hashed private runtime. The strict corpus correction is in
 [Independent bounded evidence](evidence/workflow-independent-20260928/manifest.json) retains
 these checks, the first database refusal and the source-validation/adoption mismatch. No native Word,
 live provider, whole-document compatibility or deployed migration claim follows from them.
+
+## Fixed-link continuation in an isolated descendant
+
+The [content-control hyperlink closure](hyperlink-content-controls-20260928/REPORT.md)
+retains two independent refutation rounds and a final157-test Word/CI union. Fixed hyperlink
+text survives content-control answers; harmful historical mappings now refuse. Separate
+answer controls remain fillable. The original candidate and installed release are preserved.
+Batch constraint counterexamples and D10/R-T3 remain outside this descendant.

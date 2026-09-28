@@ -43,7 +43,7 @@ class CIGatePartitions(unittest.TestCase):
             'documents.test_sdk_sandbox', 'documents.test_sdk_service', 'documents.test_layout',
             'documents.test_unmapped_areas', 'documents.test_multicolumn_and_mixed',
             'documents.test_word_v3', 'documents.test_signing_areas', 'documents.test_question_boxes',
-            'documents.test_composite_kind'])
+            'documents.test_composite_kind', 'documents.test_hyperlink_destinations'])
         self.assertEqual(support[0][-1], '-v')
         self.assertEqual(support[1], ['-m', 'unittest', 'discover', '-s', 'ops', '-p', 'test_*.py', '-v'])
 

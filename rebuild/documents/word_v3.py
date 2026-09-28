@@ -789,6 +789,10 @@ def hyperlink_run(run) -> bool:
     return run is not None and any(node.tag == q("w:hyperlink") for node in run.iterancestors())
 
 
+def hyperlink_control(control) -> bool:
+    return hyperlink_run(control) or control.find(".//" + q("w:hyperlink")) is not None
+
+
 def hyperlink_write(pieces, start, end) -> bool:
     """Whether replace_range would replace link text or insert inside its run parent.
 
@@ -1354,6 +1358,10 @@ class Detector:
             if typ in ("docPartObj", "docPartList", "citation", "bibliography", "equation", "picture", "group", "checkbox"):
                 continue
             content = slot.el.find(q("w:sdtContent"))
+            if content is not None and content.find(".//" + q("w:hyperlink")) is not None:
+                self.notes.append("A content control containing a fixed hyperlink was read by its parts. Location: "
+                                  + slot.id)
+                continue
             if content is not None and wraps_structure(content):
                 # A control that wraps other controls, fields, tables or drawings is a container, not an
                 # answer: writing into it would replace what it holds. Its contents are read by the other rules.
@@ -1421,6 +1429,11 @@ class Detector:
                 continue
             txt = self.ptext(s.el)[0]
             if BOX not in txt and CHECKED not in txt:
+                continue
+            if (any(hyperlink_run(piece.run) for piece, _, _ in glyph_boxes(s.el))
+                    or any(hyperlink_control(node) for node in checkbox_nodes(s.el))):
+                self.notes.append("A checkbox inside a fixed hyperlink was kept unchanged. Location: " + s.id)
+                self.claimed.add(id(s.el))
                 continue
             if self.region_hidden(box_region(s.el)):
                 # ⚠️ Its boxes cannot all be seen: no question is read from it (round 3 F1).
@@ -3168,6 +3181,8 @@ def set_glyph(p, n, ticked):
     if n >= len(boxes):
         fail("A stored checkbox position no longer matches the form.", "mapping_mismatch")
     pc, k, ch = boxes[n]
+    if hyperlink_run(pc.run):
+        fail("This mapping would change a checkbox inside a fixed hyperlink.", "protected_hyperlink")
     if (ch == CHECKED) == bool(ticked):
         return False
     original = (pc.node.text or "")[k] if pc.kind == "t" else ""
@@ -3203,6 +3218,8 @@ def pin_glyph(p, n):
     if not 0 <= n < len(boxes):
         fail("A stored checkbox position no longer matches the form.", "mapping_mismatch")
     piece, offset, _ = boxes[n]
+    if hyperlink_run(piece.run):
+        fail("This mapping would change a checkbox inside a fixed hyperlink.", "protected_hyperlink")
     if piece.kind == "t":
         position = piece.start + offset
         _split_at(p, position + 1)
@@ -3234,6 +3251,8 @@ def element_identity_path(root, node):
 
 def set_sdt_checkbox(sdt, ticked):
     """A checkbox content control: its checked state and the glyph its state names (checkedState/uncheckedState)."""
+    if hyperlink_control(sdt):
+        fail("This mapping would change a fixed hyperlink in a checkbox control.", "protected_hyperlink")
     pr = sdt.find(q("w:sdtPr"))
     cb = pr.find(q("w14:checkbox")) if pr is not None else None
     if cb is None:
@@ -3398,6 +3417,9 @@ def wraps_structure(content) -> bool:
 
 def write_sdt_text(sdt, answer):
     content_now = sdt.find(q("w:sdtContent"))
+    if hyperlink_control(sdt):
+        fail("This mapping would change a fixed hyperlink in a content control. Review the original answer area.",
+             "protected_hyperlink")
     if content_now is not None and wraps_structure(content_now):
         fail("This content control contains other form parts and cannot take a text answer.", "unsupported_layout")
     pr = sdt.find(q("w:sdtPr"))

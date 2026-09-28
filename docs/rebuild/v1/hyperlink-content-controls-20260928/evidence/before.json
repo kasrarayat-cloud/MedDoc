@@ -1,0 +1,221 @@
+{
+  "source": "/opt/meddoc-pro/.worktrees/v1-fixed-instructions",
+  "word_v3_sha256": "70ccc1d00e5e26032adfc293d9507324bbcb33f31686e8181b7b35b21da7be52",
+  "cases": [
+    {
+      "case": "block-placeholder-fixed-link",
+      "before_links": [
+        {
+          "text": "forms@example.invalid",
+          "visible_text": "forms@example.invalid",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>forms@example.invalid</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "original_sha256": "9ecf7b284b908a1e9053432d0a28898dd5070c1e9b1d39919957b72d460310ec",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Clinical report",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/sdt[0]",
+            "target": {
+              "type": "sdt_text"
+            },
+            "fingerprint": "6e7b4ac0143534ac67cbb52b1b1c3590d31955462c61de2cc46e7be08b206c73"
+          }
+        }
+      ],
+      "notes": [],
+      "answers": {
+        "v3_1": "Synthetic patient answer"
+      },
+      "after_links": [],
+      "output_sha256": "a3d7a76545b78106ed122a31cced5d500814b0d4c25f85b7d24946830df6f2a3",
+      "hyperlinks_changed": true
+    },
+    {
+      "case": "inline-linked-marker",
+      "before_links": [
+        {
+          "text": "Enter name",
+          "visible_text": "Enter name",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>Enter name</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "original_sha256": "161b60de55719249e106446f2b9a00fc4f1bd878fbd90ba56878692996ce0c9b",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Clinical report",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text"
+            },
+            "fingerprint": "65c67daeef9184c9c5542c84cd8d05a4891ba6fe0497be59f6af99ad86f18ed2"
+          }
+        }
+      ],
+      "notes": [],
+      "answers": {
+        "v3_1": "Synthetic patient answer"
+      },
+      "after_links": [],
+      "output_sha256": "853bcde935459567db42eaf720d8912f9cb1a061784505adc312972b20587fc7",
+      "hyperlinks_changed": true
+    },
+    {
+      "case": "hyperlink-around-sdt",
+      "before_links": [
+        {
+          "text": "Enter name",
+          "visible_text": "Enter name",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:sdt><w:sdtPr><w:alias w:val=\"Clinical report\"/><w:showingPlcHdr/></w:sdtPr><w:sdtContent><w:r><w:t>Enter name</w:t></w:r></w:sdtContent></w:sdt></w:hyperlink>"
+        }
+      ],
+      "original_sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098",
+      "fields": [],
+      "notes": [],
+      "answers": {},
+      "after_links": [
+        {
+          "text": "Enter name",
+          "visible_text": "Enter name",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:sdt><w:sdtPr><w:alias w:val=\"Clinical report\"/><w:showingPlcHdr/></w:sdtPr><w:sdtContent><w:r><w:t>Enter name</w:t></w:r></w:sdtContent></w:sdt></w:hyperlink>"
+        }
+      ],
+      "output_sha256": "08a98031bcb526fdbe3461f553ba8c5d8840a7380e80c5f1cc9b8e5e05712098",
+      "hyperlinks_changed": false
+    },
+    {
+      "case": "unlinked-sdt-positive",
+      "before_links": [],
+      "original_sha256": "5fd5701d1c6ef5caf87593d063efe849e504827b040ba95d80a69700ace21e37",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Clinical report",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text"
+            },
+            "fingerprint": "25021581067de8b65fbae70f9be2adacf24442f687cde7911897b07efa654bb6"
+          }
+        }
+      ],
+      "notes": [],
+      "answers": {
+        "v3_1": "Synthetic patient answer"
+      },
+      "after_links": [],
+      "output_sha256": "868ba2833c8f63965d02a32e47794369924779050dfb9d820058716a4c773b67",
+      "hyperlinks_changed": false
+    },
+    {
+      "case": "linked-checkbox",
+      "before_links": [
+        {
+          "text": "\u2610 Send copies",
+          "visible_text": "\u2610 Send copies",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>&#9744; Send copies</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "original_sha256": "4a4382b0e12a62747dfe6af34d13e05a3f0cdf62394c150cc615ac82d6c5d1c8",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Send copies",
+          "kind": "checkbox",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]/glyphs",
+            "target": {
+              "type": "checkboxes",
+              "boxes": [
+                {
+                  "kind": "glyph",
+                  "part": "word/document.xml",
+                  "slot": "b/p[0]/glyphs",
+                  "glyph": 0
+                }
+              ]
+            },
+            "fingerprint": "905897dcb08b816cefb7edab84100886fb8f1187745269b74a28c06688720fd4"
+          },
+          "options": [
+            "Send copies"
+          ]
+        }
+      ],
+      "notes": [],
+      "answers": {
+        "v3_1": true
+      },
+      "after_links": [
+        {
+          "text": "\u2612 Send copies",
+          "visible_text": "\u2612 Send copies",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:rPr><w:rFonts w:ascii=\"Segoe UI Symbol\" w:hAnsi=\"Segoe UI Symbol\" w:cs=\"Segoe UI Symbol\" w:eastAsia=\"Segoe UI Symbol\"/></w:rPr><w:t>&#9746;</w:t></w:r><w:r><w:t xml:space=\"preserve\"> Send copies</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "output_sha256": "ff906e3ed30c76bfe859dcdf758000fd1bd400b0c2963b69e67646d69a95ec67",
+      "hyperlinks_changed": true
+    },
+    {
+      "case": "separate-link-and-sdt-positive",
+      "before_links": [
+        {
+          "text": "Clinic instructions",
+          "visible_text": "Clinic instructions",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>Clinic instructions</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "original_sha256": "1a0360504fc88565dbdf18f8dbc0e0dcdbb3e84abe6f8d301f412ef6cdf24841",
+      "fields": [
+        {
+          "key": "v3_1",
+          "label": "Clinical report",
+          "kind": "text",
+          "context": "",
+          "locator": {
+            "contract": "v3",
+            "part": "word/document.xml",
+            "slot": "b/p[0]/sdt[0]",
+            "target": {
+              "type": "sdt_text"
+            },
+            "fingerprint": "25021581067de8b65fbae70f9be2adacf24442f687cde7911897b07efa654bb6"
+          }
+        }
+      ],
+      "notes": [],
+      "answers": {
+        "v3_1": "Synthetic patient answer"
+      },
+      "after_links": [
+        {
+          "text": "Clinic instructions",
+          "visible_text": "Clinic instructions",
+          "xml": "<w:hyperlink xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mo=\"http://schemas.microsoft.com/office/mac/office/2008/main\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:mv=\"urn:schemas-microsoft-com:mac:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" r:id=\"rId9\"><w:r><w:t>Clinic instructions</w:t></w:r></w:hyperlink>"
+        }
+      ],
+      "output_sha256": "b3a3034c8e8c269b7f7422b39c34e0c58df430a27ce8929be0a38d7b172d8d69",
+      "hyperlinks_changed": false
+    }
+  ]
+}

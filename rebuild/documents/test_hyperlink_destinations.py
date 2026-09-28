@@ -8,6 +8,7 @@ from docx.oxml.ns import qn
 from docx.opc.constants import RELATIONSHIP_TYPE
 
 from . import word_v3 as w
+from .test_word_v3 import _sdt
 
 
 def link(paragraph, text):
@@ -23,6 +24,29 @@ def link(paragraph, text):
 
 def data(document):
     out = io.BytesIO(); document.save(out); return out.getvalue()
+
+
+def linked_control(document, kind, block=False):
+    paragraph = document.add_paragraph('Answer: ')
+    control = _sdt(kind, options=('Yes', 'No'), placeholder='Enter answer')
+    properties = control.find(qn('w:sdtPr'))
+    if kind == 'date':
+        properties.append(OxmlElement('w:date'))
+    properties.append(OxmlElement('w:showingPlcHdr'))
+    content = control.find(qn('w:sdtContent'))
+    content.clear()
+    link(paragraph, 'Fixed clinic instructions')
+    hyperlink = paragraph._p[-1]
+    if block:
+        paragraph.text = 'Instructions'
+        inner = OxmlElement('w:p')
+        inner.append(hyperlink)
+        content.append(inner)
+        document.element.body.insert(len(document.element.body) - 1, control)
+    else:
+        content.append(hyperlink)
+        paragraph._p.append(control)
+    return control
 
 
 class HyperlinkDestinations(unittest.TestCase):
@@ -110,3 +134,109 @@ class HyperlinkDestinations(unittest.TestCase):
         self.assertEqual(len(info['fields']), 1)
         self.assertEqual(info['fields'][0]['locator']['target']['type'], 'cell_replace')
         w.fill(raw, info['fields'], {info['fields'][0]['key']: 'Synthetic report.'})
+
+    def test_link_bearing_content_controls_are_visible_but_not_whole_answers(self):
+        for kind in ('rich', 'dropdown', 'date'):
+            for block in (False, True):
+                with self.subTest(kind=kind, block=block):
+                    d = Document(); linked_control(d, kind, block)
+                    info = w.inspect(data(d))
+                    self.assertEqual(info['fields'], [])
+                    self.assertTrue(any('hyperlink' in note.lower() and 'word/document.xml#' in note
+                                        for note in info['notes']))
+
+    def test_historical_control_mapping_cannot_remove_link(self):
+        for kind in ('rich', 'dropdown', 'date'):
+            for block in (False, True):
+                with self.subTest(kind=kind, block=block):
+                    d = Document(); linked_control(d, kind, block)
+                    raw = data(d); index = w.SlotIndex(w.open_package(raw))
+                    slot = next(s for s in index.slots if s.kind == 'sdt')
+                    field = {'key': 'old', 'kind': 'choice' if kind == 'dropdown' else 'text',
+                             'label': 'Answer', 'options': ['Yes', 'No'],
+                             'locator': {'contract': 'v3', 'part': slot.part, 'slot': slot.path,
+                                         'fingerprint': w.fingerprint(slot.el),
+                                         'target': {'type': 'sdt_choice' if kind == 'dropdown' else 'sdt_text'}}}
+                    with self.assertRaises(w.V3Failure) as rejected:
+                        w.fill(raw, [field], {'old': 'Yes'})
+                    self.assertEqual(rejected.exception.code, 'protected_hyperlink')
+                    self.assertEqual(w.fill(raw, [field], {}), raw)
+
+    def test_content_control_refusal_precedes_any_source_mutation(self):
+        from lxml import etree
+        d = Document(); control = linked_control(d, 'rich', block=True)
+        before = etree.tostring(control)
+        with self.assertRaises(w.V3Failure) as rejected:
+            w.write_sdt_text(control, 'Synthetic answer')
+        self.assertEqual(rejected.exception.code, 'protected_hyperlink')
+        self.assertEqual(etree.tostring(control), before)
+
+    def test_linked_checkbox_is_unassigned_and_historical_write_refuses(self):
+        for position in ('body', 'table'):
+            with self.subTest(position=position):
+                d = Document()
+                paragraph = (d.add_paragraph() if position == 'body' else
+                             d.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0])
+                link(paragraph, '☐ Send copies')
+                info = w.inspect(data(d))
+                self.assertEqual(info['fields'], [])
+                self.assertTrue(any('hyperlink' in note.lower() for note in info['notes']))
+                for writer in (w.set_glyph, lambda p, n, value: w.pin_glyph(p, n)):
+                    with self.assertRaises(w.V3Failure) as rejected:
+                        writer(paragraph._p, 0, True)
+                    self.assertEqual(rejected.exception.code, 'protected_hyperlink')
+
+    def test_checkbox_control_cannot_clear_or_change_linked_content(self):
+        from lxml import etree
+        for mode in ('fixed-contact', 'linked-glyph'):
+            for position in ('body', 'table'):
+                with self.subTest(mode=mode, position=position):
+                    d = Document()
+                    paragraph = (d.add_paragraph() if position == 'body' else
+                                 d.add_table(rows=1, cols=1).cell(0, 0).paragraphs[0])
+                    control = _sdt('checkbox')
+                    content = control.find(qn('w:sdtContent'))
+                    if mode == 'linked-glyph':
+                        content.clear()
+                    link(paragraph, '☐' if mode == 'linked-glyph' else 'forms@example.invalid')
+                    content.append(paragraph._p[-1])
+                    paragraph._p.append(control); paragraph.add_run(' Send copies')
+                    info = w.inspect(data(d))
+                    self.assertEqual(info['fields'], [])
+                    self.assertTrue(any('hyperlink' in note.lower() for note in info['notes']))
+                    before = etree.tostring(control)
+                    with self.assertRaises(w.V3Failure) as rejected:
+                        w.set_sdt_checkbox(control, True)
+                    self.assertEqual(rejected.exception.code, 'protected_hyperlink')
+                    self.assertEqual(etree.tostring(control), before)
+
+    def test_checkbox_beside_linked_option_text_keeps_link_and_remains_fillable(self):
+        for control in (False, True):
+            with self.subTest(control=control):
+                d = Document(); paragraph = d.add_paragraph()
+                if control:
+                    paragraph._p.append(_sdt('checkbox'))
+                else:
+                    paragraph.add_run('☐ ')
+                link(paragraph, 'Send copies')
+                raw = data(d); info = w.inspect(raw)
+                self.assertEqual(len(info['fields']), 1)
+                output = w.fill(raw, info['fields'], {info['fields'][0]['key']: True})
+                before, after = w.open_package(raw), w.open_package(output)
+                self.assertEqual([w.etree.tostring(h) for h in before.tree('word/document.xml').iter(w.q('w:hyperlink'))],
+                                 [w.etree.tostring(h) for h in after.tree('word/document.xml').iter(w.q('w:hyperlink'))])
+
+    def test_separate_blank_in_link_bearing_block_control_still_fills(self):
+        d = Document(); control = linked_control(d, 'rich', block=True)
+        paragraph = d.add_paragraph('Patient name: ________')
+        control.find(qn('w:sdtContent')).append(paragraph._p)
+        raw = data(d); info = w.inspect(raw)
+        self.assertEqual(len(info['fields']), 1)
+        self.assertEqual(info['fields'][0]['locator']['target']['type'], 'span')
+        output = w.fill(raw, info['fields'], {info['fields'][0]['key']: 'Synthetic Example'})
+        before, after = w.open_package(raw), w.open_package(output)
+        self.assertEqual(before.zip.read('word/_rels/document.xml.rels'),
+                         after.zip.read('word/_rels/document.xml.rels'))
+        self.assertEqual([n.text for h in after.tree('word/document.xml').iter(w.q('w:hyperlink'))
+                          for n in h.iter(w.T)], ['Fixed clinic instructions'])
+        self.assertIn('Synthetic Example', w.Detector(after).text(after.tree('word/document.xml'), own=False))
