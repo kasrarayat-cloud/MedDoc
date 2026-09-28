@@ -149,3 +149,22 @@ Other fields. All four complete contexts are retained in evidence. This is a dem
 developer-owned usefulness defect, not necessarily ambiguous input and not a successful automatic
 document. A separate existing unique-field opposite-side gap is also preserved for the reusable
 context/choice repair. Safeguards and mandatory plain-note support must both survive that repair.
+
+## 2026-09-28 afternoon — Claude continuation after the assistant switch
+
+Recovery: execution and Git access work in this session; Astra's sandbox failure did not reproduce. Candidate
+`1ce3b5d2` was clean and contained every earlier stream; the three interrupted repairs' uncommitted diffs were
+preserved with hashes in `rebuild/.runtime/v1-full-release-20260928/recovery-claude-20260928T072224Z/` before any
+change. A test that cleared encounters (refused by the disposition trigger) was fixed without weakening the guard
+(`c0b27f88`). The three repairs were finished, refuted twice and repaired, then integrated as `bf8f7b78`.
+
+Evidence on `bf8f7b78`: CI run 36437449939, all six jobs green (the earlier `c0b27f88` run 36393988643 also green);
+local documents 454, ops 1,181, core 2,290 passed. The mandatory adversarial pass
+(`candidate-adversarial-pass-20260928.md`) found **the default path byte-identical to installed `dedac162`**, and
+verified defects on flag-gated paths plus two on the default path (a retention/voice-upload deadlock returning 500;
+migration 0021 reversing without an evidence guard) and one rollback-compatibility gap. Those are being repaired and
+refuted in isolated branches. Promotion precondition recorded: production `QUILLMD_AI_MODEL` must be exactly a listed
+legacy id (check with `configuration_status`).
+
+No gate above is closed by this entry. B-W1, B-G1 (useful ordinary notes), B-M1 (served Sonnet 5), the hosting and
+agreement gates and the operational gates stay open. No provider call, payment, purchase, merge or deployment occurred.
