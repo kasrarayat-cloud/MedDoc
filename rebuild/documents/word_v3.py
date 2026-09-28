@@ -955,29 +955,35 @@ MAX_LABEL_WORDS = 18
 # the question (refutation R3-1). COMPANION words join any family ('N/A ☐ Yes ☐ No'). Vocabulary only ever ADDS a
 # reason to hold a row; the one exception is a CLOSED family (below), whose members a form cannot extend.
 OPTION_FAMILIES = tuple(re.compile(r"(?:%s)\.?" % f, re.I) for f in (
-    r"y|n|yes|no",
-    r"normal|abnormal|abn|wnl|nl|high|low",
-    r"present|absent",
-    r"positive|negative|pos|neg|equivocal|indeterminate|inconclusive|reactive|non-?reactive|detected|not detected",
+    r"y|n|yes|no|maybe|possibly|probably",
+    r"normal|abnormal|abn|wnl|nl|high|low|borderline|elevated|raised|reduced|critical|intermediate|equivocal",
+    r"present|absent|suspected|possible|probable|equivocal",
+    r"positive|negative|pos|neg|equivocal|indeterminate|inconclusive|reactive|non-?reactive|detected|not detected|trace|"
+    r"weak(?:ly)? positive|strong(?:ly)? positive|invalid|pending|borderline",
     r"none|mild|moderate|severe",
-    r"left|right|bilateral|both|l|r|lt|rt|bil",
-    r"male|female|m|f",
-    r"pass|fail|true|false",
-    r"(?:strongly )?(?:agree|disagree)|neutral",
+    r"left|right|bilateral|both|l|r|lt|rt|bil|midline|central|unilateral|neither",
+    r"male|female|m|f|intersex|non-?binary|transgender",
+    r"pass|fail|true|false|borderline|incomplete|partial",
+    r"(?:strongly |somewhat )?(?:agree|disagree)|neutral|undecided",
     r"always|often|usually|sometimes|rarely|never|daily|weekly|monthly|yearly|as needed|as required|when needed|"
     r"when required|prn|once|twice|stat|hourly|nightly|occasional(?:ly)?|frequent(?:ly)?|constant(?:ly)?|"
     r"intermittent(?:ly)?|continuous(?:ly)?|(?:once|twice) (?:a day|daily|weekly)|every day",
-    r"current(?: smoker)?|former(?: smoker)?|never(?: smoker)?|ex-?smoker|non-?smoker",
-    r"regular|irregular",
+    r"current(?: smoker)?|former(?: smoker)?|never(?: smoker)?|ex-?smoker|non-?smoker|occasional smoker|social smoker|"
+    r"light smoker|heavy smoker|vaper",
+    r"regular|irregular|irregularly irregular|regularly irregular",
     r"increased|decreased|unchanged|improved|worse|better|same",
     r"active|inactive|resolved|ongoing|acute|chronic",
     r"mm|cm|m|in|inches|ft|kg|g|lbs?|oz|\u00b0\s?[CF]|bpm|mm\s?hg|%|mg|mcg|ml|l|units?|years?|yrs?|months?|weeks?|days?|"
     r"hours?|hrs?|minutes?|mins?|seconds?|secs?|times?",
-    r"single|married|divorced|widowed|separated|partnered|cohabiting|civil partnership|domestic partner",
+    r"single|married|divorced|widowed|separated|partnered|cohabiting|civil partnership|domestic partner|engaged|widower|"
+    r"widow",
 ))
-# Families a form never extends with a word of its own: after-box options all of one of them are the question's whole
+# Families a form rarely extends with a word of its own: after-box options all of one of them are the question's whole
 # answer set, so a word before the first box that is not a member is the question's (yes/no, normal/abnormal,
 # present/absent, positive/negative, sides, sexes, pass/fail, agreement, smoking status, regularity, marital status).
+# Each lists its middle and extra members ('Borderline', 'Trace', 'Midline', 'Suspected'): such a word before the first
+# box shares the family and holds the row. RESIDUAL: a member no list names still reads as the question when the
+# row's only other mark is a companion or 'Other' after its last box.
 CLOSED_FAMILIES = frozenset({0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 15})
 UNIT_TAIL = re.compile(r"\(?\s*(?:mm|cm|m|in|inches|ft|kg|g|lbs?|oz|\u00b0\s?[CF]|bpm|mm\s?hg|%|mg|mcg|ml|l|units?|years?|yrs?|"
                        r"months?|weeks?|days?|hours?|hrs?|minutes?|mins?|times?)\.?\s*\)?", re.I)
