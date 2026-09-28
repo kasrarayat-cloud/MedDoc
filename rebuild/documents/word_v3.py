@@ -950,6 +950,48 @@ FIELDISH = re.compile(r"\b(?:date|time|name|signature|signed|initials?|comments?
                       r"value|score|site|code|address|phone|reason|description|details?|id)\b", re.I)
 YESNO = re.compile(r"^(?:y|n|yes|no|n/?a|nd|unk|unknown|not known|not applicable|n/a or nd|na or nd|not done|done)\.?$", re.I)
 MAX_LABEL_WORDS = 18
+# Printed options that answer one question together. A word printed right before a row's first box that shares a
+# family with the words between its boxes ('Allergies: Yes ☐ No ☐ NKDA') is that box's option, never part of
+# the question (refutation R3-1). COMPANION words join any family ('N/A ☐ Yes ☐ No'). Vocabulary only ever ADDS a
+# reason to hold a row; the one exception is a CLOSED family (below), whose members a form cannot extend.
+OPTION_FAMILIES = tuple(re.compile(r"(?:%s)\.?" % f, re.I) for f in (
+    r"y|n|yes|no|maybe|possibly|probably",
+    r"normal|abnormal|abn|wnl|nl|high|low|borderline|elevated|raised|reduced|critical|intermediate|equivocal",
+    r"present|absent|suspected|possible|probable|equivocal",
+    r"positive|negative|pos|neg|equivocal|indeterminate|inconclusive|reactive|non-?reactive|detected|not detected|trace|"
+    r"weak(?:ly)? positive|strong(?:ly)? positive|invalid|pending|borderline",
+    r"none|mild|moderate|severe",
+    r"left|right|bilateral|both|l|r|lt|rt|bil|midline|central|unilateral|neither",
+    r"male|female|m|f|intersex|non-?binary|transgender",
+    r"pass|fail|true|false|borderline|incomplete|partial",
+    r"(?:strongly |somewhat )?(?:agree|disagree)|neutral|undecided",
+    r"always|often|usually|sometimes|rarely|never|daily|weekly|monthly|yearly|as needed|as required|when needed|"
+    r"when required|prn|once|twice|stat|hourly|nightly|occasional(?:ly)?|frequent(?:ly)?|constant(?:ly)?|"
+    r"intermittent(?:ly)?|continuous(?:ly)?|(?:once|twice) (?:a day|daily|weekly)|every day",
+    r"current(?: smoker)?|former(?: smoker)?|never(?: smoker)?|ex-?smoker|non-?smoker|occasional smoker|social smoker|"
+    r"light smoker|heavy smoker|vaper",
+    r"regular|irregular|irregularly irregular|regularly irregular",
+    r"increased|decreased|unchanged|improved|worse|better|same",
+    r"active|inactive|resolved|ongoing|acute|chronic",
+    r"mm|cm|m|in|inches|ft|kg|g|lbs?|oz|\u00b0\s?[CF]|bpm|mm\s?hg|%|mg|mcg|ml|l|units?|years?|yrs?|months?|weeks?|days?|"
+    r"hours?|hrs?|minutes?|mins?|seconds?|secs?|times?",
+    r"single|married|divorced|widowed|separated|partnered|cohabiting|civil partnership|domestic partner|engaged|widower|"
+    r"widow",
+))
+# Families a form rarely extends with a word of its own: after-box options all of one of them are the question's whole
+# answer set, so a word before the first box that is not a member is the question's (yes/no, normal/abnormal,
+# present/absent, positive/negative, sides, sexes, pass/fail, agreement, smoking status, regularity, marital status).
+# Each lists its middle and extra members ('Borderline', 'Trace', 'Midline', 'Suspected'): such a word before the first
+# box shares the family and holds the row. RESIDUAL: a member no list names still reads as the question when the
+# row's only other mark is a companion or 'Other' after its last box.
+CLOSED_FAMILIES = frozenset({0, 1, 2, 3, 5, 6, 7, 8, 10, 11, 15})
+UNIT_TAIL = re.compile(r"\(?\s*(?:mm|cm|m|in|inches|ft|kg|g|lbs?|oz|\u00b0\s?[CF]|bpm|mm\s?hg|%|mg|mcg|ml|l|units?|years?|yrs?|"
+                       r"months?|weeks?|days?|hours?|hrs?|minutes?|mins?|times?)\.?\s*\)?", re.I)
+COMPANION_OPTION = re.compile(r"(?:n/?a|nd|unk|unknown|not known|not applicable|not done|done|other|unsure|"
+                              r"don'?t know|dk|not assessed|not examined|not tested|not recorded|not stated|nkda|nka|nil|"
+                              r"none|declined|refused|unable to assess)\.?", re.I)
+# A word and its printed negation ('Equal' / 'Unequal', 'Tender' / 'Non-tender', 'Palpable' / 'Not palpable').
+NEGATION_PREFIX = ("un", "in", "im", "il", "ir", "non", "non-", "non ", "not ", "a", "ab", "dis")
 
 
 @dataclass
@@ -994,6 +1036,11 @@ def option_text(text: str) -> str:
     stripping them made both 'knee' - the clinician chose a side the export could not tell apart."""
     text = (text or "").replace("\x00", " ").replace(BOX, " ").replace(CHECKED, " ")
     return re.sub(r"\s+", " ", text.replace("\t", " ")).strip().strip(" :–—-_*").strip()[:300]
+
+
+def gap_width(space: str) -> int:
+    """How wide a run of printed whitespace is, a tab counted as eight spaces: which box a word is printed against."""
+    return 8 * space.count("\t") + len(space) - space.count("\t")
 
 
 def is_hint_run(r) -> bool:
@@ -1825,12 +1872,18 @@ class Detector:
         return headers, issue
 
     def answer_cell(self, c) -> bool:
-        """The cell holds an answer place of its own: a box or other control, or a drawn answer blank."""
-        objects = self.cell_objects(c)
-        return BOX in objects or CHECKED in objects or "\x00" in objects or any(
-            kind != "blank" or "_" in printed[start:end]
-            for x in c.children if x.kind == "p" for printed, pieces in [self.ptext(x.el)]
-            for start, end, kind in self.blank_spans(printed, pieces))
+        """The cell holds an answer place of its own: a box or other control, a drawn answer blank of any kind (an
+        underscore rule, leader dots or an ellipsis, digit boxes, a bracket, an underlined gap: every blank the
+        engine itself maps as an answer), or a printed answer gap after a label read exactly as the engine's own
+        answer-line reader reads one (inline_answer_gap: 'Temp:   °C', 'Weight:<em spaces>kg'; never a two-level
+        label 'Cardiovascular:<tab>Heart sounds'). Linear in the cell's text and read once per cell: a merged cell
+        beside twenty coded rows is asked twenty times (refutation F2, R3-3, R4-6, R4-10)."""
+        key = ("answer_cell", id(c.el))
+        if key not in self._grid:
+            objects = self.cell_objects(c)
+            self._grid[key] = BOX in objects or CHECKED in objects or "\x00" in objects or any(
+                self.blank_spans(*self.ptext(x.el)) or self.inline_answer_gap(x) for x in c.children if x.kind == "p")
+        return self._grid[key]
 
     def printed_row_label(self, cell):
         """(question, issue, group) for the row of `cell`: the row's question printed in its own plain label cell
@@ -1867,17 +1920,97 @@ class Detector:
             return "", "A cell to the left of the source prints text that is not a usable row label.", group
         return "", "", group
 
-    HEADER_NUMBER = re.compile(r"(?<![\w.])[(\[]?(\d{1,3})[)\]]?(?![\w.])")
+    # A number printed in a header option, in any legend form: '2 = Abnormal', '(2)', '2)', '1. Normal', '1.Normal',
+    # '1)Normal', 'Normal (1.)', and a decimal '1.0 Normal' (read whole, so it never equals a code '1'). Never part of a
+    # word ('12b').
+    HEADER_NUMBER = re.compile(r"(?<![\w.])[(\[]?(\d{1,3}(?:\.\d+)?)(?:[.)\]:=\-\u2013]|(?![\w.]))")
+    # In governing text (a title, lead, heading or row label): a number, the printed joiners between a code and its
+    # meaning (spaces, brackets, '=', ':', '.', a dash, an arrow - never ',' ';' or '|', which end an entry), and a
+    # run of words.
+    LEGEND_NUMBER = re.compile(r"(?<![\w.])\d{1,3}(?:\.\d+)?(?!\w)")
+    LEGEND_JOIN = r"[\s.:=()\[\]\-\u2013\u2014>\u2192\u21d2]*"
+    LEGEND_WORDS = r"[^\W\d_]+(?:[ '\u2019/-]+[^\W\d_]+)*"
+    LEGEND_ARROW = re.compile(r"=|->|=>|\u2192|\u21d2")
 
-    def legend_conflict(self, options, row):
-        """A printed header whose options also print numbers ('2 = Abnormal') is a code legend. It agrees with a
-        row only when each option prints exactly the code printed before the box under it; otherwise which box
-        means which option is not certain (refutation F4). A header that prints no number never conflicts."""
-        printed = [self.HEADER_NUMBER.findall(option) for option in options]
-        if not any(printed):
-            return False
+    @staticmethod
+    def legend_words(text):
+        """A printed meaning as its words: case, punctuation and 'and'/'or' at either end dropped ('Non-tender' is
+        'non tender'; 'Not palpable' never equals 'palpable')."""
+        words = re.findall(r"[^\W\d_]+", text.lower())
+        while words and words[0] in ("and", "or"):
+            words = words[1:]
+        while words and words[-1] in ("and", "or"):
+            words = words[:-1]
+        return " ".join(words)
+
+    def legend_entries(self, segment, meanings, codes):
+        """(code, meaning) for every legend entry printed in one piece of governing text, or None when a number is
+        printed next to an option's words in a form whose direction cannot be read.
+
+        An entry is a number printed with '=' or an arrow ('1 = Normal', 'Abnormal = 1', '1 → Normal'), or a number
+        printed next to words that contain an option ('1 Abnormal', '(1) Normal', '[1] Normal', 'Normal (1)',
+        '1.Normal'), or one of two or more numbered items whose numbers are all the row's codes ('(1) Absent
+        (2) Present'). Its meaning is the words on the side the legend prints them: the operator's side, else the
+        one side naming an option, else the side the first entry of the same text used (refutation R3-2, R4-4)."""
+        involves = lambda words: bool(words) and any(m and (" %s " % m) in (" %s " % words) for m in meanings)
+        found = []
+        for match in self.LEGEND_NUMBER.finditer(segment):
+            # A legend entry is short: the words on each side are read within 120 characters, so a long printed
+            # text costs linear time (refutation R4-6).
+            following, preceding = segment[match.end():match.end() + 120], segment[max(0, match.start() - 120):match.start()]
+            joined_after = re.match(self.LEGEND_JOIN, following).group()
+            joined_before = re.search(self.LEGEND_JOIN + "$", preceding).group()
+            after = re.match(self.LEGEND_WORDS, following[len(joined_after):])
+            before = re.search(self.LEGEND_WORDS + "$", preceding[:len(preceding) - len(joined_before)])
+            after = self.legend_words(after.group()) if after else ""
+            before = self.legend_words(before.group()) if before else ""
+            listed = bool(after) and bool(re.fullmatch(r"\s*[.):\]\-\u2013]\s*", joined_after))
+            found.append((match.group(), after, before, bool(self.LEGEND_ARROW.search(joined_after)),
+                          bool(self.LEGEND_ARROW.search(joined_before)), listed))
+        numbered = [code for code, _, _, _, _, listed in found if listed]
+        numbered_legend = len(numbered) >= 2 and all(code in codes for code in numbered)
+        entries, direction = [], None
+        for code, after, before, operator_after, operator_before, listed in found:
+            if operator_after and operator_before:
+                return None
+            if operator_after or operator_before:
+                side = "after" if operator_after else "before"
+            else:
+                sides = [name for name, words in (("after", after), ("before", before)) if involves(words)]
+                if not sides and listed and numbered_legend:
+                    sides = ["after"]
+                if not sides:
+                    continue
+                side = sides[0] if len(sides) == 1 else direction
+                if side is None:
+                    return None
+            direction = direction or side
+            entries.append((code, after if side == "after" else before))
+        return entries
+
+    def legend_conflict(self, options, row, governing=""):
+        """A printed header whose options also print numbers ('2 = Abnormal', '1.Normal') is a code legend. It agrees
+        with a row only when each option prints exactly the code printed before the box under it; otherwise which
+        box means which option is not certain (refutation F4, R3-2, R4-4). A legend printed in the governing text
+        ('codes: 1 = Abnormal, 2 = Normal', 'Abnormal (1)', '[1] Abnormal') must name, for each code it prints,
+        exactly the option printed over that code's box: its words equal the option's, so 'Not palpable' never
+        agrees with 'Palpable' (R4-5). A legend whose direction cannot be read refuses the row. A header and
+        governing text that print no legend never conflict."""
         codes = re.findall(r"(\d{1,3})\s*[☐☒]", self.ptext(row.el)[0])
-        return len(codes) != len(options) or any(found != [code] for found, code in zip(printed, codes))
+        printed = [self.HEADER_NUMBER.findall(option) for option in options]
+        if any(printed) and (len(codes) != len(options) or any(found != [code] for found, code in zip(printed, codes))):
+            return True
+        meanings = [self.legend_words(option) for option in options]
+        # Each printed piece (heading, title, lead, row label) is read alone: a number in one never pairs with the
+        # words of another.
+        for segment in re.split(r" > | \| ", governing):
+            entries = self.legend_entries(segment, meanings, codes)
+            if entries is None:
+                return True
+            for code, meaning in entries:
+                if code not in codes or len(codes) != len(options) or meanings[codes.index(code)] != meaning:
+                    return True
+        return False
 
     def coded_kind(self, label, options, context):
         """A coded response row records one code per row. Only a literal instruction widens it; a plural label
@@ -1953,7 +2086,7 @@ class Detector:
                         problem = "Literal headers, complete row labels or effective tab coordinates do not agree."
                         break
                     label = item[0] or unlabelled
-                    if self.legend_conflict(options, row):
+                    if self.legend_conflict(options, row, context):
                         complete = False
                         problem = "The printed header prints numbers that are not the row's response codes."
                         break
@@ -2011,8 +2144,11 @@ class Detector:
     # A response code as forms print it: '1', '(1)', '1.', '#1', '1a', '1=', '1:', '1 -', 'a)', 'a', 'I', 'iv'.
     CODE_TOKEN = r"(?:#\s?)?[(\[]?(?:\d{1,3}[a-z]?|[a-z]|[ivx]{1,4})[)\].:=]?(?:\s?[-\u2013=:])?"
     CODE_BEFORE = re.compile(r"(?:^|\s)" + CODE_TOKEN + r"\s*$", re.I)
-    CODE_AFTER = re.compile(r"^\s*" + CODE_TOKEN + r"(?:\s|$)", re.I)
     CODE_BARE = re.compile(r"\s*" + CODE_TOKEN + r"\s*", re.I)
+    # A code printed against the question with no space: 'Score:0 ☐', 'Grade—0 ☐', 'Pain(0) ☐'. A bracketed code may
+    # touch a word; a bare one follows a printed separator ('COVID-19' then a box is the question's own number, and
+    # is harmless: no bare code follows it).
+    CODE_GLUED = re.compile(r"(?:[(\[]\d{1,3}[a-z]?[)\]]|(?<=[:=/#\-\u2013\u2014])(?:\d{1,3}[a-z]?|[ivx]{1,4}|[a-z]))\s*$", re.I)
 
     def response_code_row(self, slot):
         """A row whose boxes are printed after digit codes ('1 ☐ 2 ☐', '(1) ☐', 'Shape ☐ 2 ☐'), in any shape.
@@ -2025,12 +2161,26 @@ class Detector:
             return False
         segments = [text[marks[i - 1] + 1 if i else 0:mark] for i, mark in enumerate(marks)]
         before = [bool(self.CODE_BEFORE.search(segment)) for segment in segments]
-        trailing = bool(self.CODE_AFTER.match(text[marks[-1] + 1:]))
-        # A code printed before every box; or a bare code between two boxes (the previous box's option or the
-        # next box's code) unless the whole row reads box-then-number: nothing coded before the first box
-        # and a number after the last one.
-        bare = any(self.CODE_BARE.fullmatch(segment) for segment in segments[1:])
-        return all(before) or (bare and (before[0] or not trailing))
+        # The first code may touch the question ('Pain score:0 ☐ 1 ☐ 2'): it is still printed before its box, and
+        # read box-then-option every box would take the next box's code (refutation R4-3).
+        before[0] = before[0] or bool(self.CODE_GLUED.search(segments[0]))
+        if all(before):
+            return True  # a code printed before every box
+        bare = [segment for segment in segments[1:] if self.CODE_BARE.fullmatch(segment)]
+        if not bare:
+            return False
+        # A bare code between two boxes is the previous box's option or the next box's code. It is the previous
+        # box's option only when the whole row reads box-then-option: nothing coded before the first box, an option
+        # (a number or a word) printed after the last box, every bare code printed against the box before it, and
+        # the first box's own option starting its sequence ('☐ 0', '☐ 1', '☐ I', '☐ A'). 'Stage: ☐ I ... ☐ IV ☐
+        # Unknown' is read; 'Shape ☐ 2 ☐ Other' (the first box's code missing) is a coded row (refutation R3-4).
+        if before[0] or not text[marks[-1] + 1:].strip():
+            return True
+        if any(gap_width(s[:len(s) - len(s.lstrip())]) > gap_width(s[len(s.rstrip()):]) for s in bare):
+            return True
+        first = segments[1]
+        return bool(self.CODE_BARE.fullmatch(first)) and \
+            re.sub(r"[#\s()\[\].:=\-\u2013]", "", first).lower() not in ("0", "1", "a", "i")
 
     def coded_column_parts(self, slot):
         if not self.coded_choice_paragraph(slot):
@@ -2103,6 +2253,7 @@ class Detector:
         row_question, row_issue, group = self.printed_row_label(cell)
         if row_issue:
             return [], row_issue
+        governing = " > ".join(x for x in (context, *headers, group, row_question) if x)
         context = " > ".join(x for x in (context, *headers, group, row_question,
                              " | ".join(texts[p.id].strip() for p in children if texts[p.id].strip())) if x)
         if issue or header_issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
@@ -2197,7 +2348,8 @@ class Detector:
                 refs = [unit[0] for unit in self.box_units(row)]
                 if len(refs) != len(info["options"]) or len(infos[row.id]["starts"]) != len(info["options"]) + 1:
                     return [], "A row's answer boxes do not match its printed column header."
-                if self.legend_conflict(info["options"], row):
+                legend = " | ".join([governing, info["prefix"]] + [texts[p.id] for p in titles + group["lead"] + before])
+                if self.legend_conflict(info["options"], row, legend):
                     return [], "The printed header prints numbers that are not the row's response codes."
                 if (self.region_hidden(box_region(row.el)) or not self.readable_box_states(row)
                         or any(hyperlink_control(node) for node in checkbox_nodes(row.el))
@@ -2752,18 +2904,157 @@ class Detector:
                     "sources": [{"part": s.part, "slot": s.path, "fingerprint": fingerprint(s.el)} for s in sources]}
         return {"kind": kind, "question": question, "context": context, "relation": relation}
 
+    @staticmethod
+    def option_families(text):
+        """The OPTION_FAMILIES a printed option belongs to; -1 for a companion word ('N/A', 'Unknown')."""
+        word = re.sub(r"^[\s(\[]+|[\s)\].:;,]+$", "", " ".join(option_text(text).lower().split()))
+        found = {n for n, family in enumerate(OPTION_FAMILIES) if family.fullmatch(word)}
+        return found | ({-1} if COMPANION_OPTION.fullmatch(word) else set())
+
+    @staticmethod
+    def option_shape(text):
+        """A printed option's form: numbers as '9', letter runs as 'a', punctuation kept ('0.5 mg' and '1 mg' are
+        '9 a'; 'A+' and 'O+' are 'a+')."""
+        shape = re.sub(r"[^\W\d_]+", "a", re.sub(r"\d+(?:[.,]\d+)?", "9", option_text(text).lower().rstrip(".,;")))
+        return " ".join(shape.split())
+
+    @staticmethod
+    def negation_pair(a, b):
+        """One printed option is the other's negation ('Equal' / 'Unequal', 'Tender' / 'Non-tender')."""
+        a, b = " ".join(option_text(a).lower().split()), " ".join(option_text(b).lower().split())
+        return bool(a and b) and any(b == prefix + a or a == prefix + b for prefix in NEGATION_PREFIX)
+
+    @staticmethod
+    def option_sequence(options):
+        """Two or more options counting from the start, each after the same printed word or none: '1', '2', '3';
+        'I', 'II', 'III'; 'A', 'B'; 'Type 1', 'Type 2'."""
+        romans = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"]
+        parts = [option_text(o).lower().rsplit(" ", 1) if " " in option_text(o) else ["", option_text(o).lower()]
+                 for o in options]
+        if len(parts) < 2 or len({lead for lead, _ in parts}) != 1:
+            return False
+        items = [item for _, item in parts]
+        for sequence in ([str(n) for n in range(0, 21)], [str(n) for n in range(1, 21)], romans, list("abcdefghij")):
+            if items == sequence[:len(items)]:
+                return True
+        return False
+
+    def words_before_boxes(self, units, options):
+        """Why a row of boxes may print each box's word BEFORE it ('Smoker: Yes ☐ No ☐ (tick one)'), or "".
+
+        Read after-box, each box would take the next box's word. A row is read after-box when nothing but the question
+        is printed before its first box, or when the words printed right before the first box (after the question's
+        colon, or the whole text before it) have no mark of being an option. The marks are layout and printed form,
+        never the absence of a word from a list (refutation F3, R3-1, R4-1, R4-2, R4-8):
+
+        - held always: that word shares an option family, or is the negation, of an after-box word ('Allergies Yes ☐
+          No'); a word is printed against the box after it (a gap); the words before the first box have the printed
+          form of the words between the boxes ('Dose 0.5 mg ☐ 1 mg ☐', 'Blood type A+ ☐ O+ ☐', '... every day smoker
+          ☐ Former smoker ☐'); or the text after the last box is a write-in or an instruction of its own ('Discussed
+          with ____', 'If yes, list ____', 'Exact: ____'), so the last box has no word after it;
+        - held unless the after-box words are provably the question's whole answer set (a closed family such as
+          yes/no, a negation pair, a counted sequence): the word before the first box is itself an option word or
+          starts a new capitalised phrase ('Urine protein Negative ☐', 'DNR status Full code ☐'); or the text after
+          the last box is a companion ('Unknown', 'Not done') or an 'Other ____' write-in, which a form may print with
+          no box of its own.
+
+        A row with none of these marks is read after-box: read the other way, its last printed option would have no
+        box at all."""
+        between, last = options[:-1], options[-1]
+        if clean_label(units[0][2]) and all(between) and not last:
+            return "and nothing after the last one"
+        instruction = re.sub(r"[()\[\].,:;!]", " ", last)
+        for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE):
+            instruction = rx.sub(" ", instruction)
+        instruction = re.sub(r"\b(?:please|only|boxe?s?|answers?|options?|responses?|here)\b", " ", instruction, flags=re.I)
+        if any(rx.search(last) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE)) and not re.search(r"[^\W_]", instruction):
+            return "and only a selection instruction after the last one"
+        head = units[0][2].rstrip()
+        # The question ends at its colon, a printed gap or its own answer blank ('Date: ____ Yes ☐ No ☐ N/A'): only
+        # what follows is the word printed right before the first box.
+        cuts = list(re.finditer(r"[:?]|\t| {2,}|_+|\.{2,}|…+|[\u25af\x00" + BOX + CHECKED + "]+", head))
+        blank_cut = bool(cuts) and not re.fullmatch(r"[:?]|\t| {2,}", cuts[-1].group())
+        # A bracketed selection instruction ('Sex: (choose one) ☐ M') is not an option word; a bracketed word ('Smoker:
+        # (Yes) ☐ (No) ☐ N/A', 'Smoker [Yes] ☐') still is. A bracket drawn around a box ('Grade [☐] 1 [☐] 2') prints no
+        # word at all (D35).
+        tail = re.sub(r"\(([^()]*)\)", lambda m: " " if any(rx.search(m.group(1)) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE))
+                      or re.search(r"\b(?:choose|select|tick|check|circle|mark|pick)\b", m.group(1), re.I) else m.group(0),
+                      head[cuts[-1].end():] if cuts else head)
+        tail = re.sub(r"[\[\]]", " ", tail)
+        # The question's own condition or question clause ('If yes', 'If yes, how many', 'which side', 'how often') is
+        # the question's; only what follows it may be the first box's option ('Smoker? If yes Yes ☐ No ☐ Unknown',
+        # 'Diet: what type Normal ☐ Soft ☐'). 'When' begins an option ('When required ☐ Daily ☐'), never a clause.
+        clause = re.compile(r"\s*(?:if\s+(?:not\s+)?|how\s+|what\s+|which\s+|where\s+)[^\W\d_]+[\s,:;]*", re.I)
+        after_clause = False
+        while clause.match(tail):
+            tail, after_clause = tail[clause.match(tail).end():], True
+        # The question, its clause, a rate ('how many per day'), or the unit of its own answer blank ('Weight ____ kg ☐
+        # measured ☐ stated') ends right before the first box. After the question's colon a unit is an option ('Dose
+        # unit: mg ☐ mcg ☐').
+        unit = UNIT_TAIL.fullmatch(re.sub(r"[^\w\s\u00b0%/]", " ", re.sub(r"^\s*(?:per|a|an|each)\s+", "", tail, flags=re.I)).strip())
+        if not re.search(r"[^\W\d_]", tail) or unit and (blank_cut or after_clause):
+            return ""
+        words = option_text(tail).split()
+        grams = lambda chosen: [" ".join(chosen[:k]) for k in (1, 2, 3) if k <= len(chosen)]
+        families = lambda texts: set().union(*(self.option_families(x) for x in texts)) if texts else set()
+        ending = families([" ".join(words[-k:]) for k in (1, 2, 3) if k <= len(words)])
+        # After the question's colon the tail starts at its first word ('Tobacco: Current every day smoker ☐').
+        near = ending | (families(grams(words)) if cuts or after_clause else set())
+        anywhere = families([" ".join(words[i:j]) for i in range(len(words)) for j in range(i + 1, min(len(words), i + 3) + 1)])
+        own_last = re.split(r"\t{2,}| {4,}", units[-1][1])[0]
+        own_last = own_last if re.search(r"\S", own_last) else units[-1][1]
+        write_in = bool(re.search(r"_{2,}|\.{3,}|…|[\u25af\x00]|[^\W\d_]\s*:|\?", own_last)
+                        or re.match(r"\s*(?:if|specify|please|comments?|list|describe|explain|details?)\b", own_last, re.I)
+                        or any(rx.search(own_last) for rx in (CHECK_ONE, CHECK_ALL, EXPLICIT_ONE)))
+        other_write_in = write_in and set(re.findall(r"[^\W\d_]+", own_last.lower())) <= {"other", "specify", "please",
+                                                                                         "state", "describe", "details"} \
+            and "other" in own_last.lower()
+        after = [o for o in between if o] + ([last] if last and not write_in else [])
+        after_families = [self.option_families(o) for o in after]
+        core = [(o, f - {-1}) for o, f in zip(after, after_families) if f != {-1}]
+        if (near - {-1}) & set().union(*after_families) or (-1 in ending and any(f - {-1} for f in after_families)) \
+                or any(self.negation_pair(words[-1], o) or self.negation_pair(" ".join(words[-2:]), o) for o in after):
+            return "(the word before the first box is one of the same printed options)"
+        for raw in (u[1] for u in units[:-1]):
+            if raw.strip() and gap_width(raw[:len(raw) - len(raw.lstrip())]) > gap_width(raw[len(raw.rstrip()):]):
+                return "(a word is printed against the box after it)"
+        shapes = {self.option_shape(o) for o in between if o}
+        if len(shapes) == 1 and re.search(r"[9+%/<>=#\u00b0]", next(iter(shapes))) and \
+                any(self.option_shape(" ".join(words[-k:])) in shapes for k in (1, 2, 3) if k <= len(words)):
+            return "(the words before the first box have the printed form of the options between the boxes)"
+        # The same last WORD ('... every day smoker ☐ Former smoker ☐'): printed brackets and numbers are not words.
+        lettered = lambda text: re.findall(r"[^\W\d_][\w'\-]*", text.lower())
+        ends = {lettered(o)[-1] for o in between if len(lettered(o)) > 1}
+        if len(lettered(tail)) > 1 and ends == {lettered(tail)[-1]} and all(len(lettered(o)) > 1 for o in between if o):
+            return "(the words before the first box have the printed form of the options between the boxes)"
+        if write_in and not other_write_in:
+            return "(the text after the last box is a write-in of its own, so the last box's word is printed before it)"
+        titled = any(re.fullmatch(r"[a-z][\w'\-]*", a) and re.fullmatch(r"[A-Z][a-z]+(?:[-'][A-Za-z]+)*", b)
+                     for a, b in zip(words, words[1:]))
+        weak = bool(ending) or titled or -1 in self.option_families(last) or other_write_in
+        if not weak:
+            return ""
+        closed = set.intersection(*(f for _, f in core)) & CLOSED_FAMILIES if core and all(f for _, f in core) else set()
+        paired = bool(core) and all(any(self.negation_pair(o, x) for x, _ in core) for o, _ in core)
+        counted = self.option_sequence([o for o, _ in core])
+        if (closed - anywhere) or paired or counted:
+            return ""
+        return "(the words right before the first box may be the first box's option)"
+
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
         for units in self.split_inline_groups(g):
             options = [option_text(re.split(r"\t{2,}| {4,}", o)[0]) if re.search(r"\S", re.split(r"\t{2,}| {4,}", o)[0]) else option_text(o)
                        for _, o, _ in units]
             question = clean_label(units[0][2])
-            if len(units) > 1 and question and all(options[:-1]) and not options[-1]:
-                # ⚠️ WORDS PRINTED BEFORE THEIR BOXES ('Smoker: Yes ☐ No ☐', 'Smoker ☐ Diabetic ☐'): read as the text
-                # after each box, every box took the next box's word, and 'No' ticked the Yes box (refutation F3).
-                self.notes.append("Boxes at %s have their words printed before each box and nothing after the last one, "
-                                  "so which printed word names which box was left for manual mapping. Printed source: %s"
-                                  % (pslot.id, " | ".join(self.ptext(p.el)[0] for p in g["paras"])))
+            before_boxes = self.words_before_boxes(units, options) if len(units) > 1 else ""
+            if before_boxes:
+                # ⚠️ WORDS PRINTED BEFORE THEIR BOXES ('Smoker: Yes ☐ No ☐', 'Allergies: Yes ☐ No ☐ NKDA'): read as the
+                # text after each box, every box took the next box's word, and 'No' ticked the Yes box (refutation F3,
+                # and R3-1 whatever is printed after the last box).
+                self.notes.append("Boxes at %s have their words printed before each box %s, so which printed word "
+                                  "names which box was left for manual mapping. Printed source: %s"
+                                  % (pslot.id, before_boxes, " | ".join(self.ptext(p.el)[0] for p in g["paras"])))
                 for p in g["paras"]:
                     self.claimed.add(id(p.el))
                 continue
@@ -3421,6 +3712,8 @@ class Detector:
                     if not (self.is_empty_cell(c) or placeholder and self.cell_is_plain(c) or guidance or instructed):
                         continue
                     label = self.row_label(tslot, r, c.info["col"])
+                    if instructed:
+                        label = self.instructed_item(tslot, rows, r, c) or label
                     header = clean_label(self.column_header(tslot, c.info["col"], r))
                     below = self.label_below(tslot, c)
                     if placeholder and not label and not header:
@@ -3451,14 +3744,30 @@ class Detector:
     INSTRUCTED_REQUEST = re.compile(r"^(?:if\b[^.;:?]{0,80},\s*)?(?:please\s+)?(?:describe|explain|specify|note|list|comment|detail)"
                                     r"\s+(?:if|whether|any|all)\b", re.I)
     INSTRUCTED_PLACE = re.compile(r"\b(?:here|below|in this (?:box|space|cell|column|section))\b", re.I)
+    # Printed advice to the patient, never a request for the clinician's answer: it speaks to its reader as 'you'
+    # ('... at your next appointment', '... when you phone us'), sends its reader to a clinician ('... to the nurse'), or
+    # adds an instruction to act ('Note any dizziness and stop the tablets'). A clinician's request names the patient
+    # or the team in the third person ('Describe discussion with the patient here') and stays a destination. A column
+    # printing content ('Patient information', 'Instructions') holds printed content unless its header records what
+    # was done ('Education provided') (refutation R3-5, R4-9).
+    ADDRESSED = re.compile(r"\b(?:you|your|yours|yourself)\b|\b(?:phone|call|tell|ask|contact|inform|email|text|see|visit)\s+us\b|"
+                           r"\b(?:to|tell|ask|call|phone|contact|inform|see)\s+(?:your|the|a|an)\s+(?:doctor|physician|nurse|"
+                           r"pharmacist|gp|provider|care\s+team|clinic|surgery|midwife|dentist)\b", re.I)
+    ACTION_ADVICE = re.compile(r"\b(?:and|then|or)\s+(?:stop|take|start|continue|avoid|call|phone|contact|tell|inform|seek|go|"
+                               r"attend|return|reduce|increase|keep|rest|drink|eat|do\s+not|don'?t)\b", re.I)
+    CONTENT_COLUMN = re.compile(r"\b(?:instructions?|information|advice|guidance|directions?|education)\b", re.I)
+    RECORDED_COLUMN = re.compile(r"\b(?:provided|given|delivered|discussed|documented|completed|received|reviewed|done|"
+                                 r"reinforced|explained)\b", re.I)
 
     def instructed_answer_cell(self, table, row, cell):
         """A plain cell of a data row whose printed text asks for the answer to be written in it ('If palpable,
         describe here', 'Describe any findings below'), under a printed column header and beside the row's own
         label; or 'Note if ... present.'. Its answer is appended below the instruction; the instruction never names
         another row's cell. Printed content ('Note: INR must be checked', 'Detail: bleeding, infection', 'Explain
-        the procedure to the patient') is not a request to write there (refutation F6)."""
+        the procedure to the patient') is not a request to write there (refutation F6). Printed advice to the
+        patient is withdrawn WITH A NOTE, so a clinician's request misread as advice is never lost silently (R4-9)."""
         text = self.cell_text(cell)
+        header = self.column_header(table, cell.info["col"], row)
         if len(text) > 200 or not self.INSTRUCTED.match(text) \
                 or not (self.INSTRUCTED_PLACE.search(text) or self.INSTRUCTED_REQUEST.match(text)) \
                 or not self.cell_is_plain(cell) or self.row_kind(table, row) != "data":
@@ -3467,7 +3776,41 @@ class Detector:
             printed, pieces = self.ptext(paragraph.el)
             if BOX in printed or CHECKED in printed or "\x00" in printed or self.blank_spans(printed, pieces):
                 return False
-        return bool(self.column_header(table, cell.info["col"], row)) and bool(self.row_label(table, row, cell.info["col"]))
+        if not (header and self.row_label(table, row, cell.info["col"])):
+            return False
+        reason = ("it speaks to the patient" if self.ADDRESSED.search(text) else
+                  "it tells the reader to act" if self.ACTION_ADVICE.search(text) else
+                  "its column '%s' prints content" % clean_label(header)[:60]
+                  if self.CONTENT_COLUMN.search(header) and not self.RECORDED_COLUMN.search(header) else "")
+        if reason:
+            self.notes.append("The cell at %s prints the instruction '%s', which reads as printed advice or content "
+                              "(%s), so it was kept as printed text and is not an answer place; map it manually if "
+                              "it asks for the clinician's answer." % (cell.id, clean_label(text)[:120], reason))
+            return False
+        return True
+
+    # A printed value, never an item: a date, a time, a number or a dose ('01/02/2026', '08:30', '500 mg', '2 x 5 ml').
+    MONTH_WORD = re.compile(r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|"
+                            r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|am|pm|x", re.I)
+
+    def value_text(self, text):
+        if not re.search(r"\d", text):
+            return False
+        return all(OPTION_FAMILIES[14].fullmatch(word) or self.MONTH_WORD.fullmatch(word)
+                   for word in re.findall(r"[^\W\d_]+", text))
+
+    def instructed_item(self, table, rows, row, cell):
+        """The item an instructed cell's row is about: the nearest printed label cell to its left that is not a value
+        ('500 mg', '01/02/2026'), not a label merged over several rows, and not in a column that prints a label only
+        on the first row of each group ('Abdomen' over Liver and Spleen); the nearest label otherwise, or "" (then
+        the row's own label is kept) (refutation R3-5, R4-7)."""
+        def grouped(col):
+            return any(is_blank_text(self.cell_text(x)) for other in rows if other != row and self.row_kind(table, other) == "data"
+                       for x in rows[other] if x.info["col"] == col and not x.info["vmerge"])
+        items = [x for x in sorted(rows[row], key=lambda x: -x.info["col"]) if x.info["col"] < cell.info["col"]
+                 and not x.info["vmerge"] and self.is_label_cell(x) and not self.value_text(self.cell_text(x))]
+        own = [x for x in items if not grouped(x.info["col"])]
+        return clean_label(self.cell_text((own or items)[0])) if items else ""
 
     def question_box_style_chain(self, name, kind):
         chain, seen = [], set()
@@ -4144,7 +4487,9 @@ class Detector:
 
     LABEL_COLON = re.compile(r"([^\t\x00:;?!]{1,160}?)\s*:(?=[\s\x00]|$)")
     ANSWER_GAP = re.compile(r"[ \t\u00a0\u2002\u2003]*")
-    ANSWER_UNIT = re.compile(r"\(?\s*(?:mm|dd|yy|hh|units?|kg|cm|lbs?|in|minutes?|hours?|days?|years?|%)\b", re.I)
+    # A unit printed after an answer gap ('Weight:      kg', 'Temp:      °C', 'Pulse:      bpm').
+    ANSWER_UNIT = re.compile(r"\(?\s*(?:mm|dd|yy|hh|units?|kg|cm|lbs?|in|minutes?|hours?|days?|years?|%|\u00b0\s?[CF]|bpm|"
+                             r"mm\s?hg|mg|mcg|ml|mmol|breaths|weeks?|months?)\b", re.I)
 
     def inline_answer_gap(self, slot) -> bool:
         """'Label:' followed by a printed gap (a tab or three or more spaces) and then more of an answer line:
