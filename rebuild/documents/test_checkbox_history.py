@@ -427,3 +427,256 @@ class CheckboxHistory(unittest.TestCase):
         self.assertEqual(previous, field)
         with self.assertRaises(w.V3Failure):
             w.fill(raw, [field], {field['key']: field['options'][:2]})
+
+
+LEAVE = ('Day', 'Overnight', 'Weekend')
+TEXTBOX = ('<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+           'xmlns:v="urn:schemas-microsoft-com:vml"><w:pict><v:shape style="position:absolute;'
+           'margin-left:300pt;width:120pt;height:30pt"><v:textbox><w:txbxContent><w:p><w:r><w:t>%s</w:t>'
+           '</w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></w:r>')
+
+
+def native_list(doc, question='Community leave taken', options=LEAVE):
+    """A native FORMCHECKBOX list, one option per paragraph, the owner on the first."""
+    for i, option in enumerate(options):
+        p = doc.add_paragraph(question + ': ' if i == 0 else '')
+        ff_field(p, 'checkbox', name='L%d' % i); p.add_run(' ' + option)
+    return doc
+
+
+def inline_question(question, options, control):
+    """An ordinary checkbox question: the question and its boxes in one paragraph (glyph or native)."""
+    doc = Document(); p = doc.add_paragraph(question + ' ')
+    for i, option in enumerate(options):
+        if control == 'ff': ff_field(p, 'checkbox', name='G%d' % i)
+        else: p.add_run('☐')
+        p.add_run(' ' + option + '   ')
+    return doc
+
+
+class SelectionLimitRefutations(unittest.TestCase):
+    """Refuter inputs against the native-checkbox history and the ordinary one-only reading (c002b620)."""
+
+    def fields(self, raw, label):
+        return [f for f in w.inspect(raw)['fields']
+                if f['locator']['target']['type'] == 'checkboxes' and f['label'].startswith(label)]
+
+    def ticks(self, raw, field, chosen):
+        output = w.fill(raw, [field], {field['key']: chosen})
+        index = w.SlotIndex(w.open_package(output))
+        return [w.box_state(index, b) for b in field['locator']['target']['boxes']]
+
+    def assertNeverTwo(self, raw, label='Community leave taken'):
+        """A limited instruction may govern the list: it stays one choice or is held, and never takes two."""
+        fields = self.fields(raw, label)
+        self.assertLessEqual(len(fields), 1)
+        for field in fields:
+            self.assertEqual(field['kind'], 'choice')
+            with self.assertRaises(w.V3Failure):
+                w.fill(raw, [field], {field['key']: field['options'][:2]})
+        self.assertTrue(any('selection' in n for n in w.inspect(raw)['notes']))
+
+    def assertOneChoice(self, raw, label, chosen, expected):
+        fields = self.fields(raw, label)
+        self.assertEqual(len(fields), 1)
+        field = fields[0]
+        self.assertEqual(field['kind'], 'choice')
+        self.assertEqual(self.ticks(raw, field, chosen), expected)
+        with self.assertRaises(w.V3Failure):
+            w.fill(raw, [field], {field['key']: field['options'][:2]})
+        return field
+
+    def assertMulti(self, raw, label, expected=(True, True, False)):
+        fields = self.fields(raw, label)
+        self.assertEqual(len(fields), 1)
+        field = fields[0]
+        self.assertEqual(field['kind'], 'multi_choice')
+        self.assertEqual(self.ticks(raw, field, field['options'][:2]), list(expected))
+        return field
+
+    # A-F1: a tick-one printed higher up in the section, in a parent heading or below the list.
+    def test_tick_one_in_the_section_or_a_parent_heading_never_grants_two(self):
+        cases = []
+        for instruction in ('Tick one box only for the leave question.', 'Please tick one box only.', 'For leave, tick one only.'):
+            doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph(instruction)
+            table = doc.add_table(rows=1, cols=2)
+            table.cell(0, 0).text = 'Report on leave:'; table.cell(0, 1).text = 'Give the dates and destination.'
+            doc.add_paragraph(''); cases.append(('above a table: ' + instruction, native_list(doc)))
+        doc = Document(); doc.add_heading('Leave', 1); doc.add_paragraph('Please tick one box only in this section.')
+        doc.add_heading('Community leave', 2); cases.append(('parent section', native_list(doc)))
+        doc = Document(); doc.add_heading('Leave', 1); doc.add_heading('Community leave', 2)
+        doc.add_paragraph('Tick one box only.'); doc.add_heading('Details', 3); cases.append(('under a sub-heading', native_list(doc)))
+        doc = Document()
+        for level, heading in enumerate(('Discharge report', 'Clinical history', 'Leave (tick one only)', 'Community leave')):
+            doc.add_heading(heading, level + 1)
+        cases.append(('heading level 3', native_list(doc)))
+        doc = Document(); doc.add_paragraph().add_run('Please tick one box only').bold = True
+        doc.add_paragraph().add_run('Community leave').bold = True; cases.append(('bold lines', native_list(doc)))
+        doc = Document(); doc.add_heading('Leave', 1); native_list(doc); doc.add_paragraph('')
+        doc.add_paragraph('Dates of leave: see record.'); doc.add_paragraph('Tick one box only.'); cases.append(('below', doc))
+        for name, doc in cases:
+            with self.subTest(case=name):
+                self.assertNeverTwo(data(doc))
+
+    # A-F2: singular-box instructions directly above the list.
+    def test_singular_box_instructions_never_grant_two(self):
+        for instruction in ('Place an X in the box that best describes the leave.', 'Place an X in the most appropriate box.',
+                            'Enter X in the correct box.', 'Place an X in the relevant box.',
+                            'Use the box that best describes the leave.', '✓ the relevant box.', 'Place a ✓ in the applicable box.'):
+            with self.subTest(instruction=instruction):
+                self.assertNeverTwo(data(form('Community leave taken', LEAVE, instruction=instruction)))
+
+    # A-F3: a plain tick-one in the page header or the preamble.
+    def test_plain_tick_one_in_a_page_header_or_preamble_never_grants_two(self):
+        header = Document(); header.add_heading('Leave', 1); native_list(header)
+        header.sections[0].header.paragraphs[0].text = 'Tick one box only.'
+        preamble = Document(); preamble.add_paragraph('Please use black ink and tick one box only.')
+        preamble.add_heading('Clinical history', 1); native_list(preamble)
+        for name, doc in (('page header', header), ('preamble', preamble)):
+            with self.subTest(case=name):
+                self.assertNeverTwo(data(doc))
+
+    # C-F1: a numeral quantity; C-F2: a pointer across a heading.
+    def test_numeral_quantities_and_pointers_across_a_heading_never_grant_two(self):
+        for instruction in ('Put an X in 1 box.', 'Not more than 1 treatment may be recorded.', 'Do not record more than 1.',
+                            'Record 1 treatment.', 'Just 1.', '1 answer.', 'Record 2 treatments.'):
+            with self.subTest(instruction=instruction):
+                self.assertNeverTwo(data(form(instruction=instruction)), 'Treatments received')
+        with self.subTest(owner='1 treatment received'):
+            raw = data(form(question='1 treatment received'))
+            for field in self.fields(raw, '1 treatment received'):
+                self.assertEqual(field['kind'], 'choice')
+                with self.assertRaises(w.V3Failure):
+                    w.fill(raw, [field], {field['key']: field['options'][:2]})
+        above = Document(); above.add_paragraph('In the list below, tick one only.'); above.add_heading('Clinical history', 1)
+        native_list(above, 'Treatments received', ('Physiotherapy', 'Occupational therapy', 'Hydrotherapy'))
+        below = Document(); below.add_heading('Clinical history', 1)
+        native_list(below, 'Treatments received', ('Physiotherapy', 'Occupational therapy', 'Hydrotherapy'))
+        below.add_heading('Notes', 1); below.add_paragraph('In the list above, tick one only.')
+        for name, doc in (('pointer above a heading', above), ('pointer below a heading', below)):
+            with self.subTest(case=name):
+                self.assertNeverTwo(data(doc), 'Treatments received')
+
+    # A-F4 and B-F5: one level, count or total.
+    def test_single_level_count_or_total_keeps_one_choice(self):
+        for question, options in (('Highest level of education completed', ('Primary', 'Secondary', 'University')),
+                                  ('Number of therapy sessions attended', ('0-2', '3-5', '6 or more')),
+                                  ('Total days of leave taken', ('Under 7 days', '7 to 14 days', 'Over 14 days'))):
+            with self.subTest(question=question):
+                doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, question, options)
+                self.assertOneChoice(data(doc), question, options[1], [False, True, False])
+        doc = Document(); doc.add_heading('Immunisation', 1); native_list(doc, 'Doses received', ('One', 'Two', 'Three'))
+        self.assertOneChoice(data(doc), 'Doses received', 'Two', [False, True, False])
+
+    # A-F5 and A-F8: ranges and alternatives are multi-select, not one-only.
+    def test_ranges_and_alternatives_stay_multiple(self):
+        symptoms = ('Headache', 'Nausea', 'Dizziness')
+        for question, options in (('Symptoms - tick 1-3 that apply:', symptoms), ('Symptoms - tick 1–3 that apply:', symptoms),
+                                  ('Symptoms (tick all that apply; more than a single answer may be ticked):', symptoms),
+                                  ('Symptoms - pick one, some or all that apply:', symptoms),
+                                  ('Side(s) affected - indicate one/both:', ('Left', 'Right')),
+                                  ('Symptoms - select 1+ option(s):', symptoms),
+                                  ('Symptoms - tick one or more that apply:', symptoms),
+                                  ('Symptoms - select one or more option(s):', symptoms),
+                                  ('Symptoms - choose one or more that apply:', symptoms)):
+            for control in ('glyph', 'ff'):
+                with self.subTest(question=question, control=control):
+                    raw = data(inline_question(question, options, control))
+                    self.assertMulti(raw, question.split(' ')[0], [True, True, False][:len(options)])
+
+    # A-F6 and C-F3: explicit one-only wording on an ordinary "(s)" question.
+    def test_explicit_one_only_wording_keeps_ordinary_questions_single(self):
+        options = ('Physiotherapy', 'Hydrotherapy', 'Literacy')
+        for question in ('Treatment(s) (one box only):', 'Treatment(s) - only one may be ticked:',
+                         'Treatment(s) - only one answer allowed:', 'Treatment(s) - tick the ONE main treatment:',
+                         'Treatment(s) - select the single best option:', 'Treatment(s) - no more than one:',
+                         'Treatment(s) - maximum one:', 'Treatment(s) - select just one and give details:',
+                         'Treatment(s) - pick one and give details:', 'Treatment(s) - indicate one to be reviewed:',
+                         'Treatment(s) - pick one - see notes:', 'Treatment(s) - pick 1 / see notes:'):
+            for control in ('glyph', 'ff'):
+                with self.subTest(question=question, control=control):
+                    self.assertOneChoice(data(inline_question(question, options, control)), 'Treatment(s)',
+                                         'Hydrotherapy', [False, True, False])
+
+    # A-F7: common printed multi-select commands above a native history.
+    def test_common_all_that_apply_commands_map_multiple(self):
+        for instruction in ('Tick all boxes that apply.', 'Tick all applicable boxes.', 'Tick as many boxes as apply.',
+                            'Tick all that are applicable.', 'Please tick all relevant boxes.', 'You may tick more than one box.',
+                            'Tick any/all that apply.'):
+            with self.subTest(instruction=instruction):
+                self.assertMulti(data(form('Community leave taken', LEAVE, instruction=instruction)), 'Community leave taken')
+
+    # B-F1, B-F2, B-F3, B-F4: exclusive Yes/No answers keep one choice whatever is printed around them.
+    def test_exclusive_yes_no_event_questions_keep_one_choice(self):
+        cases = []
+        for heading in ('Safety checks', 'Health check', 'Tumour markers', 'Treatment options', 'Multiple sclerosis review',
+                        'One-stop clinic', 'Day one review', 'Selection criteria', 'Optional section'):
+            doc = Document(); doc.add_heading(heading, 1); cases.append(('heading ' + heading, native_list(doc, 'Bloods taken', ('Yes', 'No'))))
+        for instruction in ('Please tick the relevant box.', 'Please tick the appropriate box.', 'Please tick as appropriate.',
+                            'Tick Yes or No.', 'Please select Yes or No.', 'Please mark with an X.',
+                            'Please cross the appropriate box.', 'Please tick.', 'Tick if applicable.',
+                            'Please tick one box for each item.'):
+            doc = Document(); doc.add_heading('Discharge', 1); doc.add_paragraph(instruction)
+            cases.append(('instruction ' + instruction, native_list(doc, 'Bloods taken', ('Yes', 'No'))))
+        for sentence in ('Use one font throughout the document.', 'Participants of this study will receive payment in the '
+                         'form of a check or electronic funds transfer (EFT).'):
+            doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Bloods taken', ('Yes', 'No'))
+            doc.add_heading('Notes', 1); doc.add_paragraph(sentence); cases.append(('form-wide ' + sentence, doc))
+        for sentence in ('If yes, mark the site on the body map below.', 'If no, please indicate the reason in the box below.'):
+            doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Bloods taken', ('Yes', 'No'))
+            doc.add_paragraph(sentence); cases.append(('follow-up ' + sentence, doc))
+        doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Swab taken', ('Yes', 'No'))
+        native_list(doc, 'Bloods taken', ('Yes', 'No')); cases.append(('after a separate yes/no question', doc))
+        for line in ('Date of procedure: ______________', 'Date: ____/____/______'):
+            doc = Document(); doc.add_heading('Specimens', 1); doc.add_paragraph(line)
+            p = doc.add_paragraph('Bloods taken: '); ff_field(p, 'checkbox', name='S0'); p.add_run(' Yes ')
+            ff_field(p, 'checkbox', name='S1'); p.add_run(' No'); cases.append(('under ' + line, doc))
+        for name, doc in cases:
+            with self.subTest(case=name):
+                self.assertOneChoice(data(doc), 'Bloods taken', 'Yes', [True, False])
+
+    # B-F1, B-F2, B-F3: words and sentences that are not selection guidance keep a genuine history multiple.
+    def test_non_selection_words_and_separate_questions_keep_the_history_multiple(self):
+        treatments = ('Physiotherapy', 'Occupational therapy', 'Hydrotherapy')
+        cases = []
+        for heading in ('Tumour markers', 'Treatment options', 'Multiple sclerosis review', 'One-stop clinic', 'Day one review',
+                        'Selection criteria', 'Optional section', 'Pre-operative checklist'):
+            doc = Document(); doc.add_heading(heading, 1); cases.append(('heading ' + heading, native_list(doc, 'Treatments received', treatments)))
+        for sentence in ('Use one font throughout the document.',
+                         'IF MORE THAN ONE PAGE IS USED, EACH PAGE (VAF 10-1086) MUST BE CONSECUTIVELY NUMBERED.',
+                         'Participants of this study will receive payment in the form of a check or electronic funds transfer (EFT).',
+                         'Even if you are completing the checklist manually, keep the document.',
+                         'For each question, please indicate how often you had this feeling.'):
+            doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Treatments received', treatments)
+            doc.add_heading('Notes', 1); doc.add_paragraph(sentence); cases.append(('form-wide ' + sentence[:30], doc))
+        doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Treatments received', treatments)
+        doc.add_page_break(); doc.add_paragraph('Office')._p.append(parse_xml(TEXTBOX % 'FOR OFFICE USE ONLY'))
+        cases.append(('office text box', doc))
+        doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Treatments received', treatments)
+        doc.sections[0].footer.paragraphs[0].text = 'This form is for clinical use only.'; cases.append(('footer', doc))
+        doc = Document(); doc.add_heading('Clinical history', 1); doc.add_paragraph('Date of referral: ______________')
+        cases.append(('under a date line', native_list(doc, 'Treatments received', treatments)))
+        doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, 'Bloods taken', ('Yes', 'No'))
+        cases.append(('after a separate yes/no question', native_list(doc, 'Treatments received', treatments)))
+        for name, doc in cases:
+            with self.subTest(case=name):
+                self.assertMulti(data(doc), 'Treatments received')
+
+    # B-F6: an all-that-apply list that also names a primary item is never narrowed to one.
+    def test_all_that_apply_with_a_primary_designation_is_not_narrowed_to_one(self):
+        options = ('Pain', 'Swelling', 'Fever', 'Rash')
+        for question in ('Symptoms (tick all that apply and indicate one as the main symptom):',
+                         'Symptoms (tick all that apply; pick one as primary)'):
+            native = Document(); native.add_heading('Presentation', 1); p = native.add_paragraph(question + ' ')
+            for i, option in enumerate(options):
+                ff_field(p, 'checkbox', name='S%d' % i); p.add_run(' ' + option + ' ')
+            glyph = Document(); glyph.add_heading('Presentation', 1); glyph.add_paragraph(question)
+            for option in options:
+                glyph.add_paragraph('☐ ' + option)
+            for name, doc in (('native', native), ('glyph', glyph)):
+                with self.subTest(question=question, control=name):
+                    raw = data(doc)
+                    fields = self.fields(raw, 'Symptoms')
+                    self.assertFalse([f for f in fields if f['kind'] == 'choice'])
+                    for field in fields:
+                        self.assertEqual(self.ticks(raw, field, ['Pain', 'Fever']), [True, False, True, False])
