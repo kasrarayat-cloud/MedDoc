@@ -3130,6 +3130,29 @@ def tick_glyph(p, n):
     return set_glyph(p, n, True)
 
 
+def pin_glyph(p, n):
+    """Isolate an original glyph leaf so later disjoint run splits cannot rename it."""
+    boxes = glyph_boxes(p)
+    if not 0 <= n < len(boxes):
+        fail("A stored checkbox position no longer matches the form.", "mapping_mismatch")
+    piece, offset, _ = boxes[n]
+    if piece.kind == "t":
+        position = piece.start + offset
+        _split_at(p, position + 1)
+        _split_at(p, position)
+        piece, _, _ = glyph_boxes(p)[n]
+    return piece.node
+
+
+def pinned_glyph_state(node):
+    """Read a retained physical leaf, never its ordinal among newly inserted text."""
+    p = next(node.iterancestors(q("w:p")), None)
+    if p is None:
+        return None
+    found = [ch == CHECKED for piece, _, ch in glyph_boxes(p) if piece.node is node]
+    return found[0] if len(found) == 1 else None
+
+
 def set_sdt_checkbox(sdt, ticked):
     """A checkbox content control: its checked state and the glyph its state names (checkedState/uncheckedState)."""
     pr = sdt.find(q("w:sdtPr"))
@@ -3420,6 +3443,7 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
     protected.rule_protected_signing_areas()
     protected_slots = {area.slot.id for area in protected.areas if area.protection} | protected.protected_regions
     ops = []                                   # (paragraph_or_element, sort_position, callable)
+    glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
 
     def resolve(part, path, fp):
         slot = index.by_id.get("%s#%s" % (part, path))
@@ -3512,7 +3536,10 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                     elif box["kind"] == "ff":
                         ops.append((slot.el, -1, lambda el=slot.el, w=want: set_ff_checkbox(el, w), box["part"]))
                     elif box["kind"] == "glyph":
-                        ops.append((slot.el, -1, lambda el=slot.el, n=box["glyph"], w=want: set_glyph(el, n, w), box["part"]))
+                        key = box_key(box)
+                        if key in glyph_writes and glyph_writes[key][2] != want:
+                            fail("Two answers request different states for one printed checkbox.", "mapping_mismatch")
+                        glyph_writes[key] = (slot.el, box["glyph"], want, box["part"])
                     elif box["kind"] == "cell":
                         ops.append((slot.el, -1, lambda tc=slot.el, w=want: set_cell_box(tc, w), box["part"]))
                     elif box["kind"] == "cell_text" and want:
@@ -3534,16 +3561,29 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
                 ops.append((anchor.el, 0, lambda f=field, a=answer: write_table_rows(index, f, a), part))
             else:
                 fail("This answer area cannot be filled automatically.", "unsupported_layout")
-    if protected.floating_initials and ops:
+    if protected.floating_initials and (ops or glyph_writes):
         fail(FLOATING_INITIALS_REFUSAL, "unqualified_floating_initials")
+    # Checkbox state edits preserve source offsets. Resolve them before text can
+    # insert new checkbox-looking characters, then retain the actual leaf nodes.
+    changed = set()
+    for p, n, want, part in glyph_writes.values():
+        set_glyph(p, n, want)
+        changed.add(part)
+    pins = {key: (p, pin_glyph(p, n), want, part)
+            for key, (p, n, want, part) in glyph_writes.items()}
     # position edits inside one element run from the end backwards; ticks (position -1) last
     ops.sort(key=lambda op: (id(op[0]), -op[1] if op[1] >= 0 else float("inf")))
-    changed = set()
     for _, _, apply, part in ops:
         apply()
         changed.add(part)
+    glyph_readback = {}
+    for key, (p, node, want, part) in pins.items():
+        if (p.getroottree().getroot() is not package.tree(part)
+                or next(node.iterancestors(q("w:p")), None) is not p):
+            fail("An answer changed or removed an original printed checkbox.", "mapping_mismatch")
+        glyph_readback[key] = {"part": part, "path": node.getroottree().getpath(node)}
     out = package.write({part: package.tree(part) for part in changed})
-    verify_options(out, fields, answers)
+    verify_options(out, fields, answers, glyph_readback=glyph_readback)
     return out
 
 
@@ -3683,8 +3723,8 @@ def displayed_words(slot, target):
 
 def option_states(index, field):
     """Per option of a choice, multi_choice or checkbox field: True when the form shows it chosen (ticked, marked or
-    displayed), False when not, None when it cannot be read. ONE reader for the blank form's printed state and for
-    the check of every export."""
+    displayed), False when not, None when it cannot be read. Glyph ordinals name the original source layout;
+    export verification uses retained physical leaves after text insertions can add new box characters."""
     target = field["locator"]["target"]
     kind = target["type"]
     printed = printed_options(field)
@@ -3749,7 +3789,7 @@ def annotate_printed(index, field):
             field[name] = positions
 
 
-def verify_options(data, fields, answers):
+def verify_options(data, fields, answers, *, glyph_readback):
     """⚠️ READ BACK EVERY ANSWERED OPTION FIELD FROM THE WRITTEN PACKAGE: the ticked (or shown) options must be
     exactly the chosen ones, or the export is refused. Belt and braces against any future disagreement between the
     reviewed answer and what a writer did."""
@@ -3773,6 +3813,14 @@ def verify_options(data, fields, answers):
                     displayed_words(slot, target) == str(printed_options(field)[min(chosen)]).strip()
             else:
                 states = option_states(index, field)
+                if target["type"] == "checkboxes":
+                    for i, box in enumerate(target["boxes"]):
+                        if box["kind"] != "glyph":
+                            continue
+                        ref = glyph_readback[box_key(box)]
+                        root = index.package.tree(ref["part"])
+                        nodes = root.xpath(ref["path"], namespaces={k: v for k, v in root.nsmap.items() if k})
+                        states[i] = pinned_glyph_state(nodes[0]) if len(nodes) == 1 else None
                 ok = bool(states) and all(state is (i in chosen) for i, state in enumerate(states))
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             ok = False                  # what cannot be read back is not exported

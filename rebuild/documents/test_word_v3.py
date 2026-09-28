@@ -1740,3 +1740,95 @@ class RoundThreeRemainingDefects(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SourceBoundGlyphWrites(unittest.TestCase):
+    """Inserted checkbox-looking text is not an original printed control."""
+    def form(self, before='glyph', after='glyph'):
+        from . import word_v3 as w
+        doc = Document();p = doc.add_paragraph('Choices? ')
+        def control(kind, label):
+            if kind == 'glyph': p.add_run('☐')
+            elif kind == 'sdt': p._p.append(checkbox_control())
+            else: ff_field(p, 'checkbox', name=label)
+            p.add_run(' ' + label)
+        if before: control(before, 'Before');p.add_run(': ')
+        p.add_run('_____')
+        if after: p.add_run(' ');control(after, 'After')
+        stream = io.BytesIO();doc.save(stream);raw = stream.getvalue()
+        index = w.SlotIndex(w.open_package(raw));slot = next(s for s in index.slots if s.kind == 'p')
+        start = w.paragraph_text(slot.el)[0].index('_____')
+        locator = {'contract': 'v3', 'part': slot.part, 'slot': slot.path, 'fingerprint': w.fingerprint(slot.el)}
+        choice = {'key': 'c', 'kind': 'multi_choice', 'label': 'Choices',
+                  'options': (['Before'] if before else []) + (['After'] if after else []),
+                  'locator': dict(locator, target={'type': 'checkboxes', 'boxes': w.place_box_refs(index, slot)})}
+        text = {'key': 't', 'kind': 'text', 'label': 'Description',
+                'locator': dict(locator, target={'type': 'span', 'start': start, 'end': start + 5, 'shape': 'blank'})}
+        return raw, [choice, text]
+
+    def test_inserted_box_character_never_becomes_the_printed_after_box(self):
+        from . import word_v3 as w
+        for before, after in (('glyph', 'glyph'), (None, 'glyph'), ('glyph', None)):
+            with self.subTest(before=before, after=after):
+                raw, fields = self.form(before, after)
+                answer = 'literal ☐ symbol retained'
+                result = w.fill(raw, fields, {'c': fields[0]['options'], 't': answer})
+                root = etree.fromstring(ZipFile(io.BytesIO(result)).read('word/document.xml'))
+                physical = ''.join(root.itertext())
+                expected = 'Choices? ' + ('☒ Before: ' if before else '') + answer + (' ☒ After' if after else '')
+                self.assertEqual(physical, expected)
+
+    def test_native_controls_and_missing_states_remain_independent_of_inserted_boxes(self):
+        from . import word_v3 as w
+        for before, after in (('sdt', 'glyph'), ('glyph', 'sdt'), ('ff', 'glyph'), ('glyph', 'ff'),
+                              ('sdt', 'sdt'), ('ff', 'ff')):
+            with self.subTest(before=before, after=after):
+                raw, fields = self.form(before, after)
+                missing = w.fill(raw, fields, {})
+                with ZipFile(io.BytesIO(raw)) as old, ZipFile(io.BytesIO(missing)) as new:
+                    self.assertEqual({n: old.read(n) for n in old.namelist()},
+                                     {n: new.read(n) for n in new.namelist()})
+                answer = 'ordinary ☐ text\n' + 'long retained words ' * 80
+                result = w.fill(raw, fields, {'c': ['After'], 't': answer})
+                root = etree.fromstring(ZipFile(io.BytesIO(result)).read('word/document.xml'))
+                text = ''.join(root.itertext())
+                self.assertIn('ordinary ☐ text', text)
+                self.assertIn('long retained words ' * 80, text)
+                if before == 'glyph': self.assertIn('☐ Before:', text)
+                if after == 'glyph': self.assertTrue(text.endswith('☒ After'))
+                sdt_states = [state for _, state in controls_shown(result)]
+                self.assertEqual(sdt_states, (['0'] if before == 'sdt' else []) + (['1'] if after == 'sdt' else []))
+                ff_states = root.xpath('//w:checkBox/w:checked/@w:val', namespaces={'w': W})
+                self.assertEqual(ff_states, (['0'] if before == 'ff' else []) + (['1'] if after == 'ff' else []))
+
+    def test_deleted_original_box_and_stale_source_reference_are_refused(self):
+        from . import word_v3 as w
+        raw, fields = self.form()
+        changed = deepcopy(fields)
+        changed[1]['locator']['target'].update(start=0, end=len(w.paragraph_text(
+            next(s.el for s in w.SlotIndex(w.open_package(raw)).slots if s.kind == 'p'))[0]))
+        with self.assertRaises(w.V3Failure):
+            w.fill(raw, changed, {'c': ['Before', 'After'], 't': '☒ fabricated boxes ☒'})
+        changed = deepcopy(fields);changed[0]['locator']['fingerprint'] = '0' * 64
+        with self.assertRaises(w.V3Failure) as error:
+            w.fill(raw, changed, {'c': ['Before', 'After'], 't': 'ordinary'})
+        self.assertEqual(error.exception.code, 'mapping_mismatch')
+
+    def test_final_readback_reads_original_leaf_not_inserted_mark(self):
+        from . import word_v3 as w
+        from unittest.mock import patch
+        raw, fields = self.form()
+        real_write = w.Package.write
+        def corrupt(package, changed):
+            output = real_write(package, changed)
+            other = w.open_package(output);root = other.tree('word/document.xml')
+            texts = list(root.iter(w.T))
+            original_after = [node for node in texts if node.text == '☒'][-1]
+            original_after.text = '☐'
+            inserted = next(node for node in texts if 'literal ☐ symbol' in (node.text or ''))
+            inserted.text = inserted.text.replace('☐', '☒')
+            return real_write(other, {'word/document.xml': root})
+        with patch.object(w.Package, 'write', corrupt):
+            with self.assertRaises(w.V3Failure) as error:
+                w.fill(raw, fields, {'c': ['Before', 'After'], 't': 'literal ☐ symbol retained'})
+        self.assertEqual(error.exception.code, 'fill_mismatch')
