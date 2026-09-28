@@ -1477,3 +1477,73 @@ class RoundTwoGuardsArePinned(unittest.TestCase):
         detector = self.detector(doc)
         self.assertTrue(detector.prints_answer_blank(detector.index.by_id['word/document.xml#b/tbl[0]/tr[0]/tc[1]']))
         self.assertFalse(detector.prints_answer_blank(detector.index.by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]']))
+
+
+class LayoutKeysArePinned(unittest.TestCase):
+    """R3-6: the round-two guards of the printed-source key (layout_source.Printed) and of the rendered key
+    (layout_geometry), each exercised alone."""
+
+    def key(self, doc):
+        package = w.open_package(data(doc))
+        paragraph = [p for p in package.tree('word/document.xml').iter(w.q('w:p'))][-1]
+        return layout_source.Printed(package).key(paragraph)
+
+    def styled(self, kind, name, *, hidden=True, based=None):
+        from docx.enum.style import WD_STYLE_TYPE
+        doc = Document()
+        styles = [doc.styles.add_style(n, getattr(WD_STYLE_TYPE, kind)) for n in ([based] if based else []) + [name]]
+        for style in styles:
+            style.font.hidden = hidden and style is styles[0]
+        if based:
+            styles[1].base_style = styles[0]
+        return doc
+
+    def test_a_run_a_style_may_hide_is_never_counted(self):
+        from docx.oxml import OxmlElement
+        doc = self.styled('CHARACTER', 'Child', based='Hidden')  # hidden by the style it is based on
+        paragraph = doc.add_paragraph('Normal'); paragraph.add_run('X', style='Child')
+        self.assertEqual(self.key(doc), 'normal')
+        doc = self.styled('CHARACTER', 'A', hidden=False, based='B')  # a cycle resolves as hiding
+        doc.styles['B'].base_style = doc.styles['A']
+        paragraph = doc.add_paragraph('Normal'); paragraph.add_run('X', style='A')
+        self.assertEqual(self.key(doc), 'normal')
+        doc = Document(); paragraph = doc.add_paragraph('Normal'); run = paragraph.add_run('X')  # an unknown style
+        style = OxmlElement('w:rStyle'); style.set(qn('w:val'), 'Missing'); run._r.get_or_add_rPr().append(style)
+        self.assertEqual(self.key(doc), 'normal')
+        doc = Document(); paragraph = doc.add_paragraph('Normal'); paragraph.add_run('X').font.hidden = False
+        self.assertEqual(self.key(doc), 'normalx')  # <w:vanish w:val="0"/> prints
+        doc = Document(); paragraph = doc.add_paragraph('Normal'); paragraph.add_run('X')
+        self.assertEqual(self.key(doc), 'normalx')
+
+    def test_a_paragraph_a_style_or_the_defaults_may_hide_is_never_counted(self):
+        from docx.oxml import OxmlElement
+        doc = self.styled('PARAGRAPH', 'HiddenParagraph'); doc.add_paragraph('Normal', style='HiddenParagraph')
+        self.assertEqual(self.key(doc), '')
+        doc = Document(); doc.styles['Normal'].font.hidden = True; doc.add_paragraph('Normal')  # the default paragraph style
+        self.assertEqual(self.key(doc), '')
+        doc = Document(); doc.styles['Default Paragraph Font'].element.get_or_add_rPr().append(OxmlElement('w:vanish'))
+        doc.add_paragraph('Normal')  # the default character style
+        self.assertEqual(self.key(doc), '')
+        doc = Document(); doc.add_paragraph('Normal')  # the document defaults
+        defaults = doc.styles.element.find(qn('w:docDefaults')).find(qn('w:rPrDefault')).find(qn('w:rPr'))
+        defaults.append(OxmlElement('w:vanish'))
+        self.assertEqual(self.key(doc), '')
+
+    def test_characters_that_never_print_are_removed_and_box_states_merged(self):
+        for char in ('­', '​', '͏', 'ᅟ', '᠋', '️', '\U000e0100', '\U000e0001'):
+            with self.subTest(char='U+%04X' % ord(char)):
+                doc = Document(); doc.add_paragraph('Nor' + char + 'mal')
+                self.assertEqual(self.key(doc), 'normal')
+        doc = Document(); doc.add_paragraph('1 ☒ 2 ☐')
+        self.assertEqual(self.key(doc), '1☐2☐')
+
+    def test_the_rendered_key_drops_leaders_and_controls_and_merges_box_states(self):
+        from .layout_geometry import printed_key
+        self.assertEqual(printed_key('1 ☒ 2 · … __ - – . ￼'), '1☐2')
+        self.assertEqual(printed_key('Palpable ☐'), 'Palpable☐')
+
+    def test_a_line_between_the_rows_is_beside_them_only_when_it_prints_ink(self):
+        from .layout_geometry import beside
+        neighbours = {'left': '', 'right': 'If abnormal, describe below'}
+        self.assertEqual(beside({'records': [{'text': 'describe', 'ink': (0, 0, 1, 1)}]}, neighbours), ('right',))
+        self.assertEqual(beside({'records': [{'text': 'describe', 'ink': None}]}, neighbours), ())
