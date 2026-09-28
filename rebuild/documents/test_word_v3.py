@@ -1744,7 +1744,7 @@ if __name__ == "__main__":
 
 class SourceBoundGlyphWrites(unittest.TestCase):
     """Inserted checkbox-looking text is not an original printed control."""
-    def form(self, before='glyph', after='glyph'):
+    def form(self, before='glyph', after='glyph', *, local_namespace=False):
         from . import word_v3 as w
         doc = Document();p = doc.add_paragraph('Choices? ')
         def control(kind, label):
@@ -1755,6 +1755,11 @@ class SourceBoundGlyphWrites(unittest.TestCase):
         if before: control(before, 'Before');p.add_run(': ')
         p.add_run('_____')
         if after: p.add_run(' ');control(after, 'After')
+        if local_namespace:
+            text = w.text_of(p._p)
+            p._p[:] = []
+            run = etree.SubElement(p._p, qn('w:r'), nsmap={'x': W})
+            etree.SubElement(run, qn('w:t')).text = text
         stream = io.BytesIO();doc.save(stream);raw = stream.getvalue()
         index = w.SlotIndex(w.open_package(raw));slot = next(s for s in index.slots if s.kind == 'p')
         start = w.paragraph_text(slot.el)[0].index('_____')
@@ -1832,3 +1837,10 @@ class SourceBoundGlyphWrites(unittest.TestCase):
             with self.assertRaises(w.V3Failure) as error:
                 w.fill(raw, fields, {'c': ['Before', 'After'], 't': 'literal ☐ symbol retained'})
         self.assertEqual(error.exception.code, 'fill_mismatch')
+
+    def test_readback_accepts_local_namespace_aliases_for_original_runs(self):
+        from . import word_v3 as w
+        raw, fields = self.form(local_namespace=True)
+        result = w.fill(raw, fields, {'c': ['Before', 'After'], 't': 'literal ☐ symbol retained'})
+        root = etree.fromstring(ZipFile(io.BytesIO(result)).read('word/document.xml'))
+        self.assertEqual(''.join(root.itertext()), 'Choices? ☒ Before: literal ☐ symbol retained ☒ After')

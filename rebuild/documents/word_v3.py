@@ -3153,6 +3153,18 @@ def pinned_glyph_state(node):
     return found[0] if len(found) == 1 else None
 
 
+def element_identity_path(root, node):
+    """Namespace-independent path to a retained leaf after all structural edits."""
+    path = []
+    while node is not root:
+        parent = node.getparent()
+        if parent is None:
+            fail("An original checkbox is no longer in its document part.", "mapping_mismatch")
+        path.append((node.tag, list(parent.findall(node.tag)).index(node)))
+        node = parent
+    return list(reversed(path))
+
+
 def set_sdt_checkbox(sdt, ticked):
     """A checkbox content control: its checked state and the glyph its state names (checkedState/uncheckedState)."""
     pr = sdt.find(q("w:sdtPr"))
@@ -3581,7 +3593,7 @@ def fill(data: bytes, fields: list, answers: dict) -> bytes:
         if (p.getroottree().getroot() is not package.tree(part)
                 or next(node.iterancestors(q("w:p")), None) is not p):
             fail("An answer changed or removed an original printed checkbox.", "mapping_mismatch")
-        glyph_readback[key] = {"part": part, "path": node.getroottree().getpath(node)}
+        glyph_readback[key] = {"part": part, "path": element_identity_path(package.tree(part), node)}
     out = package.write({part: package.tree(part) for part in changed})
     verify_options(out, fields, answers, glyph_readback=glyph_readback)
     return out
@@ -3818,9 +3830,14 @@ def verify_options(data, fields, answers, *, glyph_readback):
                         if box["kind"] != "glyph":
                             continue
                         ref = glyph_readback[box_key(box)]
-                        root = index.package.tree(ref["part"])
-                        nodes = root.xpath(ref["path"], namespaces={k: v for k, v in root.nsmap.items() if k})
-                        states[i] = pinned_glyph_state(nodes[0]) if len(nodes) == 1 else None
+                        node = index.package.tree(ref["part"])
+                        for tag, position in ref["path"]:
+                            children = node.findall(tag)
+                            if not 0 <= position < len(children):
+                                node = None
+                                break
+                            node = children[position]
+                        states[i] = pinned_glyph_state(node) if node is not None else None
                 ok = bool(states) and all(state is (i in chosen) for i, state in enumerate(states))
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
             ok = False                  # what cannot be read back is not exported
