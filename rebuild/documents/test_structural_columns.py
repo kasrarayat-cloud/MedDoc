@@ -1198,3 +1198,240 @@ class WitnessGuards(PaintedFixture):
         proposal, _, _ = layout_source.prepare(data(doc))
         counts = {c['source']['label']: c['rendered_source']['source_occurrences'] for c in proposal['manifest']['candidates']}
         self.assertEqual(counts, {'Percussion': 2, 'Auscultation': 1})
+
+
+# ─── Refutation 2026-09-28, round R3 (R3-1..R3-6) ──────────────────────────────────────────────────────────────────
+
+
+def box_fields(result):
+    return [(f['label'], f['options']) for f in result['fields'] if f['locator']['target']['type'] == 'checkboxes']
+
+
+class WordsBeforeBoxesWithTextAfter(unittest.TestCase):
+    """R3-1: words printed before their boxes are never shifted onto the next box, whatever is printed after the last."""
+
+    def test_printed_text_after_the_last_box_never_lets_a_box_take_the_next_boxs_word(self):
+        lines = ('Allergies: Yes ☐ No ☐ NKDA', 'Smoker: Yes ☐ No ☐ (check one)', 'Smoker Yes ☐ No ☐ If yes, packs/day',
+                 'Smoker: Yes ☐   No ☐   Pack-years: ____', 'Smoker: Yes ☐\tNo ☐\tFormer ☐\t(tick one)',
+                 'Result: positive ☐ negative ☐ equivocal', 'Right ☐ Left ☐ Bilateral',
+                 'Smoker Current ☐\tFormer ☐\tNever ☐\t(tick one)', 'Smoker: Yes ☐ No ☐   Drinker: Yes ☐ No ☐ (tick one)')
+        for control in ('glyph', 'ff'):
+            for line in lines:
+                with self.subTest(control=control, line=line):
+                    result = w.inspect(data(coded_form([line], control=control, heading=None)))
+                    self.assertEqual(box_fields(result), [])
+                    self.assertTrue(any('printed before' in n for n in result['notes']))
+
+    def test_a_no_answer_never_ticks_the_box_printed_after_yes(self):
+        raw = data(coded_form(['Allergies: Yes ☐ No ☐ NKDA'], control='ff', heading=None))
+        fields = [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'checkboxes']
+        for field in fields:
+            if 'No' in field['options']:
+                states = w.option_states(w.SlotIndex(w.open_package(w.fill(raw, fields, {field['key']: 'No'}))), field)
+                self.assertFalse(states[0], 'the box printed after "Yes" was ticked by "No"')
+
+    def test_words_printed_after_their_boxes_keep_being_read(self):
+        for line, label, options in (('Allergies: ☐ Yes ☐ No ☐ NKDA', 'Allergies', ['Yes', 'No', 'NKDA']),
+                                     ('PMH: Diabetes ☐ Yes ☐ No ☐ Unknown', 'PMH: Diabetes', ['Yes', 'No', 'Unknown']),
+                                     ('Diabetes ☐ Yes ☐ No', 'Diabetes', ['Yes', 'No']),
+                                     ('Over 65\t☐ Yes\t☐ No', 'Over 65', ['Yes', 'No']),
+                                     ('Pain present ☐ Yes ☐ No', 'Pain present', ['Yes', 'No']),
+                                     ('Left ☐ Normal ☐ Abnormal', 'Left', ['Normal', 'Abnormal']),
+                                     ('Social history: Smoking ☐ Current ☐ Former ☐ Never', 'Social history: Smoking',
+                                      ['Current', 'Former', 'Never']),
+                                     ('Q1? ☐ Yes ☐ No   Q2? ☐ Yes ☐ No', 'Q1?', ['Yes', 'No'])):
+            for control in ('glyph', 'ff'):
+                with self.subTest(control=control, line=line):
+                    result = w.inspect(data(coded_form([line], control=control, heading=None)))
+                    self.assertEqual(box_fields(result)[0], (label, options))
+        raw = data(coded_form(['Allergies: ☐ Yes ☐ No ☐ NKDA'], control='ff', heading=None))
+        [field] = [f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'checkboxes']
+        out = w.fill(raw, [field], {field['key']: 'No'})
+        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)), field), [False, True, False])
+
+
+class LegendNumbersInEveryPrintedForm(unittest.TestCase):
+    """R3-2: a legend printed as '1. Normal', 'Normal (1.)', '1.0 Normal' or in the title is a legend too."""
+
+    def test_a_legend_that_contradicts_the_row_codes_is_noted_in_any_printed_form(self):
+        stops = (2880, 4320)
+        for header in ('\t1. Normal\t2. Abnormal', '\tNormal (1.)\tAbnormal (2.)', '\t1.0 Normal\t2.0 Abnormal'):
+            for name, rows in (('two rows', [('Palpable\t2 ☐\t1 ☐', stops), '', ('Tender\t2 ☐\t1 ☐', stops)]),
+                               ('one tab pair', [('Palpable\t2 ☐\t1 ☐', stops)])):
+                with self.subTest(header=header, rows=name):
+                    cell = ['12b.\tLiver', (header, stops)] + rows
+                    detector, _, notes = detect(data(stopped_form([[cell, ['']]], (6480, 2880))))
+                    self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates], [])
+                    self.assertTrue(any('codes' in n and ('Coded column sequence at ' in n or 'Tab-column options at ' in n)
+                                        for n in notes))
+        titled = ['12b. Liver (codes: 1 = Abnormal, 2 = Normal)', ('\tNormal\tAbnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops),
+                  '', ('Tender\t1 ☐\t2 ☐', stops)]
+        for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
+            with self.subTest(title=name):
+                detector, _, notes = detect(data(stopped_form([[cell, ['']]], (6480, 2880))))
+                self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates], [])
+                self.assertTrue(any('codes' in n for n in notes))
+
+    def test_a_legend_that_agrees_with_the_row_codes_keeps_its_options(self):
+        stops = (2880, 4320)
+        agreeing = ['12b.\tLiver', ('\t1. Normal\t2. Abnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops), '', ('Tender\t1 ☐\t2 ☐', stops)]
+        detector, _, _ = detect(data(stopped_form([[agreeing, ['']]], (6480, 2880))))
+        self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates],
+                         [('Palpable', ['1. Normal', '2. Abnormal']), ('Tender', ['1. Normal', '2. Abnormal'])])
+        titled = ['12b. Liver (codes: 1 = Normal, 2 = Abnormal)', ('\tNormal\tAbnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops),
+                  '', ('Tender\t1 ☐\t2 ☐', stops)]
+        for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
+            with self.subTest(title=name):
+                detector, _, _ = detect(data(stopped_form([[cell, ['']]], (6480, 2880))))
+                self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates][:1],
+                                 [('Palpable', ['Normal', 'Abnormal'])])
+
+
+class LeftCellAnswerLines(unittest.TestCase):
+    """R3-3: a left cell printing its own answer line (leader dots, an ellipsis, a gap before a unit) is another
+    question's, never the coded row's."""
+
+    MURMUR = ['Murmur', '', ('\tAbsent\tPresent', (1440, 2880)), ('\t1 ☐\t2 ☐', (1440, 2880))]
+
+    def test_a_left_cell_with_its_own_answer_line_never_names_the_coded_row(self):
+        for text in ('Weight: .................. kg', 'Heart rate: …………… bpm', 'Temp:          °C', 'Weight:\tkg'):
+            for control in ('ff', 'glyph'):
+                with self.subTest(text=text, control=control):
+                    raw = data(stopped_form([[[text], self.MURMUR]], (2880, 6480), control=control))
+                    detector, _, notes = detect(raw)
+                    self.assertEqual([a.label for _, _, a in detector.layout_candidates], [])
+                    self.assertTrue(any('holds its own answer' in n for n in notes))
+
+    def test_a_plain_question_to_the_left_still_names_the_row(self):
+        for text, label in (('Heart', 'Heart'), ('Heart:', 'Heart'), ('Heart sounds (auscultation)', 'Heart sounds (auscultation)')):
+            with self.subTest(text=text):
+                detector, _, _ = detect(data(stopped_form([[[text], self.MURMUR]], (2880, 6480), control='glyph')))
+                self.assertEqual([a.label for _, _, a in detector.layout_candidates], [label])
+
+
+class ScalesWhoseLastOptionIsAWord(unittest.TestCase):
+    """R3-4: numbers, letters and numerals printed after their own boxes are those boxes' options, whatever the last
+    option says; a code printed before a box still is not."""
+
+    def test_a_scale_ending_in_a_word_is_read(self):
+        for line, label, options in (('Stage: ☐ I ☐ II ☐ III ☐ IV ☐ Unknown', 'Stage', ['I', 'II', 'III', 'IV', 'Unknown']),
+                                     ('Blood group: ☐ A ☐ B ☐ AB ☐ O ☐ Unknown', 'Blood group', ['A', 'B', 'AB', 'O', 'Unknown']),
+                                     ('Pain score: ☐ 0 ☐ 1 ☐ 2 ☐ 3 ☐ Not assessed', 'Pain score',
+                                      ['0', '1', '2', '3', 'Not assessed'])):
+            with self.subTest(line=line):
+                doc = Document(); doc.add_table(rows=1, cols=1).cell(0, 0).text = line
+                self.assertEqual([(f['label'], f['options']) for f in w.inspect(data(doc))['fields'] if f.get('options')],
+                                 [(label, options)])
+
+    def test_a_code_printed_before_its_box_is_still_noted(self):
+        for line in ('Shape\t☐\t2 ☐ Other', 'Shape ☐ 2 ☐ Other', 'Shape\t☐\t2 ☐', 'Finding ☐ II ☐ III ☐ Other'):
+            for control in ('glyph', 'ff'):
+                with self.subTest(line=line, control=control):
+                    result = w.inspect(data(coded_form(['4.\tThyroid', '\tNormal\tAbnormal', line], control=control)))
+                    self.assertEqual(box_fields(result), [])
+                    self.assertTrue(any('response codes are not option labels' in n for n in result['notes']))
+
+
+class PatientInstructionsAreNotDestinations(unittest.TestCase):
+    """R3-5: a printed instruction addressed to the patient is content, and an instructed cell is never named by a
+    printed value of its row."""
+
+    def test_an_instruction_to_the_patient_is_never_an_answer_destination(self):
+        raw = table_doc([('Medication', 'Dose', 'Patient instructions', 'Given (initials)'),
+                         ('Metformin', '500 mg', 'Describe any stomach upset to your doctor', '')])
+        fields = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}
+        self.assertNotIn('b/tbl[0]/tr[1]/tc[2]', fields)
+        self.assertFalse([f for f in fields.values() if f.get('source_instructions')])
+
+    def test_an_instructed_cell_is_named_by_its_row_never_by_a_value_printed_beside_it(self):
+        raw = table_doc([('Medication', 'Dose', 'Findings', 'Given (initials)'),
+                         ('Metformin', '500 mg', 'Describe any side effects here', '')])
+        own = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}['b/tbl[0]/tr[1]/tc[2]']
+        self.assertEqual(own['locator']['target']['type'], 'cell_append')
+        self.assertNotIn('500 mg', own['label'])
+        self.assertIn('Metformin', own['label'])
+
+
+class RoundTwoGuardsArePinned(unittest.TestCase):
+    """R3-6: each round-two guard has a test that fails when the guard is removed."""
+
+    MURMUR = ['Murmur', '', ('\tAbsent\tPresent', (1440, 2880)), ('\t1 ☐\t2 ☐', (1440, 2880))]
+
+    def detector(self, doc):
+        return w.Detector(w.open_package(data(doc)))
+
+    def test_a_merged_left_cell_holding_its_own_box_is_never_group_context(self):
+        for control in ('ff', 'glyph'):
+            with self.subTest(control=control):
+                rows = [[['Referred ☐'], ['Liver summary', '', ('\tNormal\tEnlarged', (1440, 2880)), ('\t1 ☐\t2 ☐', (1440, 2880))]],
+                        [[''], ['Spleen summary', '', ('\tNormal\tEnlarged', (1440, 2880)), ('\t1 ☐\t2 ☐', (1440, 2880))]]]
+                doc = stopped_form(rows, (2880, 6480), control=control)
+                doc.tables[0].cell(0, 0).merge(doc.tables[0].cell(1, 0))
+                detector, _, notes = detect(data(doc))
+                self.assertEqual([a.label for _, _, a in detector.layout_candidates], [])
+                self.assertTrue(any('merged cell to the left' in n for n in notes))
+
+    def test_a_left_cell_with_a_bracketed_or_underlined_answer_place_never_names_the_coded_row(self):
+        for text in ('Pulse: [    ]', 'Name: <name>', 'Rate {{rate}}'):
+            with self.subTest(text=text):
+                detector, _, notes = detect(data(stopped_form([[[text], self.MURMUR]], (2880, 6480), control='glyph')))
+                self.assertEqual([a.label for _, _, a in detector.layout_candidates], [])
+                self.assertTrue(any('holds its own answer' in n for n in notes))
+        doc = stopped_form([[['Pulse'], self.MURMUR]], (2880, 6480), control='glyph')
+        doc.tables[0].cell(0, 0).paragraphs[0].add_run('\t\t').underline = True
+        detector, _, notes = detect(data(doc))
+        self.assertEqual([a.label for _, _, a in detector.layout_candidates], [])
+        self.assertTrue(any('holds its own answer' in n for n in notes))
+
+    def test_an_instruction_beside_its_own_drawn_blank_keeps_the_blank_as_the_answer_place(self):
+        raw = table_doc([('Organ', 'Findings', 'Initials'), ('Liver', 'If abnormal, describe here: ________', '')])
+        fields = [f for f in w.inspect(raw)['fields'] if f['locator']['slot'].startswith('b/tbl[0]/tr[1]/tc[1]')]
+        self.assertEqual([f['locator']['target']['type'] for f in fields], ['span'])
+
+    def test_an_instruction_in_a_row_without_its_own_label_is_not_a_destination(self):
+        raw = table_doc([('Organ', 'Findings'), ('', 'Describe any findings here')])
+        self.assertNotIn('b/tbl[0]/tr[1]/tc[1]', {f['locator']['slot'] for f in w.inspect(raw)['fields']})
+        raw = table_doc([('Organ', 'Findings', 'Initials'), ('', 'Describe any findings here', '')])
+        self.assertNotIn('b/tbl[0]/tr[1]/tc[1]', {f['locator']['slot'] for f in w.inspect(raw)['fields']})
+        raw = table_doc([('Organ', 'Findings', 'Initials'), ('Liver', 'Describe any findings here', '')])
+        self.assertIn('b/tbl[0]/tr[1]/tc[1]', {f['locator']['slot'] for f in w.inspect(raw)['fields']})
+
+    def test_an_oversized_instruction_is_printed_content(self):
+        long = 'Describe any findings here, ' + ' '.join(['including size, edge, consistency and tenderness'] * 5)
+        self.assertGreater(len(long), 200)
+        raw = table_doc([('Organ', 'Findings', 'Initials'), ('Liver', long, '')])
+        self.assertNotIn('b/tbl[0]/tr[1]/tc[1]', {f['locator']['slot'] for f in w.inspect(raw)['fields']})
+        raw = table_doc([('Organ', 'Findings', 'Initials'), ('Liver', long[:190], '')])
+        self.assertIn('b/tbl[0]/tr[1]/tc[1]', {f['locator']['slot'] for f in w.inspect(raw)['fields']})
+
+    def test_a_row_whose_answer_is_a_ticked_box_is_a_data_row(self):
+        for control in ('glyph', 'ff'):
+            with self.subTest(control=control):
+                from .test_word_v3 import ff_field
+                doc = Document(); table = doc.add_table(rows=2, cols=2)
+                table.cell(0, 0).text = 'Item'; table.cell(0, 1).text = 'Done'
+                table.cell(1, 0).text = 'Consent obtained'
+                if control == 'glyph':
+                    table.cell(1, 1).text = '☒'
+                else:
+                    ff_field(table.cell(1, 1).paragraphs[0], 'checkbox', checked=True, name='Done')
+                detector = self.detector(doc)
+                self.assertEqual(detector.row_kind(detector.index.by_id['word/document.xml#b/tbl[0]'], 1), 'data')
+
+    def test_an_inline_answer_gap_is_a_label_and_a_gap_before_a_unit_or_another_label(self):
+        cases = (('Weight:      kg', True), ('Sessions:      Duration:    minutes', True), ('Weight:\tkg', True),
+                 ('Status:      see attached', False), ('Weight: kg', False), ('12:      kg', False),
+                 (' '.join(['word'] * 19) + ':      kg', False))
+        for text, gap in cases:
+            with self.subTest(text=text):
+                doc = Document(); doc.add_paragraph(text)
+                detector = self.detector(doc)
+                self.assertEqual(detector.inline_answer_gap(detector.index.by_id['word/document.xml#b/p[0]']), gap)
+
+    def test_an_underlined_gap_makes_a_value_cell(self):
+        doc = Document(); table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = 'Weight'
+        table.cell(0, 1).paragraphs[0].add_run('\t\t').underline = True
+        detector = self.detector(doc)
+        self.assertTrue(detector.prints_answer_blank(detector.index.by_id['word/document.xml#b/tbl[0]/tr[0]/tc[1]']))
+        self.assertFalse(detector.prints_answer_blank(detector.index.by_id['word/document.xml#b/tbl[0]/tr[0]/tc[0]']))
