@@ -122,3 +122,53 @@ class AdditionalCostContracts(unittest.TestCase):
         for relative, old, new in cases:
             with self.subTest(file=relative, mutation=new):
                 self.check_mutation(relative, old, new, checked)
+
+
+class BatchCostContract(unittest.TestCase):
+    check_mutation = AdditionalCostContracts.check_mutation
+    def test_batch_compiler_send_and_complete_price_have_reviewed_identities(self):
+        self.assertEqual([cap for _,cap in scan.provider_caps(scan.REBUILD/'core/batch_jobs.py')],
+                         [('profile',frozenset({6000,8000,16000}))])
+
+    def test_batch_price_control_flow_and_request_mutants_refuse(self):
+        def checked():scan.provider_caps(scan.REBUILD/'core/batch_jobs.py')
+        cases=[
+            ('core/generation_batch.py', 'Decimal(size + 12000)', 'Decimal(size)'),
+            ('core/generation_batch.py', "Decimal(wire['max_tokens'])", 'Decimal(6000)'),
+            ('core/generation_batch.py', "bound *= g.US_INFERENCE_MULTIPLIER", 'bound *= Decimal(0)'),
+            ('core/generation_batch.py', "if config['mode'] != 'live':", 'if True:'),
+            ('core/generation_batch.py', "bound * Decimal('1.5')", "bound * Decimal('1.0')"),
+            ('core/generation_batch.py', "str(sum((Decimal(p['maximum_charge']) for p in plan['parts']), Decimal(0)))", "str(Decimal(0))"),
+            ('core/generation_batch.py', '    rate = g.rates(config)', '    return plan\n    rate = g.rates(config)'),
+            ('core/generation_batch.py', 'def request(plan, ordinal):', '@unpriced\ndef request(plan, ordinal):'),
+            ('core/generation_batch.py', 'return g.anthropic_request(config[\'model\'], config[\'request_profile\'], instructions, payload, schema)', "return {'max_tokens': 90000}"),
+            ('core/batch_jobs.py', 'response=client.messages.create(**wire)', "wire['max_tokens']=90000\n            response=client.messages.create(**wire)"),
+            ('core/batch_jobs.py', 'response=client.messages.create(**wire)', 'escape(wire)\n            response=client.messages.create(**wire)'),
+            ('core/batch_jobs.py', 'response=client.messages.create(**wire)', 'response=client.messages.create(**replacement)'),
+            ('core/batch_jobs.py', 'if plan[\'config\'] != g.configuration():', 'if False:'),
+            ('core/batch_jobs.py', '\ndef current_plan(batch):', '\nb.request = replacement\n\ndef current_plan(batch):'),
+            ('core/generation_batch.py', '\ndef request(plan, ordinal):', '\ng.anthropic_request = replacement\n\ndef request(plan, ordinal):'),
+        ]
+        for relative,old,new in cases:
+            with self.subTest(relative=relative,mutation=new):self.check_mutation(relative,old,new,checked)
+
+
+    def test_batch_global_dependency_rebinding_cannot_hide_undercharge(self):
+        def checked():scan.provider_caps(scan.REBUILD/'core/batch_jobs.py')
+        old='from decimal import Decimal, ROUND_CEILING'
+        new="""from decimal import Decimal as _Decimal, ROUND_CEILING
+
+def Decimal(value=0):
+    return _Decimal(value) / (10 if type(value) is int else 1)
+"""
+        self.check_mutation('core/generation_batch.py',old,new,checked)
+        for relative,old,new in (
+            ('core/generation_batch.py','import json','import different_json as json'),
+            ('core/generation_batch.py','MAX_PARTS = 8','MAX_PARTS = 80'),
+            ('core/generation_batch.py','ROUND_CEILING','ROUND_DOWN'),
+            ('core/batch_jobs.py','from decimal import Decimal','from other_decimal import Decimal'),
+            ('core/batch_jobs.py','from .billing import reserve, settle, release, absorb_failed_job',
+             'from .other_billing import reserve, settle, release, absorb_failed_job'),
+            ('core/generation_batch.py',"    return bool(getattr(settings, 'V3_GENERATION_BATCHES', False))",'    return True'),
+        ):
+            with self.subTest(relative=relative,mutation=new):self.check_mutation(relative,old,new,checked)

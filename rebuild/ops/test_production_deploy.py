@@ -966,6 +966,46 @@ def compiled_mapping_cap(path, tree, call, expression, where):
     return 'mapping-profile', frozenset({cap})
 
 
+# Whole normalized modules bind helpers, imports, constants and their execution
+# paths as well as the priced functions. A function-only fingerprint missed an
+# undercharging replacement of Decimal. These fixed identities accompany reviewed
+# offline compiler/price witnesses; they are never learned from inspected source.
+# Any semantic module change fails until its dependency/price proof is reviewed.
+BATCH_PRICED_MODULES = {'core/generation_batch.py': '357a26d580ec01db5a5ab6bd3485ef265ecb3eb7b07ae6317e5495f4f808e7d6', 'core/batch_jobs.py': 'b9f184db2512ff7ffedb354a602f25399b2c7ce8ec6529d40ffd2cc6b306e91b'}
+
+def compiled_batch_cap(path, tree, call, expression, where):
+    if path != REBUILD / 'core/batch_jobs.py' or ast.unparse(expression) != 'wire':
+        raise Unresolved(f'{where}: unknown batch request contract')
+    if enclosing_function(call, parent_map(tree)) is not one_function(tree, 'run_one'):
+        raise Unresolved(f'{where}: batch request is outside the reviewed send boundary')
+    modules = {str(path.relative_to(REBUILD)): tree,
+               'core/generation_batch.py': ast.parse((REBUILD / 'core/generation_batch.py').read_text())}
+    for relative, module in modules.items():
+        counts, _ = bindings(module)
+        names = ('g', 'b') if relative.endswith('/batch_jobs.py') else ('g',)
+        parents = parent_map(module)
+        for name in names:
+            matches = [n for n in module.body if isinstance(n, ast.ImportFrom) and n.level == 1
+                       and n.module is None and any(a.asname == name and a.name ==
+                           ('generation' if name == 'g' else 'generation_batch') for a in n.names)]
+            if len(matches) != 1 or counts.get(name) != 1:
+                raise Unresolved(f'{where}: batch compiler module identity changed')
+            for use in ast.walk(module):
+                if not isinstance(use, ast.Name) or use.id != name or not isinstance(use.ctx, ast.Load):
+                    continue
+                top = use
+                while isinstance(parents.get(top), ast.Attribute):
+                    top = parents[top]
+                if top is use or not isinstance(top.ctx, ast.Load):
+                    raise Unresolved(f'{where}: batch compiler module is mutated or escapes')
+    for relative, expected in BATCH_PRICED_MODULES.items():
+        actual = hashlib.sha256(ast.dump(modules[relative], include_attributes=False).encode()).hexdigest()
+        if actual != expected:
+            raise Unresolved(f'{where}: {relative} changed; its complete binding/price proof needs review')
+    profile_tree = ast.parse(GENERATION.read_text())
+    return 'profile', profile_cap_values(profile_tree, int_constants(profile_tree), where)
+
+
 def provider_caps(path):
     """[(where, (kind, caps))] for every provider call in one file. Fails closed, naming the call, on anything it
     cannot trace: a provider-shaped call whose receiver is not a client constructed and bound to a name in this file;
@@ -1036,6 +1076,9 @@ def provider_caps(path):
                 raise Unresolved(f'{where}: ** beside other keywords hides the request')
             if isinstance(node.keywords[0].value, ast.Subscript):
                 caps.append((where, compiled_mapping_cap(path, tree, node, node.keywords[0].value, where)))
+                continue
+            if path == REBUILD / 'core/batch_jobs.py':
+                caps.append((where, compiled_batch_cap(path, tree, node, node.keywords[0].value, where)))
                 continue
             keywords = built_request(tree, node.keywords[0].value, where)
         else:

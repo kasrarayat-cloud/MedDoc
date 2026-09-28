@@ -1,0 +1,8 @@
+test_batch_compiler_send_and_complete_price_have_reviewed_identities (rebuild.ops.test_cost_scanner_contract.BatchCostContract.test_batch_compiler_send_and_complete_price_have_reviewed_identities) ... ok
+test_batch_global_dependency_rebinding_cannot_hide_undercharge (rebuild.ops.test_cost_scanner_contract.BatchCostContract.test_batch_global_dependency_rebinding_cannot_hide_undercharge) ... ok
+test_batch_price_control_flow_and_request_mutants_refuse (rebuild.ops.test_cost_scanner_contract.BatchCostContract.test_batch_price_control_flow_and_request_mutants_refuse) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.049s
+
+OK

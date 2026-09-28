@@ -1,0 +1,127 @@
+[
+  {
+    "case": "01_recorded_interrupt_admin_closeout",
+    "admitted_hold": "0.822486000000",
+    "batch_authorized_limit": "0.822486000000",
+    "sends": 2,
+    "before": {
+      "batch_state": "reconciliation",
+      "pending": true,
+      "children": [
+        {
+          "ordinal": 1,
+          "state": "staged",
+          "held": "0",
+          "usage": [
+            {
+              "actual_cost": "0.001200000000",
+              "charged_cost": "0.001800000000"
+            }
+          ],
+          "receipt": [
+            {
+              "actual_cost": "0.001200000000",
+              "provider_request_id": "request_a3de4aaf-4974-475c-8238-9cb4a29791a9"
+            }
+          ],
+          "platform": []
+        },
+        {
+          "ordinal": 2,
+          "state": "reconciliation",
+          "held": "0.409623000000",
+          "usage": [],
+          "receipt": [
+            {
+              "actual_cost": "0.001200000000",
+              "provider_request_id": "request_11c8670c-64c8-4a2b-9fb5-aab8ae38c7e9"
+            }
+          ],
+          "platform": []
+        }
+      ]
+    },
+    "after": {
+      "batch_state": "failed",
+      "pending": true,
+      "children": [
+        {
+          "ordinal": 1,
+          "state": "staged",
+          "held": "0",
+          "usage": [
+            {
+              "actual_cost": "0.001200000000",
+              "charged_cost": "0.001800000000"
+            }
+          ],
+          "receipt": [
+            {
+              "actual_cost": "0.001200000000",
+              "provider_request_id": "request_a3de4aaf-4974-475c-8238-9cb4a29791a9"
+            }
+          ],
+          "platform": []
+        },
+        {
+          "ordinal": 2,
+          "state": "failed",
+          "held": "0",
+          "usage": [
+            {
+              "actual_cost": "0.001200000000",
+              "charged_cost": "0.001800000000"
+            }
+          ],
+          "receipt": [
+            {
+              "actual_cost": "0.001200000000",
+              "provider_request_id": "request_11c8670c-64c8-4a2b-9fb5-aab8ae38c7e9"
+            }
+          ],
+          "platform": [
+            {
+              "kind": "absorbed_failure",
+              "amount": "0.001200000000"
+            }
+          ]
+        }
+      ]
+    },
+    "worker_after_closeout": false,
+    "expected": "No unadopted staged child stays charged or pending after whole-batch financial closeout."
+  },
+  {
+    "case": "02_late_recorded_response_after_admin_closeout",
+    "sends": 1,
+    "after": {
+      "batch_state": "failed",
+      "pending": false,
+      "children": [
+        {
+          "ordinal": 1,
+          "state": "failed",
+          "held": "0",
+          "usage": [],
+          "receipt": [
+            {
+              "actual_cost": "0.001200000000",
+              "provider_request_id": "request_70776f3b-cfc4-4ba4-82f6-651206d98311"
+            }
+          ],
+          "platform": []
+        },
+        {
+          "ordinal": 2,
+          "state": "cancelled",
+          "held": "0",
+          "usage": [],
+          "receipt": [],
+          "platform": []
+        }
+      ]
+    },
+    "worker_after_closeout": false,
+    "expected": "A newly durable known provider cost must reopen unresolved accounting or be settled/absorbed, not remain terminal without usage/platform cost."
+  }
+]
