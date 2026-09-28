@@ -650,8 +650,9 @@ class SelectionLimitRefutations(unittest.TestCase):
             doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Treatments received', treatments)
             doc.add_heading('Notes', 1); doc.add_paragraph(sentence); cases.append(('form-wide ' + sentence[:30], doc))
         doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Treatments received', treatments)
-        doc.add_page_break(); doc.add_paragraph('Office')._p.append(parse_xml(TEXTBOX % 'FOR OFFICE USE ONLY'))
-        cases.append(('office text box', doc))
+        doc.add_heading('Notes', 1); doc.add_paragraph('Record any other notes.'); doc.add_section()
+        doc.add_paragraph('Office')._p.append(parse_xml(TEXTBOX % 'FOR OFFICE USE ONLY'))
+        cases.append(('office text box in a later section', doc))
         doc = Document(); doc.add_heading('Specimens', 1); native_list(doc, 'Treatments received', treatments)
         doc.sections[0].footer.paragraphs[0].text = 'This form is for clinical use only.'; cases.append(('footer', doc))
         doc = Document(); doc.add_heading('Clinical history', 1); doc.add_paragraph('Date of referral: ______________')
@@ -680,3 +681,42 @@ class SelectionLimitRefutations(unittest.TestCase):
                     self.assertFalse([f for f in fields if f['kind'] == 'choice'])
                     for field in fields:
                         self.assertEqual(self.ticks(raw, field, ['Pain', 'Fever']), [True, False, True, False])
+                    if not fields:
+                        self.assertTrue(any('cardinality instructions conflict' in n for n in w.inspect(raw)['notes']))
+
+    # Controls for the repair itself: what it must not hold, narrow or widen.
+    def test_repair_controls_keep_ordinary_answers_useful(self):
+        treatments = ('Physiotherapy', 'Occupational therapy', 'Hydrotherapy')
+        multi = []
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        glyph = doc.add_paragraph('Sex (tick one): ☐ Male ☐ Female')
+        multi.append(('a separate glyph question above owns its tick-one', native_list(doc, 'Treatments received', treatments)))
+        doc = Document(); doc.add_heading('Demographics', 1); doc.add_paragraph('Sex (tick one): ☐ Male ☐ Female')
+        doc.add_heading('Clinical history', 1)
+        multi.append(('a glyph question in another section owns its tick-one', native_list(doc, 'Treatments received', treatments)))
+        doc = Document(); doc.add_paragraph('You may tick more than one box for each question.'); doc.add_heading('Clinical history', 1)
+        multi.append(('open count in the preamble', native_list(doc, 'Treatments received', treatments)))
+        multi.append(('dated instruction', form(instruction='Record treatments received within 6 weeks of discharge.')))
+        multi.append(('clinical option name', form(options=('Fragile X', 'Karyotype', 'Microarray'), question='Tests completed')))
+        doc = Document(); doc.add_heading('Clinical history', 1); native_list(doc, 'Treatments received', treatments)
+        doc.add_paragraph('Give the date of the change at least 14 days before the move taking place.')
+        doc.add_heading('Other', 1); doc.add_paragraph('Please indicate at least 14 days in advance.')
+        multi.append(('measured amounts are not limits', doc))
+        for name, doc in multi:
+            with self.subTest(case=name):
+                raw = data(doc)
+                label = 'Tests completed' if 'option' in name else 'Treatments received'
+                self.assertMulti(raw, label)
+        self.assertEqual(glyph.text, 'Sex (tick one): ☐ Male ☐ Female')
+        # A one-only sentence owned by a separate question stops being owned when it names a wider reach.
+        doc = Document(); doc.add_heading('Clinical history', 1)
+        boxed_question(doc, 'Please tick one box for each question in this section:', ('Yes', 'No'))
+        doc.add_paragraph(''); native_list(doc, 'Treatments received', treatments)
+        self.assertNeverTwo(data(doc), 'Treatments received')
+        # Ordinary questions: a count that is an amount, and "more than one" in a question, are not selection limits.
+        options = ('Physiotherapy', 'Hydrotherapy', 'Literacy')
+        for question in ('Symptom(s) in the one week before admission:', 'Symptom(s) lasting no more than 1 day:'):
+            with self.subTest(question=question):
+                self.assertMulti(data(inline_question(question, options, 'ff')), 'Symptom(s)')
+        raw = data(inline_question('Do you have more than one type of headache?', ('No', 'Yes - describe the worst'), 'ff'))
+        self.assertOneChoice(raw, 'Do you have more than one type', 'No', [True, False])
