@@ -670,8 +670,24 @@ class InvitationAcceptanceAgainstTheSamePayersRequests(LockFlowFixture, Transact
         self.assert_accepted({'value': self.accept(self.doctor())()})
 
     def test_a_voice_upload_holding_the_wallets_and_the_acceptance_serialize(self):
+        self.upload_raced_with(self.accept(self.doctor()))
+        self.assert_accepted(self.raced)
+
+    def test_a_voice_upload_holding_the_wallets_and_a_clinic_invitation_acceptance_serialize(self):
+        """The clinic-owner invitation (core/clinic_invitations.py) locks the account itself before welcome_credit."""
+        from core import clinic_invitations
+        _, raw = clinic_invitations.issue(self.admin, self.user.email, 'Synthetic second clinic', 'Synthetic front desk')
+        second_tab = self.doctor()
+        self.upload_raced_with(lambda: second_tab.post(f'/invite/clinic/{raw}/', {}))
+        self.assertNotIn('error', self.raced, self.raced.get('error'))
+        self.assertEqual(self.raced['value'].status_code, 302, getattr(self.raced['value'], 'exc_info', None))
+        self.assertTrue(Membership.objects.filter(user=self.user, role='owner', active=True,
+                                                  department__organization__name='Synthetic second clinic').exists())
+
+    def upload_raced_with(self, accept):
+        """U's 2 s upload is paused in reserve() (wallets locked); `accept` runs in U's second tab; the upload resumes."""
         draft = self.draft()
-        doctor, second_tab = self.doctor(), self.doctor()
+        doctor = self.doctor()
         real = billing.audit
         paused, resume = threading.Event(), threading.Event()
 
@@ -687,13 +703,12 @@ class InvitationAcceptanceAgainstTheSamePayersRequests(LockFlowFixture, Transact
                 'audio': self.recording('rfr1-a'), 'consent': 'on', 'usage_quote': quote}))
             try:
                 self.assertTrue(paused.wait(15), 'the upload never reached reserve()')
-                accepting, accepted = in_thread(self.accept(second_tab))
+                accepting, self.raced = in_thread(accept)
                 blocked = wait_for_blocked_backend()
             finally:
                 resume.set()
             self.finish(uploading, accepting)
         self.assertTrue(blocked, 'the acceptance never waited for the upload')
-        self.assert_accepted(accepted)
         self.assertNotIn('error', uploaded, uploaded.get('error'))
         self.assertEqual(uploaded['value'].status_code, 302)
         queued = Job.objects.get(encounter=draft, kind='transcription')
