@@ -93,12 +93,60 @@ def _base(doc):
             and not any(t.tag_ == 'MD' for t in doc))
 
 
+def _patient_copular_complement(doc):
+    """A finite patient copula with one complete adjectival/nominal complement.
+
+    Only this syntax allowance is new. The caller still requires the signed
+    complete-source relation and all destination, source and context guards.
+    Negation stays in the exact free-text answer; it never selects an option.
+    """
+    from . import generation as g
+    root = next(iter(doc.sents)).root
+    if root.pos_ != 'AUX' or root.text.casefold() not in ('am', 'is', 'are', 'was', 'were', 'be', 'been') or not _finite(root):
+        return False
+    subjects = [t for t in root.children if t.dep_ == 'nsubj']
+    if len(subjects) != 1 or sum(t.dep_ in SUBJECTS for t in doc) != 1:
+        return False
+    subject = subjects[0]
+    if subject.text.casefold() != 'patient' or subject.i >= root.i or any(
+            t.i != subject.i and not (t.dep_ == 'det' and t.text.casefold() in ('the', 'this'))
+            for t in subject.subtree):
+        return False
+    complements = [t for t in root.children if t.dep_ == 'acomp' and t.pos_ == 'ADJ']
+    if len(complements) != 1 or any(t.dep_ not in ('nsubj', 'acomp', 'neg', 'punct', 'aux') for t in root.children):
+        return False
+    adjective = complements[0]
+    prepositions = [t for t in adjective.children if t.dep_ == 'prep' and t.pos_ == 'ADP']
+    if len(prepositions) != 1 or any(t.dep_ != 'prep' for t in adjective.children):
+        return False
+    prep = prepositions[0]
+    if prep.text.casefold() not in ('to', 'on', 'for', 'with', 'under', 'at', 'in', 'of', 'from'):
+        return False
+    objects = [t for t in prep.children if t.dep_ == 'pobj' and t.pos_ in ('NOUN', 'PROPN')]
+    if len(objects) != 1 or list(prep.children) != objects:
+        return False
+    # An appositional noun/acronym remains inside its complete nominal object;
+    # nested predicates, actors, coordination and a trailing preposition do not.
+    if any(t.pos_ not in ('NOUN', 'PROPN', 'ADJ', 'DET', 'NUM', 'PUNCT') or
+           t.dep_ not in ('pobj', 'compound', 'amod', 'det', 'nummod', 'appos', 'punct')
+           for t in objects[0].subtree):
+        return False
+    if any(match.group().casefold() != 'to' for text in g.safety_readings(doc.text)
+           for match in g.UNSETTLED.finditer(text)):
+        return False
+    # Bind the one otherwise-unsettled word to this actual nominal preposition,
+    # never remove "to" generally or grant an infinitive/purpose clause.
+    return all((match.start(), match.end()) == (prep.idx, prep.idx + len(prep.text))
+               for match in g.UNSETTLED.finditer(doc.text))
+
+
 def _simple_fact(doc, question):
     if not _base(doc) or FOREIGN.search(doc.text): return False
     if any(t.dep_ in ('ccomp', 'xcomp', 'advcl', 'relcl', 'parataxis', 'csubj', 'csubjpass')
            or t.dep_ == 'acl' and t.pos_ == 'VERB' for t in doc): return False
     root = next(iter(doc.sents)).root
     if root.pos_ not in ('VERB', 'AUX'): return False
+    if _patient_copular_complement(doc): return 'patient'
     clauses = [root] + [t for t in doc if t.dep_ == 'conj' and t.pos_ in ('VERB', 'AUX')
                          and t.head.pos_ in ('VERB', 'AUX')]
     clinical_actor = False

@@ -61,6 +61,57 @@ class OrdinaryFieldRelations(SimpleTestCase):
         self.assertEqual(answers['prodrome']['status'], 'missing')
         self.assert_stored_clear(notes, fields, answers)
 
+    def test_complete_patient_copular_complements_retain_every_source_word(self):
+        question = 'Please confirm that this patient is subject to Multi-Agency Public Protection Arrangements (MAPPA)'
+        for notes, label in (
+            ('The patient is subject to Multi-Agency Public Protection Arrangements (MAPPA).', question),
+            ('The patient is not subject to Multi-Agency Public Protection Arrangements (MAPPA).', question),
+            ('The patient is responsive to physiotherapy.', 'Response to physiotherapy'),
+            ('The patient is not responsive to physiotherapy.', 'Response to physiotherapy'),
+            ('The patient is dependent on assistance.', 'Support needs'),
+        ):
+            with self.subTest(notes=notes):
+                fields = [field('f', label)]
+                answers = offered(notes, fields, {'f': [notes]})
+                self.assertEqual((answers['f']['status'], answers['f']['text']), ('supported', notes))
+                self.assertEqual(answers['f']['evidence'], [{'quote': notes, 'start': 0, 'end': len(notes)}])
+                self.assert_stored_clear(notes, fields, answers)
+
+    def test_copular_allowance_cannot_invent_actor_certainty_or_a_complete_complement(self):
+        fields = [field('f', 'Status under the arrangements')]
+        for notes in (
+            'The father is subject to the arrangements.',
+            "The patient's father is subject to the arrangements.",
+            'The patient advocate is subject to the arrangements.',
+            'She is subject to the arrangements.',
+            'The patient may be subject to the arrangements.',
+            'If discharged, the patient is subject to the arrangements.',
+            'The patient is apparently subject to the arrangements.',
+            'The patient is possibly subject to the arrangements.',
+            'The patient is subject to possible arrangements.',
+            'The patient is subject to.',
+            'The patient is subject to the.',
+            'The patient is subject to the arrangements tomorrow.',
+        ):
+            with self.subTest(notes=notes):
+                answer = offered(notes, fields, {'f': [notes]})['f']
+                self.assertNotEqual(answer['status'], 'supported')
+                self.assertEqual(answer['text'], '')
+
+    def test_copular_source_still_requires_complete_context_and_original_contract(self):
+        first = 'The patient is subject to the arrangements.'
+        tail = 'The arrangements cease tomorrow.'
+        fields = [field('f', 'Status under the arrangements')]
+        for relation in ('contrary', 'unresolved', 'qualifier'):
+            with self.subTest(relation=relation):
+                answer = offered(first + ' ' + tail, fields, {'f': [first]}, overrides={('f', tail): relation})['f']
+                self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+        answers = offered(first, fields, {'f': [first]})
+        changed = {**answers['f'], 'text': 'The patient is not subject to the arrangements.'}
+        self.assertEqual(g.governed_decisions(first, fields, {'f': changed}), [fields[0]['label']])
+        with override_settings(V3_FIELD_RELATIONS=False):
+            self.assertEqual(g.governed_decisions(first, fields, answers), [fields[0]['label']])
+
     def test_identical_contexts_and_ambiguous_labelled_answers_stay_held(self):
         notes = 'The patient reports intermittent buzzing.'
         fields = repeated(); fields[1]['context'] = fields[0]['context']
