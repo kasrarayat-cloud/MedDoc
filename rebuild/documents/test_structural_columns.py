@@ -1216,7 +1216,11 @@ class WordsBeforeBoxesWithTextAfter(unittest.TestCase):
                  'Result: positive ☐ negative ☐ equivocal', 'Right ☐ Left ☐ Bilateral',
                  'Smoker Current ☐\tFormer ☐\tNever ☐\t(tick one)', 'Smoker: Yes ☐ No ☐   Drinker: Yes ☐ No ☐ (tick one)',
                  'Smoker: (Yes) ☐ (No) ☐ N/A', 'Smoker [Yes] ☐ [No] ☐ N/A', 'Date: ____ Yes ☐ No ☐ N/A',
-                 'Pregnancy test ____ Positive ☐ Negative ☐ Not done')
+                 'Pregnancy test ____ Positive ☐ Negative ☐ Not done',
+                 # one reading each: an instruction after the last box, a companion word before the first, a word
+                 # printed against the box after it, a short word after the question's colon
+                 'Mobility Independent ☐ Assisted ☐ (tick one)', 'Pregnant N/A ☐ Yes ☐ No',
+                 'Mobility Independent ☐\tAssisted ☐\tBedbound', 'Allergies: NKDA ☐ Penicillin ☐ Sulfa ☐ Other')
         for control in ('glyph', 'ff'):
             for line in lines:
                 with self.subTest(control=control, line=line):
@@ -1243,6 +1247,8 @@ class WordsBeforeBoxesWithTextAfter(unittest.TestCase):
                                       ['Current', 'Former', 'Never']),
                                      ('Q1? ☐ Yes ☐ No   Q2? ☐ Yes ☐ No', 'Q1?', ['Yes', 'No']),
                                      ('Allergies: (tick one) ☐ Yes ☐ No ☐ NKDA', 'Allergies: (tick one)', ['Yes', 'No', 'NKDA']),
+                                     ('Do you smoke? If yes ☐ Cigarettes ☐ Cigars ☐ Pipe', 'Do you smoke? If yes',
+                                      ['Cigarettes', 'Cigars', 'Pipe']),
                                      # a question's own answer blank, its unit, or a sentence continuing after it (D03, D28)
                                      ('Weight ____ kg ☐ measured ☐ stated', 'Weight ____ kg', ['measured', 'stated']),
                                      ('Referral: Dr ______ ☐ urgent ☐ routine', 'Referral: Dr', ['urgent', 'routine']),
@@ -1276,7 +1282,7 @@ class LegendNumbersInEveryPrintedForm(unittest.TestCase):
                     self.assertTrue(any('codes' in n and ('Coded column sequence at ' in n or 'Tab-column options at ' in n)
                                         for n in notes))
         for title in ('12b. Liver (codes: 1 = Abnormal, 2 = Normal)', '12b. Liver (1) Abnormal (2) Normal',
-                      '12b. Liver: 1. Abnormal 2. Normal'):
+                      '12b. Liver: 1. Abnormal 2. Normal', '12b. Liver (0 = not examined)'):
             titled = [title, ('\tNormal\tAbnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops), '', ('Tender\t1 ☐\t2 ☐', stops)]
             for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
                 with self.subTest(title=title, rows=name):
@@ -1291,7 +1297,7 @@ class LegendNumbersInEveryPrintedForm(unittest.TestCase):
         self.assertEqual([(a.label, a.options) for _, _, a in detector.layout_candidates],
                          [('Palpable', ['1. Normal', '2. Abnormal']), ('Tender', ['1. Normal', '2. Abnormal'])])
         for title in ('12b. Liver (codes: 1 = Normal, 2 = Abnormal)', '12b. Liver (1) Normal (2) Abnormal', '1. Liver',
-                      '2. Liver'):
+                      '2. Liver', 'Examine: 1. Inspect 2. Palpate 3. Percuss'):
             titled = [title, ('\tNormal\tAbnormal', stops), ('Palpable\t1 ☐\t2 ☐', stops), '', ('Tender\t1 ☐\t2 ☐', stops)]
             for name, cell in (('two rows', titled), ('one tab pair', titled[:3])):
                 with self.subTest(title=title, rows=name):
@@ -1337,7 +1343,9 @@ class ScalesWhoseLastOptionIsAWord(unittest.TestCase):
                                  [(label, options)])
 
     def test_a_code_printed_before_its_box_is_still_noted(self):
-        for line in ('Shape\t☐\t2 ☐ Other', 'Shape ☐ 2 ☐ Other', 'Shape\t☐\t2 ☐', 'Finding ☐ II ☐ III ☐ Other'):
+        for line in ('Shape\t☐\t2 ☐ Other', 'Shape ☐ 2 ☐ Other', 'Shape\t☐\t2 ☐', 'Finding ☐ II ☐ III ☐ Other',
+                     'Finding\t☐\t1 ☐\t2 ☐ Other', 'Finding ☐ 1 ☐ 2 ☐', 'Finding 1 ☐ 2 ☐ ☐ 3',
+                     'Finding 0 ☐ 1 ☐ ☐ 2'):
             for control in ('glyph', 'ff'):
                 with self.subTest(line=line, control=control):
                     result = w.inspect(data(coded_form(['4.\tThyroid', '\tNormal\tAbnormal', line], control=control)))
@@ -1355,6 +1363,14 @@ class PatientInstructionsAreNotDestinations(unittest.TestCase):
         fields = {f['locator']['slot']: f for f in w.inspect(raw)['fields']}
         self.assertNotIn('b/tbl[0]/tr[1]/tc[2]', fields)
         self.assertFalse([f for f in fields.values() if f.get('source_instructions')])
+
+    def test_advice_to_the_patient_or_a_column_of_printed_information_is_content(self):
+        for header, text, destination in (('Comments', 'Describe any stomach upset to your doctor', False),
+                                          ('Patient information', 'Describe any side effects', False),
+                                          ('Findings', 'Describe any side effects', True)):
+            with self.subTest(header=header, text=text):
+                raw = table_doc([('Medication', 'Dose', header, 'Given (initials)'), ('Metformin', '500 mg', text, '')])
+                self.assertEqual('b/tbl[0]/tr[1]/tc[2]' in {f['locator']['slot'] for f in w.inspect(raw)['fields']}, destination)
 
     def test_an_instructed_cell_is_named_by_its_row_never_by_a_value_printed_beside_it(self):
         raw = table_doc([('Medication', 'Dose', 'Findings', 'Given (initials)'),
