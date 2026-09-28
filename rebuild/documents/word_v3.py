@@ -1558,6 +1558,7 @@ class Detector:
             problem = issue
         raw_question, label = self.text(question.el).strip(), self.text(label_slot.el).strip()
         context = " > ".join(x for x in (context, raw_question if subsection else "") if x)
+        write_context = " > ".join(x for x in (context, label) if x)
         if len(group["units"]) == 1:
             # A checkbox keeps its printed option as label; its question still
             # governs that option, including a local subject or subsection.
@@ -1570,8 +1571,37 @@ class Detector:
             return {"problem": "Nested option grid at " + table.id + ": " + problem
                     + " Printed source: " + source + " Options: " + self.text(table.el, own=False)}
         return {"label": label, "context": context, "cardinality": raw_question,
+                "write_context": write_context,
                 "source_slots": paragraphs + [slot for slot in before if slot.kind == "p"
                     and not self.text(slot.el).strip()], "option_paras": grid_paras}
+
+    def nested_write_in(self, slot, context):
+        """A separate explicit trailing blank never supplies a checkbox decision."""
+        text, pieces = self.ptext(slot.el)
+        spans = self.blank_spans(text, pieces)
+        if not spans:
+            return
+        problem = "Its source does not prove one separate trailing blank."
+        if len(spans) == 1:
+            start, end, shape = spans[0]
+            boxes = [i for i, char in enumerate(text) if char in (BOX, CHECKED)]
+            if (len(boxes) == 1 and not text[:boxes[0]].strip() and boxes[0] < start
+                    and not text[end:].strip() and "\x00" not in text
+                    and not any(node.tag in (q("w:drawing"), q("w:pict"), q("w:object"))
+                                for node in slot.el.iter())
+                    and (shape == "utab" or (shape == "blank" and set(text[start:end]) == {"_"}))):
+                label = text[boxes[0] + 1:start].strip()
+                if label and len(label) <= MAX_MAPPING_LABEL and len(context) <= MAX_MAPPING_CONTEXT:
+                    if not any(self.question_box_signing(value) for value in (label, context)):
+                        self.add(Area("text", label, slot,
+                            {"type": "span", "start": start, "end": end, "shape": shape},
+                            context=context, complete_source=True))
+                        return
+                    problem = "The complete source contains signing/consent instructions."
+                elif len(label) > MAX_MAPPING_LABEL or len(context) > MAX_MAPPING_CONTEXT:
+                    problem = "The complete label or context exceeds limits; nothing was shortened."
+        self.notes.append("Unassigned write-in beside a nested option at " + slot.id + ". " + problem
+                          + " Printed text: " + text + " Governing context: " + context)
 
     def emit_checkbox_group(self, g):
         pslot = g["paras"][0]
@@ -1647,9 +1677,7 @@ class Detector:
                 for source_slot in nested["source_slots"]:
                     self.claimed.add(id(source_slot.el))
                 for option_para in nested["option_paras"]:
-                    if self.blank_spans(*self.ptext(option_para.el)):
-                        self.notes.append("Unassigned write-in beside a nested option at " + option_para.id
-                                          + ". Review this separate answer area. Printed text: " + self.text(option_para.el))
+                    self.nested_write_in(option_para, nested["write_context"])
             self.add(area)
             for p in g["paras"]:
                 self.claimed.add(id(p.el))

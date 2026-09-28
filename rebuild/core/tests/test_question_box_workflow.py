@@ -238,3 +238,83 @@ class NestedCheckboxWorkflow(V3Fixture, TestCase):
                 if slot.kind == 'p' and (mode == 'missing' or slot.id not in changed_paragraphs):
                     self.assertEqual(etree.tostring(slot.el), etree.tostring(after.by_id[slot.id].el))
             self.capture(mode, original, version, encounter, exported)
+
+
+@override_settings(**V3)
+class NestedWriteInWorkflow(V3Fixture, TestCase):
+    target_slot = 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[1]/p[0]'
+    ordinary_notes = 'The patient reports pressure around the forehead.'
+    long_correction = ('SYNTHETIC retained pressure description with literal ☐ notation. ' * 45).strip()
+
+    def source(self):
+        from documents.test_question_boxes import NestedWriteIns
+        return data(NestedWriteIns().form(heading='', subsection=False, label='Other:'))
+
+    def capture(self, mode, original, version, encounter, exported, generated):
+        pass
+
+    def test_disjoint_write_in_upload_review_worker_finalize_download(self):
+        original = self.source()
+        template, version = self.uploaded(data=original, name='SYNTHETIC separate option write-in')
+        field = next((f for f in version.fields if f['locator']['slot'] == self.target_slot
+                      and f['locator']['target']['type'] == 'span'), None)
+        self.assertIsNotNone(field, 'The independently expected printed write-in is absent')
+        group = next(f for f in version.fields if f['locator']['target']['type'] == 'checkboxes'
+                     and any(box['slot'] == self.target_slot + '/glyphs' for box in f['locator']['target']['boxes']))
+        page = self.client.get(f'/templates/{template.pk}/')
+        self.assertContains(page, field['label'])
+        self.assertEqual(b''.join(self.client.get(f'/templates/{template.pk}/original/').streaming_content), original)
+        # The editable mapping review round trip must preserve both original targets.
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/',
+            {'action': 'v3_save', 'mapping_version': version.pk}).status_code, 302)
+        reviewed = self.latest(template)
+        self.assertEqual(reviewed.fields, version.fields)
+        version = reviewed;self.confirm(template, version)
+        for mode in ('missing', 'ordinary', 'long'):
+            notes = 'Administrative visit record.' if mode == 'missing' else self.ordinary_notes
+            self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+            encounter = Encounter.objects.latest('created_at')
+            answers = selected_answers(notes, version.fields, None if mode == 'missing' else field['key'])
+            generated = answers[field['key']].copy()
+            self.assertEqual(answers[group['key']]['status'], 'missing')
+            with patch('core.jobs.generation.generate', return_value=(answers, Decimal('0'), {}, {},
+                       'synthetic-write-in-selection', '', True)) as provider:
+                self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
+                self.assertTrue(run_one())
+            provider.assert_called_once();encounter.refresh_from_db()
+            self.assertEqual(Job.objects.get(encounter=encounter).state, 'succeeded')
+            usage = Usage.objects.get(job__encounter=encounter)
+            self.assertTrue(usage.simulated);self.assertEqual(usage.charged_cost, 0)
+            self.assertEqual(self.client.get(f'/encounters/{encounter.pk}/').status_code, 200)
+            value = '' if mode == 'missing' else self.ordinary_notes if mode == 'ordinary' else self.long_correction
+            payload = {'revision': encounter.revision}
+            for current in version.fields:
+                payload['reviewed_' + current['key']] = 'on'
+                payload['answer_' + current['key']] = (value if current['key'] == field['key'] else
+                    ['Other'] if mode != 'missing' and current['key'] == group['key'] else '')
+            self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/', payload).status_code, 302)
+            encounter.refresh_from_db()
+            self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/finalize/',
+                {'revision': encounter.revision, 'reviewed': 'on'}).status_code, 302)
+            encounter.refresh_from_db();self.assertEqual(encounter.status, 'finalized')
+            response = self.client.get(f'/encounters/{encounter.pk}/export/')
+            self.assertEqual(response.status_code, 200)
+            exported = b''.join(response.streaming_content)
+            self.assertEqual(hashlib.sha256(exported).hexdigest(), encounter.export_sha256)
+            self.assertEqual(private_path(template.original_path).read_bytes(), original)
+            old = w.SlotIndex(w.open_package(original));new = w.SlotIndex(w.open_package(exported))
+            identity = 'word/document.xml#' + self.target_slot
+            source = w.paragraph_text(old.by_id[identity].el)[0];target = field['locator']['target']
+            expected = source if not value else source[:target['start']] + value + source[target['end']:]
+            if value: expected = expected.replace(w.BOX, w.CHECKED, 1)
+            self.assertEqual(w.paragraph_text(new.by_id[identity].el)[0], expected)
+            allowed = {box['part']+'#'+box['slot'].rsplit('/glyphs', 1)[0]
+                       for box in group['locator']['target']['boxes']} | {identity}
+            for slot in old.slots:
+                if slot.kind == 'p' and (mode == 'missing' or slot.id not in allowed):
+                    self.assertEqual(etree.tostring(slot.el), etree.tostring(new.by_id[slot.id].el), slot.id)
+            with ZipFile(io.BytesIO(original)) as before, ZipFile(io.BytesIO(exported)) as after:
+                for name in before.namelist():
+                    if mode == 'missing' or name != 'word/document.xml':
+                        self.assertEqual(before.read(name), after.read(name), name)
+            self.capture(mode, original, version, encounter, exported, generated)
