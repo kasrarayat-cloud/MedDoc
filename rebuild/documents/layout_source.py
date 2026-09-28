@@ -90,10 +90,7 @@ def prepare(data, *, mapping=None, answers=None):
     candidates = detector.layout_candidates
     if not candidates or len(candidates) > MAX_CANDIDATES:
         w.fail("No bounded tab-column proposal is available.", "layout_unresolved")
-    fields = [w.area_to_field(i + 1, area) for i, area in enumerate(areas)]
-    for field in fields:
-        w.annotate_printed(detector.index, field)
-    w.source_policy.annotate(detector, fields)
+    fields = w.mapped_fields(detector, areas)
     descriptions = []
     for header, row, area in candidates:
         field = next((f for f in fields if f["locator"]["part"] == row.part

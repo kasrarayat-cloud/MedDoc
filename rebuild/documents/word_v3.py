@@ -3263,10 +3263,8 @@ def cell_instruction_source(index, field):
     return [{"part": slot.part, "slot": slot.path, "fingerprint": fingerprint(slot.el), "text": text}]
 
 
-def inspect(data: bytes) -> dict:
-    package = open_package(data)
-    detector = Detector(package)
-    areas, notes = detector.detect()
+def mapped_fields(detector, areas):
+    """Keep source evidence identical across ordinary and rendered inspection."""
     if len(areas) > MAX_FIELDS:
         fail("The form has more answer areas than one mapping can hold (%d)." % MAX_FIELDS, "too_many_fields")
     fields = [area_to_field(i + 1, a) for i, a in enumerate(areas)]
@@ -3275,6 +3273,14 @@ def inspect(data: bytes) -> dict:
         if field["locator"]["target"]["type"] == "cell_append":
             field["source_instructions"] = cell_instruction_source(detector.index, field)
     source_policy.annotate(detector, fields)
+    return fields
+
+
+def inspect(data: bytes) -> dict:
+    package = open_package(data)
+    detector = Detector(package)
+    areas, notes = detector.detect()
+    fields = mapped_fields(detector, areas)
     return {"contract": CONTRACT, "fields": fields, "notes": notes,
             "layout_pending": len(detector.layout_candidates)}
 

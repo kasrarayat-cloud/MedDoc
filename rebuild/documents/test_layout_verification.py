@@ -89,6 +89,26 @@ class LayoutSource(unittest.TestCase):
                     for name in before.namelist():
                         if name != 'word/document.xml': self.assertEqual(before.read(name), after.read(name))
 
+    def test_layout_preparation_retains_unrelated_guidance_and_patient_authority(self):
+        from docx.shared import RGBColor
+        doc = tab_form()
+        doc.add_paragraph('For the patient:')
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = 'What progress have you made?'
+        instruction = 'Describe your own experience; do not sign this answer for another person.'
+        table.cell(0, 1).paragraphs[0].add_run(instruction).font.color.rgb = RGBColor.from_string('808080')
+        raw = data(doc)
+        ordinary = next(f for f in w.inspect(raw)['fields'] if f['locator']['target']['type'] == 'cell_append')
+        prepared, _, _ = source.prepare(raw)
+        field = next(f for f in prepared['fields'] if f['locator'] == ordinary['locator'])
+        self.assertEqual(field['source_instructions'], ordinary['source_instructions'])
+        self.assertEqual(field['answer_policy'], ordinary['answer_policy'])
+        self.assertEqual(field['answer_policy']['source_author'], 'patient')
+        answer = 'The patient reports weekly supervised contact.'
+        _, exported, _ = source.prepare(raw, mapping=prepared['fields'], answers={field['key']: answer})
+        cell = w.SlotIndex(w.open_package(exported)).by_id['word/document.xml#b/tbl[1]/tr[0]/tc[1]'].el
+        self.assertEqual([w.text_of(p) for p in cell.findall(w.q('w:p'))], [instruction, answer])
+
 
 class LayoutPdf(unittest.TestCase):
     def setUp(self):
