@@ -1888,17 +1888,30 @@ class Detector:
             return "", "A cell to the left of the source prints text that is not a usable row label.", group
         return "", "", group
 
-    HEADER_NUMBER = re.compile(r"(?<![\w.])[(\[]?(\d{1,3})[)\]]?(?![\w.])")
+    # A number printed in a header option, in any legend form: '2 = Abnormal', '(2)', '2)', '1. Normal', 'Normal (1.)',
+    # and a decimal '1.0 Normal' (read whole, so it never equals a code '1'). Never part of a word ('12b').
+    HEADER_NUMBER = re.compile(r"(?<![\w.])[(\[]?(\d{1,3}(?:\.\d+)?)\.?[)\]]?(?![\w.])")
+    # A legend printed in the governing text (a title, lead or heading): '(codes: 1 = Abnormal, 2 = Normal)'.
+    LEGEND_PAIR = re.compile(r"(?<![\w.])(\d{1,3})\s*=\s*([^\W\d_]+(?:[ '\u2019/-]+[^\W\d_]+)*)")
 
-    def legend_conflict(self, options, row):
-        """A printed header whose options also print numbers ('2 = Abnormal') is a code legend. It agrees with a
-        row only when each option prints exactly the code printed before the box under it; otherwise which box
-        means which option is not certain (refutation F4). A header that prints no number never conflicts."""
-        printed = [self.HEADER_NUMBER.findall(option) for option in options]
-        if not any(printed):
-            return False
+    def legend_conflict(self, options, row, governing=""):
+        """A printed header whose options also print numbers ('2 = Abnormal', '1. Normal') is a code legend. It
+        agrees with a row only when each option prints exactly the code printed before the box under it; otherwise
+        which box means which option is not certain (refutation F4, R3-2). A legend printed in the governing text
+        ('codes: 1 = Abnormal, 2 = Normal') must name, for each code it prints, the option printed over that code's
+        box. A header and governing text that print no number never conflict."""
         codes = re.findall(r"(\d{1,3})\s*[☐☒]", self.ptext(row.el)[0])
-        return len(codes) != len(options) or any(found != [code] for found, code in zip(printed, codes))
+        printed = [self.HEADER_NUMBER.findall(option) for option in options]
+        if any(printed) and (len(codes) != len(options) or any(found != [code] for found, code in zip(printed, codes))):
+            return True
+        words = lambda text: " %s " % " ".join(re.findall(r"[^\W\d_]+", text.lower()))
+        for code, meaning in self.LEGEND_PAIR.findall(governing):
+            if code not in codes or len(codes) != len(options):
+                return True
+            option, meaning = words(options[codes.index(code)]), words(meaning)
+            if meaning not in option and option not in meaning:
+                return True
+        return False
 
     def coded_kind(self, label, options, context):
         """A coded response row records one code per row. Only a literal instruction widens it; a plural label
@@ -1974,7 +1987,7 @@ class Detector:
                         problem = "Literal headers, complete row labels or effective tab coordinates do not agree."
                         break
                     label = item[0] or unlabelled
-                    if self.legend_conflict(options, row):
+                    if self.legend_conflict(options, row, context):
                         complete = False
                         problem = "The printed header prints numbers that are not the row's response codes."
                         break
@@ -2124,6 +2137,7 @@ class Detector:
         row_question, row_issue, group = self.printed_row_label(cell)
         if row_issue:
             return [], row_issue
+        governing = " > ".join(x for x in (context, *headers, group, row_question) if x)
         context = " > ".join(x for x in (context, *headers, group, row_question,
                              " | ".join(texts[p.id].strip() for p in children if texts[p.id].strip())) if x)
         if issue or header_issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
@@ -2218,7 +2232,8 @@ class Detector:
                 refs = [unit[0] for unit in self.box_units(row)]
                 if len(refs) != len(info["options"]) or len(infos[row.id]["starts"]) != len(info["options"]) + 1:
                     return [], "A row's answer boxes do not match its printed column header."
-                if self.legend_conflict(info["options"], row):
+                legend = " | ".join([governing, info["prefix"]] + [texts[p.id] for p in titles + group["lead"] + before])
+                if self.legend_conflict(info["options"], row, legend):
                     return [], "The printed header prints numbers that are not the row's response codes."
                 if (self.region_hidden(box_region(row.el)) or not self.readable_box_states(row)
                         or any(hyperlink_control(node) for node in checkbox_nodes(row.el))
