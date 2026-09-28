@@ -806,3 +806,82 @@ class QueueRequestsRefuseADatabaseFailureCleanly(LockFlowFixture, TransactionTes
         job = Job.objects.get(encounter=draft, kind='transcription')
         self.assertTrue(private_path(job.input_path).is_file())
         self.assertEqual(self.orphaned_recordings(), [])
+
+
+@override_settings(QUILLMD_PAYER_ROLE_GRANTED=True, **LOCKED)
+class PayerChangeAgainstClinicalWritesAndSettlement(LockFlowFixture, TransactionTestCase):
+    """RF-R2. Reproduce (the finding's input): with the payer role granted, a staff superuser custodian with an OTP
+    session POSTs /console/departments/<D>/payer/ (organization_pays on, a reason, confirm) while (a) the clinician's
+    POST /encounters/<E>/notes/ is paused after its 'encounter.notes_saved' audit, or (b) billing.settle(a job in D, 0.1)
+    is paused after its 'usage.settle' audit; the paused side then resumes. Both hold the preservation lock and, at
+    commit, take FOR KEY SHARE on D for their new rows' foreign keys (audit rows, the usage row).
+    RED on 4192fc77: the payer change locked D FOR UPDATE and then waited for the preservation lock in D's trigger, so
+    each side waited for the other and the payer change was the deadlock victim (500). (b) is new since RF-1's
+    preservation_before_money() in settle; (a) is older."""
+
+    def setUp(self):
+        super().setUp()
+        type(self.admin).objects.filter(pk=self.admin.pk).update(is_superuser=True)
+        self.admin.refresh_from_db()
+
+    def change_payer(self, client):
+        return lambda: client.post(f'/console/departments/{self.department.pk}/payer/', {
+            'organization_pays': 'on', 'reason': 'Synthetic payer change for a refutation probe', 'confirm': 'on'})
+
+    def race(self, paused_side, paused, resume):
+        custodian = self.custodian_client()
+        running, ran = in_thread(paused_side)
+        try:
+            self.assertTrue(paused.wait(15), 'the clinical transaction never reached its pause')
+            changing, changed = in_thread(self.change_payer(custodian))
+            blocked = wait_for_blocked_backend()
+        finally:
+            resume.set()
+        self.finish(running, changing)
+        self.assertTrue(blocked, 'the payer change never waited for the paused transaction')
+        self.assertNotIn('error', changed, changed.get('error'))
+        self.assertEqual(changed['value'].status_code, 302, getattr(changed['value'], 'exc_info', None))
+        self.department.refresh_from_db()
+        self.assertTrue(self.department.organization_pays)
+        self.assertTrue(Wallet.objects.filter(organization=self.organization, kind='paid').exists())
+        self.assertNotIn('error', ran, ran.get('error'))
+        return ran['value']
+
+    def test_positive_control_the_payer_change_alone_is_recorded(self):
+        response = self.change_payer(self.custodian_client())()
+        self.assertEqual(response.status_code, 302)
+        self.department.refresh_from_db()
+        self.assertTrue(self.department.organization_pays)
+
+    def test_the_payer_change_waits_for_an_in_flight_notes_save(self):
+        paused, resume = threading.Event(), threading.Event()
+        doctor = self.doctor()
+        with patch('core.views.audit', side_effect=pause_after('encounter.notes_saved', paused, resume)):
+            response = self.race(lambda: doctor.post(f'/encounters/{self.encounter.pk}/notes/', {
+                'notes': 'Symptoms: SYNTHETIC CORRECTION, no chest pain', 'revision': str(self.encounter.revision)}),
+                paused, resume)
+        self.assertEqual(response.status_code, 302)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.notes, 'Symptoms: SYNTHETIC CORRECTION, no chest pain')
+
+    def test_the_payer_change_waits_for_the_workers_settlement(self):
+        job = Job.objects.create(encounter=self.encounter, user=self.user, request_key='rfr2-settle')
+        reserve(job, Decimal('0.2'))
+        Job.objects.filter(pk=job.pk).update(state='running')
+        units = {'input_tokens': 100, 'output_tokens': 0, 'cached_input_tokens': 0, 'cache_creation_tokens': 0}
+        paused, resume = threading.Event(), threading.Event()
+        real = billing.audit
+
+        def audit(actor, action, *args, **kwargs):
+            row = real(actor, action, *args, **kwargs)
+            if action == 'usage.settle' and not paused.is_set():
+                paused.set()
+                resume.wait(30)
+            return row
+        with patch('core.billing.audit', side_effect=audit):
+            usage = self.race(lambda: billing.settle(
+                Job.objects.get(pk=job.pk), Decimal('0.1'), units, {'input_per_million': '1000'}, 'anthropic:synthetic',
+                'req_rfr2', provider_resource_id='msg_rfr2'), paused, resume)
+        self.assertEqual(Usage.objects.get(job=job).pk, usage.pk)
+        # Settled before the change committed: the job keeps the payer reserve() recorded (the user).
+        self.assertEqual(Job.objects.get(pk=job.pk).payer, f'user:{self.user.pk}')
