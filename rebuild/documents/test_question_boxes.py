@@ -709,3 +709,129 @@ class NestedWriteIns(unittest.TestCase):
         field['locator']['fingerprint'] = '0' * 64
         with self.assertRaises(w.V3Failure):
             w.fill(raw, result['fields'], {field['key']: 'Synthetic detail.'})
+
+
+class TabColumnOwnership(unittest.TestCase):
+    def form(self, *, control='glyph', inherited=False, problem='', many=False, count=2):
+        from .test_word_v3 import checkbox_control, ff_field
+        doc = Document();doc.add_paragraph('Current visit', style='Heading 1')
+        cell = doc.add_table(rows=1, cols=2).cell(0, 0)
+        cell.text = 'Examination; tick all that apply.' if many else 'Examination'
+        options = ['Normal', 'Abnormal', 'Unavailable'][:count]
+        header = cell.add_paragraph('\t' + '\t'.join(options))
+        row = cell.add_paragraph('Finding')
+        for i in range(count):
+            row.add_run('\t' + str(8-i) + ' ')
+            if control == 'glyph':row.add_run('☐')
+            elif control == 'sdt':row._p.append(checkbox_control())
+            else:ff_field(row, 'checkbox', name='C'+str(i))
+        def stops(ppr, shift=0):
+            tabs = OxmlElement('w:tabs')
+            for i in range(count):
+                tab = OxmlElement('w:tab');tab.set(qn('w:val'), 'center')
+                tab.set(qn('w:pos'), str(1800 + i*900 + shift));tabs.append(tab)
+            ppr.append(tabs)
+        if inherited:
+            style = doc.styles.add_style('SyntheticColumns', WD_STYLE_TYPE.PARAGRAPH)
+            stops(style.element.get_or_add_pPr())
+            header.style = style;row.style = style
+        else:
+            stops(header._p.get_or_add_pPr());stops(row._p.get_or_add_pPr())
+        if problem == 'mismatch':
+            row._p.get_or_add_pPr().remove(row._p.get_or_add_pPr().find(qn('w:tabs')))
+            stops(row._p.get_or_add_pPr(), 20)
+        elif problem == 'unknown_style':
+            row._p.get_or_add_pPr().insert(0,OxmlElement('w:pStyle'))
+            row._p.get_or_add_pPr().find(qn('w:pStyle')).set(qn('w:val'),'MissingColumns')
+        elif problem == 'cleared':
+            tabs=OxmlElement('w:tabs');tab=OxmlElement('w:tab');tab.set(qn('w:val'),'clear')
+            tab.set(qn('w:pos'),'1800');tabs.append(tab);row._p.get_or_add_pPr().append(tabs)
+        elif problem == 'indent':
+            ind=OxmlElement('w:ind');ind.set(qn('w:left'),'720');row._p.get_or_add_pPr().append(ind)
+        elif problem == 'duplicate':header.text='\tNormal\tNormal'
+        elif problem == 'missing':header._p.getparent().remove(header._p)
+        elif problem == 'intervening':header.insert_paragraph_before('Donor only')
+        elif problem == 'signing':cell.paragraphs[0].text='Signed declaration'
+        return doc
+
+    def test_source_columns_bind_literal_options_to_controls_independently_of_codes(self):
+        for control in ('glyph','sdt','ff'):
+            for inherited in (False,True):
+                for count in (1,2,3):
+                    with self.subTest(control=control,inherited=inherited,count=count):
+                        raw=data(self.form(control=control,inherited=inherited,count=count))
+                        result=w.inspect(raw)
+                        fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
+                        self.assertEqual(len(fields),1)
+                        field=fields[0]
+                        self.assertEqual(field['label'],'Finding')
+                        self.assertEqual(field['options'],['Normal','Abnormal','Unavailable'][:count])
+                        self.assertIn('Examination',field['context']);self.assertIn('Current visit',field['context'])
+                        self.assertFalse(result['notes'])
+                        chosen=True if count==1 else field['options'][-1]
+                        out=w.fill(raw,result['fields'],{field['key']:chosen})
+                        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),field),[False]*(count-1)+[True])
+                        before=w.SlotIndex(w.open_package(raw));after=w.SlotIndex(w.open_package(out))
+                        for slot in before.slots:
+                            if slot.kind=='p' and not w.place_box_refs(before,slot):
+                                self.assertEqual(etree.tostring(slot.el),etree.tostring(after.by_id[slot.id].el))
+
+    def test_unknown_or_conflicting_geometry_and_source_are_visible(self):
+        for problem in ('mismatch','unknown_style','cleared','indent','duplicate','missing','intervening','signing'):
+            with self.subTest(problem=problem):
+                result=w.inspect(data(self.form(problem=problem,inherited=problem=='cleared')))
+                self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
+                self.assertTrue(any('Tab-column' in n and 'Finding' in n for n in result['notes']))
+
+    def test_literal_cardinality_is_preserved_and_missing_states_unchanged(self):
+        raw=data(self.form(many=True));result=w.inspect(raw)
+        field=next(f for f in result['fields'] if f['locator']['target']['type']=='checkboxes')
+        self.assertEqual(field['kind'],'multi_choice')
+        out=w.fill(raw,result['fields'],{field['key']:field['options']})
+        self.assertEqual(w.option_states(w.SlotIndex(w.open_package(out)),field),[True,True])
+        with ZipFile(io.BytesIO(raw)) as old,ZipFile(io.BytesIO(w.fill(raw,result['fields'],{}))) as new:
+            self.assertEqual({n:old.read(n) for n in old.namelist()},{n:new.read(n) for n in new.namelist()})
+
+    def test_inherited_stops_clear_override_and_same_indent_are_resolved(self):
+        doc=self.form(inherited=True)
+        cell=doc.tables[0].cell(0,0)
+        for paragraph in cell.paragraphs[1:]:
+            ppr=paragraph._p.get_or_add_pPr()
+            tabs=OxmlElement('w:tabs')
+            for position,kind in ((1800,'clear'),(2000,'center')):
+                tab=OxmlElement('w:tab');tab.set(qn('w:val'),kind);tab.set(qn('w:pos'),str(position));tabs.append(tab)
+            ppr.append(tabs)
+            ind=OxmlElement('w:ind');ind.set(qn('w:left'),'120');ppr.append(ind)
+        result=w.inspect(data(doc));field=next(f for f in result['fields'] if f['kind']=='choice')
+        self.assertEqual((field['label'],field['options']),('Finding',['Normal','Abnormal']))
+        self.assertFalse(result['notes'])
+
+    def test_marked_column_heading_is_preserved_without_adjacent_subject(self):
+        for heading in ('Donor','Consent'):
+            with self.subTest(heading=heading):
+                doc=self.form();table=doc.tables[0];row=table.add_row()._tr
+                row.getparent().remove(row);table._tbl.insert(list(table._tbl).index(table.rows[0]._tr),row)
+                header=table.rows[0];header.cells[0].text=heading;header.cells[1].text='Recipient'
+                header._tr.get_or_add_trPr().append(OxmlElement('w:tblHeader'))
+                result=w.inspect(data(doc));fields=[f for f in result['fields'] if f['locator']['target']['type']=='checkboxes']
+                if heading=='Consent':
+                    self.assertFalse(fields);self.assertTrue(any('protected' in n for n in result['notes']))
+                else:
+                    self.assertEqual(len(fields),1);self.assertIn('Donor',fields[0]['context'])
+                    self.assertNotIn('Recipient',fields[0]['context'])
+
+    def test_direct_numeric_option_words_are_not_reinterpreted_as_column_codes(self):
+        doc=Document();doc.add_table(rows=1,cols=1).cell(0,0).text='Score?\t☐ 1\t☐ 2'
+        result=w.inspect(data(doc));field=next(f for f in result['fields'] if f['kind']=='choice')
+        self.assertEqual(field['options'],['1','2'])
+        self.assertFalse(any('Tab-column' in note for note in result['notes']))
+
+    def test_unused_tab_stops_cannot_hide_other_inherited_spacer_markers(self):
+        doc=self.form();header=doc.tables[0].cell(0,0).paragraphs[1]
+        spacer=header.insert_paragraph_before()
+        style=doc.styles.add_style('MarkedBlank',WD_STYLE_TYPE.CHARACTER)
+        style.element.get_or_add_rPr().append(OxmlElement('w:u'))
+        spacer.add_run().style=style
+        result=w.inspect(data(doc))
+        self.assertFalse([f for f in result['fields'] if f['locator']['target']['type']=='checkboxes'])
+        self.assertTrue(any('Tab-column' in note for note in result['notes']))

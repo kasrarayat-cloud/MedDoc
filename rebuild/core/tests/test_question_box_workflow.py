@@ -318,3 +318,13 @@ class NestedWriteInWorkflow(V3Fixture, TestCase):
                     if mode == 'missing' or name != 'word/document.xml':
                         self.assertEqual(before.read(name), after.read(name), name)
             self.capture(mode, original, version, encounter, exported, generated)
+
+
+class TabColumnWorkflow(NestedCheckboxWorkflow):
+    target_slot = 'b/tbl[0]/tr[0]/tc[0]/p[2]'
+    question = 'Finding'
+    wanted_options = ['Normal', 'Abnormal']
+
+    def source(self):
+        from documents.test_question_boxes import TabColumnOwnership
+        return data(TabColumnOwnership().form(many=True))

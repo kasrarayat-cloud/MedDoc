@@ -1221,6 +1221,7 @@ class Detector:
         self.rule_protected_signing_areas()
         self.rule_content_controls()
         self.rule_form_fields()
+        self.rule_tab_columns()
         self.rule_checkboxes()
         self.rule_text_option_choices()
         self.rule_tables()
@@ -1422,6 +1423,168 @@ class Detector:
             # the option ends at a wide gap followed by more text only when it is the last box on the line
             units.append([ref, option, text[:pos] if n == 0 else ""])
         return units
+
+    def tab_column_properties(self, slot, *, scope_only=False):
+        """Resolve additive stops and per-attribute indentation; unknown layout refuses."""
+        styles = self.package.tree("word/styles.xml") if "word/styles.xml" in self.package.names else None
+        props = []
+        if styles is not None:
+            props.append(styles.find("./" + q("w:docDefaults") + "/" + q("w:pPrDefault") + "/" + q("w:pPr")))
+        cell = self.host_cell(slot)
+        for kind, ref in (("table", cell.parent.el.find("./" + q("w:tblPr") + "/" + q("w:tblStyle"))
+                           if cell is not None else None),
+                          ("paragraph", slot.el.find("./" + q("w:pPr") + "/" + q("w:pStyle")))):
+            if ref is not None:
+                name = ref.get(q("w:val"))
+            else:
+                defaults = [s for s in styles.findall(q("w:style")) if s.get(q("w:type")) == kind
+                            and s.get(q("w:default")) in ("1", "true", "on")] if styles is not None else []
+                if len(defaults) > 1:
+                    return None
+                name = defaults[0].get(q("w:styleId")) if defaults else None
+            if name:
+                chain, problem = self.question_box_style_chain(name, kind)
+                if problem or any(s.find(q("w:tblStylePr")) is not None for s in chain):
+                    return None
+                props.extend(s.find(q("w:pPr")) for s in reversed(chain))
+            elif ref is not None:
+                return None
+        props.append(slot.el.find(q("w:pPr")))
+        stops, indent = {}, {}
+        forbidden = {q("w:bidi"), q("w:mirrorIndents"), q("w:numPr"), q("w:framePr"), q("w:sectPr"),
+                     q("w:pBdr"), q("w:shd"), q("w:pageBreakBefore")}
+        for ppr in (p for p in props if p is not None):
+            if any(c.tag in forbidden for c in ppr):
+                return None
+            alignment = ppr.find(q("w:jc"))
+            if alignment is not None and alignment.get(q("w:val")) not in ("left", "start", "both"):
+                return None
+            ind = ppr.find(q("w:ind"))
+            if ind is not None:
+                if any(etree.QName(k).localname not in ("left", "right", "firstLine", "hanging") for k in ind.attrib):
+                    return None
+                try:
+                    indent.update({etree.QName(k).localname: int(v) for k, v in ind.attrib.items()})
+                except ValueError:
+                    return None
+            local = set()
+            for tab in ppr.findall("./" + q("w:tabs") + "/" + q("w:tab")):
+                try:
+                    position = int(tab.get(q("w:pos"), ""))
+                except ValueError:
+                    return None
+                if position in local:
+                    return None
+                local.add(position)
+                value = tab.get(q("w:val"))
+                if value == "clear":
+                    stops.pop(position, None)
+                elif value in ("left", "center", "right", "decimal", "bar"):
+                    stops[position] = value
+                else:
+                    return None
+        if scope_only:
+            return (), ()  # Scope text/spacers need boundary validation, not option coordinates.
+        # A hanging indent creates another implicit stop; do not erase it by
+        # pretending that the explicit center list is the entire layout.
+        if indent.get("hanging", 0) or indent.get("firstLine", 0):
+            return None
+        return sorted((pos, kind) for pos, kind in stops.items() if pos > 0), \
+            (indent.get("left", 0), indent.get("right", 0))
+
+    def rule_tab_columns(self):
+        """Complete same-cell title + repeated header/response pairs, never numeric-code guessing."""
+        def coded(slot):
+            if slot.kind != "p" or id(slot.el) in self.claimed:
+                return None
+            text = self.ptext(slot.el)[0]
+            segments = text.rstrip(" \t").split("\t")
+            if len(segments) < 2 or not all(re.fullmatch(r"\s*\d{1,3}\s*[☐☒]\s*", s)
+                                           for s in segments[1:]):
+                return None
+            codes = [re.sub(r"\D", "", s) for s in segments[1:]]
+            if len(set(codes)) != len(codes):
+                return None
+            return segments[0].strip(), len(codes)
+        for cell in (s for s in self.index.slots if s.kind == "tc"):
+            candidates = [s for s in cell.children if coded(s)]
+            if not candidates:
+                continue
+            source = " | ".join(self.ptext(s.el)[0] for s in cell.children if s.kind == "p")
+            problem = "The cell is not one complete title followed by header/response pairs."
+            paragraphs = [s for s in cell.children if s.kind == "p" and self.ptext(s.el)[0].strip()]
+            complete = cell.parent.parent is None and all(s.kind in ("p", "glyphs") for s in cell.children)
+            complete = complete and len(paragraphs) >= 3 and len(paragraphs) % 2 == 1
+            pending = []
+            if complete:
+                title = self.ptext(paragraphs[0].el)[0].strip()
+                complete = not (self.box_units(paragraphs[0]) or self.blank_spans(*self.ptext(paragraphs[0].el))
+                                or "\x00" in title)
+                if self.tab_column_properties(paragraphs[0], scope_only=True) is None or any(
+                        node.tag in (q("w:drawing"), q("w:pict"), q("w:object"), q("w:br"), q("w:sectPr"))
+                        for node in cell.el.iter()):
+                    complete = False
+                context, issue = self.question_box_context(cell.parent)
+                headers = []
+                for number, row in enumerate(cell.parent.el.findall(q("w:tr"))[:cell.info["row"]]):
+                    marked = row.find("./" + q("w:trPr") + "/" + q("w:tblHeader"))
+                    if marked is None or marked.get(q("w:val"), "1") in ("0", "false", "off"):
+                        continue
+                    for owner in self.grid(cell.parent).get(number, []):
+                        if owner.info["col"] <= cell.info["col"] and owner.info["col"] + owner.info["span"] >= cell.info["col"] + cell.info["span"]:
+                            header_paras = self.own_paragraphs(owner)
+                            headers.extend(self.ptext(p.el)[0].strip() for p in header_paras if self.ptext(p.el)[0].strip())
+                            if any(self.box_units(p) or self.blank_spans(*self.ptext(p.el))
+                                   or "\x00" in self.ptext(p.el)[0] for p in self.own_paragraphs(owner)) \
+                                    or any(node.tag in (q("w:drawing"), q("w:pict"), q("w:tbl")) for node in owner.el.iter()):
+                                issue = "The column header contains an answer area."
+                context = " > ".join(x for x in (context, *headers, title) if x)
+                if issue or len(context) > MAX_MAPPING_CONTEXT or self.question_box_signing(context):
+                    complete = False
+                    problem = "The complete governing context is unresolved, oversized or protected."
+                for header, row in zip(paragraphs[1::2], paragraphs[2::2]):
+                    item = coded(row)
+                    printed = self.ptext(header.el)[0].rstrip(" \t").split("\t")
+                    options = [s.strip() for s in printed[1:]]
+                    header_layout, row_layout = self.tab_column_properties(header), self.tab_column_properties(row)
+                    if (not item or not item[0] or len(item[0]) > MAX_MAPPING_LABEL or printed[0].strip()
+                            or any(char in item[0] for char in (BOX, CHECKED, "\x00", "\n"))
+                            or self.blank_spans(*self.ptext(row.el))
+                            or len(options) != item[1] or not all(options) or len(set(options)) != len(options)
+                            or any(len(o) > 300 for o in options)
+                            or self.box_units(header) or self.blank_spans(*self.ptext(header.el))
+                            or any("\x00" in o or "\n" in o for o in options)
+                            or not header_layout or not row_layout or header_layout[1] != row_layout[1]
+                            or header_layout[0][:item[1]] != row_layout[0][:item[1]]
+                            or len(header_layout[0]) < item[1]
+                            or any(kind != "center" for _, kind in header_layout[0][:item[1]])):
+                        complete = False
+                        problem = "Literal headers, complete row labels or effective tab coordinates do not agree."
+                        break
+                    label = item[0]
+                    if self.question_box_signing(label) or any(self.question_box_signing(o) for o in options):
+                        complete = False;problem = "The printed row or options contain signing/consent instructions.";break
+                    refs = [unit[0] for unit in self.box_units(row)]
+                    if len(refs) != len(options) or self.region_hidden(box_region(row.el)):
+                        complete = False;problem = "A source control is not independently readable.";break
+                    pending.append((header, row, Area("checkbox" if len(options) == 1 else
+                        self.choice_kind(label, options, title), label, row,
+                        {"type": "checkboxes", "boxes": refs}, context=context,
+                        options=options, complete_source=True)))
+                # A blank paragraph may still be a separate drawn answer area.
+                for spacer in (s for s in cell.children if s.kind == "p" and not self.ptext(s.el)[0].strip()):
+                    if not self.plain_spacing_paragraph(spacer, unused_tab_stops=True) \
+                            or self.tab_column_properties(spacer, scope_only=True) is None:
+                        complete = False;problem = "A marked spacer or unresolved layout boundary separates the source."
+            if not complete or len(pending) != len(candidates):
+                self.notes.append("Tab-column options at " + cell.id + ": " + problem + " Printed source: " + source)
+                for slot in candidates:
+                    self.claimed.add(id(slot.el))
+                continue
+            self.claimed.add(id(paragraphs[0].el))
+            for header, row, area in pending:
+                self.claimed.add(id(header.el))
+                self.add(area)
 
     def rule_checkboxes(self, leftovers=False):
         # paragraph-level units, then grouping. A cell holding ONLY a box under a column header is left for the
@@ -2421,7 +2584,7 @@ class Detector:
         return ""
 
     # 6. a label followed by empty paragraph(s): the answer goes on those lines ------------------------------------
-    def plain_spacing_paragraph(self, slot):
+    def plain_spacing_paragraph(self, slot, *, unused_tab_stops=False):
         """Only unmarked spacing can yield to a separately mapped destination."""
         text, pieces = self.ptext(slot.el)
         if text.strip() or self.blank_spans(text, pieces):
@@ -2429,6 +2592,10 @@ class Detector:
         markers = {q("w:sdt"), FLDCHAR, q("w:instrText"), TXBX, q("w:drawing"), q("w:pict"),
                    q("w:object"), q("w:pBdr"), q("w:framePr"), q("w:u"), q("w:br"), q("w:sectPr"), q("w:tabs"),
                    q("w:tab"), q("w:shd"), q("w:highlight"), q("w:numPr"), q("w:bdr"), q("w:strike"), q("w:dstrike")}
+        if unused_tab_stops and not text:
+            # No rendered tab character exists. Its configured stops cannot draw
+            # a blank, but all other direct/inherited marker checks still apply.
+            markers -= {q("w:tabs"), q("w:tab")}
         if any(node.tag in markers for node in slot.el.iter()):
             return False
         if "word/styles.xml" in self.package.names:
