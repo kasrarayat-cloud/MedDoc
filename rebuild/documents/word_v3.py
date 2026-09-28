@@ -3874,8 +3874,85 @@ def printed_ticked(index, field):
         return []                       # an annotation for the review page; never a reason to refuse the upload
 
 
-def effective_options(data, fields, answers):
-    """The existing writer's actual resulting option states, without persisting an export.
+def constrained_option_states(index, field):
+    """Unlike an empty placeholder, an unrecognised displayed value is unknown."""
+    target = field["locator"]["target"]
+    if target["type"] in DISPLAYED or target.get("write") == "option_text":
+        loc = field["locator"]
+        slot = index.by_id.get("%s#%s" % (loc["part"], loc["slot"]))
+        if slot is None:
+            return [None] * len(printed_options(field))
+        try:
+            position = displayed_option(index, field)
+            if position is None and (target["type"] == "ff_dropdown" or displayed_words(slot, target)):
+                return [None] * len(printed_options(field))
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            return [None] * len(printed_options(field))
+    return option_states(index, field)
+
+
+def constrained_scalar_value(original, final, field, written):
+    """Visible value in a bounded scalar destination, or None when it is ambiguous.
+
+    Read native controls and whole plain cells/paragraphs directly. A span is
+    readable only while its original surrounding text still identifies it;
+    simultaneous neighbouring edits must never move the read into another value.
+    """
+    loc = field["locator"]; target = loc["target"]
+    identity = "%s#%s" % (loc["part"], loc["slot"])
+    before, after = original.by_id.get(identity), final.by_id.get(identity)
+    if before is None or after is None:
+        return None
+    kind = target["type"]
+    if kind == "ff_text":
+        try:
+            runs, end = _field_result_runs(after.el)
+        except V3Failure:
+            return None
+        between = _siblings_between(after.el, end)
+        if any(node.tag != R and text_of(node).strip() or
+               any(fc.get(q("w:fldCharType")) == "begin" for fc in node.iter(FLDCHAR)) or
+               wraps_structure(node) and node.find(FLDCHAR) is None for node in between):
+            return None
+        value = "".join(text_of(run) for run in runs)
+        # A nonempty default without a visible result is not evidence of an
+        # empty field. Word may materialize that default; require explicit text.
+        default = after.el.find("%s/%s/%s/%s" % (FLDCHAR, q("w:ffData"), q("w:textInput"), q("w:default")))
+        if not value.strip() and default is not None and (default.get(q("w:val")) or "").strip():
+            return None
+    elif kind == "sdt_text":
+        content = after.el.find(q("w:sdtContent"))
+        if content is None or wraps_structure(content):
+            return None
+        value = "" if sdt_info(after.el)["placeholder"] else text_of(content)
+    elif kind in ("cell", "cell_replace", "paragraph"):
+        anchors = [after]
+        if kind == "paragraph":
+            anchors += [final.by_id.get("%s#%s" % (ref["part"], ref["slot"])) for ref in loc.get("extra", [])]
+        if any(anchor is None or wraps_structure(anchor.el) for anchor in anchors):
+            return None
+        paragraphs = [p for anchor in anchors for p in
+                      (anchor.el.findall(q("w:p")) if kind in ("cell", "cell_replace") else [anchor.el])]
+        value = "\n".join(text_of(p) for p in paragraphs)
+    elif kind == "span":
+        source, current = paragraph_text(before.el)[0], paragraph_text(after.el)[0]
+        start, end = target.get("start"), target.get("end")
+        if type(start) is not int or type(end) is not int or not 0 <= start <= end <= len(source):
+            return None
+        if target.get("shape") == "after_label":
+            end = start
+        prefix, suffix = source[:start], source[end:]
+        if ("\x00" in source or "\x00" in current or not current.startswith(prefix) or
+                not current.endswith(suffix) or len(current) < len(prefix) + len(suffix)):
+            return None
+        value = current[len(prefix):len(current) - len(suffix) if suffix else len(current)]
+    else:
+        return None
+    return "" if not written and is_blank_text(value) else value.strip()
+
+
+def effective_values(data, fields, answers):
+    """The existing writer's actual resulting constrained values, without an export.
 
     Unanswered controls retain their original state. Validate their source
     anchors too: fill validates only fields it writes. Unknown states remain
@@ -3890,8 +3967,8 @@ def effective_options(data, fields, answers):
     index = SlotIndex(open_package(data))
     for field in fields:
         loc = field.get("locator") or {}
-        if field.get("kind") not in ("choice", "multi_choice", "checkbox") or loc.get("contract") != CONTRACT:
-            fail("Constrained option mapping is invalid.", "invalid_mapping")
+        if field.get("kind") not in ("choice", "multi_choice", "checkbox", "text", "long_text", "date", "time") or loc.get("contract") != CONTRACT:
+            fail("Constrained answer mapping is invalid.", "invalid_mapping")
         for ref in [loc] + list(loc.get("extra", [])) + list((loc.get("target") or {}).get("copies", [])):
             slot = index.by_id.get("%s#%s" % (ref.get("part"), ref.get("slot")))
             if slot is None or not ref.get("fingerprint") or fingerprint(slot.el) != ref["fingerprint"]:
@@ -3901,19 +3978,26 @@ def effective_options(data, fields, answers):
     result = {}
     for field in fields:
         loc = field["locator"]; target = loc["target"]
-        state = option_states(final, field)
+        option = field["kind"] in ("choice", "multi_choice", "checkbox")
+        state = constrained_option_states(final, field) if option else constrained_scalar_value(index, final, field, field["key"] in answers)
         for copy in target.get("copies", []):
             # These readers resolve their own copied anchor. Absolute checkbox
             # destinations do not establish an independent copy relationship.
-            if target["type"] not in DISPLAYED + ("text_options", "paragraph_options") and target.get("write") != "option_text":
+            if option and target["type"] not in DISPLAYED + ("text_options", "paragraph_options") and target.get("write") != "option_text":
                 state = [None] * max(1, len(field.get("options") or []))
                 break
             variant = {**field, "locator": {**loc, **copy}}
-            if option_states(final, variant) != state:
-                state = [None] * max(1, len(field.get("options") or []))
+            copied = constrained_option_states(final, variant) if option else constrained_scalar_value(index, final, variant, field["key"] in answers)
+            if copied != state:
+                state = [None] * max(1, len(field.get("options") or [])) if option else None
                 break
         result[field["key"]] = state
     return result
+
+
+def effective_options(data, fields, answers):
+    """Compatibility entry point for the original constrained-state reader."""
+    return effective_values(data, fields, answers)
 
 
 def printed_unread(index, field):

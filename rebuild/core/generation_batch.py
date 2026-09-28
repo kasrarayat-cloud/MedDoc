@@ -157,17 +157,17 @@ def constraint_values(field, values):
 
 
 def option_reader(version):
-    """One sandbox read per complete constraint check, source-hash bound."""
+    """One sandbox read of all constrained exported values, source-hash bound."""
     def read(fields, writes):
-        from documents.service import effective_options, DocumentError
+        from documents.service import effective_values, DocumentError
         from .security import private_path
         try:
-            result = effective_options(private_path(version.template.original_path), fields, writes)
+            result = effective_values(private_path(version.template.original_path), fields, writes)
             if result.get('sha256') != version.template.sha256 or result.get('contract') != 'v3':
-                raise ValidationError('The original form changed; its effective option states cannot be verified.')
+                raise ValidationError('The original form changed; its constrained values cannot be verified.')
             return result.get('states')
         except (DocumentError, OSError, AttributeError, ValueError) as exc:
-            raise ValidationError('The original constrained option states could not be verified; review the original form.') from exc
+            raise ValidationError('The original constrained values could not be verified; review the original form.') from exc
     return read
 
 
@@ -178,20 +178,21 @@ def effective_values(manifest, fields, answers, read_options):
     relevant = [f for f in fields if f['key'] in keys]
     if len(relevant) != len(keys) or not keys <= set(answers):
         raise ValidationError('The constrained answer set is incomplete.')
-    controls = [f for f in relevant if f.get('kind') in ('choice', 'multi_choice', 'checkbox')]
-    writes = v3_mapping.fill_answers(controls, answers)
+    writes = v3_mapping.fill_answers(relevant, answers)
     states = {}
-    if controls:
+    if relevant:
         if read_options is None:
-            raise ValidationError('The original constrained option states are required.')
-        states = read_options(controls, writes)
-        if not isinstance(states, dict) or set(states) != {f['key'] for f in controls}:
-            raise ValidationError('The original constrained option states are incomplete.')
+            raise ValidationError('The original constrained exported values are required.')
+        states = read_options(relevant, writes)
+        if not isinstance(states, dict) or set(states) != keys:
+            raise ValidationError('The original constrained exported values are incomplete.')
     values = {}
     for field in relevant:
         key = field['key']; kind = field.get('kind')
         if kind not in ('choice', 'multi_choice', 'checkbox'):
-            text = v3_mapping.normalize(field, answers[key].get('text', ''))
+            if not isinstance(states[key], str):
+                raise ValidationError(f'The exported value of "{field["label"]}" is unreadable; review that constrained answer.')
+            text = v3_mapping.normalize(field, states[key])
             values[key] = {text} if text else set()
             continue
         options = field.get('options') or []

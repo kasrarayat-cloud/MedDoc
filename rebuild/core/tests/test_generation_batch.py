@@ -116,15 +116,23 @@ class BatchContract(SimpleTestCase):
         m['rules']=[{'kind':'max_active_groups','source_id':'rule','maximum':1,
                      'groups':[[{'key':'q000','values':['documented 000.']}],[{'key':'q100','values':['documented 100.']}]]}]
         plan=b.plan_for(e,g.configuration())
-        with self.assertRaisesMessage(ValidationError,'maximum selection'):b.assemble(plan,[response(plan,1),response(plan,2)])
+        # This pure aggregation fixture has synthetic locators; supply its
+        # independently specified exported values. Real Word read-back has its
+        # own sandboxed preserved-value regression tests.
+        with self.assertRaisesMessage(ValidationError,'maximum selection'):
+            b.assemble(plan,[response(plan,1),response(plan,2)],
+                       read_options=lambda *_:{'q000':'documented 000.','q100':'documented 100.'})
 
     def test_unique_priorities_and_full_source_guards_cannot_be_split_away(self):
         e=sample();m=e.template_version.generation_constraints
         m['instruction_references']=[{'id':'rule','part':'word/document.xml','slot':'b/p[0]','sha256':'2'*64}]
         m['rules']=[{'kind':'unique_values','source_id':'rule','keys':['q000','q100'],'allowed_values':['1','2','3']}]
         b.constraints(e.template_version)
-        with self.assertRaisesMessage(ValidationError,'priority'):b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'1'}},e.template_version.fields)
-        b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'2'}},e.template_version.fields)
+        with self.assertRaisesMessage(ValidationError,'priority'):
+            b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'1'}},e.template_version.fields,
+                                   read_options=lambda *_:{'q000':'1','q100':'1'})
+        b.validate_constraints(m,{'q000':{'text':'1'},'q100':{'text':'2'}},e.template_version.fields,
+                               read_options=lambda *_:{'q000':'1','q100':'2'})
         for notes,label in (('Family history:\nQuestion 000: documented finding.','Question 000'),
                 ('Consent obtained: yes.\nConsent was withdrawn.','Consent obtained')):
             with self.subTest(notes=notes):
