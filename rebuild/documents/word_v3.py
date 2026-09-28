@@ -1617,7 +1617,8 @@ class Detector:
                     printed = self.ptext(header.el)[0].rstrip(" \t").split("\t")
                     options = [s.strip() for s in printed[1:]]
                     header_layout, row_layout = self.tab_column_properties(header), self.tab_column_properties(row)
-                    if (not item or not item[0] or len(item[0]) > MAX_MAPPING_LABEL or printed[0].strip()
+                    summary = bool(item and not item[0] and len(paragraphs) == 3)
+                    if (not item or not (item[0] or summary) or len(item[0] or title) > MAX_MAPPING_LABEL or printed[0].strip()
                             or any(char in item[0] for char in (BOX, CHECKED, "\x00", "\n"))
                             or self.blank_spans(*self.ptext(row.el))
                             or len(options) != item[1] or not all(options) or len(set(options)) != len(options)
@@ -1631,7 +1632,7 @@ class Detector:
                         complete = False
                         problem = "Literal headers, complete row labels or effective tab coordinates do not agree."
                         break
-                    label = item[0]
+                    label = item[0] or title
                     if self.question_box_signing(label) or any(self.question_box_signing(o) for o in options):
                         complete = False;problem = "The printed row or options contain signing/consent instructions.";break
                     refs = [unit[0] for unit in self.box_units(row)]
@@ -1667,6 +1668,22 @@ class Detector:
                     self.notes.append("Layout verification required for tab-column answer at " + row.id +
                                       ". Printed question: " + area.label + ". Section: " + area.context)
 
+    def coded_choice_paragraph(self, slot):
+        """Recognise response codes only as evidence that labels live elsewhere."""
+        text = self.ptext(slot.el)[0]
+        marks = list(re.finditer("[☐☒]", text))
+        if len(marks) < 2 or text[marks[-1].end():].strip():
+            return False
+        codes = []
+        for i, mark in enumerate(marks):
+            segment = text[marks[i - 1].end() if i else 0:mark.start()]
+            match = re.fullmatch(r"(?:.*?\s)?(\d{1,3})\s*", segment, re.S) if not i else \
+                re.fullmatch(r"\s*(\d{1,3})\s*", segment)
+            if not match:
+                return False
+            codes.append(match.group(1))
+        return len(set(codes)) == len(codes)
+
     def rule_checkboxes(self, leftovers=False):
         # paragraph-level units, then grouping. A cell holding ONLY a box under a column header is left for the
         # option-grid rule; whatever that rule does not take comes back here (leftovers=True) - never dropped.
@@ -1676,6 +1693,12 @@ class Detector:
                 continue
             txt = self.ptext(s.el)[0]
             if BOX not in txt and CHECKED not in txt:
+                continue
+            if self.coded_choice_paragraph(s):
+                self.notes.append("Coded checkbox options at " + s.id +
+                                  " need their complete printed header and layout; response codes are not option labels. "
+                                  "Printed source: " + txt)
+                self.claimed.add(id(s.el))
                 continue
             if (any(hyperlink_run(piece.run) for piece, _, _ in glyph_boxes(s.el))
                     or any(hyperlink_control(node) for node in checkbox_nodes(s.el))):
@@ -2284,6 +2307,9 @@ class Detector:
                 self.claimed.update(id(node) for node in tslot.el.iter())
                 continue
             ordered = sorted(rows)
+            # Read header structure before any answer rule claims the empty/box
+            # cells below it. Claiming answers cannot turn a header into choices.
+            original_option_cells = {id(c) for r in ordered for c in rows[r] if self.is_option_cell(c)}
             handled = set()
             box_cols = {}
             for r in ordered:
@@ -2331,6 +2357,13 @@ class Detector:
                 if len(set(h.lower() for h in headers)) < len(headers):
                     continue                  # the same header over several cells: separate answers, not one choice
                 optionish = all(is_option_word(h) for h in headers) or shared[tuple(headers)] >= 3
+                # A pair of blank side columns records independent values. The
+                # printed axis alone does not instruct the author to choose a side.
+                source = self.text(tslot.el)
+                if ({h.lower() for h in headers} == {"left", "right"}
+                        and all(self.is_empty_cell(c) for c, _ in run)
+                        and not re.search(r"\b(?:select|choose|tick|check|circle|mark)\b", source, re.I)):
+                    optionish = False
                 if not optionish:
                     continue
                 if True:
@@ -2358,7 +2391,7 @@ class Detector:
                             opts.append(cells[j])
                             j += 1
                         below = rows.get(r + 1, [])
-                        header_row = any(x.info["col"] == opts[0].info["col"] and self.is_option_cell(x) for x in below) \
+                        header_row = any(x.info["col"] == opts[0].info["col"] and id(x) in original_option_cells for x in below) \
                             if len(opts) >= 2 else False
                         if len(opts) >= 2 and not header_row:
                             words = [self.cell_text(o) for o in opts]
@@ -2375,6 +2408,7 @@ class Detector:
             # (b2) a checklist down a column: box cells in >= 3 data rows under one question header, each row
             #      labelled -> one multi-choice whose options are the row labels
             for col, items in sorted(box_cols.items()):
+                items = [(r, c) for r, c in items if not self.cell_has_claim(c.el)]
                 if len(items) < 3:
                     continue
                 ht = self.header_table(tslot)
