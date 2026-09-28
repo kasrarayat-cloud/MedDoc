@@ -123,6 +123,8 @@ AI_INFERENCE_GEO=os.getenv('QUILLMD_AI_INFERENCE_GEO','')
 # enabled for doctors, and not live-verified. Shared generation/review changes have separate acceptance evidence;
 # a disabled WM flag does not establish their behavior or discharge the required ordinary-note workflow.
 WM_NARRATIVE=os.getenv('QUILLMD_WM_NARRATIVE','0')=='1'
+# Prepared only: exact-model context qualification is still a release gate.
+V3_HISTORY_CONTEXT=os.getenv('QUILLMD_V3_HISTORY_CONTEXT','0')=='1'
 # Retained provider-shaped narrative responses, keyed by the sha256 of the notes. Read ONLY in fixture mode, never live.
 AI_REPLAY_DIR=os.getenv('QUILLMD_AI_REPLAY_DIR','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
