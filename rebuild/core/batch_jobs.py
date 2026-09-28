@@ -194,7 +194,9 @@ def stop(batch_id, reason, *, uncertain_part=None, user_declined=False):
     parts=list(batch.parts.select_related('job').order_by('ordinal'))
     for part in parts:
         job=Job.objects.select_for_update().get(pk=part.job_id)
-        sent=part.events.filter(kind='send_intent').exists()
+        # A send intent with durable proof that its request was never transmitted (MONEY-2) is not a send.
+        sent=(part.events.filter(kind='send_intent').exists()
+              and not part.events.filter(kind='not_transmitted').exists())
         known=Usage.objects.filter(job=job).exists()
         if job.state=='succeeded':continue
         # Explicitly resolved attempts stay consumed. Their immutable evidence
@@ -241,27 +243,31 @@ def finish(batch_id):
     except Exception:
         stop(batch.pk,'The complete form failed validation; no partial answers were adopted.')
         return True
-    declined=False
+    declined=reconfigured=False
     with transaction.atomic():
         e=Encounter.objects.select_for_update().get(pk=batch.encounter_id)
         batch=GenerationBatch.objects.select_for_update().get(pk=batch.pk)
         if batch.state not in ('running','validating'):return True
-        from .views import clinician_decided
-        try:membership(batch.user,e.department)
-        except PermissionDenied:declined=True
-        declined=declined or e.status=='finalized' or e.revision!=batch.revision or clinician_decided(e)
-        declined=declined or e.notes!=batch.plan['notes'] or str(e.template_version_id)!=batch.plan['mapping_version_id']
-        if not declined:
-            if batch.plan['config']!=g.configuration():
-                # Flag/profile changes cannot activate a staged contract after withdrawal.
-                declined=True
-            else:
+        # QuillMD's own configuration is judged FIRST and is never the user's decision (MONEY-1). A flag, rate, profile
+        # or mode change cannot activate a staged contract after withdrawal, so the complete output is discarded; that
+        # discard is ours, so it is a platform failure and every settled part is absorbed, exactly as the same change
+        # one step earlier (current_plan, between parts) already is. It also wins over a simultaneous user-side change:
+        # our change alone made the output unusable, and our own change is never billed.
+        reconfigured=batch.plan['config']!=g.configuration()
+        if not reconfigured:
+            from .views import clinician_decided
+            try:membership(batch.user,e.department)
+            except PermissionDenied:declined=True
+            declined=declined or e.status=='finalized' or e.revision!=batch.revision or clinician_decided(e)
+            declined=declined or e.notes!=batch.plan['notes'] or str(e.template_version_id)!=batch.plan['mapping_version_id']
+            if not declined:
                 e.answers=answers;e.template_review=review;e.status='review';e.save(update_fields=['answers','template_review','status'])
                 batch.state='succeeded';batch.finished_at=timezone.now();batch.save(update_fields=['state','finished_at'])
                 Job.objects.filter(generation_part__batch=batch,state='staged').update(state='succeeded',finished_at=timezone.now())
                 event(batch,'adopted',details={'answers_sha256':b.digest(answers),'revision':e.revision})
                 audit(batch.user,'generation_batch.adopted',batch.pk,department=e.department,parts=len(parts))
-    if declined:stop(batch.pk,'The source, authorization or clinical decisions changed; the complete output was not adopted.',user_declined=True)
+    if reconfigured:stop(batch.pk,'The model, mode, price or generation configuration changed; the complete output was not adopted.')
+    elif declined:stop(batch.pk,'The source, authorization or clinical decisions changed; the complete output was not adopted.',user_declined=True)
     return True
 
 
@@ -332,8 +338,15 @@ def run_one():
     except Exception as error:
         event(batch,'part_failed',part=part,details={'error_class':type(error).__name__})
         known=Usage.objects.filter(job=job).exists()
+        from .jobs import never_transmitted
+        untransmitted=sent and not known and never_transmitted(error)
+        if untransmitted:
+            # The send intent is consumed, but the SDK refused while BUILDING the request (no credential): nothing
+            # left (MONEY-2). The durable evidence makes stop() treat this child as unsent: cancelled, hold released.
+            event(batch,'not_transmitted',part=part,details={'error_class':type(error).__name__,
+                                                            'proof':'provider SDK request build'})
         stop(batch.pk,'A batch part failed or needs reconciliation; no partial form was adopted.',
-             uncertain_part=part.pk if sent and not known else None)
+             uncertain_part=part.pk if sent and not known and not untransmitted else None)
     return True
 
 

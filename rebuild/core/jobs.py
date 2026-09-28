@@ -38,6 +38,34 @@ class NoProviderRequest(ValidationError):
     """Raised before any provider request is made: nothing billable happened, so the held funds are released."""
 
 
+#: What the doctor reads when the provider SDK refused to build a request for want of a credential. Fixed, non-clinical.
+PROVIDER_NOT_CONNECTED='Generation provider is not connected.'
+
+
+def never_transmitted(error):
+    """True only when the Anthropic SDK refused while BUILDING the request, so provably nothing left (MONEY-2).
+
+    anthropic 0.125.0 resolves its credential when a request is built, inside messages.create, not when the client is
+    constructed: with no api_key, auth_token or credentials provider, its header validation raises TypeError inside
+    `_build_request`, before `_client.send`, on the only attempt (max_retries=0). Every send sits outside its
+    pre-provider guard, so that TypeError read as an unknown provider outcome and the hold was kept. The send sites stay
+    exactly as the cost scanner binds them; the failure is classified where it lands.
+
+    The proof is structural, never a message match: the exception is a TypeError whose innermost frame is that
+    validation's own code object. Anything else, including a later SDK that moves the check, stays an unknown outcome
+    with its hold kept: the conservative status quo, never a guess.
+    """
+    if type(error) is not TypeError: return False
+    try:
+        import anthropic._client as sdk
+        validation=sdk.Anthropic._validate_headers.__code__
+    except Exception: return False
+    trace=error.__traceback__
+    if trace is None: return False
+    while trace.tb_next is not None: trace=trace.tb_next
+    return trace.tb_frame.f_code is validation
+
+
 class RecordingOverLimit(ValidationError):
     """The recording's charge limit exceeds the displayed limit. Nothing was sent; the quote says what a shorter segment or a
     higher, explicitly approved limit would be."""
@@ -711,6 +739,8 @@ def run_one():
             job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)
     except Exception as exc:
+        # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
+        if not provider_returned and never_transmitted(exc): exc=NoProviderRequest(PROVIDER_NOT_CONNECTED)
         # A timeout can be billable. Never retry it or release its reservation as if cost were known.
         known=Usage.objects.filter(job=job).exists()
         fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'

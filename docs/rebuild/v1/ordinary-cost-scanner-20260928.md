@@ -59,3 +59,39 @@ The integrated `cost-union-17f0-01` run passed17 scanner/profile methods in
 global-dependency, bypass/alias/dispatch and changed-module negative controls
 passed. This reuses unchanged historical request evidence; it sends no provider
 request and changes no historical profile, receipt, charge or reservation.
+
+## MONEY-1 / MONEY-2 addendum — batch billing classification only
+
+Reviewed the finished normalized delta of `core/batch_jobs.py` against the
+candidate `bf8f7b78` before changing its fixed identity. Only three functions
+changed, and none of them changes a request, a price, a hold or a send:
+
+- `finish`: QuillMD's own configuration is compared first. A changed
+  configuration now stops the complete batch as a platform failure (`stop`
+  without `user_declined`, so every settled child is absorbed through
+  `absorb_failed_job`) instead of the user's not-adopted charge (MONEY-1). The
+  user-side decline checks and the adoption statements are unchanged.
+- `stop`: a child counts as sent when it has a send intent and no durable
+  `not_transmitted` event.
+- `run_one`: only the `except` handler changed. When the SDK's own
+  request-build refusal (no credential) is proved structurally by
+  `jobs.never_transmitted`, it records `not_transmitted` and does not mark the
+  child uncertain (MONEY-2). The `try` body is AST-identical: the plan,
+  `b.request` wire, request digest, sandbox and held-amount checks, the
+  `Anthropic(timeout=...,max_retries=0)` construction, the send intent,
+  `client.messages.create(**wire)`, the settlement and staging.
+
+`generation.py`, `v3_field_relations.py` and `generation_batch.py` are unchanged,
+so their identities remain. The single-job and mapping classification lives in
+`jobs.run_one` and `mapping_jobs.run_one`, which are outside every send
+boundary. The mapping `send` is unchanged. No request is repeated. A consumed
+send intent stays consumed, and the child is cancelled with its hold released
+exactly once.
+
+Reviewed replacement normalized identity:
+
+- `core/batch_jobs.py`: `17623922c4281d303374aef30d2de0898d4816cae602b6fe055cf582e636ad58`.
+
+This is a scoped finished-diff financial review, not a blind refresh. The
+scanner/profile suite must pass on the actual tree before this identity is
+cited as verified.

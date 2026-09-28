@@ -142,6 +142,9 @@ def run_one():
             audit(job.user,'mapping.review_ready',job.pk,department=template.department,version=str(new.pk),
                   unresolved=len(proposal['review']['unresolved']),simulated=simulated)
     except Exception as exc:
+        # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
+        from .jobs import PROVIDER_NOT_CONNECTED, never_transmitted
+        if not returned and never_transmitted(exc): exc=NoProviderRequest(PROVIDER_NOT_CONNECTED)
         known=Usage.objects.filter(job=job).exists()
         declined=known and isinstance(exc,NotAdoptedByUser)
         unsent=not returned and (not sent or isinstance(exc,NoProviderRequest))
