@@ -17,7 +17,7 @@ refuse while that evidence exists (counts only, nothing changed at 0021's node) 
 
 No provider, network or real record is involved: every row below is synthetic and made directly.
 """
-from django.db import IntegrityError, connection, transaction
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.db.migrations.exceptions import IrreversibleError
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.loader import MigrationLoader
@@ -25,7 +25,7 @@ from django.db.migrations.recorder import MigrationRecorder
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
-from core.models import Department, MappingConfirmation, Organization, Template, TemplateVersion, User
+from core.models import Department, Encounter, MappingConfirmation, Organization, Patient, Template, TemplateVersion, User
 
 BEFORE_0021 = [('core', '0020_payment_livemode')]
 #: The installed private-beta release (dedac162) applies core 0001-0018; every later migration is this candidate's.
@@ -187,6 +187,42 @@ class ThePreviousReleaseWritesOnThisSchema(TestCase):
             # One v3-located field among legacy ones is refused too.
             self.release_version(LEGACY_FIELDS + v3_fields('pain'), 2)
         self.assertEqual(list(self.template.versions.values_list('number', 'contract')), [(1, 'v3')])
+
+    def release_encounter(self, version, patient):
+        """The INSERT dedac162's encounter_new makes: it knows no contract and no confirmation."""
+        encounter = self.release.get_model('core', 'Encounter')
+        return encounter.objects.create(department_id=self.template.department_id, patient_id=patient.pk,
+                                        template_version_id=version.pk, created_by_id=self.user.pk, notes='Pain: yes.',
+                                        service_date=timezone.localdate(), answers={})
+
+    def test_a_release_document_on_an_unconfirmed_v3_mapping_is_refused(self):
+        """Reproduce (rollback path to MIG-2's harm): during an image rollback the release started a draft on a v3
+        mapping nobody had confirmed (it has no confirmation gate); after this code was re-installed that draft was
+        saved, finalized and exported with the mapping still unconfirmed. Measured end to end: release POST
+        /encounters/new/ 302, then this code's save 302, finalize 302, status finalized, export 200. The confirmation
+        gate must hold for every writer, so the database refuses the document instead."""
+        patient = Patient.objects.create(department=self.template.department, display_name='SYNTHETIC MIG-1',
+                                         reference='mig1', created_by=self.user)
+        v3 = TemplateVersion.objects.create(template=self.template, number=1, fields=v3_fields('pain'), contract='v3',
+                                            created_by=self.user)
+        message = 'An unconfirmed contract v3 mapping cannot start a document'
+        with self.assertRaisesMessage(DatabaseError, message), transaction.atomic():
+            self.release_encounter(v3, patient)
+        with self.assertRaisesMessage(DatabaseError, message), transaction.atomic():
+            # Any writer: this code's own ORM, bypassing the form's check, is refused the same way.
+            Encounter.objects.create(department=self.template.department, patient=patient, template_version=v3,
+                                     created_by=self.user, notes='Pain: yes.', service_date=timezone.localdate())
+        legacy = TemplateVersion.objects.create(template=self.template, number=2, fields=LEGACY_FIELDS, created_by=self.user)
+        draft = self.release_encounter(legacy, patient)
+        with self.assertRaisesMessage(DatabaseError, message), transaction.atomic():
+            # Nor can an existing document be moved onto it.
+            Encounter.objects.filter(pk=draft.pk).update(template_version=v3)
+        self.assertEqual(list(Encounter.objects.values_list('template_version__contract', flat=True)), [''])
+        # Positive control: once a clinician confirms it, the same release INSERT and a move onto it both work.
+        MappingConfirmation.objects.create(version=v3, confirmed_by=self.user)
+        self.release_encounter(v3, patient)
+        Encounter.objects.filter(pk=draft.pk).update(template_version=v3)
+        self.assertEqual(Encounter.objects.filter(template_version=v3).count(), 2)
 
     def test_this_code_s_own_mapping_versions_are_unaffected(self):
         """Positive control: every shape this code writes (legacy, v3 with its contract, corrections, assistance, a
