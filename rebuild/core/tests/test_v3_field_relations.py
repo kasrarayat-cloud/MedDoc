@@ -26,6 +26,29 @@ def relation_body(notes, fields, picks, *, choices=None, overrides=None):
     return {'fields': body}
 
 
+def keyed(body, asked, units, keys=None):
+    """The keyed v2 WIRE body for an internal list-shaped `body` (relation_body's): fields keyed by field key, context
+    keyed by unit ID, option_ids only on option fields. `keys`: the requested subset (a batch part)."""
+    by_key = {f['key']: f for f in asked}
+    fields = {}
+    for item in body['fields']:
+        if keys is not None and item['key'] not in keys:
+            continue
+        entry = {'unit_ids': item['unit_ids'], 'conflict': item['conflict']}
+        if r.options(by_key[item['key']]):
+            entry['option_ids'] = item['option_ids']
+        entry['context'] = {str(u['id']): relation for u, relation in zip(units, item['context'])}
+        fields[item['key']] = entry
+    return {'fields': fields}
+
+
+def relation_wire(notes, fields, picks, *, choices=None, overrides=None, keys=None):
+    """What a model returning these picks sends under the keyed contract (the wire; relation_body is internal)."""
+    asked, context, _ = g.v3_generation_fields(fields)
+    units = g.source_units(notes, asked, context_labels=context)[0]
+    return keyed(relation_body(notes, fields, picks, choices=choices, overrides=overrides), asked, units, keys)
+
+
 def offered(notes, fields, picks, *, choices=None, overrides=None):
     asked, context, _ = g.v3_generation_fields(fields)
     units = g.source_units(notes, asked, context_labels=context)[0]

@@ -2263,6 +2263,231 @@ class PinnedTermsTests(unittest.TestCase):
         self.assertEqual(pc.Terms.from_record(good, 'Attempt 1').record(), good)
 
 
+#: The field-relations pricing chain, measured offline with core.generation.configuration() under the declared
+#: settings: the base price (rates, model, the ordinary request profile claude-sonnet-5-ordinary-v1) and the declared
+#: version it produces under the v1 contract; the v2 contract's version under the SAME base.
+RELATIONS_BASE = 'configured-v1:47caed2bcbbabc7f0d1c2713ba8b497db26f9fdf2dfff1de092410fdd7f784b4'
+RELATIONS_V1 = 'configured-v1:eb280d15cbfc2cf52477c57040c3ff11d60352aac5d9a9894bdae4e6a0594180'
+RELATIONS_V2 = 'configured-v1:0d357747cbf72641cb621e38c2e2c409fb94fddaf614ce188fc518067749a2f7'
+PLAIN_BASE = 'configured-v1:8975b1585770620ede7d015cb4945abebf872845c4a6648f0d74f4de9d1be77d'
+
+
+def amendment_text(declaration_sha256, **changes):
+    """A contract-identity amendment, as the lead would commit it (never committed to the real repository here)."""
+    lines = {'campaign': 'quillmd-v1-sonnet5-staged-40',
+             'authority_id': 'quillmd-v1-sonnet5-staged-40-call_9fkOp2kqbQ28e17HqXgHFlzk',
+             'amends_declaration_sha256': declaration_sha256,
+             'amended_pricing_key': 'ordinary_notes_field_relations',
+             'pinned_pricing_version': RELATIONS_V1,
+             'previous_pricing_version': RELATIONS_BASE,
+             'previous_ordinary_field_contract': 'ordinary-field-relations-v1',
+             'ordinary_field_contract': 'ordinary-field-relations-v2',
+             'amended_pricing_version': RELATIONS_V2, **changes}
+    body = '\n'.join(f'{name}: {value}' for name, value in lines.items() if value is not None)
+    return ('# Amendment: ordinary field-relations contract identity\n\nThe repaired relations contract changes the '
+            'request the field-relations sends make and nothing else.\n\n```\n' + body + '\n```\n')
+
+
+class AmendmentTests(unittest.TestCase):
+    """A contract-identity amendment (declared_amendment, Campaign.pricing_version): committed, tracked and unmodified
+    beside the declaration; able to change ONLY the ordinary field-relations pricing version, and only to the new
+    contract bound to the SAME base price the ledger's first attempt pinned. Anything else refuses."""
+
+    def setUp(self):
+        self.repo, self.path = repository_with(self, REAL_TEXT)
+        self.declaration = pc.declared(self.path, repository=self.repo, out=io.StringIO())
+        self.root = scratch(self)
+
+    def commit(self, text, name='20260929-test-amendment.md', commit=True):
+        path = self.path.parent / name
+        path.write_text(text, encoding='utf-8')
+        if commit:
+            git(self.repo, 'add', '--', str(path.relative_to(self.repo)))
+            git(self.repo, 'commit', '-q', '-m', 'Synthetic amendment')
+        return path
+
+    def refused(self, path, fragment='', declaration=None):
+        with self.assertRaises(pc.Refused) as caught:
+            pc.declared_amendment(path, declaration or self.declaration, out=io.StringIO())
+        self.assertIn(fragment, str(caught.exception))
+
+    def pinned_campaign(self, amendment, terms=None):
+        campaign = pc.Campaign(self.declaration, self.root, amendment=amendment)
+        campaign.ledger.acquire()
+        self.addCleanup(campaign.ledger.release)
+        d = self.declaration
+        campaign.ledger.write_attempt(attempt(1, campaign=d.campaign, authority=d.authority_id, limits=limits_record(d),
+                                              terms=terms or terms_record(d)))
+        campaign.ledger.write_outcome(1, {'class': 'completed', 'usage': usage()})
+        return campaign
+
+    def test_the_declared_relations_version_is_the_ordinary_base_bound_to_the_v1_contract(self):
+        self.assertEqual(pc.contract_pricing_version(RELATIONS_BASE, 'ordinary-field-relations-v1'), RELATIONS_V1)
+        self.assertEqual(self.declaration.pricing_version('ordinary_notes_field_relations'), RELATIONS_V1)
+        self.assertEqual(pc.contract_pricing_version(RELATIONS_BASE, 'ordinary-field-relations-v2'), RELATIONS_V2)
+        # (the plain generation price is NOT the relations base: bound to v1 it is not the declared version)
+        self.assertNotEqual(pc.contract_pricing_version(PLAIN_BASE, 'ordinary-field-relations-v1'), RELATIONS_V1)
+
+    def test_the_exact_contract_only_change_is_accepted_and_changes_nothing_else(self):
+        out = io.StringIO()
+        amendment = pc.declared_amendment(self.commit(amendment_text(self.declaration.sha256)), self.declaration, out=out)
+        self.assertEqual((amendment.pricing_key, amendment.pinned_pricing_version, amendment.previous_pricing_version,
+                          amendment.previous_contract, amendment.contract, amendment.pricing_version),
+                         ('ordinary_notes_field_relations', RELATIONS_V1, RELATIONS_BASE, 'ordinary-field-relations-v1',
+                          'ordinary-field-relations-v2', RELATIONS_V2))
+        stamp = git(self.repo, 'log', '-1', '--format=%cI').stdout.decode().strip()
+        self.assertEqual(amendment.commit_time, stamp)
+        self.assertIn(stamp, out.getvalue())
+        for campaign in (pc.Campaign(self.declaration, scratch(self), amendment=amendment),   # (no attempt yet)
+                         self.pinned_campaign(amendment)):                                      # (pinned by attempt 1)
+            with self.subTest(rows=len(campaign.rows())):
+                self.assertEqual(campaign.pricing_version('ordinary_notes_field_relations'), RELATIONS_V2)
+                for key in ('model_check', 'mapping', 'ordinary_notes'):
+                    self.assertEqual(campaign.pricing_version(key), self.declaration.pricing_version(key))
+                self.assertEqual(campaign.limits().record(), limits_record(self.declaration))
+                self.assertEqual(campaign.pinned_terms().record(), terms_record(self.declaration))
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            amendment.pricing_version = RELATIONS_V1
+
+    def test_an_untracked_uncommitted_staged_or_hidden_edit_refuses(self):
+        text = amendment_text(self.declaration.sha256)
+        self.refused(self.commit(text, 'untracked.md', commit=False), 'tracked, committed and unmodified')
+        path = self.commit(text, 'modified.md')
+        path.write_text(text.replace(RELATIONS_V2, RELATIONS_V1))
+        self.refused(path, 'tracked, committed and unmodified')
+        path = self.commit(text, 'staged.md')
+        path.write_text(text + '\n')
+        git(self.repo, 'add', '--', str(path.relative_to(self.repo)))
+        self.refused(path, 'tracked, committed and unmodified')
+        path = self.commit(text, 'hidden.md')
+        git(self.repo, 'update-index', '--assume-unchanged', '--', str(path.relative_to(self.repo)))
+        path.write_text(text.replace('ordinary-field-relations-v2', 'ordinary-field-relations-v3'))
+        self.refused(path, 'differs from its committed blob')
+
+    def test_an_amendment_outside_the_mutations_folder_or_the_declaration_itself_refuses(self):
+        text = amendment_text(self.declaration.sha256)
+        elsewhere = self.repo / 'docs' / 'amendment.md'
+        elsewhere.write_text(text)
+        git(self.repo, 'add', '--', 'docs/amendment.md')
+        git(self.repo, 'commit', '-q', '-m', 'Elsewhere')
+        self.refused(elsewhere, 'docs/foundation/mutations')
+        self.refused(self.path, 'its own file')
+
+    def test_a_base_price_other_than_the_pinned_one_refuses(self):
+        sha = self.declaration.sha256
+        # the plain generation price (8975b158) is not the relations base: its v1 wrap is not the declared version
+        cases = {
+            'the plain base': amendment_text(sha, previous_pricing_version=PLAIN_BASE, amended_pricing_version=
+                                             pc.contract_pricing_version(PLAIN_BASE, 'ordinary-field-relations-v2')),
+            'another base (a rate or profile changed)': amendment_text(
+                sha, previous_pricing_version='configured-v1:' + 'b' * 64,
+                amended_pricing_version=pc.contract_pricing_version('configured-v1:' + 'b' * 64,
+                                                                   'ordinary-field-relations-v2')),
+            'another previous contract': amendment_text(sha, previous_ordinary_field_contract='ordinary-field-relations-v0'),
+        }
+        for name, text in cases.items():
+            with self.subTest(name=name):
+                self.refused(self.commit(text, f'{len(name)}-base.md'), 'the base price is not the pinned one')
+
+    def test_a_stated_version_that_is_not_the_base_bound_to_the_new_contract_refuses(self):
+        sha = self.declaration.sha256
+        for name, text in {
+                'a version from nowhere': amendment_text(sha, amended_pricing_version='configured-v1:' + 'c' * 64),
+                'the v2 version under a v3 name': amendment_text(sha, ordinary_field_contract='ordinary-field-relations-v3'),
+        }.items():
+            with self.subTest(name=name):
+                self.refused(self.commit(text, f'{len(name)}-stated.md'), 'not its base price bound to its new contract')
+
+    def test_no_change_of_contract_or_another_key_campaign_authority_or_declaration_refuses(self):
+        sha = self.declaration.sha256
+        cases = {
+            'the same contract': (amendment_text(sha, ordinary_field_contract='ordinary-field-relations-v1',
+                                                 amended_pricing_version=RELATIONS_V1), 'contract identity'),
+            'a malformed contract': (amendment_text(sha, ordinary_field_contract='V2!'), 'contract identity'),
+            'another pricing key': (amendment_text(sha, amended_pricing_key='ordinary_notes'), 'may change only'),
+            'another replaced version': (amendment_text(sha, pinned_pricing_version=PLAIN_BASE), 'not the declared'),
+            'another campaign': (amendment_text(sha, campaign='another-campaign'), 'another campaign or authority'),
+            'another authority': (amendment_text(sha, authority_id='another-authority'), 'another campaign or authority'),
+            'another declaration': (amendment_text('d' * 64), 'another declaration'),
+        }
+        for name, (text, fragment) in cases.items():
+            with self.subTest(name=name):
+                self.refused(self.commit(text, f'{abs(hash(name))}-other.md'), fragment)
+
+    def test_anything_else_it_tries_to_state_refuses(self):
+        good = amendment_text(self.declaration.sha256)
+        extra = {
+            'a limit': 'total_limit_provider_usd: 400.00', 'a stage': 'stage: ordinary_notes limit_provider_usd 90.00 requires none',
+            'a rate': 'rates: input 1 output 5 cached 0.10 (USD per million tokens)', 'a model': 'model: claude-opus-5',
+            'a provider': 'provider: openai', 'thinking': 'thinking: adaptive', 'effort': 'effort: high',
+            'a geography': 'inference_geo: us', 'a pricing version': f'pricing_version ordinary_notes: {RELATIONS_V2}',
+            'a credential': 'credential_file: /tmp/key', 'transfers': 'unused_stage_budget_transfers: yes',
+            'owner words': 'owner_words: Approve more', 'an authorization': 'authorization: owner 2026-09-29 approved more',
+            'a decorated limit': '> **total_limit_provider_usd: 400.00**', 'a revocation': 'The owner revoked this campaign.',
+            'a reopening': 'reopen_stage: ordinary_notes',
+        }
+        for name, line in extra.items():
+            with self.subTest(name=name):
+                self.refused(self.commit(good.replace('```\n', '```\n' + line + '\n', 1), f'{abs(hash(name))}-x.md'))
+
+    def test_a_missing_or_repeated_line_refuses(self):
+        sha = self.declaration.sha256
+        for name in ('campaign', 'authority_id', 'amends_declaration_sha256', 'amended_pricing_key',
+                     'pinned_pricing_version', 'previous_pricing_version', 'previous_ordinary_field_contract',
+                     'ordinary_field_contract', 'amended_pricing_version'):
+            with self.subTest(missing=name):
+                self.refused(self.commit(amendment_text(sha, **{name: None}), f'missing-{name}.md'), f'`{name}:`')
+            text = amendment_text(sha)
+            line = next(row for row in text.splitlines() if row.startswith(name + ':'))
+            with self.subTest(repeated=name):
+                self.refused(self.commit(text.replace(line, line + '\n' + line), f'repeated-{name}.md'), f'`{name}:`')
+
+    def test_the_first_attempts_pinned_terms_bind_the_amendment(self):
+        amendment = pc.declared_amendment(self.commit(amendment_text(self.declaration.sha256)), self.declaration,
+                                          out=io.StringIO())
+        # the ledger's first attempt pinned another field-relations version (or another rate): refused, whatever the
+        # current declaration and the amendment say
+        for name, change in (('another relations version', lambda t: t['pricing_versions'].update(
+                                 ordinary_notes_field_relations='configured-v1:' + 'e' * 64)),
+                             ('another rate', lambda t: t['rates'].update(input='3'))):
+            with self.subTest(name=name):
+                self.root = scratch(self)
+                terms = terms_record(self.declaration)
+                terms = json.loads(json.dumps(terms))
+                change(terms)
+                campaign = self.pinned_campaign(amendment, terms=terms)
+                with self.assertRaises(pc.Refused):
+                    campaign.pricing_version('ordinary_notes_field_relations')
+        # an amendment of another declaration is refused by the campaign itself
+        with self.assertRaises(pc.Refused):
+            pc.Campaign(dataclasses.replace(self.declaration, sha256='f' * 64), scratch(self), amendment=amendment)
+        with self.assertRaises(pc.Refused):
+            pc.Campaign(self.declaration, scratch(self), amendment={'pricing_version': RELATIONS_V2})
+
+    def test_the_campaign_re_proves_an_amendment_it_did_not_parse(self):
+        # (an Amendment built in memory never passed declared_amendment: the campaign proves the chain itself)
+        good = pc.declared_amendment(self.commit(amendment_text(self.declaration.sha256)), self.declaration,
+                                     out=io.StringIO())
+        other = 'configured-v1:' + '2' * 64
+        cases = {
+            'another replaced version': dataclasses.replace(good, pinned_pricing_version=PLAIN_BASE),
+            'another base': dataclasses.replace(good, previous_pricing_version=other, pricing_version=
+                                                pc.contract_pricing_version(other, good.contract)),
+            'another previous contract': dataclasses.replace(good, previous_contract='ordinary-field-relations-v0'),
+            'a stated version from nowhere': dataclasses.replace(good, pricing_version='configured-v1:' + 'c' * 64),
+        }
+        for name, amendment in cases.items():
+            with self.subTest(name=name):
+                self.root = scratch(self)
+                campaign = self.pinned_campaign(amendment)
+                with self.assertRaises(pc.Refused):
+                    campaign.pricing_version('ordinary_notes_field_relations')
+                self.assertEqual(campaign.pricing_version('ordinary_notes'),
+                                 self.declaration.pricing_version('ordinary_notes'))
+        self.root = scratch(self)
+        self.assertEqual(self.pinned_campaign(good).pricing_version('ordinary_notes_field_relations'), RELATIONS_V2)
+
+
 class LiveLedgerShapeTests(unittest.TestCase):
     """The live ledger as it stood after the model check (docs/rebuild/v1/sonnet5-campaign/model-check-20260929.md),
     rebuilt in a TEMPORARY root from its documented fields — the live root is never read or written here. It must stay

@@ -34,6 +34,18 @@ What each piece guarantees, stated so a reader can see how it would fail:
   Campaign.admit()    Refuses before the request is built: a prerequisite stage not passed, a stage already passed or
                       failed (and not reopened), an attempt without an outcome, the stage or total limit in force, the
                       stage's request count; a reopened stage admits only a runner that contains the repair.
+  declared_amendment()
+                      A contract-identity amendment: TRACKED, COMMITTED and UNMODIFIED beside the declaration, naming its
+                      campaign, authority and exact declaration, and able to change ONE thing — the pricing version of the
+                      ordinary field-relations sends, and only to the contract identity bound to the SAME base price:
+                      contract_pricing_version(previous, old contract) must be the version it replaces and
+                      contract_pricing_version(previous, new contract) the version it states. It carries no limit, rate,
+                      model, profile, stage, credential or authorization line; anything else it tries to say refuses.
+  Campaign.pricing_version()
+                      The version a send must be priced at: the declaration's, or — for the amended key only — the
+                      amendment's, after proving the version it replaces is the one the ledger's FIRST attempt pinned (so
+                      the base price is exactly the pinned one). Limits, rates, model, stages and authority stay the
+                      declaration's and the ledger's.
   Campaign.reopen()   The ONLY way a failed stage is admitted again: a committed, unmodified diagnosis naming the failed
                       attempts and the repair commit, a runner that is not a failed one and contains the repair, a
                       runner or engine file that differs from every failed attempt's recorded hashes, a repair commit
@@ -570,6 +582,105 @@ def declared(path, *, repository=None, out=None):
     return declaration
 
 
+# ── the contract-identity amendment ──────────────────────────────────────────────────────────────────────────────
+
+#: The ONE pricing key an amendment may change: the ordinary field-relations sends, whose pricing version is the base
+#: price (rates, model, request profile) bound to the relations contract's identity (core.generation.configuration).
+AMENDABLE_PRICING_KEY = 'ordinary_notes_field_relations'
+CONTRACT_NAME = re.compile(r'[a-z][a-z0-9.-]{0,79}')
+#: Lines an amendment may never carry: every structured line of a declaration (limits, stages, transfers, provider,
+#: model, rates, request settings, pricing versions, credential, owner words), a stage decision's, and — through
+#: AUTHORIZATION_LINE — any authorization. An amendment is not a new authority and changes no number.
+AMENDMENT_FORBIDDEN = re.compile(
+    r'^[ \t>*_#+|-]*(?:(?:total_limit_provider_usd|stage|unused_stage_budget_transfers|provider|model|rates|thinking|'
+    r'effort|inference_geo|credential_file|credential_file_requirements|owner_words|reopen_stage|failed_attempts|'
+    r'repair_commit)[ \t]*:|pricing_version\b)', re.M | re.I)
+
+
+def contract_pricing_version(previous, contract):
+    """The ordinary field-relations pricing version for a base price and a contract identity — exactly
+    core.generation.ordinary_pricing_version (its tests assert the two agree; the runner also requires the
+    application's own version to equal the amended one before any send, so a drift refuses)."""
+    return 'configured-v1:' + hashlib.sha256(json.dumps({'previous': previous, 'ordinary_field_contract': contract},
+                                                        sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+@dataclasses.dataclass(frozen=True)
+class Amendment:
+    """A verified contract-identity amendment (declared_amendment): the ONE pricing version it replaces and the one it
+    states, both bound to the same base price."""
+    path: str
+    sha256: str
+    commit: str
+    commit_time: str
+    campaign: str
+    authority_id: str
+    declaration_sha256: str
+    pricing_key: str
+    pinned_pricing_version: str             # the version it replaces (the declaration's and the ledger's pinned one)
+    previous_pricing_version: str           # the base price both versions are bound to
+    previous_contract: str
+    contract: str
+    pricing_version: str                    # the version the amended sends must carry
+
+    def record(self):
+        return dataclasses.asdict(self)
+
+
+def declared_amendment(path, declaration, *, out=None):
+    """The committed, unmodified contract-identity amendment at `path`, verified against `declaration` (the pinned
+    ledger terms are checked by Campaign.pricing_version). Prints its commit and commit time to `out` (stderr)."""
+    out = sys.stderr if out is None else out
+    require(declaration.repository, 'The declaration names no checkout; an amendment cannot be verified.')
+    root = Path(declaration.repository).resolve()
+    require(path is not None, 'An amendment needs a path.')
+    refuse_env_path(path)
+    path = Path(path).resolve()
+    require(path.parent == root / 'docs' / 'foundation' / 'mutations' and path != Path(declaration.path).resolve(),
+            'The amendment must be its own file in this checkout\'s docs/foundation/mutations/.')
+    data, commit, commit_time, relative = committed_file(path, root, 'declaration amendment')
+    text = data.decode('utf-8')
+    require(not AMENDMENT_FORBIDDEN.search(text) and not AUTHORIZATION_LINE.search(text),
+            'The amendment states a limit, stage, provider, model, rate, request setting, pricing version, credential '
+            'or authorization line; it may change only the field-relations contract identity.')
+    require(not REVOCATION.search(' '.join(text.split())), 'The amendment carries a revocation.')
+
+    def one(name, pattern=r'(\S+)'):
+        return _one(text, rf'^{name}:[ \t]*{pattern}[ \t]*$', f'{name}:', 'amendment')
+    version = r'(configured-v1:[0-9a-f]{64})'
+    amendment = Amendment(
+        path=str(path), sha256=hashlib.sha256(data).hexdigest(), commit=commit, commit_time=commit_time,
+        campaign=one('campaign'), authority_id=one('authority_id'),
+        declaration_sha256=one('amends_declaration_sha256', r'([0-9a-f]{64})'),
+        pricing_key=one('amended_pricing_key', r'([a-z][a-z0-9_]*)'),
+        pinned_pricing_version=one('pinned_pricing_version', version),
+        previous_pricing_version=one('previous_pricing_version', version),
+        previous_contract=one('previous_ordinary_field_contract'), contract=one('ordinary_field_contract'),
+        pricing_version=one('amended_pricing_version', version))
+    require(amendment.campaign == declaration.campaign and amendment.authority_id == declaration.authority_id,
+            'The amendment names another campaign or authority.')
+    require(amendment.declaration_sha256 == declaration.sha256,
+            'The amendment amends another declaration than the one in force (its sha256 differs).')
+    require(amendment.pricing_key == AMENDABLE_PRICING_KEY,
+            f'An amendment may change only the {AMENDABLE_PRICING_KEY} pricing version.')
+    require(CONTRACT_NAME.fullmatch(amendment.previous_contract) and CONTRACT_NAME.fullmatch(amendment.contract)
+            and amendment.contract != amendment.previous_contract,
+            'The amendment does not change the contract identity to another well-formed one.')
+    require(amendment.pinned_pricing_version == declaration.pricing_version(amendment.pricing_key),
+            f'The amendment replaces {amendment.pinned_pricing_version}, not the declared '
+            f'{amendment.pricing_key} version.')
+    require(contract_pricing_version(amendment.previous_pricing_version, amendment.previous_contract)
+            == amendment.pinned_pricing_version,
+            'The amendment\'s base price and previous contract do not produce the version it replaces; the base price '
+            'is not the pinned one.')
+    require(contract_pricing_version(amendment.previous_pricing_version, amendment.contract) == amendment.pricing_version,
+            'The amendment\'s stated pricing version is not its base price bound to its new contract.')
+    print(f'amendment {relative}: committed {commit_time} in {commit}; sha256 {amendment.sha256}; '
+          f'{amendment.pricing_key} {amendment.pinned_pricing_version} -> {amendment.pricing_version} '
+          f'({amendment.previous_contract} -> {amendment.contract})', file=out)
+    return amendment
+
+
 # ── the ledger ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 ATTEMPT_FILE = re.compile(r'(\d{3})-attempt\.json')
@@ -857,12 +968,36 @@ def exposure(attempt, outcome, rates=None):
 class Campaign:
     """A declaration and the ledger that spends under it."""
 
-    def __init__(self, declaration, root, *, watched_files=()):
+    def __init__(self, declaration, root, *, watched_files=(), amendment=None):
         self.declaration = declaration
         self.root = Path(root)
         self.ledger = Ledger(self.root / 'ledger')
         #: The runner and engine files (repository-relative) a reopening must show were repaired (A2).
         self.watched_files = tuple(watched_files)
+        #: A verified contract-identity amendment (declared_amendment), or None.
+        self.amendment = amendment
+        if amendment is not None:
+            require(isinstance(amendment, Amendment) and amendment.campaign == declaration.campaign
+                    and amendment.authority_id == declaration.authority_id
+                    and amendment.declaration_sha256 == declaration.sha256,
+                    'The amendment does not amend this campaign\'s declaration.')
+
+    def pricing_version(self, key, rows=None):
+        """The pricing version a send priced under `key` must carry: the declaration's — or, for the ONE key an amendment
+        changes, the amendment's, once the version it replaces is proved to be the one the ledger's FIRST attempt pinned
+        (so its base price — rates, model, request profile — is exactly the pinned one) and the current declaration
+        still states the pinned terms."""
+        amendment = self.amendment
+        if amendment is None or key != amendment.pricing_key:
+            return self.declaration.pricing_version(key)
+        pinned = dict(self.require_pinned_terms(self.rows() if rows is None else rows).pricing_versions)
+        require(pinned.get(key) == amendment.pinned_pricing_version == self.declaration.pricing_version(key),
+                f'The amendment replaces {amendment.pinned_pricing_version}; the ledger\'s first attempt pinned '
+                f'{pinned.get(key)} for {key}.')
+        require(contract_pricing_version(amendment.previous_pricing_version, amendment.previous_contract) == pinned[key]
+                and contract_pricing_version(amendment.previous_pricing_version, amendment.contract)
+                == amendment.pricing_version, 'The amendment is not bound to the pinned base price.')
+        return amendment.pricing_version
 
     def rows(self):
         rows = self.ledger.rows()

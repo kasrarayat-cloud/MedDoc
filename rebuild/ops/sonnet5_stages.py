@@ -56,6 +56,14 @@ billing audit, validator, a second request, an uncaptured request, a response no
 response, the per-send deadline, an export that fails either check, a leaked or unscannable credential scan).
 `plan --stage <id>` prints the fixed order, each send's maximum and bound, and the stage worst case against the
 remaining stage and total limits, with no credential, network or database.
+
+REMAINDER. Once a stage has failed (and until it passes) it sends ONLY the sends its latest failure recorded as not
+sent (`pending_sends`): nothing with an attempt in the ledger is ever sent again, and `plan` shows exactly those sends.
+AMENDMENT. `--amendment <path>` (ordinary_notes only) names a committed contract-identity amendment
+(provider_campaign.declared_amendment): the field-relations sends must then carry its pricing version, which must be the
+engine's contract bound to the pinned base price; their maxima are recomputed by the same compiler (the frozen v1 bounds
+no longer describe the request) and each, and their sum, must fit the stage and total limits left. Every other send
+keeps the declared version and its frozen maximum.
 """
 import dataclasses
 import hashlib
@@ -568,10 +576,91 @@ def stage_preconditions(declaration, stage, root, *, database_prefix=sq.DATABASE
             'layout_socket': settings.QUILLMD_LAYOUT_SOCKET}
 
 
-def require_price(declaration, config, send):
+def amended(amendment, send):
+    """Whether `send` is priced under the one key a verified amendment changes."""
+    return amendment is not None and send.pricing_key == amendment.pricing_key
+
+
+def require_price(declaration, config, send, amendment=None):
+    """The quote's or job's configuration carries the version `send` must be priced at: the declared one, or for an
+    amended send the amendment's (and the amendment's contract)."""
+    if amended(amendment, send):
+        require(config.get('pricing_version') == amendment.pricing_version
+                and config.get('ordinary_field_contract') == amendment.contract
+                and config.get('model') == declaration.model and config.get('mode') == 'live',
+                f'{send.id} is priced {config.get("pricing_version")}, not the amended {send.pricing_key} version.')
+        return
     require(config.get('pricing_version') == declaration.pricing_version(send.pricing_key)
             and config.get('model') == declaration.model and config.get('mode') == 'live',
             f'{send.id} is priced {config.get("pricing_version")}, not the declared {send.pricing_key} version.')
+
+
+def amendment_in_force(campaign):
+    """The campaign's contract-identity amendment, verified (or None): it names the contract this engine runs, and the
+    version it replaces is the one the ledger's first attempt pinned (Campaign.pricing_version)."""
+    amendment = campaign.amendment
+    if amendment is None:
+        return None
+    from core import v3_field_relations
+    require(amendment.contract == v3_field_relations.CONTRACT,
+            f'The amendment names the contract {amendment.contract}; this engine runs {v3_field_relations.CONTRACT}.')
+    require(campaign.pricing_version(amendment.pricing_key) == amendment.pricing_version,
+            'The amendment is not the version in force.')
+    return amendment
+
+
+def remaining_limits(campaign, stage):
+    """(stage, total): what is left under the limits in force, at the pinned rates."""
+    rows = campaign.rows()
+    limits = campaign.limits(rows)
+    return (limits.stage(stage).limit - campaign.totals(stage)['exposure'],
+            limits.total - campaign.totals()['exposure'])
+
+
+def pending_sends(campaign, stage, plan):
+    """(sends, remainder). The fixed plan — or, once the stage has failed and until it passes, ONLY the sends its latest
+    failure recorded as not sent, in plan order (`remainder` then describes them; None otherwise). Refuses when that
+    failure records no readable list, names a send the plan does not have, leaves nothing unsent, names a send that
+    already has an attempt (nothing is ever sent twice), or drops a planned send it neither made nor lists; and a mapping
+    encounter whose form's mapping send is not in the same remainder (its form would not exist in this run)."""
+    state = campaign.ledger.stage_state(stage)
+    if not state['failures'] or state['state'] == 'passed':
+        return list(plan), None
+    number = state['failures']
+    summary = state['failed'][-1].get('summary')
+    require(isinstance(summary, dict) and isinstance(summary.get('not_sent'), list)
+            and isinstance(summary.get('plan'), list) and isinstance(summary.get('sends', []), list)
+            and all(isinstance(i, str) for i in summary['not_sent'] + summary['plan']),
+            f'Stage {stage} failure {number} records no readable list of the sends it did not make; the remainder '
+            'cannot be established and nothing is sent again.')
+    not_sent, recorded = summary['not_sent'], summary['plan']
+    by_id = {send.id: send for send in plan}
+    require(len(set(not_sent)) == len(not_sent) and set(not_sent) <= set(recorded) and set(recorded) <= set(by_id),
+            f'Stage {stage} failure {number} names a send twice, or one the fixed plan does not have.')
+    require(not_sent, f'Stage {stage} failure {number} left no send unsent; there is no remainder to send.')
+    attempted = set()
+    for attempt, _ in campaign.rows():
+        if attempt.get('stage') != stage:
+            continue
+        send = attempt.get('send')
+        require(isinstance(send, dict) and isinstance(send.get('id'), str),
+                f'Attempt {attempt.get("number")} of stage {stage} records no send; the sends already made cannot be '
+                'established.')
+        attempted.add(send['id'])
+    again = sorted(set(not_sent) & attempted)
+    require(not again, f'Stage {stage}: {", ".join(again)} already has an attempt; a send is never made twice.')
+    unexercised = {row['send']['id'] for row in summary.get('sends', []) if isinstance(row, dict)
+                   and 'not_exercised' in row and isinstance(row.get('send'), dict)}
+    dropped = sorted(set(recorded) - set(not_sent) - attempted - unexercised)
+    require(not dropped, f'Stage {stage} failure {number} neither made nor lists {", ".join(dropped)}; the remainder '
+                         'cannot be established.')
+    sends = [send for send in plan if send.id in set(not_sent)]
+    for send in sends:
+        if send.path == 'mapping_encounter':
+            require(f'mapping:{send.form}' in not_sent, f'{send.id} needs its form\'s mapping send in the same run, '
+                                                        'and that send was already made; it is not sent.')
+    return sends, {'failure': number, 'plan': [send.id for send in plan], 'sends': [send.id for send in sends],
+                   'already_made': sorted(attempted)}
 
 
 # ── the per-send machinery ───────────────────────────────────────────────────────────────────────────────────────
@@ -621,6 +710,7 @@ class Run:
         self.inputs, self.forms, self.world, self.checked, self.deadline = inputs, forms, world, checked, deadline
         self.declaration, self.ledger, self.root = campaign.declaration, campaign.ledger, campaign.root
         self.rates = campaign.pinned_terms().rates
+        self.amendment = amendment_in_force(campaign)
         self.templates = {}             # form -> (template pk, deterministic fields) from its mapping send
         self.sends, self.veto_evidence, self.stopped = [], [], None
 
@@ -639,7 +729,7 @@ class Run:
                   'limits': self.campaign.limits().record(), 'terms': self.campaign.pinned_terms().record(),
                   'engine_files': sq.watched_hashes(), 'freeze_manifest_sha256': self.inputs['freeze']['manifest_sha256'],
                   'runner_commit': self.provenance.get('runner_commit'), 'started_at': pc.now(), 'pid': os.getpid(),
-                  **extra}
+                  **({'amendment': self.amendment.record()} if self.amendment is not None else {}), **extra}
         self.ledger.write_attempt(record)                                # BEFORE anything can be sent
         return record
 
@@ -1121,7 +1211,7 @@ class Run:
         encounter = created.get()
         require(encounter.notes == notes, 'The saved notes are not the frozen notes.')
         token, revision, shown, quoted = sq.page_quote(self.world.client, encounter)
-        require_price(self.declaration, quoted, send)
+        require_price(self.declaration, quoted, send, self.amendment)
         jobs_before = set(Job.objects.values_list('pk', flat=True))
         response = steps.request_generation(self.world.client, encounter.pk, token, revision)
         jobs = list(Job.objects.exclude(pk__in=jobs_before))
@@ -1137,7 +1227,7 @@ class Run:
         if list(Job.objects.filter(state='queued').values_list('pk', flat=True)) != [job.pk]:
             self.refuse_job(job, 'another queued job would run first')
         try:
-            require_price(self.declaration, job.config, send)
+            require_price(self.declaration, job.config, send, self.amendment)
             requirements = version.review_requirements
             maximum = generation.maximum_cost(encounter.notes, version.fields, job.config,
                                               context_labels=[row['label'] for row in requirements],
@@ -1145,6 +1235,10 @@ class Run:
             held = sum((r.amount for r in Reservation.objects.filter(job=job)), Decimal(0))
             require(held == maximum * Decimal('1.5') == shown,
                     'The job\'s hold, its maximum and the page\'s quote disagree.')
+            if amended(self.amendment, send):
+                # (the amended maximum is the one the plan recomputed and fitted to the limits left, exactly)
+                require(maximum == self.planned.get(send.id),
+                        f'{send.id}: the job\'s maximum {maximum} is not the amended plan\'s {self.planned.get(send.id)}.')
             bound = self.admit(maximum)
         except Refused as refused:
             self.refuse_job(job, str(refused))
@@ -1246,22 +1340,31 @@ def raw_selection(message, fields, notes, path):
     """The model's own selection, from the provider's message, in the frozen replay's response shape: per field
     `unit_ids` and `conflict`; on the relations path also the printed option TEXTS and each non-answer, non-independent
     unit's relation (by quote). Nothing here is the adopted answer."""
+    from django.core.exceptions import ValidationError
     from core import v3_field_relations as rel
     texts = [block.get('text') for block in (message or {}).get('content') or [] if block.get('type') == 'text']
     require(len(texts) == 1, 'The provider message does not carry exactly one text block.')
-    body = json.loads(texts[0])
     asked, units = steps.source_units(notes, fields)
-    by_key = {f['key']: f for f in asked}
     selection = {}
-    for row in body.get('fields') or []:
-        chosen = {'unit_ids': list(row.get('unit_ids') or []), 'conflict': bool(row.get('conflict'))}
-        if path == 'field_relations' and row.get('key') in by_key:
-            options = {o['id']: o['text'] for o in rel.options(by_key[row['key']])}
-            chosen['options'] = [options[i] for i in row.get('option_ids') or [] if i in options]
-            context = row.get('context') or []
-            chosen['relations'] = {u['quote']: c for u, c in zip(units, context)
+    if path == 'field_relations':
+        # The keyed answer, read by the engine's own strict parser (context back in the offered unit order): the same
+        # per-field shape the frozen replay reads.
+        try:
+            parsed = rel.parse(texts[0], asked, units)
+        except ValidationError as error:
+            raise Refused('The relations answer cannot be read: ' + '; '.join(error.messages)) from None
+        by_key = {f['key']: f for f in asked}
+        for row in parsed.fields:
+            chosen = {'unit_ids': list(row.unit_ids), 'conflict': bool(row.conflict)}
+            options = {o['id']: o['text'] for o in rel.options(by_key[row.key])}
+            chosen['options'] = [options[i] for i in row.option_ids if i in options]
+            chosen['relations'] = {u['quote']: c for u, c in zip(units, row.context)
                                    if u['id'] not in chosen['unit_ids'] and c not in ('answer', 'independent')}
-        selection[row.get('key')] = chosen
+            selection[row.key] = chosen
+        return selection
+    body = json.loads(texts[0])
+    for row in body.get('fields') or []:
+        selection[row.get('key')] = {'unit_ids': list(row.get('unit_ids') or []), 'conflict': bool(row.get('conflict'))}
     return selection
 
 
@@ -1293,8 +1396,10 @@ def run_stage(campaign, stage, *, secret, provenance, database_prefix=sq.DATABAS
     checked = stage_preconditions(declaration, stage, root, database_prefix=database_prefix, rebuild=rebuild,
                                   environ=environ, ledger=ledger)
     inputs = frozen_inputs()
-    sends = plan_sends(stage, inputs)
+    planned = plan_sends(stage, inputs)
     campaign.admit(stage, Decimal('0.000001'), runner_commit=provenance.get('runner_commit'))   # (stage open at all)
+    sends, remainder = pending_sends(campaign, stage, planned)
+    amendment = amendment_in_force(campaign)
     forms = build_forms(root / 'forms' / stage, stage, inputs)
     world = seed_account(root)
     stale = sq.cancel_stale_jobs(world)
@@ -1303,8 +1408,9 @@ def run_stage(campaign, stage, *, secret, provenance, database_prefix=sq.DATABAS
     # (the plan's own prices, before anything is created: a pricing version other than the declared one refuses here,
     # and each send is previewed against the limits on its planned maximum before its world is built)
     scratch = pc.private_directory(root / 'tmp' / f'plan-{stage}-{os.getpid()}-{len(ledger.rows())}')
-    run.planned = {key: value['maximum_cost'] for key, value in price_sends(stage, sends, inputs, scratch,
-                                                                            declaration).items()}
+    run.planned = {key: value['maximum_cost'] for key, value in price_sends(
+        stage, sends, inputs, scratch, declaration, amendment=amendment,
+        remaining=remaining_limits(campaign, stage)).items()}
     reasons, not_sent = [], []
     for send in sends:
         if run.stopped:
@@ -1323,7 +1429,12 @@ def run_stage(campaign, stage, *, secret, provenance, database_prefix=sq.DATABAS
         if stops:
             run.stopped = {'send': send.id, 'attempt': record.get('attempt'), 'findings': record.get('findings')}
             reasons.append(f'{send.id}: ' + '; '.join(f['why'] for f in record.get('findings') or []))
-    return decide_stage(run, sends, reasons, not_sent, {'recovered_before_start': settled, 'stale_jobs_cancelled': stale})
+    base = {'recovered_before_start': settled, 'stale_jobs_cancelled': stale}
+    if remainder is not None:
+        base['remainder'] = remainder
+    if amendment is not None:
+        base['amendment'] = amendment.record()
+    return decide_stage(run, sends, reasons, not_sent, base)
 
 
 def decide_stage(run, sends, reasons, not_sent, base):
@@ -1354,10 +1465,12 @@ def decide_stage(run, sends, reasons, not_sent, base):
 
 # ── plan (offline: no credential, no network, no database) ───────────────────────────────────────────────────────
 
-def price_sends(stage, sends, inputs, state_dir, declaration):
+def price_sends(stage, sends, inputs, state_dir, declaration, *, amendment=None, remaining=None):
     """Each send's maximum at the declared settings, computed with the application's own functions on the frozen forms
     (Django configured with the stage's settings; nothing is sent, no database is touched). Refuses a pricing version
-    other than the declared one."""
+    other than the declared one — or, for a send an amendment (verified: amendment_in_force) changes, other than the
+    amended one. A notes send's maximum must equal its frozen bound, except an amended send's, which is recomputed by the
+    same compiler: each amended bound, and their sum, must fit `remaining` ((stage, total) left: remaining_limits)."""
     from types import SimpleNamespace
     from django.test.utils import override_settings
     from core import generation, mapping_assistance
@@ -1377,8 +1490,10 @@ def price_sends(stage, sends, inputs, state_dir, declaration):
             else:
                 fields = inputs['cases']['forms'][send.form]['fields']
             config = generation.configuration(fields if send.kind == 'generation' else None)
-            require(config['pricing_version'] == declaration.pricing_version(send.pricing_key),
-                    f'{send.id}: the application prices {config["pricing_version"]}, not the declared {send.pricing_key}.')
+            expected = amendment.pricing_version if amended(amendment, send) else declaration.pricing_version(send.pricing_key)
+            require(config['pricing_version'] == expected,
+                    f'{send.id}: the application prices {config["pricing_version"]}, not the '
+                    f'{"amended" if amended(amendment, send) else "declared"} {send.pricing_key}.')
             if send.kind == 'mapping':
                 version = SimpleNamespace(template=SimpleNamespace(format='docx', sha256=hashlib.sha256(forms[send.form])
                                                                    .hexdigest(),
@@ -1395,19 +1510,38 @@ def price_sends(stage, sends, inputs, state_dir, declaration):
             else:
                 case = next(c for c in inputs['cases']['cases'] if c['id'] == send.case)
                 maximum = generation.maximum_cost(case['notes'], fields, config, context_labels=[], requirements=[])
-                frozen = case['cost_bound_usd'][send.path]['provider_cost_max']
-                require(Decimal(frozen) == maximum, f'{send.id}: the maximum {maximum} is not the frozen {frozen}.')
-                basis = 'maximum_cost with the frozen inspected fields (equals cases.json cost_bound_usd)'
+                if amended(amendment, send):
+                    basis = ('maximum_cost with the frozen inspected fields under the contract-identity amendment '
+                             '(recomputed; the frozen cost_bound_usd describes the replaced contract)')
+                else:
+                    frozen = case['cost_bound_usd'][send.path]['provider_cost_max']
+                    require(Decimal(frozen) == maximum, f'{send.id}: the maximum {maximum} is not the frozen {frozen}.')
+                    basis = 'maximum_cost with the frozen inspected fields (equals cases.json cost_bound_usd)'
         priced[send.id] = {'maximum_cost': maximum, 'bound': pc.attempt_bound(maximum),
-                           'pricing_version': config['pricing_version'], 'basis': basis}
+                           'pricing_version': config['pricing_version'], 'basis': basis,
+                           'amended': amended(amendment, send)}
+    changed = [(send_id, row['bound']) for send_id, row in priced.items() if row['amended']]
+    if changed:
+        require(remaining is not None, 'Amended maxima are fitted to the limits left; none were given.')
+        stage_left, total_left = remaining
+        for send_id, bound in changed:
+            require(bound <= stage_left and bound <= total_left,
+                    f'{send_id}: the amended bound {bound} does not fit the {stage_left} left under the stage limit and '
+                    f'the {total_left} left under the total.')
+        worst = sum((bound for _, bound in changed), Decimal(0))
+        require(worst <= stage_left and worst <= total_left,
+                f'The amended sends\' bounds ({worst} together) do not fit the {stage_left} left under the stage limit and '
+                f'the {total_left} left under the total.')
     return priced
 
 
-def plan_report(stage, declaration, root, state_dir):
+def plan_report(stage, declaration, root, state_dir, amendment=None):
     inputs = frozen_inputs()
-    sends = plan_sends(stage, inputs)
-    priced = price_sends(stage, sends, inputs, state_dir, declaration)
-    campaign = pc.Campaign(declaration, root)
+    campaign = pc.Campaign(declaration, root, amendment=amendment)
+    sends, remainder = pending_sends(campaign, stage, plan_sends(stage, inputs))     # (read-only: no lock, no write)
+    amendment = amendment_in_force(campaign)
+    priced = price_sends(stage, sends, inputs, state_dir, declaration, amendment=amendment,
+                         remaining=remaining_limits(campaign, stage))
     rows = campaign.rows()                                  # (read-only: no lock is taken, nothing is written)
     limits = campaign.limits(rows)
     in_force = limits.stage(stage)
@@ -1420,8 +1554,11 @@ def plan_report(stage, declaration, root, state_dir):
                 {**s.record(), 'maximum_cost': format(priced[s.id]['maximum_cost'], 'f'),
                  'bound_x1_1': format(priced[s.id]['bound'], 'f'), 'pricing_version': priced[s.id]['pricing_version'],
                  'pricing_version_is_declared': priced[s.id]['pricing_version']
-                 == declaration.pricing_version(s.pricing_key), 'basis': priced[s.id]['basis']} for s in sends],
-            'sends': len(sends), 'stage_worst_case': format(worst, 'f'),
+                 == (amendment.pricing_version if amended(amendment, s) else declaration.pricing_version(s.pricing_key)),
+                 'amended': priced[s.id]['amended'], 'basis': priced[s.id]['basis']} for s in sends],
+            'sends': len(sends), 'remainder': remainder,
+            'amendment': amendment.record() if amendment is not None else None,
+            'stage_worst_case': format(worst, 'f'),
             'stage_limit': format(in_force.limit, 'f'), 'stage_exposure': format(spent, 'f'),
             'stage_remaining': format(in_force.limit - spent, 'f'),
             'total_limit': format(limits.total, 'f'), 'total_exposure': format(total, 'f'),
@@ -1433,12 +1570,15 @@ def plan_report(stage, declaration, root, state_dir):
             'credential_read': False, 'network': 'none', 'database': 'none'}
 
 
-def plan(stage, root=None, declaration_path=None):
-    """`plan --stage <id>`: the fixed order, each send's maximum and bound, and the stage worst case against the
-    remaining stage and total limits in force (the live ledger, read-only). No credential, network or database."""
+def plan(stage, root=None, declaration_path=None, amendment_path=None):
+    """`plan --stage <id> [--amendment <path>]`: the sends the stage would make (its fixed order, or the remainder of
+    its latest failure), each send's maximum and bound, and the stage worst case against the remaining stage and total
+    limits in force (the live ledger, read-only). No credential, network or database."""
     require(stage in STAGES, f'No stage runner for {stage!r}.')
     require(not sq.env_file_present(), 'plan runs only in a checkout with no rebuild/.env.')
     declaration = pc.declared(sq.DECLARATION if declaration_path is None else declaration_path)
+    require(amendment_path is None or stage == 'ordinary_notes', 'An amendment applies to the ordinary_notes stage only.')
+    amendment = None if amendment_path is None else pc.declared_amendment(amendment_path, declaration)
     with tempfile.TemporaryDirectory(prefix='sonnet5-stage-plan-') as scratch:
         environ = {'QUILLMD_SECRET_KEY': 'plan-only-' + hashlib.sha256(os.urandom(16)).hexdigest(),
                    'QUILLMD_DB_PASSWORD': 'unused-by-plan', 'QUILLMD_DB_NAME': sq.DATABASE['name'],
@@ -1456,6 +1596,6 @@ def plan(stage, root=None, declaration_path=None):
         def no_database(self, *args, **kwargs):
             raise AssertionError('plan never touches a database')
         dbbase.BaseDatabaseWrapper.ensure_connection = no_database
-        report = plan_report(stage, declaration, sq.LIVE_ROOT if root is None else root, scratch)
+        report = plan_report(stage, declaration, sq.LIVE_ROOT if root is None else root, scratch, amendment)
     print(json.dumps(report, indent=1, default=str))
     return 0

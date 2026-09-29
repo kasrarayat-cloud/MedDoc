@@ -17,7 +17,7 @@ from core.jobs import run_one
 from core.models import AuditEvent, Encounter, Job, Reservation, Usage
 from core.security import private_path
 from documents import word_v3 as w
-from .test_v3_field_relations import relation_body
+from .test_v3_field_relations import relation_wire
 from .test_v3_ordinary_input import ordinary_input_form
 from .test_v3_ordinary_notes import LIVE
 from .test_word_v3_workflow import V3Fixture
@@ -66,7 +66,7 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
             payload = json.loads(wire['messages'][0]['content'])
             self.assertEqual(payload['catalogue'], version.fields)
             choices = {target['key']: [target['key'] + (':1' if expected == 'No' else ':0')]} if target['kind'] == 'choice' else {}
-            return sdk_response(relation_body(notes, version.fields, {target['key']: [selected]}, choices=choices))
+            return sdk_response(relation_wire(notes, version.fields, {target['key']: [selected]}, choices=choices))
         with patch('anthropic.Anthropic') as provider:
             provider.return_value.messages.create.side_effect = respond
             self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/',
@@ -167,7 +167,7 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
                 self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
                 encounter = Encounter.objects.latest('created_at')
                 quote = self.client.get(f'/encounters/{encounter.pk}/').context['usage_quote']
-                body = relation_body(notes, version.fields, {target['key']: [full]})
+                body = relation_wire(notes, version.fields, {target['key']: [full]})
                 with patch('anthropic.Anthropic') as provider:
                     provider.return_value.messages.create.side_effect = lambda **wire: sdk_response(body)
                     self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': quote})
@@ -198,7 +198,7 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
         self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
         encounter = Encounter.objects.latest('created_at')
         quote = self.client.get(f'/encounters/{encounter.pk}/').context['usage_quote']
-        body = relation_body(notes, version.fields, {target['key']: [selected]})
+        body = relation_wire(notes, version.fields, {target['key']: [selected]})
         with patch('anthropic.Anthropic') as provider:
             provider.return_value.messages.create.side_effect = lambda **wire: sdk_response(body)
             self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': quote})

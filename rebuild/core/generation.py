@@ -284,8 +284,10 @@ def job_request_profile(config):
 
 def anthropic_request(model,profile,system,payload,schema):
     """The keyword arguments of the one Messages API call a profile makes. Under the legacy profile they are exactly the
-    pre-profile call — model, max_tokens=6000, system, one user message, output_config={'format': …} — and nothing else."""
-    output_schema=schema.model_json_schema()
+    pre-profile call — model, max_tokens=6000, system, one user message, output_config={'format': …} — and nothing else.
+    `schema` is a pydantic model, or a ready-made JSON schema dictionary built for this one request (copied, never
+    mutated); either way Sonnet 5 receives it through transform_schema."""
+    output_schema=json.loads(json.dumps(schema,allow_nan=False)) if isinstance(schema,dict) else schema.model_json_schema()
     if model==SONNET_5:
         # messages.create sends the supplied schema verbatim. Native structured output
         # rejects numerical/string bounds and most array bounds. The official SDK
@@ -370,10 +372,17 @@ def configuration(fields=None):
     if getattr(settings,'V3_FIELD_RELATIONS',False):
         from .v3_field_relations import CONTRACT
         config['ordinary_field_contract']=CONTRACT
-        config['pricing_version']='configured-v1:'+hashlib.sha256(json.dumps(
-            {'previous':config['pricing_version'],'ordinary_field_contract':CONTRACT},
-            sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        config['pricing_version']=ordinary_pricing_version(config['pricing_version'],CONTRACT)
     return config
+
+
+def ordinary_pricing_version(previous,contract):
+    """The pricing version of an ordinary field-relations quote: its price without the contract (`previous`: rates,
+    model and request profile) bound to the contract's identity. The campaign runner's amendment check
+    (ops/provider_campaign.contract_pricing_version) must compute exactly this, and its tests assert that it does."""
+    return 'configured-v1:'+hashlib.sha256(json.dumps(
+        {'previous':previous,'ordinary_field_contract':contract},
+        sort_keys=True,separators=(',',':')).encode()).hexdigest()
 
 
 def narrative_contract(fields,config):

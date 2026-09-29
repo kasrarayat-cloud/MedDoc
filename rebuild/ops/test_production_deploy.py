@@ -973,13 +973,19 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # Any semantic module change fails until its dependency/price proof is reviewed.
 # The MONEY-1/MONEY-2 addendum (ordinary-cost-scanner-20260928.md) reviews the
 # batch_jobs delta: billing classification in finish/stop/run_one's handler only.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': '9173e760118b7346d83032f6ccad5cc48518ef6be2ee0e9e4fb1fd5a86682ff5', 'core/batch_jobs.py': '17623922c4281d303374aef30d2de0898d4816cae602b6fe055cf582e636ad58'}
+# The relations-contract-v2 addendum (fix/v1-relations-contract): parse_part reads an ordinary part through
+# v3_field_relations.parse (the keyed answer); the request, its price and every other path are unchanged.
+BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114830bae5f58c4561746694987fdd88cdd381c0', 'core/batch_jobs.py': '17623922c4281d303374aef30d2de0898d4816cae602b6fe055cf582e636ad58'}
 
 # Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
 # quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
 # independent exact-wire/price/reservation witness and negative controls. The
-# 17f0aefe addendum reviews source-reader and disposition-denial-only deltas.
-ORDINARY_PRICED_SHA256 = '97d38fede19ea9b169f2625962fd8bd4b958b3f8b32231d1b4121611952b6309'
+# 17f0aefe addendum reviews source-reader and disposition-denial-only deltas. The relations-contract-v2 addendum
+# (fix/v1-relations-contract; was 97d38fed…): CONTRACT/SALT v2, the per-request keyed schema (response_schema, sent
+# through the same anthropic_request and refused unless it reaches the wire unchanged), the keyed response_bound, the
+# strict parse, and one refusal of a unit-less source; the priced wire is still the one compile_request builds and
+# maximum_cost measures, byte for byte.
+ORDINARY_PRICED_SHA256 = 'ad7b29dd0812d7f75e437e117cddbd16a3d7cbb0c9248b319db290663b273dfc'
 
 
 def ordinary_module_proof(where):

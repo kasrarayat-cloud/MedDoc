@@ -10,7 +10,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from core import generation as g, generation_batch as b, batch_jobs as jobs
 from core.models import Reservation, Usage
 from .test_generation_batch import SETTINGS, BatchFixture, manifest, sample
-from .test_v3_field_relations import relation_body
+from .test_v3_field_relations import relation_wire
 from .test_v3_field_relations_workflow import sdk_response
 
 ORDINARY = dict(SETTINGS, V3_FIELD_RELATIONS=True)
@@ -19,8 +19,7 @@ NOTE = 'The patient reports persistent aching discomfort.'
 
 def reply(plan, ordinal, *, picks=None):
     ids = plan['parts'][ordinal - 1]['field_ids']
-    body = relation_body(plan['notes'], plan['fields'], picks or {plan['asked'][0]['key']: [NOTE]})
-    body['fields'] = [f for f in body['fields'] if f['key'] in ids]
+    body = relation_wire(plan['notes'], plan['fields'], picks or {plan['asked'][0]['key']: [NOTE]}, keys=set(ids))
     return {'model': g.SONNET_5, 'stop_reason': 'end_turn',
             'content': [{'type': 'text', 'text': json.dumps(body)}]}
 
@@ -79,10 +78,19 @@ class OrdinaryBatchContract(SimpleTestCase):
         self.assertEqual(answers[fields[-1]['key']]['status'], 'conflict')
         changed = copy.deepcopy(plan); changed['units'][0]['quote'] = 'The patient is well.'
         with self.assertRaisesMessage(ValidationError, 'differs'): b.request(changed, 1)
-        raw = reply(plan, 1); body = json.loads(raw['content'][0]['text']); body['fields'][0]['context'] = []
+        raw = reply(plan, 1); body = json.loads(raw['content'][0]['text'])
+        first = next(iter(body['fields'].values())); first['context'].pop(next(iter(first['context'])))
         raw['content'][0]['text'] = json.dumps(body)
         with self.assertRaises(ValidationError):
             b.assemble(plan, [raw] + [reply(plan, n) for n in range(2, len(plan['parts']) + 1)])
+        # (the v1 list shape, and an answer keyed for another part's fields, are refused too)
+        v1 = reply(plan, 1); keyed_body = json.loads(v1['content'][0]['text'])
+        v1['content'][0]['text'] = json.dumps({'fields': [{'key': k, **v, 'option_ids': [],
+            'context': list(v['context'].values())} for k, v in keyed_body['fields'].items()]})
+        foreign = reply(plan, 2)
+        for raw in (v1, foreign):
+            with self.assertRaises(ValidationError):
+                b.assemble(plan, [raw] + [reply(plan, n) for n in range(2, len(plan['parts']) + 1)])
 
 
 @override_settings(**ORDINARY)

@@ -54,6 +54,19 @@ class NativeSchemaCompatibility(SimpleTestCase):
             with self.subTest(schema=schema.__module__ + '.' + schema.__name__):
                 self.assertEqual(unsupported(self.wire(g.SONNET_5, schema)), [])
 
+    def test_the_per_request_ordinary_schema_reaches_the_sdk_body_unchanged(self):
+        # (the keyed relations answer: a plain dictionary built per request; required keys and closed objects only)
+        from core import v3_field_relations as r
+        from .test_v3_ordinary_notes import field
+        fields = [field('smoking', 'Smoker', 'choice', ['Yes', 'No']), field('other', 'Other:')]
+        for count in (1, 2, 40):
+            with self.subTest(units=count):
+                schema = r.response_schema(fields, [{'id': i} for i in range(1, count + 1)])
+                sent = self.wire(g.SONNET_5, schema)
+                self.assertEqual(sent, schema)
+                self.assertEqual(unsupported(sent), [])
+                self.assertNotIn('description', json.dumps(sent))
+
     def test_prior_model_request_schema_remains_exact(self):
         self.assertEqual(self.wire('claude-sonnet-4-6', mapping_assistance.Proposal),
                          mapping_assistance.Proposal.model_json_schema())

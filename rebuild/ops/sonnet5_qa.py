@@ -23,12 +23,15 @@ One model_check attempt, in the request process (a fresh process with the scrubb
 
 Commands (from the candidate checkout's rebuild/):
   plan                     the fixed case, its hashes, the declared price and its maximum cost; no database, no request
-  plan --stage mapping|ordinary_notes
-                           the stage's fixed order, each send's maximum and bound, the stage worst case against the
+  plan --stage mapping|ordinary_notes [--amendment <path>]
+                           the sends the stage would make (its fixed order, or after a failure only the sends that
+                           failure did not make), each send's maximum and bound, the stage worst case against the
                            remaining stage and total limits (the ledger read without its lock); no credential, network
                            or database
-  run --stage model_check|mapping|ordinary_notes
-                           the stage (refused unless the declaration, credential and ledger all allow it)
+  run --stage model_check|mapping|ordinary_notes [--amendment <path>]
+                           the stage (refused unless the declaration, credential and ledger all allow it); --amendment
+                           (ordinary_notes only) names a committed contract-identity amendment
+                           (provider_campaign.declared_amendment)
   status                   the ledger against every declared limit; read-only
   recover                  records any attempt left without an outcome as interrupted_unknown and fails its stage
   reopen --stage <id> --diagnosis <path>
@@ -1060,6 +1063,10 @@ def outer_run(args):
     identity = pc.git_identity(REBUILD)
     require(identity['clean'], 'The runner checkout must be a clean commit.')
     declaration = pc.declared(DECLARATION)
+    amendment = getattr(args, 'amendment', None)
+    if amendment is not None:
+        require(args.stage == 'ordinary_notes', 'An amendment applies to the ordinary_notes stage only.')
+        amendment = str(pc.declared_amendment(amendment, declaration).path)
     root = pc.private_directory(LIVE_ROOT)
     for name in ('ledger', 'evidence', 'qa-state', 'access', 'home', 'tmp'):
         pc.private_directory(root / name)
@@ -1068,6 +1075,8 @@ def outer_run(args):
     require(password and '\n' not in password, 'The QA database password file is not one line.')
     context = {'root': str(root), 'declaration': str(DECLARATION), 'stage': args.stage,
                'runner_commit': identity['commit']}
+    if amendment is not None:
+        context['amendment'] = amendment
     env = request_environment(key, declaration, root, password, context, flags)
     ensure_database(password)
     os.chdir(REBUILD)
@@ -1092,7 +1101,11 @@ def inner():
     root = Path(context['root'])
     stage = context['stage']
     declaration = pc.declared(context['declaration'])       # (re-verified by the process that spends)
-    campaign = pc.Campaign(declaration, root, watched_files=WATCHED_FILES)
+    amendment = context.get('amendment')
+    if amendment is not None:
+        require(stage == 'ordinary_notes', 'An amendment applies to the ordinary_notes stage only.')
+        amendment = pc.declared_amendment(amendment, declaration)   # (re-verified by the process that spends)
+    campaign = pc.Campaign(declaration, root, watched_files=WATCHED_FILES, amendment=amendment)
     campaign.ledger.acquire()
     pc.scrubbed_now()
     sys.path.insert(0, str(REBUILD))
@@ -1234,11 +1247,14 @@ def main(argv=None):
         parser.add_argument('command', choices=['plan', 'run', 'status', 'recover', 'reopen'])
         parser.add_argument('--stage')
         parser.add_argument('--diagnosis')
+        parser.add_argument('--amendment')
         args = parser.parse_args(argv)
+        require(args.amendment is None or args.command in ('plan', 'run'), 'Only plan and run take --amendment.')
         if args.command == 'plan':
             if args.stage in (None, STAGE):
+                require(args.amendment is None, 'An amendment applies to the ordinary_notes stage only.')
                 return plan()
-            return stages_module().plan(args.stage)
+            return stages_module().plan(args.stage, amendment_path=args.amendment)
         if args.command == 'status':
             return status()
         if args.command == 'recover':
