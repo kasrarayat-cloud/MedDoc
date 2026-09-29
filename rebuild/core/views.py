@@ -250,11 +250,13 @@ def login_view(request):
     next_url=request.POST.get('next',request.GET.get('next',''))
     if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(next_url,allowed_hosts=set()):next_url=''
     if request.method=='POST' and form.is_valid():
-        email=form.cleaned_data['email'].lower()
-        if not rate_limit('login-ip:'+client_address(request),limit=40) or not rate_limit('login-email:'+email):
+        email=account_lookup_email(form.cleaned_data['email'])
+        # The account this address reaches (forms.accounts_at), and the limit keyed on it: one bucket per account, whatever
+        # the spelling that reached it.
+        found=next(iter(accounts_at(form.cleaned_data['email'])),None)
+        if not rate_limit('login-ip:'+client_address(request),limit=40) or not rate_limit('login-email:'+account_limit_key(found,email)):
             form.add_error(None,'Too many sign-in attempts. Try again later.')
         else:
-            found=User.objects.filter(email__iexact=email).first()
             user=authenticate(request,username=found.username if found else email,password=form.cleaned_data['password'])
             device=None
             enrol=False

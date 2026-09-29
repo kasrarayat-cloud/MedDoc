@@ -10,8 +10,8 @@ ASCII character class; every other non-ASCII local part (ß, fullwidth letters) 
 
 The rule (core.forms.account_email): an account address is ASCII, stripped and lowercased — the one set on which every
 comparison above agrees. Nothing is folded or rewritten into a different address, because the stored address is where
-the account's mail goes. An internationalized domain is entered in its ASCII ("xn--") form. And an address that the
-lookup rule already matches to an account (for example a legacy 'ſam@…' row) is refused for a new account.
+the account's mail goes. An internationalized domain is stored in its ASCII ("xn--") form (test_account_email_idn). And an
+address that the lookup rule already matches to an account (for example a legacy 'ſam@…' row) is refused for a new account.
 
 RED on 61c5cc8f: every door below created the second account.
 
@@ -52,8 +52,7 @@ ORDINARY = 'sam@synthetic.invalid'
 #: Twins of ORDINARY that PostgreSQL's UPPER() (the iexact lookup) equates with it and lower() (the unique index) does not.
 LONG_S = 'ſam@synthetic.invalid'
 NOT_ASCII = ('ſam@synthetic.invalid', 'ıan@synthetic.invalid', 'İan@synthetic.invalid',
-             '\u212aate@synthetic.invalid',  # the Kelvin sign
-             'sam@bücher.example')
+             '\u212aate@synthetic.invalid')  # the Kelvin sign; an IDN domain is accepted (test_account_email_idn)
 ASCII_REFUSAL = 'Enter the email address in ASCII characters'
 #: RR2-ACC-1: the username column, which holds the address, is 150 characters.
 TOO_LONG = 'at most 150 characters'
