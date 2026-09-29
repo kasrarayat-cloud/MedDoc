@@ -181,7 +181,13 @@ class FreezeEnforcedTests(unittest.TestCase):
         candidate = json.loads(real.read_text())['provenance']['candidate']
         head = subprocess.run(['git', '-C', str(REPOSITORY), 'rev-parse', 'HEAD'], capture_output=True, text=True)
         self.assertEqual(candidate['head'], head.stdout.strip())
-        self.assertIs(candidate['rebuild_equals_candidate'], True)
+        # The grader records whether this checkout still runs the FROZEN candidate; it must record the truth, whatever
+        # it is. On the campaign branch it is True; on a later release candidate that integrates other repairs it is
+        # False, and the provenance must say so rather than claim the frozen code ran.
+        same = subprocess.run(['git', '-C', str(REPOSITORY), 'diff', '--quiet', candidate['commit'], '--', 'rebuild',
+                               ':(exclude)rebuild/ops'], capture_output=True)
+        self.assertIn(same.returncode, (0, 1))
+        self.assertIs(candidate['rebuild_equals_candidate'], same.returncode == 0)
 
     def test_grade_refuses_an_altered_map_and_writes_nothing(self):
         # (the recheck's positive control: f5.C2 changed from must_refuse to not_an_answer graded do-nothing RIGHT)
