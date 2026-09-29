@@ -35,7 +35,7 @@ account_lookup_email = getattr(account_forms, 'account_lookup_email', lambda val
 U = 'sam@bücher.example'
 A = 'sam@xn--bcher-kva.example'
 #: Every one names A's domain under UTS46: upper case, fullwidth letters, NFD (u + U+0308), a soft hyphen, the A-label.
-SPELLINGS = ('sam@BÜCHER.EXAMPLE', 'sam@ｂüｃｈｅｒ.example', 'sam@bücher.example', 'sam@b­ücher.example',
+SPELLINGS = ('sam@BÜCHER.EXAMPLE', 'sam@ｂüｃｈｅｒ.example', 'sam@bu\u0308cher.example', 'sam@b\u00adücher.example',
              'SAM@XN--BCHER-KVA.example', 'Sam@xn--bcher-kva.EXAMPLE', U, A)
 ASCII_REFUSAL = 'Enter the email address in ASCII characters'
 TOO_LONG = 'at most 150 characters'
@@ -47,9 +47,9 @@ INVALID_DOMAINS = {
     'invalid Punycode': 'xn--zz.example',
     'non-canonical (fake) A-label': 'xn---bbk.example',
     'A-label of a disallowed code point': 'xn--ls8h.example',
-    'ZWNJ between Latin letters (CONTEXTJ)': 'ab‌cd.example',
-    'bidi rule': 'aا.example',
-    'leading combining mark': '́abc.example',
+    'ZWNJ between Latin letters (CONTEXTJ)': 'ab\u200ccd.example',
+    'bidi rule': 'a\u0627.example',
+    'leading combining mark': '\u0301abc.example',
     'disallowed symbol': '♥.example',
     'label over 63 octets once converted': 'ü' * 60 + '.example',
     'empty label from ideographic full stops': 'bücher。。example.org',
@@ -127,13 +127,13 @@ class IdnDomainReachesOneAccount(IdnFormsMixin, AccountDoors):
     def test_the_per_address_sign_in_limit_is_shared_by_every_spelling(self):
         """Without one key, each spelling is a fresh bucket of 8 guesses against the same account."""
         self.verified()
-        wrong = ('sam@bücher.example', 'sam@BÜCHER.EXAMPLE', 'sam@ｂüｃｈｅｒ.example', 'sam@bücher.example',
-                 'sam@b­ücher.example', 'sam@b­­ücher.example', 'sam@b­­­ücher.example',
+        wrong = ('sam@bücher.example', 'sam@BÜCHER.EXAMPLE', 'sam@ｂüｃｈｅｒ.example', 'sam@bu\u0308cher.example',
+                 'sam@b\u00adücher.example', 'sam@b\u00ad\u00adücher.example', 'sam@b\u00ad\u00ad\u00adücher.example',
                  'SAM@XN--BCHER-KVA.example')
         for spelling in wrong:
             self.assertContains(Client().post('/login/', {'email': spelling, 'password': 'not-the-password-1'}),
                                 'Sign-in failed', status_code=200)
-        response = Client().post('/login/', {'email': 'sam@b­­­­ücher.example', 'password': PASSWORD})
+        response = Client().post('/login/', {'email': 'sam@b\u00ad\u00ad\u00ad\u00adücher.example', 'password': PASSWORD})
         self.assertContains(response, 'Too many sign-in attempts', status_code=200)
 
     def test_recovery_with_either_form_mails_the_stored_address(self):
@@ -155,7 +155,7 @@ class IdnDomainReachesOneAccount(IdnFormsMixin, AccountDoors):
         """Of the rule, of the lookup key, AND of the email field: the prefilled invitation address, sign-in by the stored
         address and bootstrap_first_admin's canonical == declared check all depend on it."""
         field = django_forms.EmailField()
-        for typed in SPELLINGS + ('a@faß.de', 'a@βόλος.gr', 'a@ශ්‍රී.example', 'a@ıbm.example', 'a@İbm.example',
+        for typed in SPELLINGS + ('a@faß.de', 'a@βόλος.gr', 'a@ශ්\u200dරී.example', 'a@ıbm.example', 'a@İbm.example',
                                   'a@ab--cd.xn--bcher-kva.example', 'a@пример.рф', 'a@例え.テスト'):
             with self.subTest(typed=typed):
                 stored = account_email(typed)
@@ -187,7 +187,7 @@ class IdnDomainReachesOneAccount(IdnFormsMixin, AccountDoors):
 
 class IdnDomainRefusals(IdnFormsMixin, AccountDoors):
     def test_a_non_ascii_local_part_is_still_refused_at_every_form(self):
-        for email in ('ſam@bücher.example', 'ıan@xn--bcher-kva.example', 'ſam@synthetic.invalid', 'Kate@bücher.example'):
+        for email in ('ſam@bücher.example', 'ıan@xn--bcher-kva.example', 'ſam@synthetic.invalid', '\u212aate@bücher.example'):
             for form in self.every_form(email):
                 with self.subTest(email=email, form=type(form).__name__):
                     self.assertFalse(form.is_valid())
@@ -210,7 +210,7 @@ class IdnDomainRefusals(IdnFormsMixin, AccountDoors):
     @override_settings(QUILLMD_REGISTRATION='open')
     def test_fullwidth_spellings_are_the_ascii_account_not_a_new_one(self):
         self.assertEqual(Client().post('/register/', registration('sam@example.org')).status_code, 302)
-        for spelling in ('sam@ｅｘａｍｐｌｅ.org', 'sam@exam­ple.org', 'sam@EXAMPLE.ORG'):
+        for spelling in ('sam@ｅｘａｍｐｌｅ.org', 'sam@exam\u00adple.org', 'sam@EXAMPLE.ORG'):
             with self.subTest(spelling=spelling):
                 self.assertContains(Client().post('/register/', registration(spelling)), EXISTS, status_code=200)
         self.assertEqual(self.accounts('sam@example.org'), 1)
