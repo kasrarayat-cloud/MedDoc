@@ -110,3 +110,43 @@ thirteen defects, and four of its sentences were wrong in a way that matters:
 What this entry teaches is unchanged: the answer to *may I destroy this?* is
 fixed when the file is made. The correction is that each check written to
 enforce it was a claim until something tried to break it.
+
+## ⚠️ CORRECTED AGAIN 2026-09-29 — ROUND 2 ON THE REPAIR: FIVE LOWS, AND A CAPABILITY LOSS NOBODY HAD WRITTEN DOWN
+
+The correction above is kept as written. A second refutation pass, over the
+repair itself, confirmed five more defects. All five refused too much or
+counted too early; none let a file be destroyed. Each is repaired, with a test
+that was red on the repair first:
+
+- **"Twelve visible characters" meant twelve ASCII characters.** A declaration
+  in Cyrillic, Persian or Chinese counted zero and every door refused it. A
+  visible character is now a letter, number, punctuation mark or symbol in any
+  script. Spaces of every kind, controls, zero-width and format characters, and
+  bytes that are not UTF-8 still count zero.
+- **The pre-push hook's typecheck skip kept its own length test.** It was a
+  second copy of the rule, so the repair never reached it, and twelve spaces
+  skipped the typecheck with a blank reason. It now uses the shared check,
+  before `gh` is consulted.
+- **`reap … | tail` in the file's directory refused every file.** `tail` is the
+  caller's own process, but it is the shell's child, not an ancestor, so the
+  exemption for the caller's working directory missed it. A pipeline member
+  now counts as the caller's own for that one check. It qualifies by being in
+  the reaper's session and joined to its stdio by a pipe made in that session.
+- **The recorder counted a call toward the sweep bound, then refused the whole
+  call** (a ledger that was not 0600, a missing key, an unbound line). Sixteen
+  paths refused this way locked the ledger for five minutes. The checks that
+  refuse a whole call now run first.
+- **The recorder took files the reaper will never take**: `.git/HEAD`, pack
+  files, tracked files. It now refuses them at record time, with the reaper's
+  reason.
+
+⚠️ **A CAPABILITY LOSS, HELD FOR THE OWNER (class b).** Before the first repair,
+`reap-session-scratch.sh` could shred a scratch clone's `.git` metadata.
+`docs/rebuild/v1/sonnet5-campaign/diagnostics/RECHECK.md` records "22 git
+metadata files plus HEAD" shredded that way, with exit 0. Since the repair,
+**no door does**. Both refuse any path with a `.git` component, because a local
+clone hard-links `.git/objects` to its source, and shredding the clone's copy
+overwrote the source in place. So every close-out now leaves a scratch clone's
+`.git` on disk. Nothing here decides whether that is accepted, or whether a
+door that can prove a clone's objects are its own is wanted. It is written
+here so the next close-out that finds a `.git` left behind finds the reason too.

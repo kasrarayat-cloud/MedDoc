@@ -37,8 +37,9 @@
 #     column, `ls -l` output, or a path that reaches nothing refuses the run;
 #   * not inside a .git directory or a bare repository, not tracked by git, and
 #     not where git cannot answer (any exit but 0/1 is CANNOT TELL);
-#   * not open or mapped by a live process, and no live process except this
-#     reaper's own caller chain works in its directory (/proc/*/fd, maps, cwd);
+#   * not open or mapped by a live process, and no live process except the
+#     caller's own works in its directory (/proc/*/fd, maps, cwd) — its caller
+#     chain and its pipeline (`… | tail`: same session, joined by a pipe made there);
 #   * after those scans, still one link, same size/mtime/ctime, and the path
 #     walked again from / still reaches it; its directory is writable.
 # It overwrites through the VERIFIED inode (a read-only file of yours is made

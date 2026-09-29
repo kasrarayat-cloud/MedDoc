@@ -6,6 +6,8 @@ scripts/lib/inflight.sh (which also serves the pre-push hook, merge-pr.sh and pu
 files other agents owned; a later `find … | xargs -0 -n 200 …` shredded 6,537, the cleanup's own logs included.
 These tests prove every refusal that stops that with a concrete input, and a positive control for each door.
 The refutation round on df80fa58 (F1-F8 and the lows) is covered class by class below; each test names its finding.
+Round 2, on 173ee3f2 (R2-1 … R2-5): the pre-push typecheck skip, the caller's own pipeline, declarations in any
+script, the recorder refusing what the reaper refuses on git grounds, and a whole-call refusal spending the bound.
 
 Every file touched lives in a private tree this test creates under /tmp/claude-<euid>/ (derived exactly as the
 scripts derive it — the effective uid, nothing else) or in a private state directory OUTSIDE that sandbox. No
@@ -194,6 +196,28 @@ class ScratchTree(unittest.TestCase):
         finally:
             os.close(fd)
         return record
+
+    def mint_key(self, ledger=None):
+        """Give an EMPTY ledger its key, as the recorder's first record does, so `forge` can sign lines for paths the
+        recorder itself now refuses (lines a recorder at 173ee3f2 or earlier signed for them). No-op when it has one."""
+        ledger = Path(ledger or self.ledger)
+        key = Path(str(ledger) + '.key')
+        if key.exists():
+            return
+        self.assertEqual(self.ledger_records(ledger), [], 'a key is only ever minted for an empty ledger')
+        os.close(os.open(ledger, os.O_WRONLY | os.O_CREAT, 0o600))
+        fd = os.open(key, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            os.write(fd, os.urandom(32).hex().encode('ascii') + b'\n')
+        finally:
+            os.close(fd)
+
+    def window_counts(self, ledger=None):
+        """The recorder's sweep window for a ledger: the undeclared path counts it holds (empty when absent)."""
+        window = Path(str(ledger or self.ledger) + '.sweep-window')
+        if not window.exists():
+            return []
+        return [int(line.split()[1]) for line in window.read_text().splitlines() if line.split()[2] == 'u']
 
     def fake(self, name, body):
         """A stand-in executable first on PATH for every door this test runs."""
@@ -510,8 +534,13 @@ class RecordedReapRefusals(ScratchTree):
         repo.mkdir()
         git('init', '-q', repo)
         f = self.make('repo/fixture.docx.txt', b'blank fixture')
-        git('-C', repo, 'add', f.name)
+        # Recorded while untracked, tracked afterwards: since R2-4 the recorder refuses a tracked file outright, so
+        # the reaper's own refusal is reached only by a file that became tracked after it was recorded.
         self.assertRecorded(self.record(f), f)
+        git('-C', repo, 'add', f.name)
+        result = self.record(f)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn('TRACKED by git', result.stdout)
         result = self.reap()
         self.assertEqual(result.returncode, 1)
         self.assertIn('TRACKED by git', result.stdout)
@@ -810,6 +839,43 @@ class F2TheBoundHoldsWhateverDrivesTheCalls(ScratchTree):
             time.sleep(0.1)
         self.assertEqual(len(done.read_text().split()), 3, 'all three detached calls finished')
         self.assertLessEqual(len(self.shred_calls()), 16)
+
+    def test_a_call_refused_as_a_whole_spends_nothing_from_the_bound(self):
+        """R2-5: the recorder counted a call's paths into the window BEFORE the checks that refuse the whole call
+        (a ledger that is not private, a missing key, an unbound line). 16 paths refused that way used the whole
+        bound, and the next one-path record was refused as a sweep for five minutes."""
+        files = self.files(16, prefix='r25')
+
+        def refused_whole(ledger, why):
+            result = self.record(*files, ledger=ledger)
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn(why, result.stderr)
+            self.assertEqual(self.window_counts(ledger), [], 'a call refused as a whole spends none of the bound')
+
+        # 1. A ledger that is not private.
+        ledger = self.state / 'mode.ledger'
+        os.close(os.open(ledger, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+        ledger.chmod(0o644)
+        refused_whole(ledger, 'must be private (0600)')
+        ledger.chmod(0o600)
+        self.assertRecorded(self.record(files[0], ledger=ledger), files[0], ledger=ledger)
+        # 2. A ledger whose records have lost their key.
+        ledger = self.state / 'keyless.ledger'
+        self.assertRecorded(self.record(files[0], ledger=ledger), files[0], ledger=ledger)
+        key, aside = Path(str(ledger) + '.key'), self.state / 'keyless.key-aside'
+        os.rename(key, aside)
+        refused_whole_count = self.window_counts(ledger)
+        result = self.record(*files, ledger=ledger)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn('key', result.stderr)
+        self.assertEqual(self.window_counts(ledger), refused_whole_count)
+        os.rename(aside, key)
+        self.assertRecorded(self.record(*files[1:], ledger=ledger), *files[1:], ledger=ledger)  # 1 + 15 = the bound
+        # 3. A ledger holding an unbound line.
+        ledger = self.state / 'unbound.ledger'
+        self.mint_key(ledger)
+        self.forge(files[0], sign=False, ledger=ledger)
+        refused_whole(ledger, 'not bound to the recorder')
 
     def test_a_window_state_inside_the_sandbox_is_refused(self):
         result = self.session_reap(self.tree / 'absent', env=self.env(XDG_STATE_HOME=self.tree / 'xdg'))
@@ -1144,16 +1210,23 @@ class F6GitCheckFailsClosed(ScratchTree):
         self.addCleanup(index.chmod, 0o644)
 
     def test_an_unreadable_index_is_cannot_tell_not_untracked(self):
-        self.assertRecorded(self.record(self.tracked), self.tracked)
+        # Recorded while untracked, then added: the recorder refuses a tracked file outright since R2-4.
+        later = self.make('repo6/later.txt', b'tracked later')
+        self.assertRecorded(self.record(later), later)
+        git('-C', self.repo, 'add', 'later.txt')
         self.unreadable_index()
         result = self.reap(dry_run=True)
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn('CANNOT TELL', result.stdout)
-        self.assertKeptIntact(self.tracked, hashlib.sha256(b'tracked').hexdigest())
+        self.assertKeptIntact(later, hashlib.sha256(b'tracked later').hexdigest())
 
     def test_files_inside_a_git_directory_are_refused(self):
+        """SIMULATED LEDGER LINES: the recorder refuses these paths since R2-4, so each line is one a recorder at
+        173ee3f2 or earlier signed (it recorded all three), signed here with the ledger's own key."""
         head, bare_head = self.repo / '.git' / 'HEAD', self.tree / 'bare.git' / 'HEAD'
-        self.assertRecorded(self.record(head, bare_head, self.shaped), head, bare_head, self.shaped)
+        self.mint_key()
+        for path in (head, bare_head, self.shaped):
+            self.forge(path)
         result = self.reap(dry_run=True)
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertNotIn('would shred', result.stdout)
@@ -1184,7 +1257,12 @@ class F6GitCheckFailsClosed(ScratchTree):
         git('init', '-q', '--separate-git-dir', self.tree / 'sep6.git', wt)
         gitfile = wt / '.git'
         self.assertTrue(gitfile.is_file() and not gitfile.is_symlink())
-        self.assertRecorded(self.record(gitfile), gitfile)
+        result = self.record(gitfile)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn('INSIDE A .git DIRECTORY', result.stdout)
+        self.assertEqual(self.ledger_records(), [])
+        self.mint_key()
+        self.forge(gitfile)  # SIMULATED: the line a recorder at 173ee3f2 or earlier signed for it
         result = self.reap(dry_run=True)
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn('INSIDE A .git DIRECTORY', result.stdout)
@@ -1195,6 +1273,48 @@ class F6GitCheckFailsClosed(ScratchTree):
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn('INSIDE A .git DIRECTORY', result.stdout)
             self.assertEqual(self.shred_calls(), [])
+
+    def test_the_recorder_refuses_what_the_reaper_refuses_on_git_grounds(self):
+        """R2-4: the recorder took `.git/HEAD`, `.git/config`, a pack file and a tracked file; the reaper refuses
+        every one of them, forever. Each is now refused when it is recorded, with the reaper's own reason."""
+        wt = self.tree / 'wt6r'
+        git('init', '-q', '--separate-git-dir', self.tree / 'sep6r.git', wt)
+        clone = self.tree / 'handmade-clone'  # the verifier's reconstructed shape: a .git git does not recognise
+        for name, data in (('.git/HEAD', b'ref: refs/heads/main\n'), ('.git/config', b'[core]\n'),
+                           ('.git/objects/pack/pack-0.pack', b'PACK'), ('work.txt', b'work')):
+            self.make(f'handmade-clone/{name}', data)
+        cases = {
+            self.repo / '.git' / 'HEAD': 'INSIDE A .git DIRECTORY',
+            self.repo / '.git' / 'config': 'INSIDE A .git DIRECTORY',
+            wt / '.git': 'INSIDE A .git DIRECTORY',
+            clone / '.git' / 'HEAD': 'INSIDE A .git DIRECTORY',
+            clone / '.git' / 'objects' / 'pack' / 'pack-0.pack': 'INSIDE A .git DIRECTORY',
+            self.tree / 'bare.git' / 'HEAD': 'INSIDE A GIT DIRECTORY',
+            self.tracked: 'TRACKED by git',
+            self.shaped: 'CANNOT TELL — a repository marker',
+            clone / 'work.txt': 'CANNOT TELL — a repository marker',
+        }
+        for path, reason in cases.items():
+            with self.subTest(path=str(path)):
+                self.assertTrue(path.is_file(), path)
+                result = self.record(path)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(f'🔴 REFUSED ({reason}', result.stdout)
+                self.assertNotIn(str(path), {r['path'] for r in self.ledger_records()})
+        # The reaper gives the same answer for each (the same shared check), on lines signed as 173ee3f2 signed them.
+        self.mint_key()
+        for path in cases:
+            self.forge(path)
+        result = self.reap(dry_run=True)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertNotIn('would shred', result.stdout)
+        for path, reason in cases.items():
+            self.assertIn(f'🔴 REFUSED ({reason}', next(line for line in result.stdout.splitlines()
+                                                          if line.endswith(f': {path}')))
+        untracked = self.make('repo6/untracked.txt', b'scratch in a work tree')
+        self.assertRecorded(self.record(untracked), untracked)  # control: untracked scratch is still recorded
+        retained = self.record(self.repo / '.git' / 'HEAD', retain=True)
+        self.assertEqual(retained.returncode, 0, 'control: a retain record only ever prevents, so it is not refused')
 
 
 # ─── F7: nothing re-checked the file between the scans and the overwrite ─────────────────────────────────────
@@ -1335,6 +1455,100 @@ class F8DeclarationsNeedTwelveVisibleCharacters(ScratchTree):
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertFalse(log.exists(), 'git was never run')
 
+    # ── R2-3: 173ee3f2 counted only printable ASCII, so prose in any other script counted zero ──
+    def test_visible_characters_are_counted_in_every_script(self):
+        accepted = {
+            'Cyrillic prose': 'Объединяю два запроса одной партией',
+            'Persian prose': 'ادغام دو درخواست به صورت یک دسته',
+            'Chinese prose': '将两个拉取请求作为一个批次合并',
+            'mixed, six ASCII of thirteen': 'Слияние PR #618',
+            # The verifier's mixed case, with the second number written without its hash sign (this repository's
+            # pre-commit hook reads a bare hash-number in source as a ruling citation): ten ASCII, one arrow.
+            'mixed, ten ASCII and two symbols': 'PR #618 → v619 ✓',
+        }
+        refused = {
+            'mixed, eleven in all': ('PR #618 → v619', '11 visible characters'),
+            'ideographic spaces': ('　' * 12, '0 visible characters'),
+            'zero-width spaces': ('​' * 12, '0 visible characters'),
+            'byte-order marks': ('﻿' * 12, '0 visible characters'),
+            'line separators': (' ' * 12, '0 visible characters'),
+            'no-break spaces': (NBSP * 12, '0 visible characters'),
+            'Hangul fillers, letters that draw nothing': ('ㅤ' * 12, '0 visible characters'),
+            'braille blanks, a symbol that draws nothing': ('⠀' * 12, '0 visible characters'),
+            'combining marks with no base': ('́' * 12, '0 visible characters'),
+            'private use': ('' * 12, '0 visible characters'),
+            'bytes that are not UTF-8': (os.fsdecode(b'\xff' * 12), '0 visible characters'),
+            'eleven letters among blanks': ('　'.join('Объединяюдв'), '11 visible characters'),
+        }
+        for locale in ('C', 'C.UTF-8'):
+            for label, decl in accepted.items():
+                with self.subTest(locale=locale, accepted=label):
+                    result = run(['bash', '-c', '. "$1" && inflight_declaration_ok "$2"', 'probe', INFLIGHT, decl],
+                                 env=self.env(LC_ALL=locale))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+            for label, (decl, message) in refused.items():
+                with self.subTest(locale=locale, refused=label):
+                    result = run(['bash', '-c', '. "$1" && inflight_declaration_ok "$2"', 'probe', INFLIGHT, decl],
+                                 env=self.env(LC_ALL=locale))
+                    self.assertEqual(result.returncode, 1, label)
+                    self.assertIn(message, result.stderr)
+
+    def test_characters_that_cannot_be_counted_refuse(self):
+        """Without python3 the non-ASCII part cannot be counted: CANNOT TELL refuses. Printable ASCII is still
+        counted without it, so an English declaration never depends on python3."""
+        bindir = self.state / 'no-python'
+        bindir.mkdir()
+        for tool in ('dirname', 'tr', 'wc'):
+            os.symlink(shutil.which(tool), bindir / tool)
+        env = environment(PATH=str(bindir))
+        probe = [shutil.which('bash'), '-c', '. "$1" && inflight_declaration_ok "$2"', 'probe', INFLIGHT]
+        control = run(probe + ['merging two pull requests as one declared batch'], env=env)
+        self.assertEqual(control.returncode, 0, 'control: the library loaded and ASCII prose passes ' + control.stderr)
+        result = run(probe + ['Объединяю два запроса одной партией'], env=env)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('CANNOT TELL', result.stderr)
+
+    def test_the_pre_push_hook_accepts_a_declaration_in_another_script(self):
+        log = self.gh_stand_in()
+        result = run(['bash', PRE_PUSH, 'origin'], env=self.env(DECLARE_CANCELLATION='Объединяю два запроса одной партией'),
+                     cwd=self.state)
+        self.assertNotEqual(result.returncode, 0, 'the stand-in gh fails the positive control')
+        self.assertTrue(log.exists(), 'the declaration was accepted and the hook went on to gh (a stand-in)')
+
+
+# ─── R2-1: the pre-push typecheck skip had its own length test, and twelve blanks passed it ───────────────────
+class R2PrePushTypecheckSkipIsADeclaration(ScratchTree):
+    def gh_answering(self):
+        """A stand-in gh that answers every runs query with five runs, none in flight — the in-flight half of the
+        hook passes, so the typecheck-skip half is what decides. Each call is logged to $GH_LOG."""
+        self.fake('gh', 'printf "%s\\n" "$*" >> "$GH_LOG"\nprintf \'{"total_count":5,"workflow_runs":[]}\'')
+
+    def pre_push(self, log, **extra):
+        return run(['bash', PRE_PUSH, 'origin'], env=self.env(INFLIGHT_REPO='probe/probe', GH_LOG=log, **extra),
+                   cwd=self.state)
+
+    def test_a_blank_or_token_skip_reason_is_refused_before_gh(self):
+        self.gh_answering()
+        refused = {'twelve spaces': ' ' * 12, 'twelve tabs': '\t' * 12, 'six no-break spaces, twelve bytes': NBSP * 6,
+                   'twelve ideographic spaces': '　' * 12, 'a token': 'true', 'short': 'short'}
+        for n, (label, decl) in enumerate(refused.items()):
+            with self.subTest(refused=label):
+                log = self.state / f'gh-{n}.log'
+                result = self.pre_push(log, DECLARE_TYPECHECK_SKIP=decl)
+                self.assertEqual(result.returncode, 1, label + ': ' + result.stderr)
+                self.assertIn('(DECLARE_TYPECHECK_SKIP)', result.stderr)
+                self.assertNotIn('typecheck SKIPPED', result.stderr)
+                self.assertFalse(log.exists(), 'refused before gh was consulted, as DECLARE_CANCELLATION is')
+        log = self.state / 'gh-control.log'
+        reason = 'the marketing app is not in this push'
+        control = self.pre_push(log, DECLARE_TYPECHECK_SKIP=reason)
+        self.assertEqual(control.returncode, 0, control.stderr)
+        self.assertIn(f'pre-push: typecheck SKIPPED — {reason}', control.stderr)
+        self.assertTrue(log.exists(), 'control: the in-flight check still ran against the stand-in gh')
+        log = self.state / 'gh-control-2.log'
+        control = self.pre_push(log, DECLARE_TYPECHECK_SKIP='Маркетинговое приложение не менялось')
+        self.assertEqual(control.returncode, 0, 'a reason in another script is a reason: ' + control.stderr)
+
 
 # ─── The lows: the caller's own cwd, read-only own files, an unwritable directory, record-at-creation ─────────
 class LowsFalseRefusalsAndPartialDestruction(ScratchTree):
@@ -1352,6 +1566,73 @@ class LowsFalseRefusalsAndPartialDestruction(ScratchTree):
         control = self.reap(dry_run=True)
         self.assertEqual(control.returncode, 1, 'control: a process that is not our caller still refuses')
         self.assertIn(f'IN USE: live process {proc.pid}', control.stdout)
+
+    def kill_from(self, pidfile):
+        """Cleanup for a helper that wrote its pid (a sleep this test started): kill it if it is still there."""
+        def kill():
+            try:
+                os.kill(int(pidfile.read_text().strip()), 9)
+            except (OSError, ValueError):
+                pass
+        self.addCleanup(kill)
+
+    def test_the_other_members_of_the_callers_own_pipeline_are_not_foreign_processes(self):
+        """R2-2: the exemption covered only ANCESTORS, so `reap … | tail` in the directory refused every file
+        (`IN USE: live process … (tail)`): a pipeline's other members are the caller's shell's children, not its
+        ancestors. They are now recognised by what makes them the caller's own — they are in the reaper's session and
+        joined to its stdin/stdout/stderr by a pipe made inside that session, directly or through another member."""
+        f = self.make('pipe/out.json', b'mine')
+        self.assertRecorded(self.record(f), f)
+        reap = 'bash "$2" --dry-run -- "$3"'
+        pidfile = self.state / 'writer.pid'
+        self.kill_from(pidfile)
+        forms = {
+            'into tail, stderr joined': f'{reap} 2>&1 | tail -5; exit ${{PIPESTATUS[0]}}',
+            'into tee': f'{reap} | tee /dev/null; exit ${{PIPESTATUS[0]}}',
+            'through two stages': f'{reap} 2>&1 | cat | tail -5; exit ${{PIPESTATUS[0]}}',
+            'a brace group into tail': f'{{ {reap}; }} 2>&1 | tail -5; exit ${{PIPESTATUS[0]}}',
+            'into a process substitution': f'{reap} > >(cat); rc=$?; wait $!; exit $rc',
+            'fed by a live writer': (f'sh -c \'echo $$ > "$1"; exec sleep 60\' sh "$4" | '
+                                     f'{{ while [ ! -s "$4" ]; do sleep 0.05; done; {reap}; rc=$?; '
+                                     f'kill "$(cat "$4")"; exit $rc; }}; exit ${{PIPESTATUS[1]}}'),
+        }
+        for label, pipeline in forms.items():
+            with self.subTest(pipeline=label):
+                result = run(['bash', '-c', f'cd "$1" && {pipeline}', 'caller', f.parent, REAP, self.ledger, pidfile],
+                             env=self.env())
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn(f'would shred: {f}', result.stdout)
+        # CONTROL 1: the same command and session, working in the directory, but on no pipe of the reaper's.
+        result = run(['bash', '-c', 'cd "$1" && { (exec sleep 60 </dev/null >/dev/null 2>&1) & p=$!; }; '
+                      f'echo "background=$p" >&2; {reap} 2>&1 | tail -5; rc=${{PIPESTATUS[0]}}; kill $p; exit $rc',
+                      'caller', f.parent, REAP, self.ledger], env=self.env())
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        background = result.stderr.split('background=')[1].split()[0]
+        self.assertIn(f'IN USE: live process {background} (', result.stdout)
+        # CONTROL 2: on the reaper's own pipe, but in ANOTHER session (setsid): a pipe is not ownership on its own.
+        if shutil.which('setsid'):
+            other = self.state / 'other-session.pid'
+            self.kill_from(other)
+            result = run(['bash', '-c', f'cd "$1" && {{ while [ ! -s "$4" ]; do sleep 0.05; done; {reap}; }} 2>&1 | '
+                          '{ setsid -f sh -c \'echo $$ > "$1"; exec sleep 60\' sh "$4" >/dev/null 2>&1; tail -5; }; '
+                          'exit ${PIPESTATUS[0]}', 'caller', f.parent, REAP, self.ledger, other], env=self.env())
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn(f'IN USE: live process {other.read_text().strip()} (sleep)', result.stdout)
+
+    def test_a_pipe_handed_down_from_outside_the_session_is_not_followed(self):
+        """R2-2's guard: a harness passes its own stdout pipe to every command it starts. Here the reaper runs in a
+        fresh session whose stdout is such a pipe (made by this test, outside that session), and a sleep in the SAME
+        session, working in the directory, holds the same pipe. It is not a pipeline member, so it still refuses."""
+        if not shutil.which('setsid'):
+            self.skipTest('setsid is not installed')
+        f = self.make('handed/out.json', b'mine')
+        self.assertRecorded(self.record(f), f)
+        result = run(['setsid', '-w', 'bash', '-c', 'cd "$1" && { (exec sleep 60 </dev/null) & p=$!; }; '
+                      'echo "background=$p" >&2; bash "$2" --dry-run -- "$3"; rc=$?; kill $p; exit $rc',
+                      'caller', f.parent, REAP, self.ledger], env=self.env())
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        background = result.stderr.split('background=')[1].split()[0]
+        self.assertIn(f'IN USE: live process {background} (', result.stdout)
 
     def test_a_read_only_own_file_is_reaped(self):
         f = self.make('ro/token.txt', b'synthetic key material', mode=0o400)

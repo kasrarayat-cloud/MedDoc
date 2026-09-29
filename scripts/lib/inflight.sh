@@ -92,10 +92,36 @@ inflight_repo() {
 #
 # ⚠️ COUNTED IN VISIBLE CHARACTERS, NOT IN LENGTH (2026-09-29). The length test
 # accepted twelve spaces — a declaration that says nothing and passes as prose,
-# echoed to the log as a blank. So the count is of PRINTABLE ASCII non-space
-# characters (0x21-0x7E), taken by `tr` in the C locale so no locale can widen it:
-# spaces, tabs, newlines, no-break and zero-width spaces all count ZERO. Other
-# characters may appear, but they never make up the twelve.
+# echoed to the log as a blank.
+#
+# ⚠️ IN ANY SCRIPT, NOT ONLY ASCII (2026-09-29, refutation round 2, R2-3). The
+# first repair counted printable ASCII alone, so a declaration written in
+# Cyrillic, Persian or Chinese counted ZERO and every door refused it, and a
+# mixed one counted only its ASCII (the verifier's 14-character example of two
+# pull-request numbers and an arrow counted 10). A visible character is now a LETTER, NUMBER,
+# PUNCTUATION MARK or SYMBOL in the Unicode sense (general category L, N, P or S),
+# decoded as UTF-8 whatever the locale says. Everything else counts zero:
+# separators (spaces of every kind), controls, format characters (zero-width
+# spaces, byte-order marks, bidi controls), combining marks with nothing to
+# combine with, private-use and unassigned code points, and bytes that are not
+# UTF-8 at all. So do the few letters and symbols Unicode defines as drawing
+# nothing: the Hangul fillers U+115F, U+1160, U+3164 and U+FFA0 (letters that
+# Unicode lists as Default_Ignorable_Code_Point) and U+2800 BRAILLE PATTERN BLANK.
+# Honest limit: a letter or symbol that merely LOOKS blank in some font, and is
+# not one of these five, counts — as twelve x's do. The check stops tokens and
+# blanks; it cannot judge whether prose means anything.
+#
+# Printable ASCII (0x21-0x7E) is counted first by `tr` in the C locale, and it is
+# exactly the ASCII part of that class; only a declaration with fewer than twelve
+# of those is handed to python3's `unicodedata` for the rest. So an English
+# declaration never depends on python3, and when python3 is missing the rest is
+# CANNOT TELL, which refuses.
+_INFLIGHT_VISIBLE_PY='
+import sys, unicodedata
+DRAW_NOTHING = {0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800}
+text = sys.stdin.buffer.read().decode("utf-8", "surrogateescape")
+print(sum(1 for ch in text if unicodedata.category(ch)[0] in "LNPS" and ord(ch) not in DRAW_NOTHING))
+'
 inflight_declaration_ok() {
   local decl="${1:-}" visible
   [ -z "$decl" ] && return 0
@@ -112,9 +138,24 @@ inflight_declaration_ok() {
       echo "REFUSED — CANNOT TELL how many visible characters the declaration has." >&2
       return 1 ;;
   esac
+  if [ "$visible" -lt 12 ] && [ -n "$(printf '%s' "$decl" | LC_ALL=C tr -d '\000-\177')" ]; then
+    # Fewer than twelve in ASCII, and there is more than ASCII: count it all.
+    if ! command -v python3 >/dev/null 2>&1; then
+      echo "REFUSED — CANNOT TELL how many visible characters the declaration has: it is not all" >&2
+      echo "          ASCII, and python3 (which counts the rest) is not on PATH." >&2
+      return 1
+    fi
+    visible="$(printf '%s' "$decl" | python3 -I -S -B -c "$_INFLIGHT_VISIBLE_PY" 2>/dev/null)" || visible=""
+    case "$visible" in
+      ''|*[!0-9]*)
+        echo "REFUSED — CANNOT TELL how many visible characters the declaration has." >&2
+        return 1 ;;
+    esac
+  fi
   if [ "$visible" -lt 12 ]; then
-    echo "REFUSED — the declaration has $visible visible characters (printable ASCII, not" >&2
-    echo "          counting spaces or blanks of any kind); a declaration is prose of at least 12." >&2
+    echo "REFUSED — the declaration has $visible visible characters (letters, digits, punctuation or" >&2
+    echo "          symbols, in any script; spaces, blanks, controls and invisible characters count" >&2
+    echo "          zero); a declaration is prose of at least 12." >&2
     return 1
   fi
   return 0

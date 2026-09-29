@@ -73,6 +73,14 @@ fi
 
 DECL="${DECLARE_CANCELLATION:-}"
 inflight_declaration_ok "$DECL" || { echo "pre-push: (DECLARE_CANCELLATION)" >&2; exit 1; }
+# ⚠️ THE TYPECHECK SKIP IS A DECLARATION TOO, AND IT GOES THROUGH THE SAME CHECK,
+# HERE, BEFORE ANYTHING ELSE RUNS (2026-09-29, refutation round 2, R2-1). It had
+# its own `${#…} -lt 12` length test further down, so twelve spaces, twelve tabs or
+# six no-break spaces skipped the typecheck and logged a blank reason — the defect
+# the shared check had just been repaired for. A second copy of a rule is the copy
+# nobody repairs.
+TYPECHECK_SKIP="${DECLARE_TYPECHECK_SKIP:-}"
+inflight_declaration_ok "$TYPECHECK_SKIP" || { echo "pre-push: (DECLARE_TYPECHECK_SKIP)" >&2; exit 1; }
 inflight_require_gh       || { echo "pre-push: refusing. Declare with DECLARE_CANCELLATION=\"<reason>\"." >&2; exit 1; }
 inflight_positive_control || { echo "pre-push: refusing." >&2; exit 1; }
 
@@ -130,13 +138,10 @@ typecheck_before_push() {
 # declaration saying "I am knowingly discarding somebody's runs" would silently
 # have bought "I am knowingly pushing code that does not compile". Those are
 # different claims and a session making the first has not made the second.
-# One exemption must never buy another.
-if [ -n "${DECLARE_TYPECHECK_SKIP:-}" ]; then
-  if [ "${#DECLARE_TYPECHECK_SKIP}" -lt 12 ]; then
-    echo "🔴 pre-push REFUSED — DECLARE_TYPECHECK_SKIP must be a REASON, not a token." >&2
-    exit 1
-  fi
-  echo "pre-push: typecheck SKIPPED — ${DECLARE_TYPECHECK_SKIP}" >&2
+# One exemption must never buy another. The reason was checked at the top, by the
+# shared inflight_declaration_ok, before gh was consulted.
+if [ -n "$TYPECHECK_SKIP" ]; then
+  echo "pre-push: typecheck SKIPPED — ${TYPECHECK_SKIP}" >&2
 else
   typecheck_before_push || exit 1
 fi

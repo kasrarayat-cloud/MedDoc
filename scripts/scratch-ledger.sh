@@ -43,6 +43,10 @@
 # check reap-session-scratch.sh uses). `--retain` calls are exempt: a retain
 # record can only PREVENT destruction. Files outside the sandbox, directories,
 # symlinks (anywhere on the path), hard links, and files you do not own are refused.
+# So is anything the reaper refuses on git grounds (a .git component, a bare
+# repository, a tracked file, a repository git will not answer for), unless
+# --retain. A call refused as a whole (a ledger that is not private, a missing
+# key, an unbound line) is refused BEFORE its paths are counted toward the bound.
 # ============================================================================
 set -uo pipefail
 

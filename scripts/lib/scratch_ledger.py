@@ -53,8 +53,10 @@ The reaper refuses a recorded entry unless ALL of these hold at the moment of sh
   * not inside a .git directory or a bare repository, not tracked by git, and not under
     a repository git cannot answer for: git exiting anything but 0/1 is CANNOT TELL (F6);
   * not open or mapped by any live process readable to us, and no live process other than
-    this reaper's own caller chain has its working directory in the file's directory or
-    below (/proc/*/fd, /proc/*/maps, /proc/*/cwd), scanned immediately before that file;
+    the caller's own has its working directory in the file's directory or below
+    (/proc/*/fd, /proc/*/maps, /proc/*/cwd), scanned immediately before that file. The
+    caller's own are its caller chain and the other members of its pipeline (`reap … | tail`):
+    processes of the reaper's session joined to its stdio by a pipe made in that session;
   * RE-CHECKED AFTER THOSE SCANS (F7): the open file still has one link and the same size,
     mtime and ctime, and the path walked again from / still reaches it; and the directory
     is writable, so an overwrite is never left behind un-unlinked.
@@ -73,7 +75,14 @@ Honest limits, stated so the name does not read wider than the check:
   * the recorder cannot prove the caller created a file; it bounds how many undeclared
     records a ledger takes per window (scripts/lib/sweep-guard.sh, shared with
     reap-session-scratch.sh), so that claim is made a few deliberate files at a time
-    rather than by a tree walk.
+    rather than by a tree walk;
+  * the recorder refuses, when it is asked, what the reaper would refuse on git grounds
+    (a .git component, a bare repository, a tracked file, a repository git cannot answer
+    for) — but a directory can become a repository after a file is recorded, which only
+    the reaper sees. NEITHER DOOR REAPS A SCRATCH CLONE'S .git: that capability, which
+    reap-session-scratch.sh had before 2026-09-29, is gone (canon 123, round 2);
+  * a process that shares a pipe made in the reaper's session and is itself in that
+    session is taken as the caller's own for the working-directory check only.
 """
 import argparse
 import datetime
@@ -292,14 +301,21 @@ def comm_of(pid):
         return '?'
 
 
+def proc_stat(pid):
+    """(parent pid, session id) of a live process, read from /proc/<pid>/stat after the last ')' (the command
+    name before it may hold spaces and parentheses). Raises OSError/ValueError/IndexError when it cannot be read."""
+    with open(f'/proc/{pid}/stat', 'rb') as fh:
+        data = fh.read()
+    fields = data[data.rindex(b')') + 2:].split()
+    return int(fields[1]), int(fields[3])
+
+
 def ancestors(pid):
     """The caller chain of `pid` (its parent, grandparent, … up to but not including pid 1)."""
     chain, seen = set(), {pid}
     while len(chain) < 256:
         try:
-            with open(f'/proc/{pid}/stat', 'rb') as fh:
-                data = fh.read()
-            ppid = int(data[data.rindex(b')') + 2:].split()[1])
+            ppid = proc_stat(pid)[0]
         except (OSError, ValueError, IndexError):
             break
         if ppid <= 1 or ppid in seen:
@@ -310,10 +326,94 @@ def ancestors(pid):
     return chain
 
 
+def stdio_pipes(pid):
+    """The pipes on a process's stdin, stdout and stderr, as /proc names them ('pipe:[<inode>]')."""
+    pipes = set()
+    for n in (0, 1, 2):
+        try:
+            link = os.readlink(f'/proc/{pid}/fd/{n}')
+        except OSError:
+            continue
+        if link.startswith('pipe:['):
+            pipes.add(link)
+    return pipes
+
+
+def made_in_session(pipe, holder, session):
+    """Whether `pipe` was made inside `session`. Walking up from a process that holds it on stdio, the first
+    ancestor that does NOT hold it there is the one that made it (the shell that built the pipeline); that one must
+    be in the session. A pipe handed down from outside — a harness's own stdout or stderr passed to every command
+    it runs — is held all the way up to a process outside the session, so it is never followed."""
+    pid = holder
+    for _ in range(256):
+        try:
+            ppid = proc_stat(pid)[0]
+            if ppid <= 0:
+                return False
+            if pipe not in stdio_pipes(ppid):
+                return proc_stat(ppid)[1] == session
+        except (OSError, ValueError, IndexError):
+            return False
+        pid = ppid
+    return False
+
+
+def pipeline_members(self_pid):
+    """The other members of the caller's own pipeline: `reap … | tail`, `… 2>&1 | tee log`, `… | grep | tail`,
+    `{ reap …; } | tail`, `reap … > >(cat)`, `writer | reap …` (2026-09-29, refutation round 2, R2-2).
+
+    They are the calling shell's CHILDREN, not its ancestors, and they inherited its working directory exactly as
+    the reaper did, so an exemption for the caller chain alone refused every file whenever the caller stood in the
+    directory and piped the output. What makes them the caller's own is recognised, not their names: a member is in
+    the reaper's own SESSION and is joined to the reaper's stdin, stdout or stderr by a pipe that was MADE INSIDE
+    that session — directly, or through another member (a pipe on a member's stdio that was made in the session is
+    followed in turn). A process in another session is never a member, whatever pipe it holds (`setsid` is how a
+    process leaves), and a pipe handed down from outside the session is never followed (`made_in_session`).
+    Unreadable /proc entries make a process a non-member: the direction that refuses."""
+    try:
+        session = proc_stat(self_pid)[1]
+        names = os.listdir('/proc')
+    except (OSError, ValueError, IndexError):
+        return set()
+    frontier = {p for p in stdio_pipes(self_pid) if made_in_session(p, self_pid, session)}
+    if not frontier:
+        return set()
+    candidates = {}
+    for name in names:
+        if not name.isdigit() or int(name) == self_pid:
+            continue
+        pid = int(name)
+        try:
+            if proc_stat(pid)[1] != session:
+                continue
+        except (OSError, ValueError, IndexError):
+            continue
+        pipes = stdio_pipes(pid)
+        if pipes:
+            candidates[pid] = pipes
+    members, grew = set(), True
+    while grew:
+        grew = False
+        for pid, pipes in candidates.items():
+            if pid in members or not pipes & frontier:
+                continue
+            members.add(pid)
+            frontier |= {p for p in pipes - frontier if made_in_session(p, pid, session)}
+            grew = True
+    return members
+
+
+def caller_processes(self_pid):
+    """The processes whose working directory is the caller's own: its caller chain and its pipeline's members."""
+    return frozenset(ancestors(self_pid) | pipeline_members(self_pid))
+
+
 def process_refusal(dev, ino, parent_dir, self_pid, cwd_exempt=frozenset()):
     """Any readable live process that holds or maps the file refuses it; so does any that works inside the
-    file's directory, EXCEPT this reaper's own caller chain (`cwd_exempt`): the shell that asked for the reap
-    standing in the directory is the owner asking, not another agent working there."""
+    file's directory, EXCEPT the caller's own processes (`cwd_exempt`, from `caller_processes`: its caller chain
+    and the other members of its pipeline): the shell that asked for the reap standing in the directory, and the
+    `tail` it piped the output to, are the owner asking, not another agent working there. The exemption is from
+    the working-directory check only; a caller's process that holds or maps the file still refuses it."""
     try:
         pids = [n for n in os.listdir('/proc') if n.isdigit()]
     except OSError as e:
@@ -779,11 +879,11 @@ def cmd_record(args):
         raise StartRefused(f'--agent {args.agent!r}: an agent id is 1-128 of [A-Za-z0-9._:@/+-]')
     root = sandbox_root()
     ledger = ledger_path(args.ledger, root)
-    if not args.retain:
-        # The window lives beside the ledger, in the directory checked private here (created 0700 if absent).
-        check_private_dir(os.path.dirname(ledger), euid, create=True)
-        if not run_sweep_guard('scratch-ledger record', len(args.files), ledger + WINDOW_SUFFIX):
-            return 1
+    # ⚠️ EVERY CHECK THAT REFUSES THE WHOLE CALL RUNS BEFORE THE SWEEP GUARD COUNTS IT (2026-09-29, refutation
+    # round 2, R2-5). The guard appends this call's path count to the window as it lets the call through, and it
+    # used to run first: a call then refused as a whole — a ledger that is not 0600, a missing key, an unbound line
+    # — had already spent its paths, and 16 of them locked the ledger's next record out for five minutes. The lock
+    # order is always ledger, then window, for every recorder, so the two locks cannot deadlock.
     fd, ledger, pfd = open_private(ledger, euid, root, create=True, write=True, label='ledger', keep_dir=True)
     refused = 0
     try:
@@ -796,6 +896,11 @@ def cmd_record(args):
             records, _ = read_ledger(rfd, key, ledger)
         finally:
             os.close(rfd)
+        # The window lives beside the ledger, in the private directory open_private has just checked. Paths the
+        # call names are counted whether or not each one is then recorded: the bound is on what a call ATTEMPTS
+        # to claim, and a sweep naming paths that turn out to be refusable is still a sweep.
+        if not args.retain and not run_sweep_guard('scratch-ledger record', len(args.files), ledger + WINDOW_SUFFIX):
+            return 1
         seq = len(records)
         for given in args.files:
             path = os.path.abspath(given)
@@ -810,6 +915,14 @@ def cmd_record(args):
                     raise Refused(f'NOT YOURS: owned by uid {st.st_uid}; you are uid {euid}')
                 if st.st_nlink != 1:
                     raise Refused(f'SHARED HARD LINK: link count {st.st_nlink}')
+                if not args.retain:
+                    # ⚠️ THE REAPER'S OWN GIT REFUSALS, APPLIED WHEN THE CLAIM IS MADE (2026-09-29, refutation round
+                    # 2, R2-4). The recorder took `.git/HEAD`, `.git/config`, pack files and tracked files that the
+                    # reaper refuses on every run, so a whole-ledger close-out could never exit 0 again. The same
+                    # function answers both doors. A --retain record is not refused: it can only prevent.
+                    reason = git_refusal(path, root)
+                    if reason:
+                        raise Refused(reason + ' — the reaper refuses it on every run, so it is not recorded')
                 digest, size = sha256_fd(leaf_fd)
                 after = os.fstat(leaf_fd)
                 if size != after.st_size or after.st_mtime_ns != st.st_mtime_ns:
@@ -899,7 +1012,6 @@ class Reaper:
                 if rec['retain']:
                     self.retain_by_path.setdefault(rec['path'], ledger)
                     self.retain_by_id.setdefault((rec['dev'], rec['ino'], rec['sha256']), ledger)
-            self.lineage = ancestors(os.getpid())
             append_line(self.log_fd, {
                 'at': utc_now(), 'run': self.run, 'decision': 'RUN-START', 'ledger': ledger, 'ledger_sha256': ledger_sha,
                 'ledger_records': len(records), 'explicit_paths': list(args.paths), 'dry_run': args.dry_run,
@@ -991,8 +1103,11 @@ class Reaper:
             if digest != rec['sha256']:
                 raise Refused(f'CHANGED: content sha256 {digest[:16]} is not the recorded {rec["sha256"][:16]}'
                               + CHANGED_HINT)
+            # The caller's own processes are read afresh for each file, immediately before its scan, not once per
+            # run: a pipeline member that exited earlier in the run, and whose pid another process now holds, is not
+            # exempted. (The gap between that read and the scan is not closed; it is microseconds, not a run.)
             reason = git_refusal(path, self.root) or process_refusal(st.st_dev, st.st_ino, os.path.dirname(path),
-                                                                      os.getpid(), self.lineage)
+                                                                      os.getpid(), caller_processes(os.getpid()))
             if reason:
                 raise Refused(reason)
             reason = self.recheck(path, leaf_fd, st)
