@@ -17,6 +17,8 @@ Messages response; `network_guard` refuses every other socket. What each test pr
   · the export evidence (refutation R1): an EMPTY 200 export, an export that is not the finalized record's, and a
     failed export request each write stage_failed; every declared evidence file must be retained, non-empty and
     regular when the stage is decided, or it fails;
+  · the review FORM's answer inputs (not the notes panel, which always shows every value) must carry the draft;
+  · a retained file the leak scan cannot read is a campaign stop after a send, and a refusal before one;
   · a precondition that does not hold (pricing, database, credential) refuses before any send;
   · no code path opens a `.env` file.
 """
@@ -24,6 +26,7 @@ import dataclasses
 import io
 import json
 import os
+import re
 import shutil
 import tempfile
 import unittest
@@ -82,7 +85,7 @@ else:
     from django.test import TestCase, override_settings
 
     from ops import sonnet5_qa as sq
-    from .test_provider_campaign import NoEnvOpened
+    from .test_provider_campaign import NoEnvOpened, limits_record
 
     SONNET_5 = dict(AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL='claude-sonnet-5', AI_INPUT_RATE='2',
                     AI_OUTPUT_RATE='10', AI_CACHED_RATE='0.20', AI_THINKING='disabled', AI_EFFORT='medium',
@@ -190,6 +193,8 @@ else:
             # The ledger: the declared maximum, then the provider-reported usage at the declared rates.
             self.assertEqual(Decimal(attempt['maximum_cost']), Decimal('0.104896'))
             self.assertEqual(attempt['pricing_version'], self.declaration.pricing_version('model_check'))
+            # (item 8: every new attempt records the limits in force — the total, every stage's limit and count)
+            self.assertEqual(attempt['limits'], limits_record(self.declaration))
             cost = (Decimal(1386) * 2 + Decimal(97) * 10) / 1000000
             self.assertEqual((outcome['class'], outcome['served_model'], outcome['stop_reason']),
                              ('completed', 'claude-sonnet-5', 'end_turn'))
@@ -414,6 +419,108 @@ else:
             self.assertTrue(any('not a supported answer' in r for r in sq.judge_answers(held, fields, notes)))
             moved = {**good, 'cell_1': {**good['cell_1'], 'evidence': [{'quote': sq.EXPECTED['Findings'], 'start': 0, 'end': 24}]}}
             self.assertTrue(any('does not match the notes' in r for r in sq.judge_answers(moved, fields, notes)))
+
+        def test_the_review_form_not_the_notes_panel_must_carry_the_draft(self):
+            # (item 5: the page's notes panel always shows every documented value, so finding the values anywhere on
+            # the page was vacuous. The review FORM's answer inputs are read instead, and here they are served empty.)
+            from django.test import Client
+            real_get = Client.get
+            served = []
+
+            def blank_inputs(client, path, *args, **kwargs):
+                response = real_get(client, path, *args, **kwargs)
+                if (response.status_code == 200 and not getattr(response, 'streaming', False)
+                        and b'name="answer_' in response.content):
+                    response.content, count = re.subn(
+                        rb'(<textarea id="answer-[^"]*" name="answer_[^"]*"[^>]*>)[^<]*(</textarea>)', rb'\1\2',
+                        response.content)
+                    served.append((count, response.content))
+                return response
+            with patch.object(Client, 'get', blank_inputs):
+                _, failed = self.stopped("the review form's History answer is not the draft")
+            self.assertEqual([count for count, _ in served], [len(sq.FORM_LABELS)])      # (the blanking applied)
+            page = served[0][1]
+            self.assertTrue(all(sq.EXPECTED[label].encode() in page for label in sq.FORM_LABELS))   # (notes panel)
+            for label in sq.FORM_LABELS:
+                self.assertIn(f"the review form's {label} answer is not the draft", failed['reasons'])
+
+        @unittest.skipUnless(os.geteuid() != 0, 'root reads every mode')
+        def test_an_unscannable_evidence_tree_after_the_send_stops_the_campaign(self):
+            # (item 1: a retained file the leak scan cannot read is a campaign stop, never 'no leak')
+            from core.management.commands import audit_billing
+            real = audit_billing.audit_report
+
+            def unreadable_evidence():
+                path = self.evidence() / 'unreadable.log'
+                path.write_text('synthetic')
+                os.chmod(path, 0)
+                self.addCleanup(os.chmod, path, 0o600)
+                return real()
+            with patch.object(audit_billing, 'audit_report', side_effect=unreadable_evidence):
+                result = self.run_check()
+            self.assertEqual(result['verdict'], 'FAIL')
+            ledger = self.campaign.ledger
+            self.assertIsNone(ledger.stage_record('model_check', 'passed'))
+            failed = ledger.stage_record('model_check', 'failed')
+            self.assertTrue(any('could not be scanned' in reason for reason in failed['reasons']), failed['reasons'])
+            stop = ledger.campaign_stop()
+            self.assertIsNotNone(stop)
+            self.assertEqual(stop['reason'], 'the retained evidence could not be scanned for the credential')
+            self.assertEqual(len(self.sent), 1)
+            for stage in ('model_check', 'mapping', 'ordinary_notes'):
+                with self.assertRaises(pc.Refused):
+                    self.campaign.admit(stage, '0.104896')
+
+        def test_a_leak_scan_that_cannot_finish_before_the_decision_stops_the_campaign(self):
+            # (the tree is readable again by the scan after the decision: the stop must come from the first one)
+            real, calls = pc.leaked, []
+
+            def second_scan_fails(*args, **kwargs):
+                calls.append(1)
+                if len(calls) == 2:
+                    raise pc.Unscannable('synthetic: the tree could not be listed before the decision')
+                return real(*args, **kwargs)
+            with patch.object(pc, 'leaked', side_effect=second_scan_fails):
+                result = self.run_check()
+            self.assertEqual((len(calls), result['verdict']), (3, 'FAIL'))
+            ledger = self.campaign.ledger
+            self.assertIsNone(ledger.stage_record('model_check', 'passed'))
+            failed = ledger.stage_record('model_check', 'failed')
+            self.assertIn('the retained evidence could not be scanned for the credential: synthetic: the tree could not be '
+                          'listed before the decision', failed['reasons'])
+            stop = ledger.campaign_stop()
+            self.assertIsNotNone(stop)
+            self.assertEqual((stop['reason'], stop['detail']),
+                             ('the retained evidence could not be scanned for the credential',
+                              'synthetic: the tree could not be listed before the decision'))
+
+        def test_a_leak_scan_that_cannot_finish_after_the_decision_still_stops_the_campaign(self):
+            # (the scan after the decision covers the decision record itself: unscannable there is a stop too)
+            real, calls = pc.leaked, []
+
+            def third_scan_fails(*args, **kwargs):
+                calls.append(1)
+                if len(calls) == 3:
+                    raise pc.Unscannable('synthetic: the tree could not be listed after the decision')
+                return real(*args, **kwargs)
+            with patch.object(pc, 'leaked', side_effect=third_scan_fails):
+                result = self.run_check()
+            self.assertEqual((len(calls), result['verdict']), (3, 'FAIL'))
+            self.assertIn('the retained evidence could not be scanned for the credential after the decision',
+                          result['reasons'])
+            stop = self.campaign.ledger.campaign_stop()
+            self.assertIsNotNone(stop)
+            self.assertIn('could not be scanned', stop['reason'])
+            for stage in ('mapping', 'ordinary_notes'):
+                with self.assertRaises(pc.Refused):
+                    self.campaign.admit(stage, '0.104896')
+
+        @unittest.skipUnless(os.geteuid() != 0, 'root reads every mode')
+        def test_an_unscannable_tree_refuses_before_any_send(self):
+            hidden = pc.private_directory(pc.private_directory(self.root / 'evidence') / 'unlistable')
+            os.chmod(hidden, 0)
+            self.addCleanup(os.chmod, hidden, 0o700)
+            self.refused_unsent('evidence/unlistable')
 
         def test_a_runner_failure_after_the_attempt_is_a_failed_stage_never_a_refusal(self):
             # (before the outcome is written: the attempt is recorded with an unknown outcome at its maximum)

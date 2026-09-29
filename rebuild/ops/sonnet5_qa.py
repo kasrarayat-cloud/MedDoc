@@ -13,20 +13,26 @@ One model_check attempt, in the request process (a fresh process with the scrubb
   authenticated views create the encounter, show the quote and take the Generate request (which quotes, enqueues and
   holds); the job's own maximum cost is read and admitted against the ledger; the attempt is written; the real worker
   function `core.jobs.run_one` runs ONCE with the outbound request captured before it leaves; the outcome is written; the
-  stop conditions are checked; the review page is read, every answer is saved reviewed, the document is finalized and its
-  authenticated export is verified against the original; the billing audit runs; and a stage_passed record is written
-  ONLY if every check held — otherwise a stage_failed record with the reasons. Nothing is ever re-sent.
+  stop conditions are checked (each adopted answer's evidence on its own question's notes line, containing the answer);
+  the review FORM's answer inputs are read, every answer is saved reviewed, the document is finalized and its
+  authenticated export is verified against the original (all of each answer cell's text; no hidden text or nested
+  table); the billing audit runs; the evidence is scanned for the key (a tree it cannot read whole is a campaign stop);
+  and a stage_passed record is written ONLY if every check held — otherwise a stage_failed record with the reasons.
+  Nothing is ever re-sent.
 
 Commands (from the candidate checkout's rebuild/):
   plan                     the fixed case, its hashes, the declared price and its maximum cost; no database, no request
   run --stage model_check  the model check (refused unless the declaration, credential and ledger all allow it)
   status                   the ledger against every declared limit; read-only
   recover                  records any attempt left without an outcome as interrupted_unknown and fails its stage
-Exit status: 0 PASS (or a clean plan/status/recover), 3 FAIL (stage_failed written), 2 REFUSED (nothing sent).
+  reopen --stage <id> --diagnosis <path>
+                           reopens a FAILED stage after offline repair (provider_campaign.Campaign.reopen); nothing is sent
+Exit status: 0 PASS (or a clean plan/status/recover/reopen), 3 FAIL (stage_failed written), 2 REFUSED (nothing sent).
 """
 import argparse
 import copy
 import hashlib
+import html.parser
 import io
 import json
 import os
@@ -148,19 +154,20 @@ def private_evidence(root, number):
 # ── the ledger's open ends ───────────────────────────────────────────────────────────────────────────────────────
 
 def settle_open_stages(campaign):
-    """Every attempt with no outcome is recorded `interrupted_unknown`; every stage that has attempts and no decision
-    is FAILED (the run ended before it was decided, so it is never repeated: offline diagnosis). Needs the lock."""
+    """Every attempt with no outcome is recorded `interrupted_unknown`; every stage with an attempt no decision covers
+    (an open stage's attempts since its last reopening) is FAILED — the run ended before it was decided, so it is never
+    repeated in place: offline diagnosis, then `reopen`. Needs the lock."""
     ledger = campaign.ledger
     recovered = pc.recover_interrupted(ledger)
-    records = ledger.stage_records()
+    rows = ledger.rows()
+    outcomes = {attempt['number']: outcome for attempt, outcome in rows}
     failed = []
-    for stage in sorted({attempt['stage'] for attempt, _ in ledger.rows()}):
-        if records.get(stage):
-            continue
-        reasons = [f'attempt {attempt["number"]} ended {outcome["class"]}' + (' (recovered after an interruption)'
-                   if outcome.get('recovered') else '') for attempt, outcome in ledger.rows() if attempt['stage'] == stage]
-        ledger.write_stage(stage, 'failed', {'reasons': ['The run ended before this stage was decided; it is stopped '
-                                                         'for offline diagnosis and never repeated.'] + reasons})
+    for stage, numbers in sorted(ledger.undecided(rows).items()):
+        reasons = [f'attempt {number} ended {outcomes[number]["class"]}' + (' (recovered after an interruption)'
+                   if outcomes[number].get('recovered') else '') for number in numbers]
+        ledger.write_stage(stage, 'failed', {'attempts': numbers, 'reasons': [
+            'The run ended before this stage was decided; it is stopped for offline diagnosis and is admitted again only '
+            'after `reopen` with a committed diagnosis and repair.'] + reasons})
         failed.append(stage)
     return {'recovered': recovered, 'failed_stages': failed}
 
@@ -212,9 +219,7 @@ def preconditions(declaration, stage, root, *, database_prefix=DATABASE_PREFIX, 
     if ledger is not None:
         rows = ledger.rows()
         require(all(outcome is not None for _, outcome in rows), 'The ledger is not reconciled: an attempt has no outcome.')
-        records = ledger.stage_records()
-        require(all(records.get(attempt['stage']) for attempt, _ in rows),
-                'The ledger is not reconciled: a stage with attempts has no decision.')
+        require(not ledger.undecided(rows), 'The ledger is not reconciled: a stage with attempts has no decision.')
     return {'database': {'name': database['NAME'], 'host': database['HOST'], 'port': str(database['PORT'])},
             'state_dir': str(state), 'data_mode': settings.QUILLMD_DATA_MODE, 'ai_mode': settings.AI_MODE,
             'provider': settings.AI_PROVIDER, 'model': settings.AI_MODEL,
@@ -362,9 +367,22 @@ def classify(job, receipt, usage_row, captured):
     return 'uncertain'
 
 
+def question_line(notes, label):
+    """(start, end) of the ONE notes line that documents `label` (`Label: value`), end excluding its line break; None
+    when the notes do not have exactly one. Lines are split as str.splitlines does, so no line separator hides."""
+    spans, offset = [], 0
+    for line in notes.splitlines(keepends=True):
+        body = line.splitlines()[0] if line.splitlines() else ''
+        if body.startswith(label + ':'):
+            spans.append((offset, offset + len(body)))
+        offset += len(line)
+    return spans[0] if len(spans) == 1 else None
+
+
 def judge_answers(answers, fields, notes):
     """The validator's decision against the fixed case: every question supported, by its own complete documented value,
-    cited at its own place in the notes. Anything else is a stop (a wrong destination is unsafe output)."""
+    cited on its OWN question's notes line, each citation containing the adopted text. Anything else is a stop —
+    evidence from another line is unsafe output (a wrong destination, or an answer its citation does not support)."""
     reasons = []
     keys = {field['key'] for field in fields}
     if set(answers) - keys:
@@ -375,21 +393,102 @@ def judge_answers(answers, fields, notes):
         if answer.get('status') != 'supported':
             reasons.append(f'{label}: the draft is {answer.get("status") or "absent"}, not a supported answer')
             continue
-        if answer.get('text') != EXPECTED[label]:
+        text = answer.get('text')
+        if text != EXPECTED[label]:
             reasons.append(f'{label}: the adopted answer is not this question\'s documented value (wrong destination)')
         evidence = answer.get('evidence') or []
         if not evidence:
             reasons.append(f'{label}: the adopted answer has no source support')
+        line = question_line(notes, label)
+        if line is None:
+            reasons.append(f'{label}: the notes do not have exactly one line for this question')
         for item in evidence:
-            if not (isinstance(item, dict) and isinstance(item.get('start'), int) and isinstance(item.get('end'), int)
+            if not (isinstance(item, dict) and type(item.get('start')) is int and type(item.get('end')) is int
+                    and 0 <= item['start'] < item['end'] <= len(notes)
                     and notes[item['start']:item['end']] == item.get('quote')):
                 reasons.append(f'{label}: its cited source does not match the notes')
+                continue
+            if line is not None and not (line[0] <= item['start'] and item['end'] <= line[1]):
+                reasons.append(f'{label}: its cited source lies outside this question\'s own notes line '
+                               '(unsafe: a wrong destination or an unsupported answer)')
+            if not (isinstance(text, str) and text and text in item['quote']):
+                reasons.append(f'{label}: its cited source does not contain the adopted answer (unsafe: unsupported)')
     return reasons
 
 
+class _ReviewForm(html.parser.HTMLParser):
+    """The answer inputs of ONE form (by its action): every textarea's text and every select's chosen value, by name.
+    Everything outside that form — the notes panel, the evidence quotations — is not read."""
+
+    def __init__(self, action):
+        super().__init__(convert_charrefs=True)
+        self.action, self.inside, self.values = action, False, {}
+        self.textarea = self.select = None
+        self.text, self.options = [], []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == 'form':
+            self.inside = attrs.get('action') == self.action
+        elif self.inside and tag == 'textarea':
+            self.textarea, self.text = attrs.get('name'), []
+        elif self.inside and tag == 'input' and attrs.get('name'):
+            # (any other input of the same name is a second answer the save would carry)
+            self.values.setdefault(attrs['name'], []).append(attrs.get('value') or '')
+        elif self.inside and tag == 'select':
+            self.select, self.options = attrs.get('name'), []
+        elif self.inside and self.select is not None and tag == 'option':
+            self.options.append((attrs.get('value'), 'selected' in attrs))
+
+    def handle_endtag(self, tag):
+        if tag == 'form':
+            self.inside = False
+        elif tag == 'textarea' and self.textarea is not None:
+            text = ''.join(self.text)
+            # (HTML drops one line break directly after <textarea>)
+            self.values.setdefault(self.textarea, []).append(text[1:] if text.startswith('\n') else text)
+            self.textarea = None
+        elif tag == 'select' and self.select is not None:
+            chosen = [value for value, selected in self.options if selected] or [value for value, _ in self.options[:1]]
+            self.values.setdefault(self.select, []).append(chosen[0] if len(chosen) == 1 else None)
+            self.select = None
+
+    def handle_data(self, data):
+        if self.textarea is not None:
+            self.text.append(data)
+
+
+def review_form_problems(page, encounter_pk, fields, expected):
+    """The review page as the doctor reviews it: the REVIEW FORM's own answer input for each field (the save form of
+    this encounter) must hold the draft value. The notes panel shows every documented value on every page, so a value
+    found anywhere on the page proves nothing (the check before this one was vacuous)."""
+    reader = _ReviewForm(f'/encounters/{encounter_pk}/save/')
+    reader.feed(page)
+    reader.close()
+    problems = []                   # (no review form, or two: no field then has exactly one input with the draft)
+    for field in fields:
+        found = reader.values.get('answer_' + field['key'], [])
+        if found != [expected[field['label']]]:
+            problems.append(f"the review form's {field['label']} answer is not the draft")
+    return problems
+
+
+#: Word properties that hide text when the document is shown or printed.
+HIDDEN = (f'{{{W}}}vanish', f'{{{W}}}specVanish', f'{{{W}}}webHidden')
+
+
 def _cell_text(cell):
-    return '\n'.join(''.join(node.text or '' for node in paragraph.iter(f'{{{W}}}t'))
-                     for paragraph in cell.findall(f'{{{W}}}p'))
+    """ALL the text a cell carries: every descendant w:t in document order — content controls, nested tables,
+    hyperlinks, fields and text boxes included — with a line break between paragraphs."""
+    parts, paragraphs = [], 0
+    for node in cell.iter():
+        if node.tag == f'{{{W}}}p':
+            if paragraphs:
+                parts.append('\n')
+            paragraphs += 1
+        elif node.tag == f'{{{W}}}t':
+            parts.append(node.text or '')
+    return ''.join(parts)
 
 
 def export_checks(original, export, expected):
@@ -413,7 +512,9 @@ def export_checks(original, export, expected):
     parser = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False)
     before = etree.fromstring(first.read('word/document.xml'), parser)
     after = etree.fromstring(second.read('word/document.xml'), parser)
-    tables = before.findall(f'.//{{{W}}}tbl'), after.findall(f'.//{{{W}}}tbl')
+    # (the body's own tables: a table nested in an answer cell is then named for that cell below, and one anywhere
+    # else changes the body outside the answer cells)
+    tables = before.findall(f'{{{W}}}body/{{{W}}}tbl'), after.findall(f'{{{W}}}body/{{{W}}}tbl')
     if len(tables[0]) != 1 or len(tables[1]) != 1:
         return problems + ['the export does not keep the original\'s one question table']
     rows_before = [row.findall(f'{{{W}}}tc') for row in tables[0][0].findall(f'{{{W}}}tr')]
@@ -427,6 +528,10 @@ def export_checks(original, export, expected):
             problems.append(f'the original {label} answer cell is not blank')
         if _cell_text(answer_after) != expected[label]:
             problems.append(f'the exported {label} answer is not the reviewed answer')
+        if any(True for _ in answer_after.iter(*HIDDEN)):
+            problems.append(f'the exported {label} answer cell holds hidden text')
+        if answer_after.find(f'.//{{{W}}}tbl') is not None:
+            problems.append(f'the exported {label} answer cell holds a nested table')
         answer_after.getparent().replace(answer_after, deepcopy(answer_before))
     if etree.tostring(before, method='c14n') != etree.tostring(after, method='c14n'):
         problems.append('the document body differs from the original outside the answer cells')
@@ -505,7 +610,8 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
     fields_preview = [{'key': f'cell_{index}', 'label': label, 'kind': 'text', 'locator': {'cell': index}}
                       for index, label in enumerate(FORM_LABELS)]
     preview = generation.maximum_cost(NOTES, fields_preview, generation.configuration(), context_labels=[], requirements=[])
-    campaign.admit(STAGE, preview)
+    runner_commit = provenance.get('runner_commit')
+    campaign.admit(STAGE, preview, runner_commit=runner_commit)
     world = seed_world(root)
     from core.billing import available_balance
     require(available_balance(world.user, world.department) >= preview * Decimal('1.5'),
@@ -556,7 +662,8 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
         cancel(job, world.user)
         raise Refused('The job\'s hold, its maximum and the page\'s quote disagree; the job was cancelled unsent.')
     try:
-        bound = campaign.admit(STAGE, maximum)
+        bound = campaign.admit(STAGE, maximum, runner_commit=runner_commit)
+        limits = campaign.limits().record()
     except Refused:
         from core.jobs import cancel
         cancel(job, world.user)      # (never run: the product's own cancellation releases its hold)
@@ -568,7 +675,7 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
                'pricing_version': job.config['pricing_version'], 'request_profile': job.config['request_profile'],
                'encounter': str(encounter.pk), 'job': str(job.pk), 'form_sha256': FORM_SHA256, 'notes_sha256': NOTES_SHA256,
                'declaration_sha256': declaration.sha256, 'declaration_commit': declaration.commit,
-               'runner_commit': provenance.get('runner_commit'), 'started_at': pc.now(), 'pid': os.getpid()}
+               'limits': limits, 'runner_commit': runner_commit, 'started_at': pc.now(), 'pid': os.getpid()}
     ledger.write_attempt(attempt)                                            # BEFORE anything can be sent
     base = {'stage': STAGE, 'attempt': number, 'recovered_before_start': settled, 'stale_jobs_cancelled': stale}
     try:
@@ -669,8 +776,10 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
 
     # The review page, a save marking every answer reviewed, finalization, and the authenticated export.
     page = world.client.get(f'/encounters/{encounter.pk}/')
-    if page.status_code != 200 or not all(EXPECTED[label].encode() in page.content for label in FORM_LABELS):
+    if page.status_code != 200:
         reasons.append(f'the review page did not show the draft ({page.status_code})')
+    else:
+        reasons += review_form_problems(page.content.decode(), encounter.pk, fields, EXPECTED)
     posted = {'revision': str(encounter.revision)}
     for field in fields:
         posted['answer_' + field['key']] = encounter.answers[field['key']]['text']
@@ -732,11 +841,11 @@ def _record_interruption(ledger, attempt, error):
     except Exception:
         pass
     try:
-        decided = ledger.stage_records().get(attempt['stage'], {})
-        if not decided:
+        state = ledger.stage_state(attempt['stage'])['state']
+        if state == 'open':
             ledger.write_stage(attempt['stage'], 'failed', {'attempt': attempt['number'], 'reasons': [
                 f'the runner failed after the attempt was written ({name}); the outcome is recorded as it stood']})
-        elif 'passed' in decided:
+        elif state == 'passed':
             ledger.write_stop({'reason': f'the runner failed after the stage was decided ({name})'})
     except Exception:
         pass
@@ -761,12 +870,23 @@ def _decide(campaign, attempt, evidence, secret, reasons, result, provenance, ch
                'settings': checked, 'login': LOGIN,
                'versions': {'python': sys.version.split()[0], 'django': django.get_version(), 'anthropic': anthropic.__version__},
                'reasons': list(reasons)}
-    write_manifest(evidence, attempt, context)
-    hits = pc.leaked(root, secret, exclude=(declaration.credential_file,))
+    unscannable = None
+    try:
+        write_manifest(evidence, attempt, context)
+    except OSError as error:
+        unscannable = f'the evidence could not be read for its manifest ({type(error).__name__})'
+    try:
+        hits = pc.leaked(root, secret, exclude=(declaration.credential_file,))
+    except pc.Refused as refused:
+        hits, unscannable = [], unscannable or str(refused)
+    if unscannable:
+        # ⚠️ AN UNSCANNABLE TREE IS A STOP, NEVER "NO LEAK" (S1): what the scan could not read may carry the key.
+        reasons = list(reasons) + [f'the retained evidence could not be scanned for the credential: {unscannable}']
+        ledger.write_stop({'reason': 'the retained evidence could not be scanned for the credential', 'detail': unscannable})
     if hits:
         reasons = list(reasons) + ['the credential was found in retained evidence: ' + ', '.join(hits)]
         ledger.write_stop({'reason': 'credential found in retained evidence', 'files': hits})
-    manifest = pc.file_sha256(evidence / 'manifest.json')
+    manifest = pc.file_sha256(evidence / 'manifest.json') if (evidence / 'manifest.json').is_file() else None
     if reasons:
         ledger.write_stage(STAGE, 'failed', {'attempt': attempt['number'], 'reasons': list(reasons), 'manifest_sha256': manifest})
         verdict = 'FAIL'
@@ -777,7 +897,15 @@ def _decide(campaign, attempt, evidence, secret, reasons, result, provenance, ch
                                                         'review, finalize, export', 'billing audit', 'evidence retained',
                                                         'no leaked credential']})
         verdict = 'PASS'
-    late = pc.leaked(root, secret, exclude=(declaration.credential_file,))
+    try:
+        late, late_unscannable = pc.leaked(root, secret, exclude=(declaration.credential_file,)), None
+    except pc.Refused as refused:
+        late, late_unscannable = [], str(refused)
+    if late_unscannable:
+        ledger.write_stop({'reason': 'the retained evidence could not be scanned for the credential after the decision',
+                           'detail': late_unscannable})
+        verdict = 'FAIL'
+        reasons = list(reasons) + ['the retained evidence could not be scanned for the credential after the decision']
     if late:
         ledger.write_stop({'reason': 'credential found in retained evidence after the decision', 'files': late})
         verdict = 'FAIL'
@@ -835,7 +963,12 @@ def _interrupted(signum, frame):
 
 
 def inner():
-    """The request process: its environment is exactly `request_environment`."""
+    """The request process: its environment is exactly `request_environment`. Before anything else — before the
+    declaration is read and long before django.setup() — it refuses unless QUILLMD_ENV_MANAGED is exactly '1' (settings
+    then never calls load_dotenv) and rebuild/.env does not exist, so even `_inner` started by hand never loads one."""
+    require(os.environ.get('QUILLMD_ENV_MANAGED') == '1',
+            'The request process runs only with QUILLMD_ENV_MANAGED=1: settings must never load a .env file.')
+    require(not env_file_present(), 'The candidate checkout has a rebuild/.env; the request process never starts beside one.')
     os.umask(0o077)
     signal.signal(signal.SIGTERM, _interrupted)
     signal.signal(signal.SIGINT, _interrupted)
@@ -912,21 +1045,26 @@ def plan():
 
 
 def status(root=LIVE_ROOT, declaration_path=DECLARATION):
+    """The ledger against the limits IN FORCE (the tightest of the declaration's and those the ledger pinned); read-only."""
     declaration = pc.declared(declaration_path)
     campaign = pc.Campaign(declaration, root)
     rows = campaign.rows()
-    records = campaign.ledger.stage_records()
+    limits = campaign.limits(rows)
     stages = {}
     for stage in declaration.stages:
         totals = campaign.totals(stage.id)
-        stages[stage.id] = {'attempts': totals['attempts'], 'max_requests': stage.max_requests,
-                            'exposure': format(totals['exposure'], 'f'), 'limit': format(stage.limit, 'f'),
-                            'remaining': format(stage.limit - totals['exposure'], 'f'), 'requires': stage.requires,
-                            'decision': sorted(records.get(stage.id, {})) or None}
+        state = campaign.ledger.stage_state(stage.id)
+        in_force = {s.id: s for s in limits.stages}.get(stage.id)       # (None: no limit in force — never admitted)
+        stages[stage.id] = {'attempts': totals['attempts'], 'max_requests': in_force.max_requests if in_force else 0,
+                            'exposure': format(totals['exposure'], 'f'),
+                            'limit': format(in_force.limit, 'f') if in_force else None,
+                            'remaining': format(in_force.limit - totals['exposure'], 'f') if in_force else None,
+                            'requires': list(in_force.requires) if in_force else None,
+                            'state': state['state'], 'failures': state['failures'], 'reopenings': state['reopenings']}
     total = campaign.totals()
     print(json.dumps({'campaign': declaration.campaign, 'root': str(root), 'stages': stages,
-                      'total': {'exposure': format(total['exposure'], 'f'), 'limit': format(declaration.total_limit, 'f'),
-                                'remaining': format(declaration.total_limit - total['exposure'], 'f')},
+                      'total': {'exposure': format(total['exposure'], 'f'), 'limit': format(limits.total, 'f'),
+                                'remaining': format(limits.total - total['exposure'], 'f')},
                       'open_attempts': [a['number'] for a, o in rows if o is None],
                       'outcomes': [{'attempt': a['number'], 'stage': a['stage'], 'class': (o or {}).get('class'),
                                     'exposure': format(pc.exposure(a, o), 'f')} for a, o in rows],
@@ -943,14 +1081,34 @@ def recover(root=LIVE_ROOT, declaration_path=DECLARATION):
     return 0
 
 
+def reopen(stage, diagnosis, root=None, declaration_path=None, repository=None, rebuild=None):
+    """Reopens a FAILED stage after offline repair (Campaign.reopen): the diagnosis committed and unmodified in this
+    checkout, naming the failed attempts and the repair commit, which this clean runner commit contains. Writes
+    stage-<id>-reopened-<n>.json; nothing is sent."""
+    root = LIVE_ROOT if root is None else root
+    declaration = pc.declared(DECLARATION if declaration_path is None else declaration_path,
+                              repository=REPOSITORY if repository is None else repository)
+    identity = pc.git_identity(REBUILD if rebuild is None else rebuild)
+    require(identity['clean'], 'The runner checkout must be a clean commit.')
+    campaign = pc.Campaign(declaration, root)
+    campaign.ledger.acquire()
+    try:
+        record = campaign.reopen(stage, diagnosis, runner_commit=identity['commit'])
+    finally:
+        campaign.ledger.release()
+    print(json.dumps(record, indent=1, default=str))
+    return 0
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     try:
         if argv[:1] == ['_inner']:
             return inner()
         parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-        parser.add_argument('command', choices=['plan', 'run', 'status', 'recover'])
-        parser.add_argument('--stage', choices=[STAGE])
+        parser.add_argument('command', choices=['plan', 'run', 'status', 'recover', 'reopen'])
+        parser.add_argument('--stage')
+        parser.add_argument('--diagnosis')
         args = parser.parse_args(argv)
         if args.command == 'plan':
             return plan()
@@ -958,6 +1116,8 @@ def main(argv=None):
             return status()
         if args.command == 'recover':
             return recover()
+        if args.command == 'reopen':
+            return reopen(args.stage, args.diagnosis)       # (Campaign.reopen refuses a missing stage or diagnosis)
         require(args.stage == STAGE, 'run needs --stage model_check.')
         outer_run(args)
     except Refused as refused:
