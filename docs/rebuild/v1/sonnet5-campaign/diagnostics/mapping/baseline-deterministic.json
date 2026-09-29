@@ -1,13 +1,13 @@
 {
  "schema": "quillmd-sonnet5-mapping-baseline/1",
  "what": "Pre-model deterministic baseline for the Sonnet 5 MAPPING-stage diagnostics. Measurement only.",
- "recorded_at": "2026-09-29T00:52:50Z",
+ "recorded_at": "2026-09-29T02:44:53Z",
  "order_of_work": "Forms generated and expected maps written and checked (check_expected.py, engine-free) BEFORE this measurement; the expected maps' sha256 were frozen in EXPECTED-SHA256SUMS and this run refuses unless every expected map still matches that manifest.",
  "expectations": {
   "manifest": "EXPECTED-SHA256SUMS",
-  "manifest_sha256": "3beddaf52269c725d53bafc3f0e2381ef2b933bab2f960fd35e861316608ecd7",
+  "manifest_sha256": "70097790bad1e45f3e4169650e4b13b4248a1671b6b230951c4a8211482a0f2b",
   "frozen_meta": {},
-  "manifest_mtime_utc": "2026-09-29T00:52:29Z",
+  "manifest_mtime_utc": "2026-09-29T02:41:47Z",
   "files": {
    "f1-guidance-confirmation.expected.json": "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae",
    "f2-leave-checkboxes.expected.json": "96dfba0669f5fa0de718992dcdaba7e7c44b5fae3336dbc336f042e0d4dd6eb0",
@@ -19,15 +19,17 @@
    "f6b-admin-missing.expected.json": "87465c4b9eed9fc5fd9de7ef6db3b9e1364faab66306fc852ff21c842bf8b390"
   },
   "frozen_with_them": {
+   "../freeze_check.py": "cbd0e79331e5780eb505b843cb71db481b3b773135c8c54d9a1156e82c84d9c5",
    "../notes/app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
-   "../notes/app_path_walk.py": "5b733ad10f46420127656163fa813d898299f0dd78dbf999df2b8c07c6797c1a",
+   "../notes/app_path_steps.py": "732e7b18933aaad08b103c904113885f80ed305bb50be5304587ed84bb580878",
+   "../notes/app_path_walk.py": "b1d85973fa7981c6455a44567d345d9362c8976664ce585736ba191985734757",
    "../notes/build_note_forms.py": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
    "../notes/cases.json": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
-   "../notes/offline_replay.py": "4c3965f72312a4201215e4a40c6c1502679c5a9c4c2d741745246bb78175c21b",
-   "../notes/run_app_path_walk.py": "628daa226258d70a0fc8d36c0033c976c4ad169fad612f88918735fe05fcb76a",
+   "../notes/offline_replay.py": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
+   "../notes/run_app_path_walk.py": "f42bc3a0d08de040bf27ac99ea8d3b7b64c8e2f392caa8e9be570facf9c2fb14",
    "build_forms.py": "32e72baeb9f05b48059c0ca1b9ffc0b66cdb945b4ee7002d701c8c84d3ac1ab4",
    "check_expected.py": "b2fec94b3808be9d98c4a5d6e5b6bed6af8c1e20eaa2b61cfd1bca3da7b185ff",
-   "grade_app_path.py": "5a51f113bbb459bc720825af445b57767e2307e08c0a64ce0e49c2b3f014e258",
+   "grade_app_path.py": "a03685f5df649dc6c63cbe4fb11500257c02e93406f0444802395b320adaf1d1",
    "long-answer.txt": "919be558f73a23ebc46851d9be9321f570d28e8f89bea81ce63f8c75ba564e7f",
    "long_answer_readback.py": "b43514b35a6a0ec6d1fd93d3adaadbfaba97c19d275540c0f125b5fe0cd20891",
    "measure_baseline.py": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
@@ -36,15 +38,15 @@
   "match_frozen": true
  },
  "candidate": {
-  "worktree": "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics",
-  "head": "0beaf2b2f3f0786da6917fea9b9bcc5aa16054ea",
+  "worktree": "/opt/meddoc-pro/.worktrees/v1-sonnet5-campaign",
+  "head": "60d67db093fb9283ee71b168a3980e59438a3fe7",
   "engine_files_clean": true,
   "engine_sha256": {
    "rebuild/documents/word_v3.py": "4e2ea03d7fb3e1050d0702b7ca960f9cd2e160ecf0552e2fedeba74922d5b04f",
    "rebuild/documents/source_policy.py": "3af27ea7337d815d4c0174c0cf9f3116c1a0a5104ba795d1746e2d6993734e0a",
    "rebuild/documents/mapping_limits.py": "bdebe9b5f9ec8268164177600176404917af22537e60ef7b971f065b8d396802"
   },
-  "engine_imported_from": "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/rebuild/documents/word_v3.py"
+  "engine_imported_from": "/opt/meddoc-pro/.worktrees/v1-sonnet5-campaign/rebuild/documents/word_v3.py"
  },
  "harness": {
   "script": "mapping",
