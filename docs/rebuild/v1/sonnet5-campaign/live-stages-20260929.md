@@ -91,3 +91,10 @@ unit-keyed contract; the veto stays paused and its six evaluation sends were not
 | mapping | $25.00 | $0.00984 | $24.99016 | failed-1 (contract; reopen after repair) |
 | ordinary_notes | $10.00 | $0.066604 | $9.933396 | failed-1 (contract on the relations path) |
 | **total** | **$40.00** | **$0.079304** | **$39.920696** | |
+
+## Amendment, 2026-09-29 (appended; the rows above are kept as written)
+
+The mapping row's "reopen after repair" did not happen. Two repair rounds on `fix/v1-mapping-partial`
+(`d40c8689`, `48aa5e8d`) each drew verified HIGH refutation findings, so under the bounded-repair rule the mapping
+stage is **not reopened** and no further mapping send is made in this campaign. Record:
+`mapping-repair-stop-20260929.md`.
