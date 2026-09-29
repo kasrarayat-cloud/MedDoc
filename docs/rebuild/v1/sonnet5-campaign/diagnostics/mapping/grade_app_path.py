@@ -19,12 +19,15 @@ is graded from the fields AND the review record:
                holds the area;
   held_safe    the area is held for the clinician: a covering field carries a not_answer/uncertain FIELD verdict or
                any unresolved record with its key (a refused replacement leaves the prior field with such a record),
-               or an unresolved record lies on the area's destination (an uncertain SLOT verdict, or a covered slot
-               that nothing maps). Confirmation is refused while any record is open (core/views.py v3_confirm), and
-               a clinician's "not an answer" decision on a record that carries a field key removes that field
-               (core/mapping_views.py resolve). `field_grade_under_hold` records what the held field would have
-               graded; `hold_reaches_field` is false when the only hold is a slot record, whose "not an answer"
-               decision removes nothing;
+               or — for an area NO field covers — an unresolved record lies on the area's destination (an uncertain
+               SLOT verdict, or a covered slot that nothing maps). Confirmation is refused while any record is open
+               (core/views.py v3_confirm), and a clinician's "not an answer" decision on a record that carries a field
+               key removes that field (core/mapping_views.py resolve). `field_grade_under_hold` records what the held
+               field would have graded.
+               RECHECK.md R1 (2026-09-29): a SLOT-level record over a COVERED area holds nothing — it is resolved
+               "mapped" because the slot is mapped, and "not an answer" on it removes no field — so the area is graded
+               by its covering field (a kept WRONG field is `wrong`, a right one `right`), with `hold` recorded and
+               `hold_reaches_field` false (summary `areas_slot_record_over_kept_field`);
   wrong        covered by an un-held field that fails a condition (kind, boxes, options, codes, identity,
                preservation, capacity, split, covers another area);
   missed       no covering field and no hold. `dismissed_by_model` marks an area whose destination slots the model
@@ -66,6 +69,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent))
+import freeze_check                  # noqa: E402  (RECHECK R2: the one freeze check, and the provenance recorded)
 import measure_baseline as mb        # noqa: E402  (denies sockets on import; reuses the frozen grading rules)
 
 WORKTREE = HERE.parents[5]
@@ -193,16 +198,18 @@ def grade_output(expected: dict, output: dict, deterministic_fields: list | None
         res = {"id": area["id"], "label": area["label"], "expected_kind": area["kind"]}
         if covering:
             res["fields"] = base.get("fields")
-        if held_by_field or records:
+        if held_by_field or (records and not covering):
             res["outcome"] = "held_safe"
-            res["hold"] = {"field_keys": held_by_field, "records": records,
-                           "hold_reaches_field": bool(held_by_field) or not covering}
+            res["hold"] = {"field_keys": held_by_field, "records": records, "hold_reaches_field": True}
             if covering:
                 res["field_grade_under_hold"] = base["outcome"]
                 if base.get("problems"):
                     res["field_problems"] = base["problems"]
         elif covering:
+            # (RECHECK R1: only slot records touch a covered area — resolving them "mapped" keeps the field as it is)
             res["outcome"] = base["outcome"]
+            if records:
+                res["hold"] = {"field_keys": [], "records": records, "hold_reaches_field": False}
             if base.get("problems"):
                 res["problems"] = base["problems"]
         else:
@@ -287,6 +294,8 @@ def grade_output(expected: dict, output: dict, deterministic_fields: list | None
     for e in extras:
         tally[e["outcome"]] = tally.get(e["outcome"], 0) + 1
     tally["areas"] = len(areas)
+    tally["areas_slot_record_over_kept_field"] = sum(1 for r in area_results
+                                                     if (r.get("hold") or {}).get("hold_reaches_field") is False)
     tally["controls"] = len(controls)
     tally["not_expressible_at_candidate"] = sum(1 for r in area_results + control_results
                                                 if r["expressible"]["expressible"] is False)
@@ -447,7 +456,12 @@ def plans(name, det_fields):
         harmful = {"changes": [("add", None, "b/p[2]", "text", "Discharge letter", ())]}
     elif name == "f6b-admin-missing":
         harmful = {"changes": [("add", None, "b/p[0]", "text", "Wound review", ())]}
-    return {"correct": correct, "do_nothing": {}, "harmful": harmful}
+    # RECHECK R1: keep every deterministic field and mark ONE paragraph on the defective area uncertain — a slot record
+    # the clinician resolves "mapped", which leaves the kept wrong field exactly as it was.
+    slot_only = {"f1-guidance-confirmation": {"slots": {"b/tbl[0]/tr[1]/tc[1]/p[0]": "u"}},
+                 "f2b-leave-checkboxes-owner": {"slots": {"b/p[10]": "u"}},
+                 "f3-selection-instructions": {"slots": {"b/p[21]": "u"}}}.get(name, {})
+    return {"correct": correct, "do_nothing": {}, "harmful": harmful, "slot_only": slot_only}
 
 
 def build_response(wire, payload, plan):
@@ -645,6 +659,11 @@ def assertions(result: dict) -> list:
         g = f[form]["responses"][label].get("graded") or {}
         return next((r["outcome"] for r in g.get("areas", []) + g.get("controls", []) if r["id"] == item), None)
 
+    def hold_reaches(form, label, item):
+        g = f[form]["responses"][label].get("graded") or {}
+        row = next((r for r in g.get("areas", []) if r["id"] == item), {})
+        return (row.get("hold") or {}).get("hold_reaches_field")
+
     checks = [
         ("do-nothing leaves f3.A4 (single choice for a plural owner) wrong", o("f3-selection-instructions", "do_nothing", "f3.A4") == "wrong"),
         ("the correct hold makes f3.A4 held_safe", o("f3-selection-instructions", "correct", "f3.A4") == "held_safe"),
@@ -671,9 +690,23 @@ def assertions(result: dict) -> list:
                  if a["slot"].endswith("/ff[0]"))),
         ("f2.A2 is right under both correct and do-nothing (keep)", o("f2-leave-checkboxes", "correct", "f2.A2") == "right"
          and o("f2-leave-checkboxes", "do_nothing", "f2.A2") == "right"),
+        # RECHECK R1: a slot-level record over a KEPT WRONG field is not a hold
+        ("a slot-only uncertain record leaves f1.A2's kept leaked label wrong (hold_reaches_field false)",
+         o("f1-guidance-confirmation", "slot_only", "f1.A2") == "wrong"
+         and not hold_reaches("f1-guidance-confirmation", "slot_only", "f1.A2")),
+        ("a slot-only uncertain record leaves f2b.A2's kept one-choice list wrong (hold_reaches_field false)",
+         o("f2b-leave-checkboxes-owner", "slot_only", "f2b.A2") == "wrong"
+         and not hold_reaches("f2b-leave-checkboxes-owner", "slot_only", "f2b.A2")),
+        ("a slot-only uncertain record leaves f3.A4's kept single choice wrong (hold_reaches_field false)",
+         o("f3-selection-instructions", "slot_only", "f3.A4") == "wrong"
+         and not hold_reaches("f3-selection-instructions", "slot_only", "f3.A4")),
+        ("the app's own fixture (slot records only) leaves f1.A2, f2b.A2 and f3.A4 wrong",
+         o("f1-guidance-confirmation", "app_fixture", "f1.A2") == "wrong"
+         and o("f2b-leave-checkboxes-owner", "app_fixture", "f2b.A2") == "wrong"
+         and o("f3-selection-instructions", "app_fixture", "f3.A4") == "wrong"),
     ]
     totals = {}
-    for label in ("correct", "do_nothing", "harmful", "app_fixture"):
+    for label in ("correct", "do_nothing", "harmful", "app_fixture", "slot_only"):
         t = {}
         for form in f.values():
             for k, v in ((form["responses"].get(label) or {}).get("graded") or {}).get("summary", {}).items():
@@ -688,6 +721,11 @@ def assertions(result: dict) -> list:
     return [{"check": c, "passed": bool(ok)} for c, ok in checks]
 
 
+def provenance_map(form: str):
+    """The frozen sha256 of FORM's expected map (EXPECTED-SHA256SUMS), or None when the manifest does not list it."""
+    return freeze_check.listed().get(form + ".expected.json")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--self-test", action="store_true")
@@ -700,16 +738,33 @@ def main(argv=None) -> int:
     ap.add_argument("--expressible", type=Path, help="per-item expressibility from the self-test (JSON object)")
     ap.add_argument("--dump-outputs", type=Path, help="self-test: also write every raw validate_proposal output here")
     args = ap.parse_args(argv)
+    if not (args.grade or args.self_test):
+        ap.error("choose --self-test or --grade")
+    # RECHECK R2: nothing is graded (and the self-test boots nothing) unless every frozen file matches; what is written
+    # records the manifest, this grader, the inputs and the candidate.
+    try:
+        if args.grade:
+            if not re.fullmatch(r"[a-z0-9-]+", args.form or ""):
+                raise freeze_check.FreezeMismatch("--grade needs --form NAME (one of the frozen maps)")
+            provenance = freeze_check.provenance(Path(__file__), {
+                "map": HERE / (args.form + ".expected.json"), "graded": args.grade,
+                "deterministic": args.deterministic, "expressible": args.expressible})
+            if provenance["inputs"]["map"] is None or provenance["inputs"]["map"] != provenance_map(args.form):
+                raise freeze_check.FreezeMismatch("%s.expected.json is not a frozen map" % args.form)
+        else:
+            provenance = freeze_check.provenance(Path(__file__), {"forms_dir": None})
+    except freeze_check.FreezeMismatch as refused:
+        print("REFUSED: %s" % refused, file=sys.stderr)
+        return 2
     if args.grade:
         expected = json.loads((HERE / (args.form + ".expected.json")).read_text())
         det = json.loads(args.deterministic.read_text()) if args.deterministic else None
         table = json.loads(args.expressible.read_text()) if args.expressible else None
         graded = grade_output(expected, json.loads(args.grade.read_text()), det, table)
+        graded["provenance"] = provenance
         text = json.dumps(graded, indent=1, ensure_ascii=False)
         (args.out.write_text(text + "\n") if args.out else print(text))
         return 0
-    if not args.self_test:
-        ap.error("choose --self-test or --grade")
     import tempfile
     state = args.state_dir or Path(tempfile.mkdtemp(prefix="app-path-state-"))
     state.mkdir(parents=True, exist_ok=True)
@@ -719,6 +774,7 @@ def main(argv=None) -> int:
               "recorded_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
               "candidate_head": mb.git("rev-parse", "HEAD"),
               "script_sha256": mb.sha256(Path(__file__)), "measure_baseline_sha256": mb.sha256(HERE / "measure_baseline.py"),
+              "provenance": provenance,
               "network": "socket connect/create_connection/getaddrinfo denied in-process; the compiled request is never sent",
               "checks": checks, **result}
     if args.out:

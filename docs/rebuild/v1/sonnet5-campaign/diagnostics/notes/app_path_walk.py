@@ -14,42 +14,36 @@ of the walk. Exports stay in the test's temporary directory and only their sha25
 Run it with run_app_path_walk.py (a quillmd_qa_diag_* test database on the campaign QA PostgreSQL); never directly
 against any other database. Python sockets are denied in every test (positive control asserted); the database
 driver connects through libpq, not Python sockets.
+
+The steps that must stay identical to the campaign's live ordinary_notes stage (the path flags, the reference answer,
+the review save, the export verification) live in app_path_steps.py, which both import (2026-09-29 re-freeze).
 """
 import copy
 import hashlib
-import io
 import json
 import os
 import socket
 from pathlib import Path
 from unittest.mock import patch
-from zipfile import ZipFile
 
 from django.test import TestCase, override_settings
 from lxml import html
 
-from core import generation as g
 from core.jobs import run_one
 from core.models import Encounter, Job
 from core.security import private_path
 from core.tests.test_v3_field_relations_workflow import sdk_response
 from core.tests.test_v3_ordinary_notes import LIVE
 from core.tests.test_word_v3_workflow import V3Fixture
-from documents import word_v3 as w
+
+import app_path_steps as steps
 
 NOTES_DIR = Path(os.environ['NOTES_DIR'])
 CASES = json.loads((NOTES_DIR / 'cases.json').read_text())
 OBSERVATIONS_PATH = Path(os.environ.get('NOTES_OBSERVATIONS', NOTES_DIR / 'offline-observations.json'))
 OBSERVATIONS = json.loads(OBSERVATIONS_PATH.read_text()) if OBSERVATIONS_PATH.exists() else {}
 OUT = Path(os.environ['NOTES_WALK_OUT'])
-PATH_SETTINGS = {'default': dict(LIVE, V3_HISTORY_CONTEXT=False, V3_FIELD_RELATIONS=False,
-                                 V3_GENERATION_BATCHES=False, WM_NARRATIVE=False),
-                 'field_relations': dict(LIVE, V3_HISTORY_CONTEXT=False, V3_FIELD_RELATIONS=True,
-                                         V3_GENERATION_BATCHES=False, WM_NARRATIVE=False)}
-
-
-def applies(selection, path):
-    return path in selection.get('paths', ('default', 'field_relations'))
+PATH_SETTINGS = {path: dict(LIVE, **flags) for path, flags in steps.PATH_FLAGS.items()}
 
 
 class NotesAppPath(V3Fixture, TestCase):
@@ -89,40 +83,17 @@ class NotesAppPath(V3Fixture, TestCase):
                 page = stage('before-generation', self.client.get(f'/encounters/{encounter.pk}/'))
                 result['quote_error'] = page.context.get('generation_quote_error')
                 quote = page.context['usage_quote']
-                reference = {k: next(s for s in e['raw_model_expectation']['acceptable'] if applies(s, path))
-                             for k, e in case['fields'].items()}
+                reference = steps.reference_selection(case, path)
                 captured = []
 
                 def respond(**wire):
                     captured.append(wire)
                     payload = json.loads(wire['messages'][0]['content'])
-                    fields = version.fields
-                    asked, context, _ = g.v3_generation_fields(fields)
-                    units = g.source_units(case['notes'], asked, context_labels=context)[0]
-                    by_quote = {u['quote']: u['id'] for u in units}
-                    if 'catalogue' in payload:
-                        from core import v3_field_relations as rel
-                        body = []
-                        for f in asked:
-                            s = reference.get(f['key'], {})
-                            ids = [by_quote[q] for q in s.get('units', [])]
-                            options = {o['text']: o['id'] for o in rel.options(f)}
-                            body.append({'key': f['key'], 'unit_ids': ids, 'conflict': bool(s.get('conflict')),
-                                         'option_ids': [options[t] for t in s.get('options', [])],
-                                         'context': ['answer' if u['id'] in ids else
-                                                     s.get('relations', {}).get(u['quote'], 'independent') for u in units]})
-                        answer = {'fields': body}
-                    else:
-                        sent = {u['quote']: u['id'] for u in payload['source_units']}
-                        self.assertEqual(sent, by_quote, 'the request carries different source units than the replay')
-                        keys = [q['key'] for q in payload['questions']]
-                        answer = {'fields': [{'key': k, 'unit_ids': [sent[q] for q in reference.get(k, {}).get('units', [])],
-                                              'conflict': bool(reference.get(k, {}).get('conflict'))} for k in keys]}
-                    result.setdefault('requests', []).append({
-                        'payload_keys': sorted(payload), 'relations_payload': 'catalogue' in payload,
-                        'questions': len(payload.get('questions') or []), 'source_units': len(payload.get('source_units') or []),
-                        'catalogue': len(payload.get('catalogue') or []), 'max_tokens': wire.get('max_tokens'),
-                        'model': wire.get('model'), 'request_bytes': len(json.dumps(wire).encode())})
+                    answer, units = steps.reference_answer(case['notes'], version.fields, payload, reference)
+                    if units is not None:
+                        self.assertEqual(units['sent'], units['expected'],
+                                         'the request carries different source units than the replay')
+                    result.setdefault('requests', []).append(steps.request_summary(wire))
                     return sdk_response(answer)
 
                 with patch('anthropic.Anthropic') as provider:
@@ -139,9 +110,7 @@ class NotesAppPath(V3Fixture, TestCase):
                     return result
                 encounter.refresh_from_db()
                 generated = copy.deepcopy(encounter.answers)
-                state = {'conflict': 'held'}
-                result['fields'] = {k: {'status': state.get(v['status'], v['status']), 'text': v.get('text', '')}
-                                    for k, v in generated.items()}
+                result['fields'] = steps.field_outcomes(generated)
                 replay = (((OBSERVATIONS.get('cases') or {}).get(cid) or {}).get('reference') or {}).get(path, {}).get('fields', {})
                 result['agrees_with_generation_layer_replay'] = {
                     k: (replay[k]['status'], replay[k]['text']) == (v['status'], v['text']) if k in replay else None
@@ -149,18 +118,8 @@ class NotesAppPath(V3Fixture, TestCase):
                 page = stage('generated-review', self.client.get(f'/encounters/{encounter.pk}/'))
                 result['review_rows'] = {row['key']: row.get('status') for row in page.context['answer_rows']}
                 controls = set(html.fromstring(page.content).xpath('//*[@name]/@name'))
-                payload = {'revision': encounter.revision}
-                for f in version.fields:
-                    value = generated.get(f['key'], {})
-                    text = value.get('text', '') if value.get('status') == 'supported' else ''
-                    if 'answer_' + f['key'] in controls:
-                        payload['answer_' + f['key']] = text
-                    if 'reviewed_' + f['key'] in controls:
-                        payload['reviewed_' + f['key']] = 'on'
-                    if not text and 'blank_' + f['key'] in controls:
-                        payload['blank_' + f['key']] = 'on'
-                for requirement in version.review_requirements:
-                    payload['requirement_' + requirement['key']] = 'on'
+                payload = steps.review_payload(version.fields, generated, controls, encounter.revision,
+                                               version.review_requirements)
                 saved = stage('save-review', self.client.post(f'/encounters/{encounter.pk}/save/', payload))
                 if saved.status_code != 302:
                     result['failure_boundary'] = 'review save'
@@ -180,21 +139,7 @@ class NotesAppPath(V3Fixture, TestCase):
                 result['export_sha256'] = hashlib.sha256(exported).hexdigest()
                 self.assertEqual(result['export_sha256'], encounter.export_sha256)
                 self.assertEqual(private_path(template.original_path).read_bytes(), original)
-                with ZipFile(io.BytesIO(original)) as a, ZipFile(io.BytesIO(exported)) as b:
-                    result['zip_members_unchanged'] = a.namelist() == b.namelist()
-                    result['changed_parts'] = [p for p in a.namelist() if a.read(p) != b.read(p)]
-                new = w.SlotIndex(w.open_package(exported))
-                written = {}
-                for f in version.fields:
-                    text = result['fields'].get(f['key'], {}).get('text', '')
-                    if result['fields'].get(f['key'], {}).get('status') != 'supported' or not text:
-                        continue
-                    target = new.by_id[f['locator']['part'] + '#' + f['locator']['slot']]
-                    exported_text = w.text_of(target.el)
-                    written[f['key']] = (text in exported_text) or (f['kind'] in ('choice', 'checkbox'))
-                result['supported_answers_in_their_fields'] = written
-                result['workflow_success'] = (result['zip_members_unchanged'] and set(result['changed_parts']) <= {'word/document.xml'}
-                                              and all(written.values()))
+                result.update(steps.export_verification(original, exported, version.fields, result['fields']))
                 return result
         except Exception as error:
             result['exception'] = type(error).__name__ + ': ' + str(error)[:500]

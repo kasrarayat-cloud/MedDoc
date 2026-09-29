@@ -118,6 +118,21 @@ def main():
     ap.add_argument('--skip-form-check', action='store_true', help='do not re-inspect the .docx forms')
     args = ap.parse_args()
     cases_path = os.path.abspath(args.cases)
+    provenance = None
+    if args.replay:
+        # RECHECK R2: a live answer is scored only against the FROZEN expectations — every file EXPECTED-SHA256SUMS
+        # lists must match and the cases are the frozen cases.json — and the output records the manifest, this replay,
+        # the cases, the responses and the candidate. Refused before anything is booted or written.
+        sys.path.insert(0, os.path.dirname(HERE))
+        import freeze_check
+        try:
+            if cases_path != os.path.abspath(CASES):
+                raise freeze_check.FreezeMismatch('--replay scores against the frozen notes/cases.json only')
+            provenance = freeze_check.provenance(os.path.abspath(__file__), {'cases': cases_path,
+                                                                              'responses': args.replay})
+        except freeze_check.FreezeMismatch as refused:
+            print('REFUSED: %s' % refused, file=sys.stderr)
+            return 2
     os.makedirs(args.state_dir, exist_ok=True)
     if args.record and frozen_cases_sha() != sha(cases_path):
         print('cases.json does not match the frozen manifest (mapping/EXPECTED-SHA256SUMS); freeze the expectations '
@@ -306,7 +321,12 @@ def main():
                                            caught(entry.get('app_should', 'not_supported'), got[k])
                                            if kind == 'forbidden' else 'adjudicate_by_hand')}
                 out.setdefault(cid, {})[path] = rows
-        print(json.dumps(out, indent=1, ensure_ascii=False))
+        replayed = {'provenance': provenance, 'responses': out}
+        if args.out:
+            with open(args.out, 'w') as fh:
+                json.dump(replayed, fh, indent=1, ensure_ascii=False)
+                fh.write('\n')
+        print(json.dumps(replayed, indent=1, ensure_ascii=False))
         return 0
 
     # ─── replay every listed selection, alone and beside the reference ────────────────────────────────────────

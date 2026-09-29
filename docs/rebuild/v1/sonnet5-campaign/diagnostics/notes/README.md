@@ -1,5 +1,14 @@
 # Ordinary-notes diagnostic set (frozen 2026-09-28; repaired and re-frozen 2026-09-29)
 
+> **Re-frozen again 2026-09-29 after the recheck (`../RECHECK.md`), before any live notes result.** No case, form or
+> expectation changed. `offline_replay.py --replay` now refuses (exit 2, nothing written) unless every file in
+> `../mapping/EXPECTED-SHA256SUMS` matches and the cases are the frozen `cases.json`, and its output is
+> `{"provenance": {...}, "responses": {...}}` (manifest, replay, cases, responses and candidate sha256; R2). The walk's
+> steps that must stay identical to the campaign's live ordinary_notes stage — the path flags, the reference answer,
+> the review save and the export verification — moved unchanged into `app_path_steps.py`, which `app_path_walk.py` and
+> `rebuild/ops/sonnet5_stages.py` both import; `run_app_path_walk.py` gained `--runtime DIR` and compares `rebuild/`
+> outside `rebuild/ops/`.
+
 > **2026-09-29 repair** (after `../CHECK.md`; details in `../REPAIR.md`, sha256 of every file in `../FREEZE.json`).
 > What changed for anyone scoring a live run:
 >

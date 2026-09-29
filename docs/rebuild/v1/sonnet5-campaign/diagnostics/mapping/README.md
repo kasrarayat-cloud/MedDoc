@@ -1,5 +1,25 @@
 # Sonnet 5 qualification: MAPPING-stage diagnostic set
 
+> **Re-frozen again 2026-09-29, after the independent recheck (`../RECHECK.md`) and before any live mapping result.**
+> Grader-only repairs; no map, form or expectation changed.
+>
+> - **R1 — a slot record over a kept wrong field is not a hold.** `grade_app_path.grade_output` grades `held_safe`
+>   only when a covering field is held by a not_answer/uncertain FIELD verdict or a KEYED record, or when no field
+>   covers the area and a record lies on its destination. A covered area touched only by slot-level records is graded
+>   by its covering field (the kept leaked label, one-choice list or single choice is `wrong`), with `hold` recorded
+>   and `hold_reaches_field: false`; the summary counts them (`areas_slot_record_over_kept_field`). The self-test adds
+>   a `slot_only` response per form and four assertions (the recheck's probe, and the app's own fixture).
+> - **R2 — the live graders enforce and record the freeze.** `--grade` and `--self-test` (and the notes
+>   `offline_replay.py --replay`) refuse, exit 2, writing nothing, unless every file `EXPECTED-SHA256SUMS` lists
+>   matches and every expected map is listed (`../freeze_check.py`, the one implementation); what they write carries
+>   `provenance`: the manifest's sha256, the grader's own sha256, each input's sha256 and the candidate (commit,
+>   whether `rebuild/` outside `rebuild/ops/` still equals it, the engine files' sha256).
+> - **R3 — f6b's note is exercised.** Its administrative `source_note` (all five answers missing) is sent: the mapping
+>   stage's plan (`rebuild/ops/sonnet5_stages.py`, `plan --stage mapping`) confirms f6b's proposed mapping and
+>   generates it with exactly that note, then checks that nothing is filled; f6a is generated with `long-answer.txt`
+>   and checked for the whole answer.
+> - Tests: `rebuild/ops/tests/test_stage_graders.py` (subprocess; the recheck's f5.C2 positive control included).
+
 > **Repaired and re-frozen 2026-09-29** after the independent check (`../CHECK.md`); what changed and why is in
 > `../REPAIR.md`, and `../FREEZE.json` lists the sha256 of every file. In short: eight forms (the new twin `f2b`
 > tests the leave list without the engine's special owner word), fresh wording where a provider-bound string shared

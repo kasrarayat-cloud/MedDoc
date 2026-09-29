@@ -1,10 +1,15 @@
 """Run app_path_walk.py (CHECK.md N6) on the candidate against the campaign QA PostgreSQL; mocked provider only.
 
-    python -B run_app_path_walk.py TAG [--observations FILE] [--out app-path-walk.json] [-- test labels...]
+    python -B run_app_path_walk.py TAG [--observations FILE] [--out app-path-walk.json] [--runtime DIR]
+                                       [-- test labels...]
 
 Django creates and drops a test database named quillmd_qa_diag_notes_<TAG>; nothing else on that server is touched.
 The password is read from the campaign's qa-db file into the child's environment and never printed. Every tracked
 and untracked source file under rebuild/ is hashed before and after the run; a change fails the run.
+
+--runtime DIR (2026-09-29): where the per-walk records, the state directory and the log go (default: the campaign's
+diagnostics runtime directory). The candidate check compares rebuild/ outside rebuild/ops/ (the campaign runner lives
+there and is not the application under test).
 """
 from pathlib import Path
 import argparse, datetime, hashlib, json, re, subprocess, sys
@@ -20,16 +25,18 @@ ap = argparse.ArgumentParser()
 ap.add_argument('tag')
 ap.add_argument('--observations', type=Path, default=HERE / 'offline-observations.json')
 ap.add_argument('--out', type=Path, default=HERE / 'app-path-walk.json')
+ap.add_argument('--runtime', type=Path, default=RUNTIME)
 ap.add_argument('labels', nargs='*')
 args = ap.parse_args()
 assert re.fullmatch(r'[a-z0-9]+', args.tag), 'tag: lowercase letters and digits'
 head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-engine_diff = subprocess.run(['git', 'diff', '--quiet', CANDIDATE, '--', 'rebuild'], cwd=ROOT).returncode
-assert engine_diff == 0, 'rebuild/ differs from the candidate'
+engine_diff = subprocess.run(['git', 'diff', '--quiet', CANDIDATE, '--', 'rebuild', ':(exclude)rebuild/ops'],
+                             cwd=ROOT).returncode
+assert engine_diff == 0, 'rebuild/ (outside rebuild/ops/) differs from the candidate'
 database = 'quillmd_qa_diag_notes_' + args.tag
-walk_out = RUNTIME / ('walk-' + args.tag)
+walk_out = args.runtime / ('walk-' + args.tag)
 assert not walk_out.exists(), 'choose a new tag: every first result is preserved'
-state = RUNTIME / ('walk-state-' + args.tag)
+state = args.runtime / ('walk-state-' + args.tag)
 env = {'PATH': '/usr/bin:/bin', 'QUILLMD_ENV_MANAGED': '1', 'PYTHONDONTWRITEBYTECODE': '1',
        'QUILLMD_SECRET_KEY': 'synthetic-offline-notes-walk-only', 'QUILLMD_DATA_MODE': 'synthetic',
        'QUILLMD_AI_MODE': 'fixture', 'QUILLMD_DB_HOST': '127.0.0.1', 'QUILLMD_DB_PORT': '55731',
@@ -41,7 +48,8 @@ files = subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--e
                                 cwd=ROOT, text=True).splitlines()
 before = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in files if (ROOT / p).is_file()}
 started = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-log = RUNTIME / ('walk-' + args.tag + '.log')
+args.runtime.mkdir(parents=True, exist_ok=True)
+log = args.runtime / ('walk-' + args.tag + '.log')
 with log.open('x') as output:
     result = subprocess.run([str(PYTHON), '-B', 'manage.py', 'test', '--noinput', '--verbosity', '2',
                              *(args.labels or ['app_path_walk'])],
@@ -59,10 +67,12 @@ summary = {'walks': len(walks), 'workflow_success': sum(1 for v in walks.values(
            'fields_disagreeing_with_replay': disagree}
 record = {'schema': 'quillmd-sonnet5-notes-app-path-walk/1', 'started_at': started,
           'completed_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
-          'head': head, 'rebuild_equals_candidate': engine_diff == 0, 'test_database': database,
+          'head': head, 'rebuild_equals_candidate': engine_diff == 0,
+          'rebuild_compared': 'rebuild/ outside rebuild/ops/ (the campaign runner)', 'test_database': database,
           'database_server': '127.0.0.1:55731 (campaign QA PostgreSQL)', 'exit_code': result.returncode,
           'harness_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                             for p in (HERE / 'app_path_walk.py', HERE / 'app_path_settings.py', Path(__file__))},
+                             for p in (HERE / 'app_path_walk.py', HERE / 'app_path_steps.py', HERE / 'app_path_settings.py',
+                                       Path(__file__))},
           'cases_sha256': hashlib.sha256((HERE / 'cases.json').read_bytes()).hexdigest(),
           'observations_sha256': hashlib.sha256(args.observations.read_bytes()).hexdigest() if args.observations.exists() else None,
           'provider': 'mocked (anthropic.Anthropic patched to return each case\'s reference selection); Python sockets denied',
