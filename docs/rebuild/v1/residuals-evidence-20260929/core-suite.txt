@@ -1,0 +1,25 @@
+manage.py test core.tests --noinput --parallel 1 (throwaway database quillmd_qa_resid_t1, one run at a time), tree = this commit's rebuild/
+
+FAIL: test_round_13_a_whole_leg_unexamined_is_read_once_per_sentence (core.tests.test_wm_narrative.ReviewCost.test_round_13_a_whole_leg_unexamined_is_read_once_per_sentence)
+Round 13's triage: a sentence saying only that a leg was not examined is read once, not per sentence under it
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_wm_narrative.py", line 5387, in test_round_13_a_whole_leg_unexamined_is_read_once_per_sentence
+    self.within_limit(generation_and_finalization, 5.0)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_wm_narrative.py", line 5060, in within_limit
+    self.assertLess(time.perf_counter() - start, limit or self.LIMIT)
+AssertionError: 5.121053782990202 not less than 5.0
+
+----------------------------------------------------------------------
+Ran 2381 tests in 1770.816s
+FAILED (failures=1, skipped=31)
+real	29m42.698s
+exit 1
+
+Isolated re-runs of the one failure, same database, after the suite (load average 3.46 on 14 cores):
+Ran 1 test in 4.939s OK
+Ran 1 test in 4.706s OK
+Ran 1 test in 4.563s OK

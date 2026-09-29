@@ -16,6 +16,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.validators import validate_email
 from django.db import connection, transaction, DatabaseError
 from django_otp.plugins.otp_totp.models import TOTPDevice
+from core.forms import account_email
 from core.models import User
 from core.security import audit
 from ops import deployment_profile
@@ -73,6 +74,12 @@ def bootstrap(action, profile, declaration, identifier, email):
                     'confirmed_mfa': bool(user and TOTPDevice.objects.filter(user=user, confirmed=True).exists())}
         empty_clinical_state()
         if action == 'create':
+            # The one rule every account-creating door applies to an address (core.forms.account_email, RA-LOW-1).
+            try:
+                canonical = account_email(email)
+            except ValidationError:
+                canonical = None
+            require(canonical == email, 'first_admin_email')
             require(not User.objects.exists(), 'bootstrap_user_exists')
             secret = private_json(profile.operator_directory / 'first-admin-password.json')
             require(set(secret) == {'password'} and isinstance(secret['password'], str), 'password_file')

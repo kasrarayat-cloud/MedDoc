@@ -1,0 +1,56 @@
+Affected modules after the RR2 repairs (27 modules):  core.tests.test_money_closeout core.tests.test_account_email_rule core.tests.test_invitation_account_race core.tests.test_mapping_outcome_unknown core.tests.test_mapping_assistance core.tests.test_settlement_outcome_unknown core.tests.test_settlement_database_error core.tests.test_billing_policy core.tests.test_billing_boundary_regressions core.tests.test_doctor_pilot_self_service core.tests.test_v1_invite_only core.tests.test_retention_flow_locks core.tests.test_worker_financial_reliability core.tests.test_account_session_revocation core.tests.test_auth_refutation core.tests.test_disposition_integration core.tests.test_email core.tests.test_internal_access_review core.tests.test_preview_access core.tests.test_private_email core.tests.test_production_first_admin core.tests.test_recovery core.tests.test_v1_data_mode core.tests.test_v1_email_copy core.tests.test_v1_mfa_required core.tests.test_v1_rate_limit_client core.tests.test_workflow
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......./opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(PydanticSerializationUnexpectedValue: Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections]
+PydanticSerializationUnexpectedValue: Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ParsedResponseFunctionToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFileSearchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionWebSearch` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `AdditionalTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseReasoningItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `Program` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ProgramOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalRequest` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalResponse` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ImageGenerationCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallAction` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpListTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCodeInterpreterToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCompactionItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  PydanticSerializationUnexpectedValue(Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  return self.__pydantic_serializer__.to_python(
+.../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+........................................................................................................................................................................................................................................Forbidden (private preview CSRF validation failed).
+Forbidden (private preview CSRF validation failed).
+.Forbidden (private preview CSRF validation failed).
+Forbidden (private preview CSRF validation failed).
+.........................Forbidden (CSRF cookie not set.): /recovery/
+Forbidden (CSRF cookie not set.): /verification/resend/
+..........................................................................................................................................................
+----------------------------------------------------------------------
+Ran 422 tests in 351.434s
+
+OK
+Preserving test database for alias 'default'...
+Found 422 test(s).
+System check identified no issues (0 silenced).
+exit=0

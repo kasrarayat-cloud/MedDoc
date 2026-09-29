@@ -1,0 +1,62 @@
+[RB-M1 resolution ignores the durable receipt (the 8e3dcfd0 behaviour)] expected 1 / measured 1
+[RB-M1 resolution ignores the durable receipt (the 8e3dcfd0 behaviour)] mutation applied: True
+[RB-M1 resolution ignores the durable receipt (the 8e3dcfd0 behaviour)] restored: True (sha256 d6e7d638c018b9cf… before, d6e7d638c018b9cf… after)
+[RB-M2 a provider-completed settlement failure treated as not processed (hold released)] expected 1 / measured 1
+[RB-M2 a provider-completed settlement failure treated as not processed (hold released)] mutation applied: True
+[RB-M2 a provider-completed settlement failure treated as not processed (hold released)] restored: True (sha256 3fd8f298b2c661ce… before, 3fd8f298b2c661ce… after)
+[RB-M3 settlement failure swallowed and the output adopted] expected 1 / measured 1
+[RB-M3 settlement failure swallowed and the output adopted] mutation applied: True
+[RB-M3 settlement failure swallowed and the output adopted] restored: True (sha256 3fd8f298b2c661ce… before, 3fd8f298b2c661ce… after)
+[
+ {
+  "id": "RB-M1 resolution ignores the durable receipt (the 8e3dcfd0 behaviour)",
+  "applied": true,
+  "exit": 1,
+  "summary": [
+   "Ran 2 tests in 1.899s",
+   "FAILED (failures=1, errors=1)"
+  ],
+  "failing": [
+   "test_absorb_records_the_receipts_cost_whatever_the_form_carried",
+   "test_release_records_the_receipts_cost_as_the_platforms"
+  ],
+  "killed": true,
+  "restored_sha256_equal": true,
+  "sha256": "d6e7d638c018b9cf81989ba5bf4f8ce6b759512ac00e3e4b553902ea804a803f"
+ },
+ {
+  "id": "RB-M2 a provider-completed settlement failure treated as not processed (hold released)",
+  "applied": true,
+  "exit": 1,
+  "summary": [
+   "Ran 5 tests in 5.174s",
+   "FAILED (failures=6)"
+  ],
+  "failing": [
+   "test_a_connection_terminated_during_settlement_is_held_for_reconciliation",
+   "test_generation_held_for_reconciliation_at_every_stage",
+   "test_transcription_held_for_reconciliation_and_notes_untouched"
+  ],
+  "killed": true,
+  "restored_sha256_equal": true,
+  "sha256": "3fd8f298b2c661ce3baa48c9a9c6e7351b21d51690a25c6c8db5bf73c6912bf9"
+ },
+ {
+  "id": "RB-M3 settlement failure swallowed and the output adopted",
+  "applied": true,
+  "exit": 1,
+  "summary": [
+   "Ran 5 tests in 5.406s",
+   "FAILED (failures=7)"
+  ],
+  "failing": [
+   "test_a_connection_terminated_during_settlement_is_held_for_reconciliation",
+   "test_an_error_after_the_settlement_committed_is_absorbed_never_charged",
+   "test_generation_held_for_reconciliation_at_every_stage",
+   "test_transcription_held_for_reconciliation_and_notes_untouched"
+  ],
+  "killed": true,
+  "restored_sha256_equal": true,
+  "sha256": "3fd8f298b2c661ce3baa48c9a9c6e7351b21d51690a25c6c8db5bf73c6912bf9"
+ }
+]

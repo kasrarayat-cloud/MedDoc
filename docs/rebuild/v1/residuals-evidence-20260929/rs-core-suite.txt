@@ -1,0 +1,29 @@
+manage.py test core.tests --noinput --keepdb --parallel 1 (throwaway database quillmd_qa_resid2_t1, one run at a time), tree = 61c5cc8f + this change
+2026-09-29T01:50:37Z
+Tree (uncommitted change on 61c5cc8f):
+ docs/rebuild/cost-definition.md                    |   6 +-
+ docs/rebuild/v1/residuals-assessment-20260929.md   |  15 +-
+ rebuild/core/forms.py                              |  30 +++-
+ rebuild/core/jobs.py                               | 161 ++++++++++++++++-----
+ .../management/commands/bootstrap_first_admin.py   |   7 +
+ rebuild/core/mapping_jobs.py                       |  21 ++-
+ rebuild/core/tests/test_billing_policy.py          |  33 ++++-
+ rebuild/core/tests/test_mapping_assistance.py      |  23 ++-
+ 8 files changed, 234 insertions(+), 62 deletions(-)
+a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43  core/jobs.py
+1a0b08adb2ff85019b6526f4c088a63f9526fa95dbf55d962560a818015e9a60  core/mapping_jobs.py
+e8fd69b60e016f00a5a7f635dc28d39ff8667e585a70927479c31acdb158b7cc  core/forms.py
+bf5498703e115db008752f5c4990de94c5251006cf27a61a3d749320c5af6efe  core/management/commands/bootstrap_first_admin.py
+9913579822b5cbcfae98b38560773ffc0a1a6ccd4bf01c2b4395066245239e03  core/tests/test_settlement_outcome_unknown.py
+6521b2138b35b3d219aa3ad4832088be8dcb67f3fb10e58aba3976b8021c69c9  core/tests/test_account_email_rule.py
+9f5a2be24064f3e7dde55001b29c150ca4ecc102761a4430422b99053f047c90  core/tests/test_billing_policy.py
+b0e843bcd49f3574abcbb98af35634776af298e697fec387faf9c0aad9523d56  core/tests/test_mapping_assistance.py
+...
+2026-09-29T01:50:37Z
+Ran 2405 tests in 1777.431s
+OK (skipped=31)
+real	29m43.403s
+user	23m5.112s
+sys	3m39.363s
+exit 0
+2026-09-29T02:20:21Z

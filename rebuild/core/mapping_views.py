@@ -61,8 +61,12 @@ def review(request,pk):
         if not error:error='; '.join(exc.messages) if isinstance(exc,ValidationError) else 'This form cannot be prepared for mapping assistance.'
     areas={row['slot']:shown_area(row) for row in version.assistance.get('areas',[])}
     unresolved=[{**areas.get(row['slot'],shown_area(row)),**row} for row in version.assistance.get('unresolved',[])]
+    from .jobs import deliverable
+    operations=list(Job.objects.filter(mapping_version__template=template).order_by('-created_at')[:20])
+    # A charged operation's stored provider output, under views.job_result's rule (RR2-L1).
+    for job in operations:job.deliverable=bool(job.result_path) and deliverable(job)
     return render(request,'mapping_assistance.html',{'template':template,'version':version,'error':error,'quote':quote,
-        'approval':approval,'operations':Job.objects.filter(mapping_version__template=template).order_by('-created_at')[:20],
+        'approval':approval,'operations':operations,
         'unresolved':unresolved,'areas':list(areas.values()),'record':version.assistance},status=status)
 
 @transaction.atomic

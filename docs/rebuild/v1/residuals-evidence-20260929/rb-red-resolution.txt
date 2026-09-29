@@ -1,0 +1,49 @@
+Using existing test database for alias 'default' ('quillmd_qa_resid_t1')...
+test_absorb_records_the_receipts_cost_whatever_the_form_carried (core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError.test_absorb_records_the_receipts_cost_whatever_the_form_carried) ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+FAIL
+test_release_records_the_receipts_cost_as_the_platforms (core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError.test_release_records_the_receipts_cost_as_the_platforms) ... ERROR
+test_generation_held_for_reconciliation_at_every_stage (core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_generation_held_for_reconciliation_at_every_stage) ... ok
+test_transcription_held_for_reconciliation_and_notes_untouched (core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_transcription_held_for_reconciliation_and_notes_untouched) ... ok
+
+======================================================================
+ERROR: test_release_records_the_receipts_cost_as_the_platforms (core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError.test_release_records_the_receipts_cost_as_the_platforms)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_database_error.py", line 195, in test_release_records_the_receipts_cost_as_the_platforms
+    self.resolve({'outcome': 'release_no_cost', 'evidence_note': 'Provider console lookup for the stored request id'})
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_database_error.py", line 183, in resolve
+    cost = PlatformCost.objects.get(job=job, kind='absorbed_failure')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 635, in get
+    raise self.model.DoesNotExist(
+core.models.PlatformCost.DoesNotExist: PlatformCost matching query does not exist.
+
+======================================================================
+FAIL: test_absorb_records_the_receipts_cost_whatever_the_form_carried (core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError.test_absorb_records_the_receipts_cost_whatever_the_form_carried)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_database_error.py", line 198, in test_absorb_records_the_receipts_cost_whatever_the_form_carried
+    self.resolve({'outcome': 'absorb_platform_failure', 'actual_cost': '0.05',
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_database_error.py", line 184, in resolve
+    self.assertEqual(cost.amount, receipt.actual_cost)
+AssertionError: Decimal('0.050000000000') != Decimal('0.100000000000')
+
+----------------------------------------------------------------------
+Ran 4 tests in 4.688s
+
+FAILED (failures=1, errors=1)
+Preserving test database for alias 'default' ('quillmd_qa_resid_t1')...
+Found 4 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

@@ -296,10 +296,16 @@ def register(request):
     form=RegisterForm(request.POST or None)
     if request.method=='POST' and form.is_valid():
         if not rate_limit('register:'+client_address(request),limit=5):return HttpResponse('Try again later.',status=429)
-        with transaction.atomic():
-            user=form.save(commit=False);user.username=form.cleaned_data['email'];user.save()
-            raw=token();verification=Verification.objects.create(user=user,token_hash=digest(raw),expires_at=timezone.now()+timedelta(hours=24))
-            audit(user,'account.register')
+        try:
+            with transaction.atomic():
+                user=form.save(commit=False);user.username=form.cleaned_data['email'];user.save()
+                raw=token();verification=Verification.objects.create(user=user,token_hash=digest(raw),expires_at=timezone.now()+timedelta(hours=24))
+                audit(user,'account.register')
+        except IntegrityError:
+            # The same address registered by another request a moment earlier (R-A, forms.account_created_meanwhile).
+            if not account_created_meanwhile(form.cleaned_data['email']):raise
+            form.add_error('email',ACCOUNT_EXISTS)
+            return render(request,'register.html',{'form':form})
         delivery=verification_mail(user,raw,verification)
         if delivery.status=='outbox':messages.success(request,'Verification created in the private development outbox. Email delivery is not live yet.')
         elif delivery.status=='accepted':messages.success(request,'Verification submitted to the email provider. Check your inbox; inbox delivery is not yet confirmed.')
@@ -1695,22 +1701,31 @@ def invite_accept(request,raw):
         if existing or form.is_valid():
             if not existing and form.cleaned_data['email']!=invite.email:form.add_error('email','Use the invited email address.')
             else:
-                with transaction.atomic():
-                    invite=Invitation.objects.select_for_update().get(pk=invite.pk)
-                    if invite.accepted_at or invite.expires_at<=timezone.now():raise Http404
-                    # An outstanding invitation cannot outlive its issuer's authority.
-                    membership(invite.invited_by,invite.department,roles=['owner','manager'])
-                    if existing:user=existing
-                    else:user=form.save(commit=False);user.username=invite.email;user.verified_at=timezone.now();user.save()
-                    current_membership=Membership.objects.select_for_update().filter(user=user,department=invite.department).first()
-                    if current_membership and not current_membership.active:
-                        return HttpResponse('Your department access is inactive. Ask the organization owner to restore it. This invitation has not been used.',status=409,content_type='text/plain')
-                    # Possession of the emailed high-entropy invitation verifies this mailbox.
-                    if not user.verified_at:user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
-                    Membership.objects.get_or_create(user=user,department=invite.department,defaults={'role':invite.role})
-                    welcome_credit(user);invite.accepted_at=timezone.now();invite.save(update_fields=['accepted_at'])
-                    audit(user,'department.invitation_accepted',invite.pk,department=invite.department)
-                messages.success(request,'Invitation accepted; your personal welcome credit is available.' if welcome_credit_label() else 'Invitation accepted.');return redirect('login')
+                try:
+                    with transaction.atomic():
+                        invite=Invitation.objects.select_for_update().get(pk=invite.pk)
+                        # Accepted by a simultaneous submission of this same invitation (RR2-ACC-3): this one wrote nothing.
+                        if invite.accepted_at:messages.info(request,INVITATION_ALREADY_ACCEPTED);return redirect('login')
+                        if invite.expires_at<=timezone.now():raise Http404
+                        # An outstanding invitation cannot outlive its issuer's authority.
+                        membership(invite.invited_by,invite.department,roles=['owner','manager'])
+                        if existing:user=existing
+                        else:user=form.save(commit=False);user.username=invite.email;user.verified_at=timezone.now();user.save()
+                        current_membership=Membership.objects.select_for_update().filter(user=user,department=invite.department).first()
+                        if current_membership and not current_membership.active:
+                            return HttpResponse('Your department access is inactive. Ask the organization owner to restore it. This invitation has not been used.',status=409,content_type='text/plain')
+                        # Possession of the emailed high-entropy invitation verifies this mailbox.
+                        if not user.verified_at:user.verified_at=timezone.now();user.save(update_fields=['verified_at'])
+                        Membership.objects.get_or_create(user=user,department=invite.department,defaults={'role':invite.role})
+                        welcome_credit(user);invite.accepted_at=timezone.now();invite.save(update_fields=['accepted_at'])
+                        audit(user,'department.invitation_accepted',invite.pk,department=invite.department)
+                except IntegrityError:
+                    # Another request created this address's account first (R-A, forms.account_created_meanwhile): answered as the
+                    # same request a moment later is. The whole acceptance rolled back, so this invitation is unused.
+                    if existing or not account_created_meanwhile(invite.email):raise
+                    messages.error(request,ACCOUNT_CREATED_MEANWHILE);existing_account=True
+                else:
+                    messages.success(request,'Invitation accepted; your personal welcome credit is available.' if welcome_credit_label() else 'Invitation accepted.');return redirect('login')
     return render(request,'register.html',{'form':form,'invitation':invite,'existing_invited_account':existing_account})
 
 #: ⚠️ A FINALIZED RECORD'S CODES ARE PART OF IT. Finalization does not renumber the revision (see `finalize`), so a Coding tab
@@ -2031,9 +2046,15 @@ def admin_resolve_job(request,pk):
     from .billing import absorb_failed_job
     settled=Usage.objects.filter(job=job,simulated=False).first()
     simulated=Usage.objects.filter(job=job,simulated=True).exists() or (job.kind in ('generation','mapping') and job.config.get('mode',settings.AI_MODE)!='live')
+    # ⚠️ A DURABLE RECEIPT WITH NO USAGE ROW IS PROVIDER COST QUILLMD ALREADY EVIDENCES: the provider completed and metered the
+    # request, and only settlement failed (a DatabaseError or a refusal inside settle(); R-B, docs/rebuild/v1/residuals-
+    # assessment-20260929.md). The platform absorbs the receipt's cost whatever the form carried, as the settled branch below
+    # and the batch resolution (batch_jobs.resolve_view) already do. It used to record 'no provider cost evidenced' and no
+    # platform cost on 'release_no_cost', and the typed amount on 'absorb_platform_failure'.
+    receipt=None if settled or simulated else ProviderReceipt.objects.filter(job=job,simulated=False).first()
     release(job)
     job.state='failed';job.finished_at=timezone.now()
-    job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
+    job.error='Resolved by administrator: settled provider cost absorbed by QuillMD.' if settled else 'Resolved by administrator: synthetic fixture job carries no provider cost.' if simulated else 'Resolved by administrator: the provider cost of its durable receipt absorbed by QuillMD.' if receipt else 'Resolved by administrator: no provider cost evidenced.' if data['outcome']=='release_no_cost' else 'Resolved by administrator: provider cost absorbed by QuillMD.'
     # A resolved job ended without success: free its request key so the same revision or recording can be requested again.
     job.request_key=ended_key(job,'failed')
     job.save(update_fields=['state','error','finished_at','request_key'])
@@ -2041,6 +2062,8 @@ def admin_resolve_job(request,pk):
         # The worker settled the charge before the outcome became uncertain: reverse it, whatever amount the form carried.
         absorbed=absorb_failed_job(job,actor=request.user,note=note)
     elif simulated: absorbed=None
+    elif receipt:
+        absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':receipt.actual_cost,'description':'Provider cost absorbed: provider completed, settlement failed','evidence_reference':f'receipt:{receipt.pk} {note}'[:240],'recorded_by':request.user})
     elif data['outcome']=='absorb_platform_failure':
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':data['actual_cost'],'description':'Provider cost absorbed: uncertain outcome resolved by administrator','evidence_reference':note,'recorded_by':request.user})
     else: absorbed=None
@@ -2159,14 +2182,17 @@ def review_transcript(job):
 
 
 def job_result(request,pk):
-    job=get_object_or_404(Job.objects.filter(encounter__department__in=departments(request.user)),pk=pk)
+    # One rule for every job's stored output: an active member of the job's department. A mapping job has no encounter; its
+    # department is its template's, which scoping by encounter alone never matched (RR2-L1: its requester got 404).
+    visible=departments(request.user)
+    job=get_object_or_404(Job.objects.filter(models.Q(encounter__department__in=visible)|models.Q(mapping_version__template__department__in=visible)),pk=pk)
     receipt=get_object_or_404(ProviderReceipt,job=job)
     if not job.result_path:raise Http404('Provider output was not stored; financial receipt is retained.')
     # Output of a request that is not charged (absorbed platform failure, pending reconciliation) is not delivered.
     if not deliverable(job):raise Http404('Provider output is delivered only for charged requests and usable transcripts.')
     path=private_path(job.result_path)
     if hashlib.sha256(path.read_bytes()).hexdigest()!=job.result_sha256:raise ValidationError('Provider output integrity check failed.')
-    audit(request.user,'job.result_download',job.pk,department=job.encounter.department)
+    audit(request.user,'job.result_download',job.pk,department=job.department)
     return FileResponse(path.open('rb'),as_attachment=True,filename=f'quillmd-provider-result-{str(job.pk)[:8]}.json',content_type='application/json')
 
 

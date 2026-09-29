@@ -1,0 +1,10 @@
+Probe (rs1_probe.py) on the sources of 61c5cc8f: settle()'s COMMIT answer lost, the commit then landed.
+Ran 1 test in 1.038s
+OK
+PROBE state: reconciliation
+PROBE error: Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.
+PROBE handler waited for the in-flight commit: True
+PROBE usage row exists: True
+PROBE usage ledger debits: ['-0.150000000000']
+PROBE reservations: ['settled']
+PROBE audit billing: uncertain
