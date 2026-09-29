@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__r2fix__run-django-tests.sh",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-ae86c9551080201b3.jsonl:59",
+   "timestamp": "2026-09-29T01:00:03.292Z",
+   "sha256_after": "a223b6ed5144d8d3a33a86435190117ee3dabacb37fea8fff6bb5b70d831434d",
+   "bytes_after": 1018
+  }
+ ],
+ "lines": 15,
+ "sha256": "a223b6ed5144d8d3a33a86435190117ee3dabacb37fea8fff6bb5b70d831434d"
+}

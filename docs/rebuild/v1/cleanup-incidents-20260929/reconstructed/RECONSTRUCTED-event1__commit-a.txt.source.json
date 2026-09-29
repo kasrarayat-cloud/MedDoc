@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__commit-a.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_81ecaf0b-939/agent-a72f8adaf164f1511.jsonl:550",
+   "timestamp": "2026-09-29T00:52:40.562Z",
+   "sha256_after": "2bc6628f0aca12921b54f7d0e186881c4acca96ea3f70ffae2892e472bd033a6",
+   "bytes_after": 2163
+  }
+ ],
+ "lines": 34,
+ "sha256": "2bc6628f0aca12921b54f7d0e186881c4acca96ea3f70ffae2892e472bd033a6"
+}

@@ -185,3 +185,12 @@ Two further points:
 - **N8 (consent):** which rule governs a "Consent obtained" box still needs a ruling.
 - **M7:** the results are pinned to this candidate; `FREEZE.json` records the sha and that `rebuild/` equals it.
 - **README.md:** the mapping and notes READMEs gained a repair banner and updated reproduce/scoring notes. Their older sections still describe the checked set.
+
+## Amendment, 2026-09-29 (appended; the incident text above is kept as written)
+
+Corrections from the reconciled record `docs/rebuild/v1/cleanup-incidents-20260929.md`: of the 227 shredded files,
+**197 were this agent's and 30 were not** (the "205" counted 8 top-level files twice). The directories' "same
+minute" times were produced by the shred itself; the last writes were 00:14:32Z (`camp/`) and about 00:35Z
+(`evidence/`). The shredded files cannot be restored as files, but the cited residual evidence is committed
+(`ra-red.txt` matches a sha256 recorded before the shred), and 26 of the 30 foreign files' contents are committed or
+reconstructed from the session transcript.

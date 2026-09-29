@@ -1,0 +1,6 @@
+after boot: 11 first-party modules resident, 0 from candidate source: -
+request before     GET /health/ -> ('200 OK', 105)
+before window: 30 first-party modules resident, 0 from candidate source: -
+window: `from documents import DocumentError` succeeded
+after restore: 32 first-party modules resident, 2 from candidate source: documents documents.service
+documents exports after restore: ['DocumentError', 'fill_template', 'inspect_template', 'locate_fields', 'outline_template', 'resolve_template', 'service']

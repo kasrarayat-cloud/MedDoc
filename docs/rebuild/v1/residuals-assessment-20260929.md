@@ -444,3 +444,10 @@ Evidence: `residuals-evidence-20260929/rr2-*` and `rr2_mutate.py`. Tests: `rebui
 (`AccountEmailBounds`, `QuotedLocalPart`, two first-administrator tests), `rebuild/core/tests/test_invitation_account_race.py`
 (`OneInvitationAcceptedTwiceAtOnce`), `rebuild/core/tests/test_mapping_outcome_unknown.py`, and two tests in
 `rebuild/core/tests/test_mapping_assistance.py`.
+
+## Amendment, 2026-09-29 — re-runnability of the committed mutation proofs (appended)
+
+`residuals-evidence-20260929/rs_mutate.py` and `rr2_mutate.py` name runners in the session scratchpad that no longer
+exist (`pyenv/run-tests.sh`, shredded at 09:42Z; `rr2repair/run-tests.sh`, removed by its own agent at 03:49Z). They
+are not re-runnable as committed. Reconstructed runners are in `docs/rebuild/v1/cleanup-incidents-20260929/
+reconstructed/`. The assessment's cited evidence files themselves are committed and hash-checked.

@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__msg-merge-stop.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P.jsonl:18657",
+   "timestamp": "2026-09-29T09:38:42.593Z",
+   "sha256_after": "8df6846ffb35a59675c10d8b6915426ffcae62f09a27a839ddd17fd6599b690a",
+   "bytes_after": 298
+  }
+ ],
+ "lines": 6,
+ "sha256": "8df6846ffb35a59675c10d8b6915426ffcae62f09a27a839ddd17fd6599b690a"
+}

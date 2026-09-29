@@ -1,0 +1,13 @@
+V1 blockers and decisions: the staged Sonnet 5 campaign results (QA worker)
+
+B-M1, B-G1 and B-W2 evidence columns gain the 2026-09-29 QA-worker results; no gate is
+closed. A dated section records the three stages ($0.079304 of $40.00): model check
+passed, mapping failed-1 and not reopened after two repair rounds with verified HIGHs,
+ordinary notes' default path 0 unsafe with 29 over-holds and the relations contract failure.
+
+Decisions log: N8 (consent) as the lead decision already stated in the diagnostics RECHECK;
+the mapping stage not reopened and model-assisted mapping kept off; no relations-contract
+repair in this milestone (disk over the preflight line; default-off path; budget not spent
+for its own sake), reversible by an owner instruction.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

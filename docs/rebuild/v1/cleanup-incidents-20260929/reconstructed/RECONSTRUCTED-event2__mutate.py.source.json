@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__mutate.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "write",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl:403",
+   "timestamp": "2026-09-29T01:36:32.914Z",
+   "sha256_after": "5a5b3f82aa780dff19d6c1a2d771b68acf401cd332c4f1f122394a8bda7af297",
+   "bytes_after": 9745
+  }
+ ],
+ "lines": 158,
+ "sha256": "5a5b3f82aa780dff19d6c1a2d771b68acf401cd332c4f1f122394a8bda7af297"
+}

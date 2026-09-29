@@ -1,0 +1,9 @@
+[
+ {"name": "event2__rr__probes__money1.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-a7932d7ba0724de14.jsonl", 78, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/rr/probes/money1.py", ">"]]},
+ {"name": "event2__rr__probes__money2.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-a7932d7ba0724de14.jsonl", 82, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/rr/probes/money2.py", ">"]]},
+ {"name": "event2__rr__probes__archives.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-a7932d7ba0724de14.jsonl", 86, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/rr/probes/archives.py", ">"]]},
+ {"name": "event2__rr__probes__decide.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-a7932d7ba0724de14.jsonl", 90, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/rr/probes/decide.py", ">"]]},
+ {"name": "event2__rr__probes__export.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-a7932d7ba0724de14.jsonl", 106, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/rr/probes/export.py", ">"]]},
+ {"name": "event2__rr2verify__rebuild__verify_settings.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_2b34f2ad-30d/agent-abf4397bad3c12fbc.jsonl", 77, "$S/rebuild/verify_settings.py", ">"]]},
+ {"name": "event2__rr2verify__run.sh", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_2b34f2ad-30d/agent-abf4397bad3c12fbc.jsonl", 77, "$S/run.sh", ">"]]}
+]

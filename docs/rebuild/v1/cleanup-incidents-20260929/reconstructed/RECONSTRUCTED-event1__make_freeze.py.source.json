@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__make_freeze.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_81ecaf0b-939/agent-a72f8adaf164f1511.jsonl:594",
+   "timestamp": "2026-09-29T00:57:26.869Z",
+   "sha256_after": "95d9d58103433e3ba8e928edb08de800a0a103b2301101e201cfb1db999f7482",
+   "bytes_after": 5069
+  }
+ ],
+ "lines": 66,
+ "sha256": "95d9d58103433e3ba8e928edb08de800a0a103b2301101e201cfb1db999f7482"
+}

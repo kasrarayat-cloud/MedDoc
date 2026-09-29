@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__commit-message.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "write",
+   "source": "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl:635",
+   "timestamp": "2026-09-29T00:07:28.324Z",
+   "sha256_after": "01dea9cd92f9b8da87c2fbc5989614bb8a1437eb17bfd2479a0cd3b359953ce9",
+   "bytes_after": 2765
+  }
+ ],
+ "lines": 37,
+ "sha256": "01dea9cd92f9b8da87c2fbc5989614bb8a1437eb17bfd2479a0cd3b359953ce9"
+}

@@ -1,0 +1,14 @@
+[
+ {"id": "RA-M1 invite_accept handler removed", "file": "core/views.py",
+  "old": "if existing or not account_created_meanwhile(invite.email):raise", "new": "raise",
+  "tests": ["core.tests.test_invitation_account_race.TwoInvitationsForOneNewAddress.test_two_department_invitations_accepted_at_the_same_moment"]},
+ {"id": "RA-M2 clinic accept handler removed", "file": "core/clinic_invitations.py",
+  "old": "if existing or not account_created_meanwhile(invitation.email):\n                        raise", "new": "if True:\n                        raise",
+  "tests": ["core.tests.test_invitation_account_race.TwoInvitationsForOneNewAddress.test_two_clinic_invitations_accepted_at_the_same_moment"]},
+ {"id": "RA-M3 register handler removed", "file": "core/views.py",
+  "old": "if not account_created_meanwhile(form.cleaned_data['email']):raise", "new": "raise",
+  "tests": ["core.tests.test_invitation_account_race.TwoRegistrationsForOneAddress.test_two_registrations_at_the_same_moment_create_one_account"]},
+ {"id": "RA-M4 handler swallows every IntegrityError", "file": "core/forms.py",
+  "old": "def account_created_meanwhile(email): return User.objects.filter(email__iexact=email).exists()", "new": "def account_created_meanwhile(email): return True",
+  "tests": ["core.tests.test_invitation_account_race.OtherIntegrityErrorsStayDefects", "core.tests.test_invitation_account_race.TwoRegistrationsForOneAddress.test_an_unrelated_integrity_error_is_still_a_defect"]}
+]

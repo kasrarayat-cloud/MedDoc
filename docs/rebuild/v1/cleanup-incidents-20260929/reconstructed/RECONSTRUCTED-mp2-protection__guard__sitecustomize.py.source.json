@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-mp2-protection__guard__sitecustomize.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl:87",
+   "timestamp": "2026-09-29T09:06:43.952Z",
+   "sha256_after": "49d5ad697b06fac1f22024466c43370cb08ff1c8b395842be1b78ccbde56eadc",
+   "bytes_after": 626
+  }
+ ],
+ "lines": 14,
+ "sha256": "49d5ad697b06fac1f22024466c43370cb08ff1c8b395842be1b78ccbde56eadc"
+}

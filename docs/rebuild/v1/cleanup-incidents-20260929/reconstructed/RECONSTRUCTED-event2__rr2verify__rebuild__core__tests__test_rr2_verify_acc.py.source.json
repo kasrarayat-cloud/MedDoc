@@ -1,0 +1,22 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__rr2verify__rebuild__core__tests__test_rr2_verify_acc.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "write",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-abf4397bad3c12fbc.jsonl:122",
+   "timestamp": "2026-09-29T02:44:12.467Z",
+   "sha256_after": "41a2f5cff8103db2b63eb3a61b71d092f9138ab196fc2853d3c3771df102df01",
+   "bytes_after": 6051
+  },
+  {
+   "step": "pyreplace",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-abf4397bad3c12fbc.jsonl:130",
+   "timestamp": "2026-09-29T02:44:36.289Z",
+   "sha256_after": "568cb12fab11080de2b58bc6ec26126cf99c20c2491205b0bd2cdc763a2200a2",
+   "bytes_after": 6387
+  }
+ ],
+ "lines": 117,
+ "sha256": "568cb12fab11080de2b58bc6ec26126cf99c20c2491205b0bd2cdc763a2200a2"
+}

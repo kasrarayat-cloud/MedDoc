@@ -1,0 +1,29 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-mp2-protection__rebuild__core__tests__test_refute_mp2.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "write",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl:117",
+   "timestamp": "2026-09-29T09:10:44.531Z",
+   "sha256_after": "b3844a405341a2225ff609d0197f1f62f42a8820ed304eb00e649105f27b0e7c",
+   "bytes_after": 5933
+  },
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl:138",
+   "timestamp": "2026-09-29T09:12:52.913Z",
+   "sha256_after": "b5501d80bab101b8e1359b9598327bfc5780ed7dccdfa90b4349182d02fc8a54",
+   "bytes_after": 9965
+  },
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl:161",
+   "timestamp": "2026-09-29T09:14:27.275Z",
+   "sha256_after": "6eb6028992c9cd64846ef6b98e79fec9aae7df8bed41bf3d90c4bd743a0d9497",
+   "bytes_after": 13614
+  }
+ ],
+ "lines": 215,
+ "sha256": "6eb6028992c9cd64846ef6b98e79fec9aae7df8bed41bf3d90c4bd743a0d9497"
+}

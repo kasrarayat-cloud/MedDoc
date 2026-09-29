@@ -1,0 +1,14 @@
+Record the mapping stage stop: two repair rounds, two verified HIGHs, not reopened
+
+Repair 1 (d40c8689) and repair 2 (48aa5e8d) on fix/v1-mapping-partial (pushed) each drew
+verified HIGH refutation findings. At 48aa5e8d: a signing/consent question box that holds
+printed guidance or a drawing is not held (word_v3.py:5002 non-empty gate), and a cell under
+a Signature column header is not a signing area unless the engine made one there
+(assistance.py:61-69). Model additions there are adopted and filled.
+
+Per the bounded-repair rule the mapping stage is not reopened; its $24.99016 stays unspent and
+does not transfer. Model-assisted mapping stays off (both flags default 0) and is not
+qualified. The repair branch is not integrated into v1/release-integration. The live-stages
+record gets an appended, dated amendment; its original rows are kept.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

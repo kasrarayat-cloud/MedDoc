@@ -1,0 +1,194 @@
+[
+ {
+  "name": "event2__pyenv__run-tests.sh",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "heredoc",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl",
+    129,
+    "run-tests.sh",
+    ">"
+   ]
+  ]
+ },
+ {
+  "name": "event2__pyenv__resid2_settings.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "heredoc",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl",
+    129,
+    "resid2_settings.py",
+    ">"
+   ]
+  ]
+ },
+ {
+  "name": "event2__pyenv__sitecustomize.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "heredoc",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl",
+    129,
+    "sitecustomize.py",
+    ">"
+   ]
+  ]
+ },
+ {
+  "name": "event2__pyenv__probe_rs1.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "heredoc",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl",
+    193,
+    "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/pyenv/probe_rs1.py",
+    ">"
+   ]
+  ]
+ },
+ {
+  "name": "event2__mutate.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "write",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl",
+    403
+   ]
+  ]
+ },
+ {
+  "name": "event2__commit-msg.txt",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "write",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl",
+    491
+   ],
+   [
+    "pyreplace",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl",
+    626,
+    ""
+   ],
+   [
+    "pyreplace",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-a970e15c7e673c393.jsonl",
+    631,
+    ""
+   ]
+  ]
+ },
+ {
+  "name": "event2__r2fix__mutate.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "write",
+    "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-ae86c9551080201b3.jsonl",
+    305
+   ],
+   [
+    "pyreplace",
+    "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-ae86c9551080201b3.jsonl",
+    354,
+    "m = Path("
+   ]
+  ]
+ },
+ {
+  "name": "event2__r2fix__run-django-tests.sh",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "heredoc",
+    "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-ae86c9551080201b3.jsonl",
+    59,
+    "run-django-tests.sh",
+    ">"
+   ]
+  ]
+ },
+ {
+  "name": "event2__rr2verify__rebuild__core__tests__test_rr2_verify_acc.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "write",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-abf4397bad3c12fbc.jsonl",
+    122
+   ],
+   [
+    "pyreplace",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-abf4397bad3c12fbc.jsonl",
+    130,
+    ""
+   ]
+  ]
+ },
+ {
+  "name": "event2__rr2verify__rebuild__core__tests__test_rr2_verify_m1.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "write",
+    "P/subagents/workflows/wf_2b34f2ad-30d/agent-abf4397bad3c12fbc.jsonl",
+    89
+   ]
+  ]
+ },
+ {
+  "name": "event2__rs1__rebuild__core__tests__test_rs1_verify.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "write",
+    "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a536008198534ca5e.jsonl",
+    84
+   ]
+  ]
+ },
+ {
+  "name": "event2__rs1__rebuild__verify_settings.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "write",
+    "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a536008198534ca5e.jsonl",
+    80
+   ]
+  ]
+ },
+ {
+  "name": "own-reap-0349__rr2repair__run-tests.sh",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "heredoc",
+    "P/subagents/workflows/wf_1516699d-93f/agent-a278cf46a50e013df.jsonl",
+    141,
+    "\"$D/run-tests.sh\"",
+    ">"
+   ]
+  ]
+ },
+ {
+  "name": "own-reap-0349__rr2repair__resid3_settings.py",
+  "outdir": "recovered",
+  "steps": [
+   [
+    "heredoc",
+    "P/subagents/workflows/wf_1516699d-93f/agent-a278cf46a50e013df.jsonl",
+    141,
+    "\"$D/resid3_settings.py\"",
+    ">"
+   ]
+  ]
+ }
+]

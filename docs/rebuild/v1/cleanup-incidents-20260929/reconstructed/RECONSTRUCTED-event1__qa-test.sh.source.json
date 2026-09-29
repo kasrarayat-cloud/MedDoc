@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__qa-test.sh",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_345deca9-b32/agent-a23989dfeb6b73899.jsonl:52",
+   "timestamp": "2026-09-29T00:26:34.605Z",
+   "sha256_after": "3e5923658dea9f441f9fe5a8acdd5d4d380583493fc0f35f1fac45e8afc523ed",
+   "bytes_after": 877
+  }
+ ],
+ "lines": 13,
+ "sha256": "3e5923658dea9f441f9fe5a8acdd5d4d380583493fc0f35f1fac45e8afc523ed"
+}

@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__rs1__rebuild__core__tests__test_rs1_verify.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "write",
+   "source": "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a536008198534ca5e.jsonl:84",
+   "timestamp": "2026-09-29T01:00:35.883Z",
+   "sha256_after": "f69f7eb33f2892b87e5ff2608985badefe3c782f18092847f2b51ccd13e7d1cd",
+   "bytes_after": 10784
+  }
+ ],
+ "lines": 213,
+ "sha256": "f69f7eb33f2892b87e5ff2608985badefe3c782f18092847f2b51ccd13e7d1cd"
+}

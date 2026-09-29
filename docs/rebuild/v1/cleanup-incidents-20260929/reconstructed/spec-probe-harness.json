@@ -1,0 +1,10 @@
+[
+ {"name": "mp2-verify__run.sh", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-a987b2bbafca1c9c0.jsonl", 101, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mp2-verify/run.sh", ">"]]},
+ {"name": "mp2-verify__summ.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-a987b2bbafca1c9c0.jsonl", 110, "/tmp/claude-1000/-opt-meddoc-pro/64d93580-8414-4553-b17d-ed04b0550ae1/scratchpad/mp2-verify/summ.py", ">"]]},
+ {"name": "mp2-verify__mp2cmp.py", "outdir": "recovered", "steps": [["write", "P/subagents/workflows/wf_62da2f2d-812/agent-a987b2bbafca1c9c0.jsonl", 136]]},
+ {"name": "mp2-protection__guard__sitecustomize.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl", 87, "$S/guard/sitecustomize.py", ">"]]},
+ {"name": "mp2-protection__run.sh", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl", 87, "$S/run.sh", ">"]]},
+ {"name": "mp2-usefulness-size__env.sh", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl", 92, "$S/env.sh", ">"]]},
+ {"name": "mp2-usefulness-size__probe__probe_size.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl", 214, "$S/probe/probe_size.py", ">"]]},
+ {"name": "mp2-usefulness-size__head__rebuild__quillmd__probe_settings.py", "outdir": "recovered", "steps": [["heredoc", "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl", 222, "$S/head/rebuild/quillmd/probe_settings.py", ">"]]}
+]

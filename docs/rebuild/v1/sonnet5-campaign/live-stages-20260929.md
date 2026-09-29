@@ -98,3 +98,11 @@ The mapping row's "reopen after repair" did not happen. Two repair rounds on `fi
 (`d40c8689`, `48aa5e8d`) each drew verified HIGH refutation findings, so under the bounded-repair rule the mapping
 stage is **not reopened** and no further mapping send is made in this campaign. Record:
 `mapping-repair-stop-20260929.md`.
+
+## Amendment, 2026-09-29 — the field-relations diagnosis (appended)
+
+The diagnosis above says the Sonnet 5 schema transform moved an array-length constraint into the description. More
+precisely: the schema that was sent had **no** length constraint on `context` at all (a length that depends on the
+request cannot be written into the static model); had one been emitted, the transform would indeed have moved it.
+The conclusion is unchanged: the positional contract is not enforced by structured output, and the repair is a
+contract the schema itself enforces (per-request keyed context).

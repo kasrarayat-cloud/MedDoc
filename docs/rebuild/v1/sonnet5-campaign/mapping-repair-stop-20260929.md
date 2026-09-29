@@ -63,3 +63,18 @@ initials/consent area — fail-closed over-holds; the text-addition capability l
 | mapping | $25.00 | $0.00984 | $24.99016 | failed-1; **not reopened** (two verified HIGHs after the bounded repair) |
 | ordinary_notes | $10.00 | $0.066604 | $9.933396 | failed-1 (contract on the relations path) |
 | **total** | **$40.00** | **$0.079304** | **$39.920696** | |
+
+## Amendment, 2026-09-29 (appended; the record above is kept as written)
+
+- "Probe `mp2verify.py`, session scratch, not retained" is inaccurate: the probe existed when this record was
+  committed (09:35:47Z) and was destroyed at 09:42:51Z by the lead's scratch cleanup. It is reconstructed from the
+  session transcript (15,249 bytes, equal to the verifier's own listing; `docs/rebuild/v1/cleanup-incidents-20260929/
+  reconstructed/`); its raw output log was not recovered. R1 and R2 were **reproduced again** from the
+  reconstruction on 2026-09-29 and stand.
+- "The candidate … refuses only a replacement that would turn a signing field into another kind
+  (`core/mapping_assistance.py:146`)" is incomplete: line 146 also has a joined-label arm that almost never fires,
+  and the engine's own signing areas are protected at the candidate only by the overlap checks.
+- "R1/R2 … not measured on the candidate" is superseded: measured the same day, the candidate is **weaker** than the
+  repair branch — it adopts and fills R1 in every variant including the empty signing box, R2 whenever the column
+  cell holds anything, and signature/initials places once the engine's own signing field is absent. Its manual
+  mapping edits (add field; remove and re-add) also reach signing places. Both paths are flag-gated off by default.

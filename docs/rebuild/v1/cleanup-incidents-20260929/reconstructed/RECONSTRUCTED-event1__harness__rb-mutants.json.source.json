@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__harness__rb-mutants.json",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl:369",
+   "timestamp": "2026-09-28T23:53:25.141Z",
+   "sha256_after": "1fee1422f7af99ee1e7a5e62150326ef546d51dbaa00a5ab961a3b488c806981",
+   "bytes_after": 1126
+  }
+ ],
+ "lines": 12,
+ "sha256": "1fee1422f7af99ee1e7a5e62150326ef546d51dbaa00a5ab961a3b488c806981"
+}

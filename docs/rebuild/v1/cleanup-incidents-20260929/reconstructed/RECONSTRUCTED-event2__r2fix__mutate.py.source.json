@@ -1,0 +1,22 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__r2fix__mutate.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "write",
+   "source": "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-ae86c9551080201b3.jsonl:305",
+   "timestamp": "2026-09-29T01:33:16.151Z",
+   "sha256_after": "ce34417f4e331ccd75f1004b5ca347a5ac565e6d2f10e8f1d902582c4a2fe5da",
+   "bytes_after": 25165
+  },
+  {
+   "step": "pyreplace",
+   "source": "P/subagents/workflows/wf_9cc6dfc7-1ed/agent-ae86c9551080201b3.jsonl:354",
+   "timestamp": "2026-09-29T01:40:35.593Z",
+   "sha256_after": "ae99042c9a949c315694de23c3e63ef11e424f28e6016623614d69ad417b1fba",
+   "bytes_after": 25432
+  }
+ ],
+ "lines": 324,
+ "sha256": "ae99042c9a949c315694de23c3e63ef11e424f28e6016623614d69ad417b1fba"
+}

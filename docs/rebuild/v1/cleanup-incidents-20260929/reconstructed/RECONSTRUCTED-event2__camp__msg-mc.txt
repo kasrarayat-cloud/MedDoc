@@ -1,0 +1,10 @@
+Record the Sonnet 5 model check: passed on one request, $0.00286 (QA worker)
+
+One request through the ruled-act door under the committed declaration, runner 231183b3 on
+candidate 8e3dcfd0: served claude-sonnet-5, end_turn, 840 input / 118 output tokens,
+global geography, settled at 1.5x, billing audit clean, adopted answers equal to the
+documented values with evidence on their own lines, review, finalization and authenticated
+export verified. QA-worker evidence only; the installed release was not touched.
+Campaign total exposed $0.00286 of $40; mapping and ordinary-notes stages may start.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

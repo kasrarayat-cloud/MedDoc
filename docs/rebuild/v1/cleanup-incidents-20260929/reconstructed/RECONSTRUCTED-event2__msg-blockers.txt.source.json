@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__msg-blockers.txt",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P.jsonl:18701",
+   "timestamp": "2026-09-29T09:39:27.388Z",
+   "sha256_after": "46c7811b8ac36b9379fb4891f4c9435f51ea22e76991292cb26b62628a3a454e",
+   "bytes_after": 827
+  }
+ ],
+ "lines": 13,
+ "sha256": "46c7811b8ac36b9379fb4891f4c9435f51ea22e76991292cb26b62628a3a454e"
+}

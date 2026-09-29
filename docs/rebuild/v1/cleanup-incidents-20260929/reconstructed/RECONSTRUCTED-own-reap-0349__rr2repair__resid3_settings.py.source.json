@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-own-reap-0349__rr2repair__resid3_settings.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_1516699d-93f/agent-a278cf46a50e013df.jsonl:141",
+   "timestamp": "2026-09-29T02:49:59.063Z",
+   "sha256_after": "3d26dac5dfd319ec1918d06005be835744d5739317a74efd729c2932245a6561",
+   "bytes_after": 129
+  }
+ ],
+ "lines": 3,
+ "sha256": "3d26dac5dfd319ec1918d06005be835744d5739317a74efd729c2932245a6561"
+}

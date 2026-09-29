@@ -1,0 +1,22 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event1__harness__run.sh",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl:144",
+   "timestamp": "2026-09-28T23:37:20.374Z",
+   "sha256_after": "de007b3ba708119138cc51b37ddb1cfdf5d8aec201ff78cf177f450eecef12fa",
+   "bytes_after": 804
+  },
+  {
+   "step": "replace_line",
+   "source": "P/subagents/workflows/wf_c5c35e3c-6c0/agent-a31c70309d323a89f.jsonl:410",
+   "timestamp": "2026-09-28T23:58:33.632Z",
+   "sha256_after": "a9dc4c0aae72bf61740380fa311b34fdb01eec61a7d422515f7a8583f7105799",
+   "bytes_after": 843
+  }
+ ],
+ "lines": 17,
+ "sha256": "a9dc4c0aae72bf61740380fa311b34fdb01eec61a7d422515f7a8583f7105799"
+}

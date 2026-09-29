@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-event2__rr2verify__rebuild__verify_settings.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_2b34f2ad-30d/agent-abf4397bad3c12fbc.jsonl:77",
+   "timestamp": "2026-09-29T02:42:13.388Z",
+   "sha256_after": "2c284bdbc4104dde5797420a44a05d01570675e04fc22c9707ad78d6f0197beb",
+   "bytes_after": 723
+  }
+ ],
+ "lines": 12,
+ "sha256": "2c284bdbc4104dde5797420a44a05d01570675e04fc22c9707ad78d6f0197beb"
+}

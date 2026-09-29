@@ -115,3 +115,12 @@ questions) against the control's 11/20/9. No holdout was opened.
    2026-09-27) cannot be shredded by this account and were not unlinked; they need an owner-sanctioned route.
 7. **Disk**: 93% used, 22 GB free. Most of it is another tenant's 36 GB PostgreSQL volume, which was left alone.
 8. **Provider console charge**: read and recorded against the $0.079304 configured-rate exposure.
+
+## Amendment, 2026-09-29 (appended; the text above is kept as written)
+
+§7's "Scratch shredded" line is superseded by `cleanup-incidents-20260929.md`: there were two events (00:58Z,
+227 files of which 30 were other agents'; and 09:42–09:46Z, 6,537 files shredded by the lead after this report was
+committed, including that cleanup's own logs). The "one mutation-proof log" named here is reconstructable; the
+real losses are the per-mutant records behind `a68ee3ec` and the mapping verifier's raw log. The 27-second tree
+move is re-examined there: no installed process restarted or loaded candidate code at startup; whether a web
+request arrived inside the window is not provable with the access available.

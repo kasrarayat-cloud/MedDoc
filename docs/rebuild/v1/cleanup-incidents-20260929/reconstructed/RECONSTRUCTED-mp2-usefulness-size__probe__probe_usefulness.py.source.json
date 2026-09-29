@@ -1,0 +1,29 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-mp2-usefulness-size__probe__probe_usefulness.py",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl:115",
+   "timestamp": "2026-09-29T09:11:01.896Z",
+   "sha256_after": "d66a0278faae6cdbe0fd1e13957250cb60af2ac76e67274feec3422f56c7ecb3",
+   "bytes_after": 9188
+  },
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl:205",
+   "timestamp": "2026-09-29T09:16:03.489Z",
+   "sha256_after": "0a89319fd1fc6bef7205bfb010904b873fd560f8b44e34413d6cdfab282db57d",
+   "bytes_after": 12201
+  },
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acb4f2510edec1c23.jsonl:226",
+   "timestamp": "2026-09-29T09:19:50.347Z",
+   "sha256_after": "2b84232a75357a24bf455d3c36eff9ccb4d8848308ed620da21df68cb3d4dc70",
+   "bytes_after": 13053
+  }
+ ],
+ "lines": 211,
+ "sha256": "2b84232a75357a24bf455d3c36eff9ccb4d8848308ed620da21df68cb3d4dc70"
+}

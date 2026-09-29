@@ -1,0 +1,15 @@
+{
+ "reconstructed_file": "RECONSTRUCTED-mp2-protection__run.sh",
+ "label": "RECONSTRUCTED from session transcripts",
+ "steps": [
+  {
+   "step": "heredoc",
+   "source": "P/subagents/workflows/wf_62da2f2d-812/agent-acf5fab7b239dc08d.jsonl:87",
+   "timestamp": "2026-09-29T09:06:43.952Z",
+   "sha256_after": "cee4a70521ce932bcba09f6ef8b49173637cbd7c2578d424e3fefae933630560",
+   "bytes_after": 538
+  }
+ ],
+ "lines": 6,
+ "sha256": "cee4a70521ce932bcba09f6ef8b49173637cbd7c2578d424e3fefae933630560"
+}

@@ -1,0 +1,20 @@
+Record the owner's staged $40 Sonnet 5 approval before any request under it
+
+The owner approved one synthetic Sonnet 5 campaign: "Approve the staged $40 maximum"
+(authority quillmd-v1-sonnet5-staged-40-call_9fkOp2kqbQ28e17HqXgHFlzk; $5 model check, then
+up to $25 mapping and $10 notes only after it succeeds). The owner delivered the desktop
+assistant's structured record to this session directly; it is stored verbatim.
+
+- docs/foundation/mutations/20260928-quillmd-v1-sonnet5-staged-campaign.md: the declaration the
+  campaign runner will require (committed before any send): limits per stage and in total,
+  model and request profile, the three pricing versions computed offline with the candidate's
+  own code (the default equals the migration note's documented value), admission and stop
+  rules, the QA-only route, synthetic-only inputs (the development originals carry "no
+  provider upload"), and the credential file the owner still has to deliver.
+- V1-EXTERNAL-REQUEST.md: status line; the original request text is kept unchanged. The live
+  Stripe payment remains unapproved.
+
+No earlier record of this authority exists (repository, worktrees, runtime evidence and git
+history searched), so this is not a duplicate grant. No provider request has been made.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
