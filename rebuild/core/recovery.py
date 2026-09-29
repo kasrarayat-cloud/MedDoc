@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from .email_delivery import deliver_account_email
+from .forms import account_lookup_email
 from .models import User, Verification
 from .security import audit, client_address, digest, rate_limit, token
 
@@ -54,7 +55,7 @@ def recovery_request(request):
     form = RecoveryRequestForm(request.POST or None)
     sent = False
     if request.method == 'POST' and form.is_valid():
-        email = form.cleaned_data['email'].strip().lower()
+        email = account_lookup_email(form.cleaned_data['email'])
         allowed_ip = rate_limit('recovery-ip:' + client_address(request), limit=20)
         allowed_email = rate_limit('recovery-email:' + email, limit=3)
         if allowed_ip and allowed_email:
@@ -110,7 +111,7 @@ def verification_resend(request):
     form = RecoveryRequestForm(request.POST or None)
     sent = False
     if request.method == 'POST' and form.is_valid():
-        email = form.cleaned_data['email'].strip().lower()
+        email = account_lookup_email(form.cleaned_data['email'])
         allowed_ip = rate_limit('verification-resend-ip:' + client_address(request), limit=20)
         allowed_email = rate_limit('verification-resend-email:' + email, limit=3)
         if allowed_ip and allowed_email:

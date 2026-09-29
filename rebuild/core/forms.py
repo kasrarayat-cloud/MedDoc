@@ -1,7 +1,9 @@
 from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import UserCreationForm
+from django.core.validators import validate_email
 from django.utils import timezone
+import idna
 from .models import User, Department, Patient, TemplateVersion, Membership, Invitation, ClinicInvitation, latest_service_date
 from .security import departments
 
@@ -33,7 +35,7 @@ class LoginForm(forms.Form):
 #: letters in a local part (ſ ı İ and the Kelvin sign U+212A), and only because re.IGNORECASE folds them onto its ASCII
 #: class; every other one is refused already. So an account address is ASCII, stripped and lowercased: the one set on which
 #: every comparison agrees. Nothing is folded into a different address (NFKC or casefold would rewrite 'ſ' as 's', and the
-#: stored address is where the account's mail goes); an internationalized domain is entered in its ASCII ("xn--") form.
+#: stored address is where the account's mail goes); an internationalized domain is stored in its ASCII ("xn--") form.
 #: Applied where an account's address is chosen: registration, both invitation acceptances (RegisterForm), both invitation
 #: issuances, and the first administrator (bootstrap_first_admin).
 #: ⚠️ AND IT IS UNQUOTED AND FITS EVERY COLUMN IT IS WRITTEN TO (RR2-ACC-2, RR2-ACC-1, the second refutation of the same
@@ -42,21 +44,58 @@ class LoginForm(forms.Form):
 #: not unquoted, for the reason nothing is folded: the stored address is where the account's mail goes. And the address
 #: is the account's username (the views set username = email), a 150-character column where the email and invitation
 #: columns hold 254: 151 characters or more passed every form and every door answered 500 (a DataError on the insert).
-ACCOUNT_EMAIL_NOT_ASCII=('Enter the email address in ASCII characters. An internationalized domain can be entered in its '
-                         'ASCII ("xn--") form.')
+#: ⚠️ AND AN INTERNATIONALIZED DOMAIN IS ACCEPTED IN ITS OWN LETTERS AND STORED AS ITS A-LABEL (v1 close-out, email). The
+#: STORED address stays ASCII, so every comparison above still agrees. The part before "@" must still be typed in ASCII
+#: (checked as typed, before lowercasing). The domain goes through account_domain: an ASCII domain is lowercased exactly as
+#: before, except that a typed "xn--" label must be a valid, canonical A-label; any other domain is converted by idna
+#: (UTS46 mapping, non-transitional -- idna 3.x has no transitional mode --, STD3 rules, IDNA2008 validity: bidi, CONTEXTJ/O,
+#: canonical Punycode) to the lowercase A-label form DNS resolves, so every spelling of one domain (case, fullwidth, NFD,
+#: soft hyphen, typed A-label) is one stored address and two different domains (faß/fass, ıbm/ibm) stay two. The stored
+#: domain must itself pass EmailValidator: that refuses a trailing dot (the fully qualified spelling of the same name, a
+#: second string for one mailbox) and a converted form the email field would refuse when typed back (a@example.１２３).
+#: The bound is measured on the stored form. The doors that LOOK an account up (sign-in, recovery, verification resend)
+#: find it, and key their per-address limits, by account_lookup_email: one account and one bucket for every spelling.
+#: Nothing stored is rewritten. An ASCII input gives exactly the lookup key it gave before, and the stored address it gave
+#: before unless it carries an invalid "xn--" label, which is now refused where an address is chosen.
+ACCOUNT_EMAIL_NOT_ASCII=('Enter the email address in ASCII characters before the "@". The domain after it may be entered '
+                         'in its own letters or in its ASCII ("xn--") form.')
 ACCOUNT_EMAIL_QUOTED='Enter the email address without quotation marks.'
+ACCOUNT_EMAIL_BAD_DOMAIN='Enter a valid domain after the "@", in its own letters or in its ASCII ("xn--") form.'
 ACCOUNT_EMAIL_MAX_LENGTH=min(User._meta.get_field('username').max_length,User._meta.get_field('email').max_length,
                              Invitation._meta.get_field('email').max_length,ClinicInvitation._meta.get_field('email').max_length)
 ACCOUNT_EMAIL_TOO_LONG=f'Enter an email address of at most {ACCOUNT_EMAIL_MAX_LENGTH} characters.'
+def account_domain(domain):
+    """The stored form of an account address's domain (the part after the last "@"); ValidationError otherwise."""
+    if domain.isascii():
+        domain=domain.lower()
+        try:
+            for label in domain.split('.'):
+                if label.startswith('xn--'): idna.ulabel(label)
+        except idna.IDNAError: raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN) from None
+    else:
+        try: domain=idna.encode(domain,uts46=True,std3_rules=True).decode('ascii')
+        except idna.IDNAError: raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN) from None
+    if domain not in validate_email.domain_allowlist and not validate_email.validate_domain_part(domain):
+        raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN)
+    return domain
 def account_email(value):
     """The address an account is created with or invited at, under the one rule above; ValidationError otherwise.
-    ASCII is checked on the address as typed, before lowercasing: str.lower() itself folds the Kelvin sign onto 'k'.
-    A double quote can only be part of a quoted local part: EmailValidator admits it nowhere else."""
+    The part before "@" is checked for ASCII as typed, before lowercasing: str.lower() itself folds the Kelvin sign onto
+    'k'. A double quote can only be part of a quoted local part: EmailValidator admits it nowhere else."""
     email=(value or '').strip()
-    if not email.isascii(): raise forms.ValidationError(ACCOUNT_EMAIL_NOT_ASCII)
+    local,at,domain=email.rpartition('@')
+    if not local.isascii(): raise forms.ValidationError(ACCOUNT_EMAIL_NOT_ASCII)
     if '"' in email: raise forms.ValidationError(ACCOUNT_EMAIL_QUOTED)
+    if not at: raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN)
+    email=local.lower()+'@'+account_domain(domain)
     if len(email)>ACCOUNT_EMAIL_MAX_LENGTH: raise forms.ValidationError(ACCOUNT_EMAIL_TOO_LONG)
-    return email.lower()
+    return email
+def account_lookup_email(value):
+    """The address a lookup door (sign-in, recovery, verification resend) finds an account by AND keys its per-address
+    rate limit on: the stored form when the rule accepts the input, so every spelling of one domain reaches one account and
+    one bucket; otherwise the input stripped and lowercased, exactly as before (it can match only what it matched before)."""
+    try: return account_email(value)
+    except forms.ValidationError: return (value or '').strip().lower()
 
 class RegisterForm(SyntheticAttestation,UserCreationForm):
     synthetic_only=forms.BooleanField(label='I will use synthetic test data only.')

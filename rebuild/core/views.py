@@ -250,7 +250,7 @@ def login_view(request):
     next_url=request.POST.get('next',request.GET.get('next',''))
     if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(next_url,allowed_hosts=set()):next_url=''
     if request.method=='POST' and form.is_valid():
-        email=form.cleaned_data['email'].lower()
+        email=account_lookup_email(form.cleaned_data['email'])
         if not rate_limit('login-ip:'+client_address(request),limit=40) or not rate_limit('login-email:'+email):
             form.add_error(None,'Too many sign-in attempts. Try again later.')
         else:
