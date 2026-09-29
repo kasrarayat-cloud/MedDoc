@@ -1,27 +1,43 @@
 {
  "schema": "quillmd-sonnet5-mapping-baseline/1",
  "what": "Pre-model deterministic baseline for the Sonnet 5 MAPPING-stage diagnostics. Measurement only.",
- "recorded_at": "2026-09-28T23:51:43Z",
+ "recorded_at": "2026-09-29T00:52:50Z",
  "order_of_work": "Forms generated and expected maps written and checked (check_expected.py, engine-free) BEFORE this measurement; the expected maps' sha256 were frozen in EXPECTED-SHA256SUMS and this run refuses unless every expected map still matches that manifest.",
  "expectations": {
   "manifest": "EXPECTED-SHA256SUMS",
-  "manifest_sha256": "68724344c86a3dbe6063430b4a09b5beb5cafe31a72e3c96e3cf46395581f3ae",
+  "manifest_sha256": "3beddaf52269c725d53bafc3f0e2381ef2b933bab2f960fd35e861316608ecd7",
   "frozen_meta": {},
-  "manifest_mtime_utc": "2026-09-28T23:51:34Z",
+  "manifest_mtime_utc": "2026-09-29T00:52:29Z",
   "files": {
-   "f1-guidance-confirmation.expected.json": "d2bce729a3db62c97082fe9f978e828fd0c389e2f044d2940314cb454435b325",
-   "f2-leave-checkboxes.expected.json": "f8987ab71e835e9018b8628a9495d4977e674b5245b298f4099e4735e4fd5aa8",
+   "f1-guidance-confirmation.expected.json": "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae",
+   "f2-leave-checkboxes.expected.json": "96dfba0669f5fa0de718992dcdaba7e7c44b5fae3336dbc336f042e0d4dd6eb0",
+   "f2b-leave-checkboxes-owner.expected.json": "97e98a1f8b28859d5eef592e2f0fb37698d5243d4e78243b846c217790149809",
    "f3-selection-instructions.expected.json": "fd1911a1385ce6075297083520b5c52711791770cbc31ea100e83bd935c5ba78",
-   "f4-exam-grid.expected.json": "0c78d77ffb8790dae54241937cdf0474014da7f188e56b7aa91cc3cc5274ffb9",
-   "f5-negative-controls.expected.json": "e47ebf2a7d2705dbdb33887fa3a7a8c465a50791cd45e66fbe11474630182947",
+   "f4-exam-grid.expected.json": "8c7dd094a3ec963fbc4751a2f3ec0a1e98159b6539f9d57abcf9ca532c082499",
+   "f5-negative-controls.expected.json": "22ebd42a76a0104fb88903bf2e4abf8037149e6b70b9299056d946eb6d141379",
    "f6a-long-answer.expected.json": "cbdc1fdcb0b27dee3e25c8db08a93b7293ef35c583ea14e0656ee526a7d31f4f",
-   "f6b-admin-missing.expected.json": "91b671d7c8e76266c32df34e78f1d90e41b5c66d21d9ffd623fd9ded11aa2876"
+   "f6b-admin-missing.expected.json": "87465c4b9eed9fc5fd9de7ef6db3b9e1364faab66306fc852ff21c842bf8b390"
+  },
+  "frozen_with_them": {
+   "../notes/app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
+   "../notes/app_path_walk.py": "5b733ad10f46420127656163fa813d898299f0dd78dbf999df2b8c07c6797c1a",
+   "../notes/build_note_forms.py": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
+   "../notes/cases.json": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+   "../notes/offline_replay.py": "4c3965f72312a4201215e4a40c6c1502679c5a9c4c2d741745246bb78175c21b",
+   "../notes/run_app_path_walk.py": "628daa226258d70a0fc8d36c0033c976c4ad169fad612f88918735fe05fcb76a",
+   "build_forms.py": "32e72baeb9f05b48059c0ca1b9ffc0b66cdb945b4ee7002d701c8c84d3ac1ab4",
+   "check_expected.py": "b2fec94b3808be9d98c4a5d6e5b6bed6af8c1e20eaa2b61cfd1bca3da7b185ff",
+   "grade_app_path.py": "5a51f113bbb459bc720825af445b57767e2307e08c0a64ce0e49c2b3f014e258",
+   "long-answer.txt": "919be558f73a23ebc46851d9be9321f570d28e8f89bea81ce63f8c75ba564e7f",
+   "long_answer_readback.py": "b43514b35a6a0ec6d1fd93d3adaadbfaba97c19d275540c0f125b5fe0cd20891",
+   "measure_baseline.py": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
+   "wording_check.py": "e40012d9cb1a15a673ed850659ad94ace1a752bd172cbafa9575e34c72221878"
   },
   "match_frozen": true
  },
  "candidate": {
   "worktree": "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics",
-  "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+  "head": "0beaf2b2f3f0786da6917fea9b9bcc5aa16054ea",
   "engine_files_clean": true,
   "engine_sha256": {
    "rebuild/documents/word_v3.py": "4e2ea03d7fb3e1050d0702b7ca960f9cd2e160ecf0552e2fedeba74922d5b04f",
@@ -32,7 +48,7 @@
  },
  "harness": {
   "script": "mapping",
-  "script_sha256": "45aa529bea2c3ab21cde83c6532cc025e5c1f1b5b2e7a80235b6506ce4fde255",
+  "script_sha256": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
   "python": "3.12.3",
   "network": "denied (socket() and create_connection() both raised PermissionError before the engine import)",
   "calls": [
@@ -42,11 +58,12 @@
   "not_run": "no fill/export, no renderer, no provider/model/token-count call, no database"
  },
  "forms": {
-  "f1-guidance-confirmation.docx": "88a123880adf22538a3ef4dccdf083da2353f3248c8afb244b4efa65ee90d96c",
-  "f2-leave-checkboxes.docx": "abed0741fd0f2cd22f8b77fc947c7b8fbb7657c4eb0e0d60ed1669988faf1557",
+  "f1-guidance-confirmation.docx": "ceac8361c341f92939295e6c34f6fbd82b66a71cfe54984c95fb2ac1a24f54bc",
+  "f2-leave-checkboxes.docx": "e4e14bcbd66b1b8f5809dbca9c8a4736602ff9b8a321905f86d2e97323bc85a8",
+  "f2b-leave-checkboxes-owner.docx": "c5b07b53ee3e769b1f626520627b0ad374410bb1154eb6f13612b76f0d1f02d0",
   "f3-selection-instructions.docx": "830804ca0cdd48da1a59ab463d7e652bb390716b57012badc8ae75f6037faa6c",
-  "f4-exam-grid.docx": "06d0b8869b576a1b1eb8a2bbf1489e1782723907fd8cf65d20b2f42cc7fd3cb2",
-  "f5-negative-controls.docx": "1e1d6be87b9caf593ad47331c7a4b3b82bdb70f6423d3336528cd70f08dd9749",
+  "f4-exam-grid.docx": "db77451166d5e6fad3500b58c66ca6003aab4e6d5d01f041caf26cff6508540b",
+  "f5-negative-controls.docx": "9359629da52d34574820c3a2bd031531e405294c9e1b87dfc33f5c5fbe5b8756",
   "f6a-long-answer.docx": "86530e5a681efe578d06abee25bef6ec3aff772a1620b37559a85637a3a12564",
   "f6b-admin-missing.docx": "0162138eb645bdf51de3c9cf8deee6f34c981ffa29e633ccd106b1eeaae50f4b"
  },
@@ -81,7 +98,7 @@
     "table_rows (one field for the whole group)"
    ]
   },
-  "area_right": "Exactly one covering field; accepted kind; answerable (not write_protected, not signature/initials); for option areas: its box refs are exactly the expected controls in the expected order and its printed options equal the expected options verbatim (whitespace runs as one space) in that order, and no option is a response code the map forbids; for text areas: no options, and an anchor at the answer paragraph or at the region cell; every must_name token appears in label+context and no must_not_name token appears in the label; guidance/instruction preserved (target type cell_append, cell_replace with all=true, or paragraph/span anchored on the answer paragraph; a plain 'cell' or 'cell_replace' target rewrites the first paragraph and so fails wherever the map lists preserved text in that cell); max_chars absent or >= min_capacity_chars.",
+  "area_right": "Exactly one covering field; accepted kind; answerable (not write_protected, not signature/initials); for option areas: its box refs are exactly the expected controls in the expected order and its printed options equal the expected options verbatim (whitespace runs as one space) in that order, and no option is a response code the map forbids; for text areas: no options, and an anchor at the answer paragraph or at the region cell; every must_name token appears in label+context and no must_not_name token appears in the label (in label AND context when the map says must_not_name_scope=label_and_context; added 2026-09-29, CHECK.md M6); guidance/instruction preserved (target type cell_append, cell_replace with all=true, or paragraph/span anchored on the answer paragraph; a plain 'cell' or 'cell_replace' target rewrites the first paragraph and so fails wherever the map lists preserved text in that cell); max_chars absent or >= min_capacity_chars.",
   "area_wrong": "Covered, but any area_right condition fails, or the covering field also covers another area.",
   "area_missed": "No covering field. 'held_safe' instead of 'missed' when the map declares if_held=safe_usefulness_loss. Notes naming the area's slots are quoted as evidence.",
   "not_an_answer": "right iff no answerable field is anchored in the region(s).",
@@ -91,25 +108,25 @@
  },
  "totals": {
   "inspect": {
-   "areas": 45,
-   "areas_right": 35,
-   "controls": 23,
-   "controls_right": 22,
+   "areas": 48,
+   "areas_right": 36,
+   "areas_wrong": 3,
+   "controls": 25,
+   "controls_right": 24,
    "extras_answerable": 0,
    "extras_protected": 0,
    "areas_missed": 9,
-   "areas_wrong": 1,
    "controls_wrong": 1
   },
   "layout_proposal": {
-   "areas": 45,
-   "areas_right": 42,
-   "controls": 23,
-   "controls_right": 22,
+   "areas": 48,
+   "areas_right": 43,
+   "areas_wrong": 3,
+   "controls": 25,
+   "controls_right": 24,
    "extras_answerable": 0,
    "extras_protected": 0,
    "areas_missed": 2,
-   "areas_wrong": 1,
    "controls_wrong": 1
   }
  },
@@ -121,9 +138,9 @@
     "fields": [
      {
       "key": "v3_1",
-      "label": "Is the patient currently managed under a statutory public-protection arrangement?",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
       "kind": "text",
-      "context": "Section 3: Public protection > Is the patient currently managed under a statutory public-protection arrangement?",
+      "context": "Section 3: Public protection > Does a formal offender supervision scheme currently apply to this person?",
       "options": [],
       "printed_options": [],
       "target_type": "cell_append",
@@ -149,12 +166,12 @@
     "areas": [
      {
       "id": "f1.A1",
-      "label": "Is the patient currently managed under a statutory public-protection arrangement?",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
       "expected_kind": "text",
       "fields": [
        {
         "key": "v3_1",
-        "label": "Is the patient currently managed under a statutory public-protection arrangement?",
+        "label": "Does a formal offender supervision scheme currently apply to this person?",
         "kind": "text",
         "target_type": "cell_append",
         "slot": "b/tbl[0]/tr[0]/tc[1]",
@@ -179,7 +196,11 @@
         "write_protected": false
        }
       ],
-      "outcome": "right"
+      "outcome": "wrong",
+      "problems": [
+       "label names 'State yes or no'",
+       "label names 'management level'"
+      ]
      }
     ],
     "controls": [
@@ -199,7 +220,8 @@
     "extras": [],
     "summary": {
      "areas": 2,
-     "areas_right": 2,
+     "areas_right": 1,
+     "areas_wrong": 1,
      "controls": 2,
      "controls_right": 2,
      "extras_answerable": 0,
@@ -212,9 +234,9 @@
     "fields": [
      {
       "key": "v3_1",
-      "label": "Is the patient currently managed under a statutory public-protection arrangement?",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
       "kind": "text",
-      "context": "Section 3: Public protection > Is the patient currently managed under a statutory public-protection arrangement?",
+      "context": "Section 3: Public protection > Does a formal offender supervision scheme currently apply to this person?",
       "options": [],
       "printed_options": [],
       "target_type": "cell_append",
@@ -240,12 +262,12 @@
     "areas": [
      {
       "id": "f1.A1",
-      "label": "Is the patient currently managed under a statutory public-protection arrangement?",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
       "expected_kind": "text",
       "fields": [
        {
         "key": "v3_1",
-        "label": "Is the patient currently managed under a statutory public-protection arrangement?",
+        "label": "Does a formal offender supervision scheme currently apply to this person?",
         "kind": "text",
         "target_type": "cell_append",
         "slot": "b/tbl[0]/tr[0]/tc[1]",
@@ -270,7 +292,11 @@
         "write_protected": false
        }
       ],
-      "outcome": "right"
+      "outcome": "wrong",
+      "problems": [
+       "label names 'State yes or no'",
+       "label names 'management level'"
+      ]
      }
     ],
     "controls": [
@@ -290,7 +316,8 @@
     "extras": [],
     "summary": {
      "areas": 2,
-     "areas_right": 2,
+     "areas_right": 1,
+     "areas_wrong": 1,
      "controls": 2,
      "controls_right": 2,
      "extras_answerable": 0,
@@ -334,26 +361,26 @@
       "kind": "multi_choice",
       "context": "Part B: Leave and discharge > Leave during the review period",
       "options": [
-       "Escorted leave within the hospital grounds",
-       "Unescorted leave within the hospital grounds",
-       "Escorted day leave in the community",
-       "Unescorted day leave in the community",
-       "Escorted overnight leave",
-       "Unescorted overnight leave",
-       "Leave to attend a medical appointment",
-       "Leave on compassionate grounds",
-       "Trial leave to a supported placement"
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
       ],
       "printed_options": [
-       "Escorted leave within the hospital grounds",
-       "Unescorted leave within the hospital grounds",
-       "Escorted day leave in the community",
-       "Unescorted day leave in the community",
-       "Escorted overnight leave",
-       "Unescorted overnight leave",
-       "Leave to attend a medical appointment",
-       "Leave on compassionate grounds",
-       "Trial leave to a supported placement"
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
       ],
       "target_type": "checkboxes",
       "slot": "b/p[8]/ff[0]",
@@ -376,15 +403,15 @@
         "question": "Types of leave taken",
         "context": "Part B: Leave and discharge > Leave during the review period",
         "options": [
-         "Escorted leave within the hospital grounds",
-         "Unescorted leave within the hospital grounds",
-         "Escorted day leave in the community",
-         "Unescorted day leave in the community",
-         "Escorted overnight leave",
-         "Unescorted overnight leave",
-         "Leave to attend a medical appointment",
-         "Leave on compassionate grounds",
-         "Trial leave to a supported placement"
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
         ],
         "cardinality": "multi_choice",
         "sources": [
@@ -396,47 +423,47 @@
          {
           "part": "word/document.xml",
           "slot": "b/p[8]",
-          "fingerprint": "f7b026219fdc7b9285fe13dd7ea92b5ffa65ca62b239a2c3d0edd3cc65e37ca3"
+          "fingerprint": "bd2bb42f537f4925d0b3cb56edee69aef702e038c1febcef31a01295ceb367b0"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[9]",
-          "fingerprint": "02764bf8b7d4e9d78649d119aeae121be03ebde501329cb44a724b587dbe2933"
+          "fingerprint": "64422ba78853b3a95a0c8002f868d72e00706e98704f42fc6f95b312d3ef026e"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[10]",
-          "fingerprint": "20a303fbebd3b72a73d6b9498554b904fa70f9b04eb29d9f6ca4a6b37dc4d68f"
+          "fingerprint": "f6baca029760a89828b52a38b6fd29439d34f243d85a699cd0e33e38e4dcb2f2"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[11]",
-          "fingerprint": "205b3a2c918ec6f6fb954f9b9c3ac065136af0280729ee52eeee3197b2c2f28f"
+          "fingerprint": "a9f784ebcbd8287ee16dff5e47201802e667b430c24d437453547b897e32dc71"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[12]",
-          "fingerprint": "9e4be2990b6f04381433736ec02ede0154c7fb0606e9a06489f064f8cc54df06"
+          "fingerprint": "f7c5fa04bff39ac89a6fc9bf12a8639457a3799ee7272d4a5af45cf1c92d128d"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[13]",
-          "fingerprint": "2cdf5125a708b549247353b307af3b736162037c36d01f72b7b8f3057dd63632"
+          "fingerprint": "6502949f0879d957bd97113346f1bfd622673cb31371d4760b3f7731e017cc0f"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[14]",
-          "fingerprint": "db90a40ea13bffcb0d7b7124473af9b3c868db0a9057e1c053b9a6cec6a8d0b5"
+          "fingerprint": "1c18bb2801130a855b1543acec4697fae967d720da53fcc7f3678dcdc54e2410"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[15]",
-          "fingerprint": "6b4eb4e4a3ff07507ad68202744095693467aaad490f5ab25eac615689bf91d0"
+          "fingerprint": "f630984706b37804cb02c2800b589330d4a745d036147c4c0302e8f5768b1f90"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[16]",
-          "fingerprint": "416c6b3a924274253b1c904ecf56392add35ba522f98a3d7cb26eae1e9323195"
+          "fingerprint": "b540127ba97e98c9cbcd5a53c315d90cb102660765229715fc7f1aa8a161dbed"
          }
         ]
        }
@@ -490,15 +517,15 @@
         "target_type": "checkboxes",
         "slot": "b/p[8]/ff[0]",
         "options": [
-         "Escorted leave within the hospital grounds",
-         "Unescorted leave within the hospital grounds",
-         "Escorted day leave in the community",
-         "Unescorted day leave in the community",
-         "Escorted overnight leave",
-         "Unescorted overnight leave",
-         "Leave to attend a medical appointment",
-         "Leave on compassionate grounds",
-         "Trial leave to a supported placement"
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
         ],
         "write_protected": false
        }
@@ -582,26 +609,26 @@
       "kind": "multi_choice",
       "context": "Part B: Leave and discharge > Leave during the review period",
       "options": [
-       "Escorted leave within the hospital grounds",
-       "Unescorted leave within the hospital grounds",
-       "Escorted day leave in the community",
-       "Unescorted day leave in the community",
-       "Escorted overnight leave",
-       "Unescorted overnight leave",
-       "Leave to attend a medical appointment",
-       "Leave on compassionate grounds",
-       "Trial leave to a supported placement"
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
       ],
       "printed_options": [
-       "Escorted leave within the hospital grounds",
-       "Unescorted leave within the hospital grounds",
-       "Escorted day leave in the community",
-       "Unescorted day leave in the community",
-       "Escorted overnight leave",
-       "Unescorted overnight leave",
-       "Leave to attend a medical appointment",
-       "Leave on compassionate grounds",
-       "Trial leave to a supported placement"
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
       ],
       "target_type": "checkboxes",
       "slot": "b/p[8]/ff[0]",
@@ -624,15 +651,15 @@
         "question": "Types of leave taken",
         "context": "Part B: Leave and discharge > Leave during the review period",
         "options": [
-         "Escorted leave within the hospital grounds",
-         "Unescorted leave within the hospital grounds",
-         "Escorted day leave in the community",
-         "Unescorted day leave in the community",
-         "Escorted overnight leave",
-         "Unescorted overnight leave",
-         "Leave to attend a medical appointment",
-         "Leave on compassionate grounds",
-         "Trial leave to a supported placement"
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
         ],
         "cardinality": "multi_choice",
         "sources": [
@@ -644,47 +671,47 @@
          {
           "part": "word/document.xml",
           "slot": "b/p[8]",
-          "fingerprint": "f7b026219fdc7b9285fe13dd7ea92b5ffa65ca62b239a2c3d0edd3cc65e37ca3"
+          "fingerprint": "bd2bb42f537f4925d0b3cb56edee69aef702e038c1febcef31a01295ceb367b0"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[9]",
-          "fingerprint": "02764bf8b7d4e9d78649d119aeae121be03ebde501329cb44a724b587dbe2933"
+          "fingerprint": "64422ba78853b3a95a0c8002f868d72e00706e98704f42fc6f95b312d3ef026e"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[10]",
-          "fingerprint": "20a303fbebd3b72a73d6b9498554b904fa70f9b04eb29d9f6ca4a6b37dc4d68f"
+          "fingerprint": "f6baca029760a89828b52a38b6fd29439d34f243d85a699cd0e33e38e4dcb2f2"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[11]",
-          "fingerprint": "205b3a2c918ec6f6fb954f9b9c3ac065136af0280729ee52eeee3197b2c2f28f"
+          "fingerprint": "a9f784ebcbd8287ee16dff5e47201802e667b430c24d437453547b897e32dc71"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[12]",
-          "fingerprint": "9e4be2990b6f04381433736ec02ede0154c7fb0606e9a06489f064f8cc54df06"
+          "fingerprint": "f7c5fa04bff39ac89a6fc9bf12a8639457a3799ee7272d4a5af45cf1c92d128d"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[13]",
-          "fingerprint": "2cdf5125a708b549247353b307af3b736162037c36d01f72b7b8f3057dd63632"
+          "fingerprint": "6502949f0879d957bd97113346f1bfd622673cb31371d4760b3f7731e017cc0f"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[14]",
-          "fingerprint": "db90a40ea13bffcb0d7b7124473af9b3c868db0a9057e1c053b9a6cec6a8d0b5"
+          "fingerprint": "1c18bb2801130a855b1543acec4697fae967d720da53fcc7f3678dcdc54e2410"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[15]",
-          "fingerprint": "6b4eb4e4a3ff07507ad68202744095693467aaad490f5ab25eac615689bf91d0"
+          "fingerprint": "f630984706b37804cb02c2800b589330d4a745d036147c4c0302e8f5768b1f90"
          },
          {
           "part": "word/document.xml",
           "slot": "b/p[16]",
-          "fingerprint": "416c6b3a924274253b1c904ecf56392add35ba522f98a3d7cb26eae1e9323195"
+          "fingerprint": "b540127ba97e98c9cbcd5a53c315d90cb102660765229715fc7f1aa8a161dbed"
          }
         ]
        }
@@ -738,15 +765,15 @@
         "target_type": "checkboxes",
         "slot": "b/p[8]/ff[0]",
         "options": [
-         "Escorted leave within the hospital grounds",
-         "Unescorted leave within the hospital grounds",
-         "Escorted day leave in the community",
-         "Unescorted day leave in the community",
-         "Escorted overnight leave",
-         "Unescorted overnight leave",
-         "Leave to attend a medical appointment",
-         "Leave on compassionate grounds",
-         "Trial leave to a supported placement"
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
         ],
         "write_protected": false
        }
@@ -789,6 +816,370 @@
     "summary": {
      "areas": 3,
      "areas_right": 3,
+     "controls": 2,
+     "controls_right": 2,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  },
+  "f2b-leave-checkboxes-owner": {
+   "inspect": {
+    "layout_pending": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Outcome requested at this review (please tick one)",
+      "kind": "choice",
+      "context": "Part B: Leave and discharge",
+      "options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "printed_options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[2]/ff[0]",
+      "boxes": [
+       "b/p[2]/ff[0]",
+       "b/p[3]/ff[0]",
+       "b/p[4]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Leave arrangements used since the last review",
+      "kind": "choice",
+      "context": "Leave during the review period",
+      "options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "printed_options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[8]/ff[0]",
+      "boxes": [
+       "b/p[8]/ff[0]",
+       "b/p[9]/ff[0]",
+       "b/p[10]/ff[0]",
+       "b/p[11]/ff[0]",
+       "b/p[12]/ff[0]",
+       "b/p[13]/ff[0]",
+       "b/p[14]/ff[0]",
+       "b/p[15]/ff[0]",
+       "b/p[16]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "kind": "long_text",
+      "context": "Leave during the review period > Details of the leave (dates, destinations and any incidents)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f2b.A1",
+      "label": "Outcome requested at this review",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Outcome requested at this review (please tick one)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[2]/ff[0]",
+        "options": [
+         "Remain in hospital under the current arrangements",
+         "Discharge with conditions",
+         "Discharge without conditions"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f2b.A2",
+      "label": "Leave arrangements used since the last review",
+      "expected_kind": "multi_choice",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Leave arrangements used since the last review",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[8]/ff[0]",
+        "options": [
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "wrong",
+      "problems": [
+       "kind choice, expected multi_choice (accepted ['multi_choice'])"
+      ]
+     },
+     {
+      "id": "f2b.A3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "expected_kind": "long_text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Details of the leave (dates, destinations and any incidents)",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[0]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f2b.C1",
+      "type": "not_an_answer",
+      "printed": "Leave arrangements used since the last review",
+      "outcome": "right"
+     },
+     {
+      "id": "f2b.C2",
+      "type": "not_an_answer",
+      "printed": "Outcome requested at this review (please tick one)",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 3,
+     "areas_right": 2,
+     "areas_wrong": 1,
+     "controls": 2,
+     "controls_right": 2,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Outcome requested at this review (please tick one)",
+      "kind": "choice",
+      "context": "Part B: Leave and discharge",
+      "options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "printed_options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[2]/ff[0]",
+      "boxes": [
+       "b/p[2]/ff[0]",
+       "b/p[3]/ff[0]",
+       "b/p[4]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Leave arrangements used since the last review",
+      "kind": "choice",
+      "context": "Leave during the review period",
+      "options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "printed_options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[8]/ff[0]",
+      "boxes": [
+       "b/p[8]/ff[0]",
+       "b/p[9]/ff[0]",
+       "b/p[10]/ff[0]",
+       "b/p[11]/ff[0]",
+       "b/p[12]/ff[0]",
+       "b/p[13]/ff[0]",
+       "b/p[14]/ff[0]",
+       "b/p[15]/ff[0]",
+       "b/p[16]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "kind": "long_text",
+      "context": "Leave during the review period > Details of the leave (dates, destinations and any incidents)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f2b.A1",
+      "label": "Outcome requested at this review",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Outcome requested at this review (please tick one)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[2]/ff[0]",
+        "options": [
+         "Remain in hospital under the current arrangements",
+         "Discharge with conditions",
+         "Discharge without conditions"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f2b.A2",
+      "label": "Leave arrangements used since the last review",
+      "expected_kind": "multi_choice",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Leave arrangements used since the last review",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[8]/ff[0]",
+        "options": [
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "wrong",
+      "problems": [
+       "kind choice, expected multi_choice (accepted ['multi_choice'])"
+      ]
+     },
+     {
+      "id": "f2b.A3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "expected_kind": "long_text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Details of the leave (dates, destinations and any incidents)",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[0]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f2b.C1",
+      "type": "not_an_answer",
+      "printed": "Leave arrangements used since the last review",
+      "outcome": "right"
+     },
+     {
+      "id": "f2b.C2",
+      "type": "not_an_answer",
+      "printed": "Outcome requested at this review (please tick one)",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 3,
+     "areas_right": 2,
+     "areas_wrong": 1,
      "controls": 2,
      "controls_right": 2,
      "extras_answerable": 0,
@@ -1746,8 +2137,8 @@
    "inspect": {
     "layout_pending": 7,
     "notes": [
-     "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[2]. Printed question: Pulse summary. Section: Vascular and skin examination > Pulse summary",
-     "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[2]. Printed question: Skin and limb summary. Section: Vascular and skin examination > Skin and limb summary",
+     "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[2]. Printed question: Overall pulse. Section: Vascular and skin examination > Overall pulse",
+     "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[2]. Printed question: Overall skin and limb. Section: Vascular and skin examination > Overall skin and limb",
      "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[3]. Printed question: Skin colour. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
      "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[4]. Printed question: Nail beds. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
      "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[5]. Printed question: Capillary refill. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
@@ -1965,11 +2356,11 @@
      },
      {
       "id": "f4.A7",
-      "label": "Pulse summary",
+      "label": "Overall pulse",
       "expected_kind": "choice",
       "outcome": "missed",
       "notes_evidence": [
-       "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[2]. Printed question: Pulse summary. Section: Vascular and skin examination > Pulse summary"
+       "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[2]. Printed question: Overall pulse. Section: Vascular and skin examination > Overall pulse"
       ]
      },
      {
@@ -2036,11 +2427,11 @@
      },
      {
       "id": "f4.A14",
-      "label": "Skin and limb summary",
+      "label": "Overall skin and limb",
       "expected_kind": "choice",
       "outcome": "missed",
       "notes_evidence": [
-       "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[2]. Printed question: Skin and limb summary. Section: Vascular and skin examination > Skin and limb summary"
+       "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[2]. Printed question: Overall skin and limb. Section: Vascular and skin examination > Overall skin and limb"
       ]
      },
      {
@@ -2200,9 +2591,9 @@
      },
      {
       "key": "v3_7",
-      "label": "Pulse summary",
+      "label": "Overall pulse",
       "kind": "choice",
-      "context": "Vascular and skin examination > Pulse summary",
+      "context": "Vascular and skin examination > Overall pulse",
       "options": [
        "Normal",
        "Abnormal",
@@ -2354,9 +2745,9 @@
      },
      {
       "key": "v3_14",
-      "label": "Skin and limb summary",
+      "label": "Overall skin and limb",
       "kind": "choice",
-      "context": "Vascular and skin examination > Skin and limb summary",
+      "context": "Vascular and skin examination > Overall skin and limb",
       "options": [
        "Normal",
        "Abnormal",
@@ -2496,12 +2887,12 @@
      },
      {
       "id": "f4.A7",
-      "label": "Pulse summary",
+      "label": "Overall pulse",
       "expected_kind": "choice",
       "fields": [
        {
         "key": "v3_7",
-        "label": "Pulse summary",
+        "label": "Overall pulse",
         "kind": "choice",
         "target_type": "checkboxes",
         "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
@@ -2636,12 +3027,12 @@
      },
      {
       "id": "f4.A14",
-      "label": "Skin and limb summary",
+      "label": "Overall skin and limb",
       "expected_kind": "choice",
       "fields": [
        {
         "key": "v3_14",
-        "label": "Skin and limb summary",
+        "label": "Overall skin and limb",
         "kind": "choice",
         "target_type": "checkboxes",
         "slot": "b/tbl[1]/tr[4]/tc[0]/p[2]",
@@ -2761,14 +3152,14 @@
      },
      {
       "key": "v3_3",
-      "label": "I confirm that the patient agreed to this examination and to these findings being shared with the referring team.",
+      "label": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
       "kind": "checkbox",
       "context": "Declaration > Declaration",
       "options": [
-       "I confirm that the patient agreed to this examination and to these findings being shared with the referring team."
+       "I declare the person examined agreed to this examination and to these results being sent to the referring team."
       ],
       "printed_options": [
-       "I confirm that the patient agreed to this examination and to these findings being shared with the referring team."
+       "I declare the person examined agreed to this examination and to these results being sent to the referring team."
       ],
       "target_type": "checkboxes",
       "slot": "b/p[4]/ff[0]",
@@ -2851,18 +3242,18 @@
      {
       "id": "f5.C2",
       "type": "must_refuse",
-      "printed": "I confirm that the patient agreed to this examination and to these findings being shared with the referring team.",
+      "printed": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
       "protected_fields": [],
       "outcome": "wrong",
       "offending_fields": [
        {
         "key": "v3_3",
-        "label": "I confirm that the patient agreed to this examination and to these findings being shared with the referring team.",
+        "label": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
         "kind": "checkbox",
         "target_type": "checkboxes",
         "slot": "b/p[4]/ff[0]",
         "options": [
-         "I confirm that the patient agreed to this examination and to these findings being shared with the referring team."
+         "I declare the person examined agreed to this examination and to these results being sent to the referring team."
         ]
        }
       ]
@@ -2949,14 +3340,14 @@
      },
      {
       "key": "v3_3",
-      "label": "I confirm that the patient agreed to this examination and to these findings being shared with the referring team.",
+      "label": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
       "kind": "checkbox",
       "context": "Declaration > Declaration",
       "options": [
-       "I confirm that the patient agreed to this examination and to these findings being shared with the referring team."
+       "I declare the person examined agreed to this examination and to these results being sent to the referring team."
       ],
       "printed_options": [
-       "I confirm that the patient agreed to this examination and to these findings being shared with the referring team."
+       "I declare the person examined agreed to this examination and to these results being sent to the referring team."
       ],
       "target_type": "checkboxes",
       "slot": "b/p[4]/ff[0]",
@@ -3039,18 +3430,18 @@
      {
       "id": "f5.C2",
       "type": "must_refuse",
-      "printed": "I confirm that the patient agreed to this examination and to these findings being shared with the referring team.",
+      "printed": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
       "protected_fields": [],
       "outcome": "wrong",
       "offending_fields": [
        {
         "key": "v3_3",
-        "label": "I confirm that the patient agreed to this examination and to these findings being shared with the referring team.",
+        "label": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
         "kind": "checkbox",
         "target_type": "checkboxes",
         "slot": "b/p[4]/ff[0]",
         "options": [
-         "I confirm that the patient agreed to this examination and to these findings being shared with the referring team."
+         "I declare the person examined agreed to this examination and to these results being sent to the referring team."
         ]
        }
       ]
@@ -3678,49 +4069,5 @@
     }
    }
   }
- },
- "post_hoc_verification": {
-  "status": "Written AFTER the measurement, by reading every raw engine field and note in per_form. It does NOT change any pre-declared outcome above; the totals stay exactly as the declared grading produced them.",
-  "automated_output_sha256": "27fadbb97fafb0163f929953bbbffba2fe1be6a4ef472ee798d07d5dd58a755b",
-  "grades_confirmed": "Every 'right' was re-read against the raw fields (kind, target type, anchor, options in order, labels/contexts). No outcome was found mis-graded under the declared rules.",
-  "observations_outside_the_declared_rules": [
-   {
-    "id": "f1.A2",
-    "paths": [
-     "inspect",
-     "layout_proposal"
-    ],
-    "severity": "medium",
-    "what": "The date field's label and context carry the OTHER question's blue guidance: label 'Date the lead agency was last informed — State yes or no. If yes, give the management level and category, and confirm tha' (truncated). The row-0 answer cell's guidance is read as a column header for the whole right-hand column.",
-    "why_it_matters": "A reader (clinician or model) is told 'State yes or no' for a date answer; the guidance of one question leaks into another's identity. The declared rules checked must_name/must_not_name tokens only, so it graded 'right'."
-   },
-   {
-    "id": "f6a.A2",
-    "paths": [
-     "inspect",
-     "layout_proposal"
-    ],
-    "severity": "low",
-    "what": "The >5,000-character narrative cell is kind 'text' (not 'long_text'), target 'cell', no max_chars. Accepted by the declared kind table and uncapped; whether the review UI treats 'text' as a single-line input for a 10,000-twip cell is not measured here."
-   },
-   {
-    "id": "f4.A8 / f4.A15",
-    "paths": [
-     "layout_proposal"
-    ],
-    "severity": "info",
-    "what": "The two identical 'Describe any abnormality' fields are told apart only through context text that runs the cell's paragraphs together without separators ('table row 2: Pulse findingsDescribe any abnormality____...'). The distinguishing title is present, so the declared rule holds."
-   },
-   {
-    "id": "f2.A2",
-    "paths": [
-     "inspect",
-     "layout_proposal"
-    ],
-    "severity": "scope caveat",
-    "what": "multi_choice comes from the engine's native-checkbox-history relation, which requires the owner to END in a completed-event word (taken/received/completed/attended/undergone). The synthetic owner 'Types of leave taken' mirrors the recorded D31 owner structure, so this form does NOT test a genuinely multi-select FORMCHECKBOX list whose owner lies outside that word class."
-   }
-  ],
-  "what_the_baseline_does_not_show": "The synthetic forms are clean reproductions of structures the engine has already been repaired on, several of them close to its own unit-test shapes. The high deterministic score (layout path 42/45 areas, 22/23 controls) therefore does not transfer to the originals (for example D10's 126 detected fields against 198 independently recorded areas). The discriminating items for a Sonnet 5 mapping run are the non-right rows, the two must_hold controls (a model must hold them too), f1.A2's label, and the knee/consent/signature controls."
  }
 }
