@@ -86,11 +86,16 @@ class MappingAssistance(TestCase):
                 replacement = next(f for f in result['fields'] if f['label'] == prior['label'])
                 self.assertNotEqual(replacement['context'], long_context)
                 prior['locator'] = saved
+        # A place INSIDE the field's own destination is not that destination: the replacement is held (the ONE place
+        # rule, c), the prior field and its context are kept, and nothing is written at the descendant.
         descendant = copy.deepcopy(body); descendant['x'][0][1] = sid + 1
+        self.assertTrue(payload['slots'][sid + 1]['slot'].startswith(slot + '/'))
         moved = mapping.validate_proposal(self.version, self.compiled, descendant)
-        descendant_field = next(f for f in moved['fields'] if f['label'] == prior['label'])
-        self.assertNotEqual(descendant_field['locator'], prior['locator'])
-        self.assertNotEqual(descendant_field['context'], long_context)
+        self.assertEqual(moved['fields'], self.version.fields)
+        self.assertEqual(moved['review']['changes'], [])
+        record = next(row for row in moved['review']['unresolved'] if row['key'] == prior['key'])
+        self.assertEqual((record['slot'], record['proposed_slot']), (slot, payload['slots'][sid + 1]['slot']))
+        self.assertIn(mapping.INSIDE_REASON, record['reason'])
         foreign_slot = payload['fields'][1]['slots'][0]
         foreign = copy.deepcopy(body)
         foreign['x'][0][1] = next(n for n, row in enumerate(payload['slots']) if row['slot'] == foreign_slot)
@@ -571,22 +576,26 @@ class MappingAssistance(TestCase):
         fields=[f for f in self.version.fields if f['key']!=signing['key']]
         self.version=TemplateVersion.objects.create(template=self.template,number=2,fields=fields,contract='v3',created_by=self.user)
         self.compiled=mapping.compile_request(self.version,self.config)
-        for kind,adopted in (('text',False),('long_text',False),('date',False),('signature',True)):
+        # The ONE place rule holds every model change at a place the engine holds as a signing area - a signing kind
+        # included (the engine already reads the line; a model change there adds nothing but a record to review).
+        for kind in ('text','long_text','date','signature'):
             with self.subTest(kind=kind):
                 body=self.body();body['x']=[self.target(signature_slot,'Signature',kind)]
                 result=mapping.validate_proposal(self.version,self.compiled,body)
                 added=[f for f in result['fields'] if f.get('origin')=='model_assisted']
-                self.assertEqual([f['kind'] for f in added],[kind] if adopted else [])
-                if not adopted:
-                    self.assertIn('Signature or initials areas cannot become generated answers.',
-                                  result['review']['rejected_changes'][0]['reason'])
-                    self.assertTrue(any(row['slot']==signature_slot for row in result['review']['unresolved']))
+                self.assertEqual(added,[])
+                self.assertIn('Signature or initials areas cannot become generated answers.',
+                              result['review']['rejected_changes'][0]['reason'])
+                self.assertTrue(any(row['slot']==signature_slot for row in result['review']['unresolved']))
+        # The label reader is the ENGINE's kind rule on each printed part (plus the product's clinician-signature rule):
+        # 'Initial assessment' is an initials label to the engine (its own inspect gives that line kind 'initials').
         for text,signing in (('Signature: ____________',True),('Initials: ______',True),('Signature ……',True),
                              ('Patient signature: ________',True),('Signed by (witness)',True),('Patient initials',True),
                              ('Initial:',True),('Initial: ______',True),('Initial ……',True),('Sign here',True),('Signature date',False),('Date of signature',False),
-                             ('Date signed',False),('Initial assessment',False),('Initial diagnosis',False),('Plan',False)):
+                             ('Date signed',False),('Initial assessment',True),('Initial diagnosis',True),('Plan',False),
+                             ('Signature/Date',True),('Name of Participant\t\tDate\t\tSignature',True),('Name\t\tDate',False)):
             with self.subTest(text=text):
-                self.assertEqual(mapping.signing_caption(text),signing)
+                self.assertEqual(mapping.signing_label(text),signing)
 
     def test_integrity_failure_while_locating_refuses_the_whole_response(self):
         prior=self.version.fields[0];fid=0
@@ -594,8 +603,12 @@ class MappingAssistance(TestCase):
         real=mapping.locate_fields
         def changed(path,targets):
             located=real(path,targets);return {**located,'sha256':'0'*64}
+        instructions=next(row['slot'] for row in json.loads(self.compiled['request']['messages'][0]['content'])['slots']
+                          if row['text'].startswith('Instructions:'))
         for name,owner in (('addition',-1),('replacement',fid)):
-            body=self.body();body['x']=[self.target(slot,prior['label'],prior['kind'],owner)]
+            # The addition goes to an unmapped paragraph, so it reaches the locate the Refusal is about.
+            body=self.body();body['x']=[self.target(slot,prior['label'],prior['kind'],owner) if owner>=0 else
+                                        self.target(instructions,'Instructions','text')]
             if owner>=0:body['f']['k'].remove(fid);body['f']['r']=[fid]
             with self.subTest(name),patch.object(mapping,'locate_fields',side_effect=changed),\
                     self.assertRaises(ValidationError) as caught:
@@ -623,7 +636,17 @@ class MappingAssistance(TestCase):
                 expected=(Decimal(compiled['input_token_bound'])*2+Decimal(20000)*10)/1000000
                 self.assertEqual(Decimal(compiled['maximum_cost']),expected)
                 size=len(mapping.canonical(compiled['request']).encode())
-                with patch.object(mapping,'MAX_PAYLOAD_BYTES',size):mapping.compile_request(version,self.config)
-                with patch.object(mapping,'MAX_PAYLOAD_BYTES',size-1),self.assertRaises(ValidationError):mapping.compile_request(version,self.config)
+                self.assertEqual(compiled['presentation'],'slot_refs')
+                with patch.object(mapping,'MAX_PAYLOAD_BYTES',size):
+                    self.assertEqual(mapping.compile_request(version,self.config)['presentation'],'slot_refs')
+                # One byte short: the presentation is dropped INSIDE the same bound, never the form.
+                with patch.object(mapping,'MAX_PAYLOAD_BYTES',size-1):
+                    plain=mapping.compile_request(version,self.config)
+                plain_size=len(mapping.canonical(plain['request']).encode())
+                self.assertEqual(plain['presentation'],'none');self.assertLess(plain_size,size)
+                self.assertEqual(plain['input_token_bound'],plain_size+12000)
+                self.assertEqual(plain['request']['system'],mapping.SYSTEM_V3)
+                with patch.object(mapping,'MAX_PAYLOAD_BYTES',plain_size):mapping.compile_request(version,self.config)
+                with patch.object(mapping,'MAX_PAYLOAD_BYTES',plain_size-1),self.assertRaises(ValidationError):mapping.compile_request(version,self.config)
         with patch.object(mapping,'MAX_SLOTS',1199),patch.object(mapping,'assistance_outline',return_value={'sha256':self.template.sha256,'slots':rows}),self.assertRaises(ValidationError):
             mapping.compile_request(version,self.config)

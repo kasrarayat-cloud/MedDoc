@@ -1280,6 +1280,41 @@ INITIALS = re.compile(r"\binitials?\b|\binitial (?:the )?box", re.I)
 DATE_LABEL = re.compile(r"\b(?:date|dob|d\.o\.b|born)\b|mm/dd|dd/mm|yyyy|\bD[DT]\s*\((?:dictated|transcribed)\)", re.I)
 TIME_LABEL = re.compile(r"\btime\b|hh:mm|\(24.?h", re.I)
 LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|notes?|summary|history|findings|plan|narrative|reason)\b", re.I)
+
+
+def kind_for_label(label: str) -> str:
+    """The kind the engine gives ONE printed label (Detector.kind_for). A caption row holding several labels is read
+    through `label_parts`, never as one joined label: there a date part would excuse its signature part."""
+    label = label or ""
+    if SIGNATURE.search(label) and not DATE_LABEL.search(label):
+        return "signature"
+    if INITIALS.search(label) and not DATE_LABEL.search(label):
+        return "initials"
+    # A free-text destination asking for description keeps the whole
+    # answer even when its printed question also mentions a date or time.
+    # Dedicated native date controls are typed by their own OOXML rule.
+    if LONG_LABEL.search(label):
+        return "long_text"
+    if TIME_LABEL.search(label) and not DATE_LABEL.search(label):
+        return "time"
+    if DATE_LABEL.search(label) or re.search(r"\bdated\s*$", label, re.I):
+        return "date"
+    return "text"
+
+
+#: Where one printed label ends and the next begins inside ONE paragraph: tabs, printed blanks and form fields.
+LABEL_BREAK = re.compile("|".join((r"\t+", r"\x00+", SEGMENTED.pattern, DIGIT_RUN.pattern, UNDERSCORES.pattern, DOTS.pattern)))
+
+
+def label_parts(text: str) -> list:
+    """The separately printed labels of one paragraph's text, each cleaned as a label: 'Name of Participant<tab>Date
+    <tab>Signature' is three labels and 'Signature: ______' is one."""
+    return [part for part in (clean_label(piece) for piece in LABEL_BREAK.split(text or "")) if part]
+
+
+def signing_wording(text: str) -> bool:
+    """Some printed label of this paragraph text is a signature or initials label to the engine's kind rule."""
+    return any(kind_for_label(part) in SIGNING_KINDS for part in label_parts(text))
 HEADING_STYLE = re.compile(r"^(?:heading|title|subtitle|toc)", re.I)
 LABEL_END = re.compile(r"[:?]\s*$|[–—-]\s*$")
 OPTION_WORD = re.compile(r"^(?:y|n|yes|no|m|f|male|female|n/?a|nd|unk|unknown|not known|true|false|done|not done|normal|abnormal|"
@@ -1462,6 +1497,9 @@ class Detector:
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
         self.floating_initials = False
+        #: Question boxes whose printed question or section is a signing or consent context (question_box_signing).
+        #: Recorded only; the box keeps its note and is not a protected region (a clinician may still map it).
+        self.signing_boxes: set[str] = set()
         self._order = 0
         self._grid = {}
         self._text = {}
@@ -1857,21 +1895,7 @@ class Detector:
         self.claimed.add(id(area.slot.el))
 
     def kind_for(self, label: str) -> str:
-        label = label or ""
-        if SIGNATURE.search(label) and not DATE_LABEL.search(label):
-            return "signature"
-        if INITIALS.search(label) and not DATE_LABEL.search(label):
-            return "initials"
-        # A free-text destination asking for description keeps the whole
-        # answer even when its printed question also mentions a date or time.
-        # Dedicated native date controls are typed by their own OOXML rule.
-        if LONG_LABEL.search(label):
-            return "long_text"
-        if TIME_LABEL.search(label) and not DATE_LABEL.search(label):
-            return "time"
-        if DATE_LABEL.search(label) or re.search(r"\bdated\s*$", label, re.I):
-            return "date"
-        return "text"
+        return kind_for_label(label)
 
     def cardinality(self, question, options, *, local=(), between=(), own=(), hint="", where="", context=""):
         """The selection rule for one checkbox question (see MANY_COMMAND): {"kind": "choice" | "multi_choice",
@@ -5001,6 +5025,8 @@ class Detector:
             # Question and section are distinct source blocks: joining them can
             # manufacture the adjective phrase across a real signing boundary.
             signing = self.question_box_signing(raw) or self.question_box_signing(context)
+            if signing:
+                self.signing_boxes.add(cell.id)
             inline_answer = question is not None and (BOX in raw or CHECKED in raw or
                 bool(self.blank_spans(*self.ptext(question.el))))
             if not bordered or cell.info["span"] != 1 or cell.info["vmerge"] is not None:
@@ -6490,6 +6516,50 @@ def _options_chosen(field, answer):
     return out
 
 
+def field_locations(field) -> list:
+    """Every place a v3 field writes to, as 'part#slot': its anchor, extra anchors, copies, boxes, option paragraphs
+    and its table. ONE reader for fill's protection check and the mapping-assistance place rule."""
+    loc = field.get("locator") or {}
+    target = loc.get("target") or {}
+    destinations = [loc] + list(loc.get("extra", [])) + list(target.get("copies", [])) + list(target.get("boxes", []))
+    if target.get("type") == "paragraph_options":
+        destinations.extend({"part": anchor.get("part"), "slot": path}
+                            for anchor in [loc] + list(target.get("copies", []))
+                            for path in target.get("paragraphs", []))
+    if target.get("type") == "table_rows":
+        destinations.append({"part": loc.get("part"), "slot": target.get("table")})
+    return ["%s#%s" % (x.get("part"), x.get("slot")) for x in destinations]
+
+
+def protected_places(package, source_detector, index):
+    """The places fill never writes: every protected signing/question-box area, the protected regions of those rules
+    and of the full detection (`source_detector`, already detected), and legacy text fields carrying protection.
+    Returns (the protected-rules detector, protected slot ids, {legacy slot id: reason}). ONE reader for fill and for
+    the mapping-assistance place rule (documents.assistance.places)."""
+    protected = Detector(package)
+    protected.rule_protected_signing_areas()
+    protected.rule_question_boxes()
+    protected_slots = ({area.slot.id for area in protected.areas if area.protection}
+                       | protected.protected_regions | source_detector.protected_regions)
+    legacy_protected = {slot.id: ff_text_protection(slot.el) for slot in index.slots if slot.kind == "ff"}
+    legacy_protected = {identity: reason for identity, reason in legacy_protected.items() if reason}
+    return protected, protected_slots, legacy_protected
+
+
+def floating_place(slot) -> bool:
+    """The engine's floating/anchored containers: a header or footer part, a text box, a drawing, VML picture or
+    embedded object, or a positioned text frame (w:framePr) - the place itself or anything holding it."""
+    if slot.part != "word/document.xml":
+        return True
+    containers = (TXBX, q("w:drawing"), q("w:pict"), q("w:object"))
+    for node in [slot.el, *slot.el.iterancestors()]:
+        if node.tag in containers:
+            return True
+        if node.tag == q("w:p") and node.find("./" + q("w:pPr") + "/" + q("w:framePr")) is not None:
+            return True
+    return False
+
+
 def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> bytes:
     """Write answers into the original package. Every field's anchor is checked against its fingerprint before
     anything changes; signature and initials areas never take an automatic answer."""
@@ -6501,14 +6571,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     if layout_nodes and retained_layout is None and any(value not in (None, "", []) for value in answers.values()):
         fail("This form's tab-column answers require layout verification before export.",
              "layout_verification_required")
-    protected = Detector(package)
-    protected.rule_protected_signing_areas()
-    protected.rule_question_boxes()
-    protected_slots = ({area.slot.id for area in protected.areas if area.protection}
-                       | protected.protected_regions | source_detector.protected_regions)
-    legacy_protected = {slot.id: ff_text_protection(slot.el) for slot in index.slots if slot.kind == "ff"}
-    legacy_protected = {identity: reason for identity, reason in legacy_protected.items() if reason}
-    ops = []                                   # (paragraph_or_element, sort_position, callable)
+    protected, protected_slots, legacy_protected = protected_places(package, source_detector, index)
+    ops = []                                 # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
 
@@ -6535,14 +6599,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             if current_policy.get("answer_policy") != field["answer_policy"]:
                 fail("The printed authorship or review requirement has changed. Review the mapping again.",
                      "mapping_mismatch")
-        destinations = [loc] + list(loc.get("extra", [])) + list(target.get("copies", [])) + list(target.get("boxes", []))
-        if target.get("type") == "paragraph_options":
-            destinations.extend({"part": anchor.get("part"), "slot": path}
-                                for anchor in [loc] + list(target.get("copies", []))
-                                for path in target.get("paragraphs", []))
-        if target.get("type") == "table_rows":
-            destinations.append({"part": loc.get("part"), "slot": target.get("table")})
-        locations = ["%s#%s" % (x.get("part"), x.get("slot")) for x in destinations]
+        locations = field_locations(field)
         for identity, reason in legacy_protected.items():
             if any(location == identity or location.startswith(identity + "/") or identity.startswith(location + "/")
                    for location in locations):

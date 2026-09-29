@@ -20,12 +20,12 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 if __package__:
     from .tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
     from . import word_v3
-    from .assistance import outline as assistance_outline
+    from .assistance import outline as assistance_outline, places as assistance_places
     from .layout_source import prepare as prepare_layout
 else:  # Isolated worker imports this module directly (before the sandbox closes the filesystem).
     from tab_form import inspect_tabs, fill_tabs, _answer_tab, WARNINGS as TAB_WARNINGS
     import word_v3
-    from assistance import outline as assistance_outline
+    from assistance import outline as assistance_outline, places as assistance_places
     from layout_source import prepare as prepare_layout
 
 V3_WARNINGS = [
@@ -62,6 +62,8 @@ def process_v3(workspace, request):
             return {"format": "docx", **word_v3.outline(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "assistance_outline":
             return {"format": "docx", **assistance_outline(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "assistance_places":
+            return {"format": "docx", **assistance_places(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "locate":
             return {"format": "docx", "fields": word_v3.locate(data, request.get("targets") or []),
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
@@ -674,7 +676,7 @@ def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare")
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "assistance_places", "effective_options", "effective_values", "layout_prepare")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):

@@ -924,7 +924,9 @@ def compiled_mapping_cap(path, tree, call, expression, where):
     compiler_tree = ast.parse((REBUILD / 'core' / 'mapping_assistance.py').read_text())
     compiler = one_function(compiler_tree, 'compile_request')
     assigned_once(compiler, 'profile', 'request_profile(config)')
-    assigned_once(compiler, 'request', "generation.anthropic_request(config['model'], profile, SYSTEM, payload, wire.Proposal)")
+    # The request is built once from the job profile; its prompt is the presented one only when the presented request
+    # fits the bound, otherwise the unpresented v3 prompt (the per-slot presentation is counted inside the bound).
+    assigned_once(compiler, 'request', "generation.anthropic_request(config['model'], profile, SYSTEM if fits else SYSTEM_V3, payload, wire.Proposal)")
     readonly_value(compiler, 'request', ('canonical', 'digest'))
     assigned_once(compiler, 'size', 'len(canonical(request).encode())')
     assigned_once(compiler, 'bound', 'size + 12000')

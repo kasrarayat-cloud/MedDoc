@@ -111,7 +111,9 @@ class PerChangeDegradation(SimpleTestCase):
         self.assertEqual(expanded['fields'][1]['verdict'], 'replace')
         self.assertEqual(expanded['fields'][1]['target']['label'], 'Plan')
         self.assertEqual(len(expanded['additions']), 1)
-        self.assertEqual(expanded['sources'], {'fields': {'f1': 0}, 'additions': [4]})
+        # Each adopted change also names the WHOLE printed text its label quotes (the place rule reads that wording).
+        self.assertEqual(expanded['sources'], {'fields': {'f1': 0}, 'additions': [4],
+                                               'quoted': {0: body['slots'][1]['text'], 4: body['slots'][2]['text']}})
         self.assertEqual([(r['change'], r['type'], r['key'], r['slot']) for r in expanded['rejected']],
                          [(n, 'addition', '', body['slots'][2]['slot']) for n in (1, 2, 3)])
         self.assertEqual([r['wire'] for r in expanded['rejected']], bad)
@@ -146,26 +148,28 @@ class PerChangeDegradation(SimpleTestCase):
 
 class PerSlotPresentation(SimpleTestCase):
     def test_each_slot_and_field_lists_its_own_catalog_positions_and_the_catalog_is_unchanged(self):
-        body = payload(3, 2); body['slots'][1]['text'] = ''; body['slots'][2]['options'] = []
+        body = payload(4, 2); body['slots'][1]['text'] = ''; body['slots'][2]['options'] = []
+        body['slots'][3].update(text='', heading='', row_label='', options=[])     # a slot with no text reference
         body['text_refs'] = wire.catalog(body); before = copy.deepcopy(body['text_refs'])
         wire.present(body)
         self.assertEqual(body['text_refs'], before); self.assertEqual(wire.catalog(body), before)
-        for sid, row in enumerate(body['slots']):
-            expected = {name: before.index([sid, role, 0]) for role, name in enumerate(('text', 'heading', 'row_label'))
-                        if [sid, role, 0] in before}
-            if row['options']:
-                expected['options'] = [before.index([sid, 3, n]) for n in range(len(row['options']))]
+        for sid, row in enumerate(body['slots'][:3]):
+            # A compact list of the slot's own catalog positions, in catalog order (text, heading, row_label, options).
+            expected = [n for n, (owner, role, _) in enumerate(before) if owner == sid and role != 4]
             self.assertEqual(row['refs'], expected)
-            for position in [*[v for k, v in row['refs'].items() if k != 'options'], *row['refs'].get('options', [])]:
-                self.assertEqual(before[position][0], sid)
-        self.assertNotIn('text', body['slots'][1]['refs']); self.assertNotIn('options', body['slots'][2]['refs'])
+            self.assertTrue(all(before[position][0] == sid for position in row['refs']))
+        self.assertEqual([before[n][1] for n in body['slots'][1]['refs']], [1, 2, 3, 3])      # no text role
+        self.assertEqual([before[n][1] for n in body['slots'][2]['refs']], [0, 1, 2])         # no options
+        self.assertNotIn('refs', body['slots'][3])                                            # empty lists are omitted
         self.assertEqual([f['label_ref'] for f in body['fields']], [before.index([n, 4, 0]) for n in range(2)])
 
     def test_presented_and_legacy_requests_expand_identically_and_a_wrong_presentation_refuses(self):
         legacy = payload(); presented = wire.present(copy.deepcopy(legacy))
         answer = replacing(legacy, 0, change(legacy, 0, 0), change(legacy, -1, 2, ref=ref(legacy, 1)))
         self.assertEqual(wire.expand(legacy, copy.deepcopy(answer)), wire.expand(presented, copy.deepcopy(answer)))
-        for name, mutate in [('a slot lists another slot\'s ID', lambda b: b['slots'][0]['refs'].update(text=ref(b, 1))),
+        for name, mutate in [('a slot lists another slot\'s ID', lambda b: b['slots'][0]['refs'].__setitem__(0, ref(b, 1))),
+                             ('a slot lists one ID too many', lambda b: b['slots'][0]['refs'].append(ref(b, 1))),
+                             ('an empty list is sent', lambda b: b['slots'][0].update(refs=[])),
                              ('a field lists another label', lambda b: b['fields'][0].update(label_ref=ref(b, 1, 4))),
                              ('one slot is not presented', lambda b: b['slots'][2].pop('refs')),
                              ('one field is not presented', lambda b: b['fields'][1].pop('label_ref'))]:
@@ -174,6 +178,11 @@ class PerSlotPresentation(SimpleTestCase):
                 wire.expand(bad, copy.deepcopy(answer))
 
     def test_the_instructions_name_the_per_slot_lists_and_the_separate_numbering(self):
-        for words in ('refs', 'label_ref', 'target slot', 'never a slot ID'):
+        for words in ('refs', 'label_ref', 'target slot', 'never a slot ID', 'text_refs order'):
             self.assertIn(words, wire.INSTRUCTIONS)
         self.assertIn(wire.INSTRUCTIONS, mapping_assistance.SYSTEM)
+        # The unpresented request keeps the v3 prompt, which never names the presentation it does not carry.
+        self.assertTrue(wire.INSTRUCTIONS.startswith(wire.INSTRUCTIONS_V3))
+        self.assertTrue(mapping_assistance.SYSTEM_V3.endswith(wire.INSTRUCTIONS_V3))
+        for words in ('refs', 'label_ref'):
+            self.assertNotIn(words, wire.INSTRUCTIONS_V3.replace('text_refs', ''))

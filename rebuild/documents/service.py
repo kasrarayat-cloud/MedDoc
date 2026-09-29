@@ -174,6 +174,12 @@ def assistance_outline(path):
     return _run(path, "assistance_outline", engine="v3")
 
 
+def assistance_places(path):
+    """What the engine holds at each place of a blank v3 Word original (protected, signing, consent, authorship) and
+    which places are anchored containers, for the model-assisted mapping place rule; still the isolated parser."""
+    return _run(path, "assistance_places", engine="v3")
+
+
 def locate_fields(path, targets: list):
     """Clinician-chosen places -> contract v3 fields with verified anchors (recorded as manual)."""
     if not isinstance(targets, list) or len(targets) > 200:

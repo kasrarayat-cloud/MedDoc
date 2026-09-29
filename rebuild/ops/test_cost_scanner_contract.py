@@ -116,8 +116,8 @@ class AdditionalCostContracts(unittest.TestCase):
             ('core/mapping_assistance.py', 'cost*=generation.US_INFERENCE_MULTIPLIER', 'cost*=0'),
             ('core/mapping_assistance.py', 'bound=size+12000', 'bound=size'),
             ('core/mapping_assistance.py', 'return profile', 'return base'),
-            ('core/mapping_assistance.py', "request=generation.anthropic_request(config['model'],profile,SYSTEM,payload,wire.Proposal)",
-             "request=generation.anthropic_request(config['model'],base,SYSTEM,payload,wire.Proposal)"),
+            ('core/mapping_assistance.py', "request=generation.anthropic_request(config['model'],profile,SYSTEM if fits else SYSTEM_V3,payload,wire.Proposal)",
+             "request=generation.anthropic_request(config['model'],base,SYSTEM if fits else SYSTEM_V3,payload,wire.Proposal)"),
         ]
         for relative, old, new in cases:
             with self.subTest(file=relative, mutation=new):

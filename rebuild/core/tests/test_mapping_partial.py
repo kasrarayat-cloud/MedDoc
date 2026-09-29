@@ -108,7 +108,7 @@ class RetainedLiveResponse(TestCase):
         now = json.loads(compiled['request']['messages'][0]['content'])
         # The one profile difference is its recorded name (the new prompt/payload version); nothing else in it moved.
         self.assertEqual(compiled['profile']['profile'], mapping.PROFILE)
-        self.assertNotEqual(mapping.PROFILE, 'claude-sonnet-5-blank-mapping-v3')
+        self.assertNotIn(mapping.PROFILE, ('claude-sonnet-5-blank-mapping-v3', 'claude-sonnet-5-blank-mapping-v4'))
         self.assertEqual(mapping.digest({**compiled['profile'], 'profile': 'claude-sonnet-5-blank-mapping-v3'}),
                          self.payload['profile_sha256'])
         self.assertEqual(now['profile_sha256'], compiled['profile_sha256'])
@@ -119,18 +119,35 @@ class RetainedLiveResponse(TestCase):
         # So the retained answer means exactly the same thing against today's request.
         answer = json.loads(self.result['content'][0]['text'])
         self.assertEqual(wire.expand(now, copy.deepcopy(answer)), wire.expand(self.payload, copy.deepcopy(answer)))
-        # The per-slot lists are the catalog positions, and the ones the live response confused are visible: slot 3
-        # lists 5/6/7 (its text/heading/row_label), never 3 (slot 2's text).
+        # The per-slot lists are the catalog positions (a compact list; each ID's role is in text_refs), and the ones
+        # the live response confused are visible: slot 3 lists 5/6/7 (its text/heading/row_label), never 3 (slot 2's
+        # text).
         slots, labels = wire.presented(now)
-        self.assertEqual([row['refs'] for row in now['slots']], slots)
+        self.assertEqual([row.get('refs') for row in now['slots']], [refs or None for refs in slots])
         self.assertEqual([f['label_ref'] for f in now['fields']], labels)
-        self.assertEqual(now['slots'][3]['refs'], {'text': 5, 'heading': 6, 'row_label': 7})
-        self.assertEqual(now['slots'][8]['refs'], {'heading': 17, 'row_label': 18})
+        self.assertEqual(now['slots'][3]['refs'], [5, 6, 7])
+        self.assertEqual(now['slots'][8]['refs'], [17, 18])
         self.assertEqual(labels, [22, 23])
+        self.assertEqual(compiled['presentation'], 'slot_refs')
         self.assertIn(wire.INSTRUCTIONS, compiled['request']['system'])
         self.assertNotEqual(compiled['request']['system'], self.body['system'])
         # The quote still prices exactly this (larger) request under the unchanged pricing rule.
-        self.assertEqual(compiled['input_token_bound'], len(mapping.canonical(compiled['request']).encode()) + 12000)
+        size = len(mapping.canonical(compiled['request']).encode())
+        self.assertEqual(compiled['input_token_bound'], size + 12000)
+        # Counted INSIDE the bound: one byte short of the presented request, the request is the retained one - the
+        # v3 prompt and the unpresented payload, identical to what was sent except the profile digest it binds, and
+        # the same length byte for byte - so a form that fitted the bound then fits it now.
+        with patch.object(mapping, 'MAX_PAYLOAD_BYTES', size - 1):
+            plain = mapping.compile_request(self.version, generation.configuration())
+        self.assertEqual(plain['presentation'], 'none')
+        self.assertEqual(plain['request']['system'], self.body['system'])
+        self.assertEqual(mapping.SYSTEM_V3, self.body['system'])
+        content = json.loads(plain['request']['messages'][0]['content'])
+        self.assertEqual({**content, 'profile_sha256': self.payload['profile_sha256']}, self.payload)
+        self.assertEqual({**plain['request'], 'messages': [{**plain['request']['messages'][0],
+                                                            'content': self.body['messages'][0]['content']}]}, self.body)
+        self.assertEqual(len(mapping.canonical(plain['request']).encode()), len(mapping.canonical(self.body).encode()))
+        self.assertEqual(wire.expand(content, copy.deepcopy(answer)), wire.expand(now, copy.deepcopy(answer)))
 
     def test_live_response_keeps_every_field_and_holds_both_rejected_changes(self):
         parsed = mapping_jobs.parse_response(native(self.result), False)

@@ -6,17 +6,22 @@ This module does not choose answers or change an existing stored mapping.
 import re
 
 
-def annotate(detector, fields):
+def _source(slot, text):
     if __package__:
-        from .word_v3 import fingerprint, q
-        from .mapping_limits import MAX_MAPPING_CONTEXT
+        from .word_v3 import fingerprint
     else:
-        from word_v3 import fingerprint, q
-        from mapping_limits import MAX_MAPPING_CONTEXT
+        from word_v3 import fingerprint
+    return {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el), 'text': text}
 
-    def source(slot, text):
-        return {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el), 'text': text}
 
+def roles(detector):
+    """{root slot id: the printed patient-role source governing it, or None}: the explicit authorship boundaries of
+    the body, read root by root. ONE reader for `annotate` and the mapping-assistance place rule."""
+    if __package__:
+        from .word_v3 import q
+    else:
+        from word_v3 import q
+    source = _source
     roles = {}
     current = None
     for root in detector.index.roots:
@@ -39,7 +44,37 @@ def annotate(detector, fields):
                     detector.is_heading(root.el):
                 current = None
         roles[root.id] = current
+    return roles
 
+
+def attestation_statement(detector, slot):
+    """The printed left-hand cell a simple paired table's answer cell `slot` attests to, or None: 'I confirm (that)
+    the patient has read/reviewed/seen ... the report/form/document/application'. The place alone decides; the
+    field label is annotate's separate condition."""
+    if __package__:
+        from .mapping_limits import MAX_MAPPING_CONTEXT
+    else:
+        from mapping_limits import MAX_MAPPING_CONTEXT
+    if slot.kind != 'tc':
+        return None
+    row = sorted(detector.grid(slot.parent).get(slot.info['row'], []), key=lambda c: c.info['col'])
+    position = next((i for i, c in enumerate(row) if c is slot), None)
+    if not position or position <= 0:
+        return None
+    previous = row[position - 1]
+    text = detector.cell_text(previous)
+    if len(text) <= MAX_MAPPING_CONTEXT and \
+            re.search(r'\b(?:report|form|document|application)\b', text, re.I) and re.search(
+                r'\bconfirm\s+(?:that\s+)?(?:the\s+)?patient\s+(?:(?:has|had)\s+)?'
+                r'(?:read\b|reviewed\b|seen\b|had\s+sight\s+of\b|'
+                r'(?:had|was\s+given)\s+(?:an?\s+)?opportunity\s+to\b)', text, re.I):
+        return previous, text
+    return None
+
+
+def annotate(detector, fields):
+    source = _source
+    roles_by_root = roles(detector)
     for field in fields:
         loc = field.get('locator') or {}
         slot = detector.index.by_id.get(str(loc.get('part')) + '#' + str(loc.get('slot')))
@@ -49,22 +84,16 @@ def annotate(detector, fields):
         while root.parent is not None:
             root = root.parent
         policy = {}
-        if roles.get(root.id):
-            policy = {'source_author': 'patient', 'source': roles[root.id]}
+        if roles_by_root.get(root.id):
+            policy = {'source_author': 'patient', 'source': roles_by_root[root.id]}
         # A simple paired table's left-hand source is explicit. Do not infer
         # attestation authority from a model-edited label or a remote header.
         if slot.kind == 'tc' and loc.get('target', {}).get('type') in ('cell', 'cell_append'):
-            row = sorted(detector.grid(slot.parent).get(slot.info['row'], []), key=lambda c: c.info['col'])
-            position = next((i for i, c in enumerate(row) if c is slot), None)
-            if position and position > 0:
-                previous = row[position - 1]
-                text = detector.cell_text(previous)
+            found = attestation_statement(detector, slot)
+            if found:
+                previous, text = found
                 label = field.get('label', '')
-                if text.strip(' :') == label.strip(' :') and len(text) <= MAX_MAPPING_CONTEXT and \
-                        re.search(r'\b(?:report|form|document|application)\b', text, re.I) and re.search(
-                            r'\bconfirm\s+(?:that\s+)?(?:the\s+)?patient\s+(?:(?:has|had)\s+)?'
-                            r'(?:read\b|reviewed\b|seen\b|had\s+sight\s+of\b|'
-                            r'(?:had|was\s+given)\s+(?:an?\s+)?opportunity\s+to\b)', text, re.I):
+                if text.strip(' :') == label.strip(' :'):
                     policy.update(attestation='document_review', attestation_source=source(previous, text))
         if policy:
             field['answer_policy'] = policy

@@ -158,3 +158,60 @@ class SigningAreas(unittest.TestCase):
         doc = Document(); doc.add_paragraph('Dated and signed: __________')
         out = io.BytesIO(); doc.save(out)
         self.assertEqual(word.inspect(out.getvalue())['fields'][0]['kind'], 'signature')
+
+
+class AssistancePlaces(unittest.TestCase):
+    """What the engine itself holds for the model-assisted mapping place rule (documents.assistance.places)."""
+
+    @staticmethod
+    def places(data):
+        from . import assistance
+        result = assistance.places(data)
+        return dict(result['held']), set(result['anchored'])
+
+    def test_a_signing_block_caption_and_its_bands_are_held_part_by_part(self):
+        held, anchored = self.places(signing_form(table=False))
+        # The caption row is three printed labels; its signature part makes it a signing place although it names a date.
+        self.assertEqual(word.label_parts('Name of Participant\t\tDate\t\tSignature'), ['Name of Participant', 'Date', 'Signature'])
+        self.assertTrue(word.signing_wording('Name of Participant\t\tDate\t\tSignature'))
+        self.assertFalse(word.signing_wording('Name of Participant\t\tDate'))
+        self.assertEqual(held.get('word/document.xml#b/p[2]'), 'signing')
+        self.assertEqual(held.get('word/document.xml#b/p[1]'), 'signing')
+        self.assertNotIn('word/document.xml#b/p[0]', held)            # 'Participant ID: ____' is an ordinary answer
+        self.assertEqual(anchored, set())
+
+    def test_question_boxes_the_engine_reads_as_signing_or_authorship_are_held(self):
+        def box_form(question):
+            doc = Document(); doc.add_paragraph('Participant ID: __________'); doc.add_paragraph(question)
+            table = doc.add_table(rows=1, cols=1); borders = OxmlElement('w:tcBorders')
+            for side in ('top', 'left', 'bottom', 'right'):
+                edge = OxmlElement('w:' + side); edge.set(word.q('w:val'), 'single'); borders.append(edge)
+            table.cell(0, 0)._tc.get_or_add_tcPr().append(borders)
+            out = io.BytesIO(); doc.save(out); return out.getvalue()
+        box = 'word/document.xml#b/tbl[0]/tr[0]/tc[0]'
+        held, _ = self.places(box_form('I confirm the risks were explained and the patient gave consent:'))
+        self.assertEqual(held.get(box), 'consent')
+        held, _ = self.places(box_form('This section is for the patient to add any comments or concerns about their care'))
+        self.assertEqual(held.get(box), 'protected')
+        held, _ = self.places(box_form('Please describe the wound?'))
+        self.assertNotIn(box, held)
+
+    def test_text_boxes_frames_and_headers_are_anchored(self):
+        doc = Document(); doc.add_paragraph('Plan: ______')
+        frame = doc.add_paragraph('Office code: ______')
+        prop = OxmlElement('w:framePr'); prop.set(word.q('w:w'), '2000'); frame._p.get_or_add_pPr().insert(0, prop)
+        doc.sections[0].header.paragraphs[0].text = 'Clinic reference: ______'
+        out = io.BytesIO(); doc.save(out)
+        _, anchored = self.places(out.getvalue())
+        self.assertIn('word/document.xml#b/p[1]', anchored)
+        self.assertNotIn('word/document.xml#b/p[0]', anchored)
+        self.assertTrue(any(slot.startswith('word/header') for slot in anchored))
+
+    def test_fill_and_the_place_rule_read_one_protected_set(self):
+        data = signing_form(table=False)
+        package = word.open_package(data)
+        source = word.Detector(package, layout_proposal=True); source.detect()
+        _, protected, _ = word.protected_places(package, source, source.index)
+        held, _ = self.places(data)
+        self.assertTrue(protected)
+        self.assertTrue(set(protected) <= set(held))

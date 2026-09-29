@@ -40,7 +40,7 @@ class MappingWire(SimpleTestCase):
     def test_minimum_empty_complete_and_unicode_source_expansion(self):
         payload=self.payload(0,0)
         result,exhausted=wire.expand(payload,wire.fixture(payload))
-        self.assertEqual(result,{'fields':[],'slots':[],'additions':[],'rejected':[],'sources':{'fields':{},'additions':[]}})
+        self.assertEqual(result,{'fields':[],'slots':[],'additions':[],'rejected':[],'sources':{'fields':{},'additions':[],'quoted':{}}})
         self.assertFalse(exhausted)
         payload=self.payload();body=wire.fixture(payload);body['x']=[self.target(payload,1)]
         result,_=wire.expand(payload,body)

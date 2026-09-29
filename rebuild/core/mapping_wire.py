@@ -36,7 +36,8 @@ class Proposal(Strict):
     x:list[Annotated[list[Number],Field(min_length=7,max_length=307)]]=Field(max_length=MAX_CHANGES)
     e:bool
 
-INSTRUCTIONS=(' Array positions are request-bound numeric IDs. Return f groups k=keep, r=replace, '
+#: The v3 prompt, byte for byte: sent (with no per-slot presentation) when the presented request would exceed the bound.
+INSTRUCTIONS_V3=(' Array positions are request-bound numeric IDs. Return f groups k=keep, r=replace, '
  'n=not_answer, u=uncertain; s groups c=covered, n=not_answer, u=uncertain. Each field/slot ID '
  'must occur exactly once in its groups. x contains at most 100 combined changes: '
  '[prior field ID (-1 for addition), target slot ID, kind code, label text-reference ID, '
@@ -48,13 +49,14 @@ INSTRUCTIONS=(' Array positions are request-bound numeric IDs. Return f groups k
  'at its existing destination. Spans use Unicode code-point offsets, end exclusive, never byte offsets; '
  f'labels 1..{MAX_MAPPING_LABEL} characters and options 1..200 characters. Never shorten source text to fit. '
  'Every r field needs exactly one change. When more changes/options are needed than the envelope permits, '
- 'set e=true and mark remaining affected fields/slots uncertain; all slots still require verdicts. '
- 'Slot IDs, field IDs and text-reference IDs are separate numbering spaces: a text-reference ID is never a slot ID. '
- 'Each slot lists its own text-reference IDs by role in refs (text, heading, row_label, and options in print order); '
- 'each field lists its existing label reference in label_ref. The target slot ID is the slot where the answer is '
- 'written. A change may use only reference IDs listed in its target slot\'s refs, or, for a replacement at that '
- 'field\'s existing destination, that field\'s own label_ref. A change that breaks a rule is not adopted and '
- 'leaves its field or area for clinician review.')
+ 'set e=true and mark remaining affected fields/slots uncertain; all slots still require verdicts.')
+#: The presented prompt: the v3 prompt plus how the per-slot reference lists read.
+INSTRUCTIONS=(INSTRUCTIONS_V3+' Slot IDs, field IDs and text-reference IDs are separate numbering spaces: a text-reference '
+ 'ID is never a slot ID. A slot that has text references lists its own text-reference IDs in refs, in text_refs order '
+ '(each ID\'s role is in text_refs); each field lists its existing label reference in label_ref. The target slot ID '
+ 'is the slot where the answer is written. A change may use only reference IDs listed in its target slot\'s refs, '
+ 'or, for a replacement at that field\'s existing destination, that field\'s own label_ref. A change that breaks a '
+ 'rule is not adopted and leaves its field or area for clinician review.')
 
 ROLES=('text','heading','row_label')
 
@@ -69,27 +71,31 @@ def catalog(payload):
     return refs
 
 def presented(payload):
-    """Each slot's own reference IDs by role and each field's label reference: positions in the ONE catalog."""
-    slots=[{} for _ in payload['slots']];fields=[None]*len(payload['fields'])
+    """Each slot's own reference IDs (a compact list in catalog order; each ID's role is in text_refs) and each
+    field's label reference: positions in the ONE catalog."""
+    slots=[[] for _ in payload['slots']];fields=[None]*len(payload['fields'])
     for position,(owner,role,index) in enumerate(catalog(payload)):
         if role==4:fields[owner]=position
-        elif role==3:slots[owner].setdefault('options',[]).append(position)
-        else:slots[owner][ROLES[role]]=position
+        else:slots[owner].append(position)
     return slots,fields
 
 def present(payload):
-    """Additive request presentation: text_refs and every existing ID are unchanged, so a response keeps its meaning."""
+    """Additive request presentation: text_refs and every existing ID are unchanged, so a response keeps its meaning.
+    A slot with no text reference carries no refs key (an empty list is omitted, not sent)."""
     slots,fields=presented(payload)
-    for row,refs in zip(payload['slots'],slots):row['refs']=refs
+    for row,refs in zip(payload['slots'],slots):
+        if refs:row['refs']=refs
     for field,label in zip(payload['fields'],fields):field['label_ref']=label
     return payload
 
 def _presentation(payload):
-    """A request compiled before per-slot presentation carries none; a presented one must match its catalog exactly."""
+    """An unpresented (v3) request carries none; a presented one must match its catalog exactly: every field has its
+    label_ref, and exactly the slots with references carry refs."""
     marks=[('refs' in row) for row in payload['slots']]+[('label_ref' in field) for field in payload['fields']]
     if not any(marks):return
     slots,fields=presented(payload)
-    if (not all(marks) or [row['refs'] for row in payload['slots']]!=slots
+    if ([row.get('refs') for row in payload['slots']]!=[refs or None for refs in slots]
+            or not all('label_ref' in field for field in payload['fields'])
             or [field['label_ref'] for field in payload['fields']]!=fields):
         raise ValidationError('Mapping source catalog differs from its bound request.')
 
@@ -106,7 +112,9 @@ def expand(payload,response):
     differing from the bound request, and option capacity. An individually INVALID CHANGE is never adopted and never
     refuses the rest: a replacement leaves its field `uncertain` with no target (the prior field is preserved), an
     addition is dropped, and each is returned in `rejected` with its change index, wire array, field key, proposed
-    slot and reason. `sources` maps each adopted change back to its index. Both keys are consumed by the caller."""
+    slot and reason. `sources` maps each adopted change back to its index, and each index to the WHOLE printed text its
+    label quotes ('quoted': the place rule reads that wording, never only the span chosen). Both keys are consumed by
+    the caller."""
     body=Proposal.model_validate(response).model_dump()
     _partition(body['f'],len(payload['fields']),'field')
     _partition(body['s'],len(payload['slots']),'slot')
@@ -133,7 +141,7 @@ def expand(payload,response):
             text=row.get('options',[])[index] if role==3 else row.get(ROLES[role],'')
         if not 0<=start<end<=len(text) or end-start>(MAX_MAPPING_LABEL if label else 200):
             raise ValidationError('Invalid Unicode source span; source text was not truncated.')
-        return text[start:end]
+        return text[start:end],text
     owners={}
     for change in body['x']:
         if change[0]!=-1:owners[change[0]]=owners.get(change[0],0)+1
@@ -145,10 +153,10 @@ def expand(payload,response):
             raise ValidationError('Replacement does not uniquely own a replace verdict.')
         if fid!=-1 and not v3_mapping.is_mapped(payload['slots'][sid]['slot'],payload['fields'][fid]['slots']):
             raise ValidationError('Replacement target belongs to another field destination.')
-        return {'slot':payload['slots'][sid]['slot'],'kind':KINDS[kind],
-                'label':span(ref,start,end,sid,fid,True),'glyph':None if glyph==-1 else glyph,
-                'options':[span(*change[n:n+3],sid,fid,False) for n in range(7,len(change),3)]}
-    replacements={};additions=[];rejected=[];sources={'fields':{},'additions':[]}
+        label,quoted=span(ref,start,end,sid,fid,True)
+        return {'slot':payload['slots'][sid]['slot'],'kind':KINDS[kind],'label':label,'glyph':None if glyph==-1 else glyph,
+                'options':[span(*change[n:n+3],sid,fid,False)[0] for n in range(7,len(change),3)]},quoted
+    replacements={};additions=[];rejected=[];sources={'fields':{},'additions':[],'quoted':{}}
     def reject(number,change,fid,sid,reason):
         rejected.append({'change':number,'wire':None if change is None else list(change),
                          'type':'addition' if fid==-1 else 'replacement',
@@ -156,7 +164,7 @@ def expand(payload,response):
                          'slot':payload['slots'][sid]['slot'] if 0<=sid<len(payload['slots']) else '','reason':reason})
     for number,change in enumerate(body['x']):
         fid,sid=change[0],change[1]
-        try:built=target(change)
+        try:built,sources['quoted'][number]=target(change)
         except ValidationError as exc:
             reject(number,change,fid,sid,' '.join(exc.messages));continue
         if fid==-1:additions.append(built);sources['additions'].append(number)
