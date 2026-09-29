@@ -1,13 +1,13 @@
 {
  "schema": "quillmd-sonnet5-mapping-baseline/1",
  "what": "Pre-model deterministic baseline for the Sonnet 5 MAPPING-stage diagnostics. Measurement only.",
- "recorded_at": "2026-09-29T02:44:53Z",
+ "recorded_at": "2026-09-29T03:03:35Z",
  "order_of_work": "Forms generated and expected maps written and checked (check_expected.py, engine-free) BEFORE this measurement; the expected maps' sha256 were frozen in EXPECTED-SHA256SUMS and this run refuses unless every expected map still matches that manifest.",
  "expectations": {
   "manifest": "EXPECTED-SHA256SUMS",
-  "manifest_sha256": "70097790bad1e45f3e4169650e4b13b4248a1671b6b230951c4a8211482a0f2b",
+  "manifest_sha256": "7a141d05bcd92d2d522dff773bea74150793ff2c0149aceefbdc8231cde6afe3",
   "frozen_meta": {},
-  "manifest_mtime_utc": "2026-09-29T02:41:47Z",
+  "manifest_mtime_utc": "2026-09-29T03:00:51Z",
   "files": {
    "f1-guidance-confirmation.expected.json": "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae",
    "f2-leave-checkboxes.expected.json": "96dfba0669f5fa0de718992dcdaba7e7c44b5fae3336dbc336f042e0d4dd6eb0",
@@ -21,8 +21,8 @@
   "frozen_with_them": {
    "../freeze_check.py": "cbd0e79331e5780eb505b843cb71db481b3b773135c8c54d9a1156e82c84d9c5",
    "../notes/app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
-   "../notes/app_path_steps.py": "732e7b18933aaad08b103c904113885f80ed305bb50be5304587ed84bb580878",
-   "../notes/app_path_walk.py": "b1d85973fa7981c6455a44567d345d9362c8976664ce585736ba191985734757",
+   "../notes/app_path_steps.py": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
+   "../notes/app_path_walk.py": "0f407081859522077983ef5d570fd9692774cc840b2d0c48348278617c629433",
    "../notes/build_note_forms.py": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
    "../notes/cases.json": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
    "../notes/offline_replay.py": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
@@ -39,7 +39,7 @@
  },
  "candidate": {
   "worktree": "/opt/meddoc-pro/.worktrees/v1-sonnet5-campaign",
-  "head": "60d67db093fb9283ee71b168a3980e59438a3fe7",
+  "head": "10db4197b7aca86896d57e7ef9caa82a82485951",
   "engine_files_clean": true,
   "engine_sha256": {
    "rebuild/documents/word_v3.py": "4e2ea03d7fb3e1050d0702b7ca960f9cd2e160ecf0552e2fedeba74922d5b04f",

@@ -1,6 +1,6 @@
 {
  "schema": "quillmd.sonnet5-diagnostics.ordinary-notes.observations.v2",
- "recorded_at": "2026-09-29T02:43:01Z",
+ "recorded_at": "2026-09-29T03:01:51Z",
  "script_sha256": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
  "what": "What candidate 8e3dcfd0 did, offline with a SIMULATED provider, with every listed selection (replayed alone), with each case's reference response, and with the adversarial simulations and controls. Recorded AFTER cases.json was frozen.",
  "candidate_files": {

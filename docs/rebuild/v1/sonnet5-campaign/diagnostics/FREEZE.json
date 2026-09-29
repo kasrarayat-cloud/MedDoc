@@ -530,5 +530,49 @@
    "totals_and_per_form_identical_to_previous_record": true
   },
   "superseded_by": "the records committed after the third freeze (same scripts, same results)"
+ },
+ "records_after_third_freeze": {
+  "manifest_sha256": "7a141d05bcd92d2d522dff773bea74150793ff2c0149aceefbdc8231cde6afe3",
+  "freeze_commit": "10db4197",
+  "mapping/app-path-selftest.json": {
+   "recorded_at": "2026-09-29T03:01:33Z",
+   "checks_passed": 22,
+   "checks": 22,
+   "provenance_manifest_sha256": "7a141d05bcd92d2d522dff773bea74150793ff2c0149aceefbdc8231cde6afe3",
+   "rebuild_equals_candidate": true,
+   "forms_totals_checks_identical_to_previous_record": true
+  },
+  "notes/offline-observations.json": {
+   "recorded_at": "2026-09-29T03:01:51Z",
+   "script_sha256": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
+   "same_as_previous_record_except": [
+    "recorded_at"
+   ],
+   "drift_check_after_recording": "exit 0"
+  },
+  "notes/app-path-walk.json": {
+   "started_at": "2026-09-29T03:02:10Z",
+   "test_database": "quillmd_qa_diag_notes_refrozenthree",
+   "harness_sha256": {
+    "app_path_walk.py": "0f407081859522077983ef5d570fd9692774cc840b2d0c48348278617c629433",
+    "app_path_steps.py": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
+    "app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
+    "run_app_path_walk.py": "f42bc3a0d08de040bf27ac99ea8d3b7b64c8e2f392caa8e9be570facf9c2fb14"
+   },
+   "summary": {
+    "walks": 21,
+    "workflow_success": 21,
+    "failure_boundaries": {},
+    "exceptions": {},
+    "mapping_equals_cases_json": 21,
+    "fields_compared_with_replay": 91,
+    "fields_disagreeing_with_replay": []
+   },
+   "per_walk_records_identical_to_previous_record": true
+  },
+  "mapping/baseline-deterministic.json": {
+   "recorded_at": "2026-09-29T03:03:35Z",
+   "totals_and_per_form_identical_to_previous_record": true
+  }
  }
 }

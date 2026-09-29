@@ -1,21 +1,21 @@
 {
  "schema": "quillmd-sonnet5-notes-app-path-walk/1",
- "started_at": "2026-09-29T02:43:28Z",
- "completed_at": "2026-09-29T02:44:52Z",
- "head": "60d67db093fb9283ee71b168a3980e59438a3fe7",
+ "started_at": "2026-09-29T03:02:10Z",
+ "completed_at": "2026-09-29T03:03:34Z",
+ "head": "10db4197b7aca86896d57e7ef9caa82a82485951",
  "rebuild_equals_candidate": true,
  "rebuild_compared": "rebuild/ outside rebuild/ops/ (the campaign runner)",
- "test_database": "quillmd_qa_diag_notes_refrozen",
+ "test_database": "quillmd_qa_diag_notes_refrozenthree",
  "database_server": "127.0.0.1:55731 (campaign QA PostgreSQL)",
  "exit_code": 0,
  "harness_sha256": {
-  "app_path_walk.py": "b1d85973fa7981c6455a44567d345d9362c8976664ce585736ba191985734757",
-  "app_path_steps.py": "732e7b18933aaad08b103c904113885f80ed305bb50be5304587ed84bb580878",
+  "app_path_walk.py": "0f407081859522077983ef5d570fd9692774cc840b2d0c48348278617c629433",
+  "app_path_steps.py": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
   "app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
   "run_app_path_walk.py": "f42bc3a0d08de040bf27ac99ea8d3b7b64c8e2f392caa8e9be570facf9c2fb14"
  },
  "cases_sha256": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
- "observations_sha256": "908849578df85f19b1f15621e99313202a3ee8a79364603c2e8136528de4408e",
+ "observations_sha256": "1feaa5ed6598f06ea6f33621feb48918378b3d81404c71c4ae3f5fbdf6d00a0e",
  "provider": "mocked (anthropic.Anthropic patched to return each case's reference selection); Python sockets denied",
  "source_unchanged": true,
  "summary": {

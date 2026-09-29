@@ -1,12 +1,12 @@
 {
  "schema": "quillmd-sonnet5-mapping-app-path-selftest/1",
- "recorded_at": "2026-09-29T02:42:33Z",
- "candidate_head": "60d67db093fb9283ee71b168a3980e59438a3fe7",
+ "recorded_at": "2026-09-29T03:01:33Z",
+ "candidate_head": "10db4197b7aca86896d57e7ef9caa82a82485951",
  "script_sha256": "a03685f5df649dc6c63cbe4fb11500257c02e93406f0444802395b320adaf1d1",
  "measure_baseline_sha256": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
  "provenance": {
   "manifest": "mapping/EXPECTED-SHA256SUMS",
-  "manifest_sha256": "70097790bad1e45f3e4169650e4b13b4248a1671b6b230951c4a8211482a0f2b",
+  "manifest_sha256": "7a141d05bcd92d2d522dff773bea74150793ff2c0149aceefbdc8231cde6afe3",
   "frozen_files_match": true,
   "grader": "grade_app_path.py",
   "grader_sha256": "a03685f5df649dc6c63cbe4fb11500257c02e93406f0444802395b320adaf1d1",
@@ -15,7 +15,7 @@
   },
   "candidate": {
    "commit": "8e3dcfd07a5946430e7291b520faf35c8055127b",
-   "head": "60d67db093fb9283ee71b168a3980e59438a3fe7",
+   "head": "10db4197b7aca86896d57e7ef9caa82a82485951",
    "rebuild_equals_candidate": true,
    "engine_sha256": {
     "rebuild/core/mapping_assistance.py": "03fa6840a559e50f0f14a79356cfaa7dfc47848bda419fc5269067522995093b",
