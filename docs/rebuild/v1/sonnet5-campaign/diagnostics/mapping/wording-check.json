@@ -1,0 +1,1427 @@
+{
+ "schema": "quillmd-sonnet5-wording-check/1",
+ "recorded_at": "2026-09-29T00:53:39Z",
+ "rule": "normalized (NFKC, casefold, non-alphanumeric runs -> one space) shared substring of 25+ characters, boundary spaces counted",
+ "script_sha256": "e40012d9cb1a15a673ed850659ad94ace1a752bd172cbafa9575e34c72221878",
+ "engine_strings_included": true,
+ "provider_strings": 5785,
+ "provider_strings_gated": 5766,
+ "provider_windows": 42389,
+ "dev_strings": 32341,
+ "forms": 19,
+ "inputs_sha256": {
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping/f1-guidance-confirmation.docx": "ceac8361c341f92939295e6c34f6fbd82b66a71cfe54984c95fb2ac1a24f54bc",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping/f2-leave-checkboxes.docx": "e4e14bcbd66b1b8f5809dbca9c8a4736602ff9b8a321905f86d2e97323bc85a8",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping/f2b-leave-checkboxes-owner.docx": "c5b07b53ee3e769b1f626520627b0ad374410bb1154eb6f13612b76f0d1f02d0",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping/f3-selection-instructions.docx": "830804ca0cdd48da1a59ab463d7e652bb390716b57012badc8ae75f6037faa6c",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping/f4-exam-grid.docx": "db77451166d5e6fad3500b58c66ca6003aab4e6d5d01f041caf26cff6508540b",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping/f5-negative-controls.docx": "9359629da52d34574820c3a2bd031531e405294c9e1b87dfc33f5c5fbe5b8756",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping/f6a-long-answer.docx": "86530e5a681efe578d06abee25bef6ec3aff772a1620b37559a85637a3a12564",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping/f6b-admin-missing.docx": "0162138eb645bdf51de3c9cf8deee6f34c981ffa29e633ccd106b1eeaae50f4b",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n02-repeated-other.docx": "96f9c3a7d2cf4bab1c87d3a74ed76f2cd2884d1183241ec76e77c9d8175b7e6b",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n03-order-question.docx": "ea6a432cb3072789e9797c790e278b2c711173c8d75db692293c1c5bfe61f07b",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n08-knee-and-findings.docx": "60c486ab1aa18b18ace4e4b04be4bca002325365a89d460c2f6ef393f85c9b61",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n09-knee-pair.docx": "79310a2ba7ef95bda06621a9baf9b426ae3f21fd82296ffbb690dcbfcdc882f8",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n10-smoker-allergies.docx": "7b8edc65f832ceb8094b8ac6f89153b048976f542d5598f6840117e48edd43d6",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n11-n12-correction.docx": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n13-risk-and-medication.docx": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n14-smoking-and-mental-state.docx": "e0d8133fba02ee2dc12912df8b998f27e52e9bcc00ea1cb0b64586a8017706e4",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n15-risk-and-arrangements.docx": "3804e0fa77aff59f2d6d6023b524c9e13936026aa4d2f03ad615577b12dc4f3c",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/n16-mood-and-allergies.docx": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+  "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/r1-11.docx": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/cases.json": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/f1-guidance-confirmation.expected.json": "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/f2-leave-checkboxes.expected.json": "96dfba0669f5fa0de718992dcdaba7e7c44b5fae3336dbc336f042e0d4dd6eb0",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/f2b-leave-checkboxes-owner.expected.json": "97e98a1f8b28859d5eef592e2f0fb37698d5243d4e78243b846c217790149809",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/f3-selection-instructions.expected.json": "fd1911a1385ce6075297083520b5c52711791770cbc31ea100e83bd935c5ba78",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/f4-exam-grid.expected.json": "8c7dd094a3ec963fbc4751a2f3ec0a1e98159b6539f9d57abcf9ca532c082499",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/f5-negative-controls.expected.json": "22ebd42a76a0104fb88903bf2e4abf8037149e6b70b9299056d946eb6d141379",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/f6a-long-answer.expected.json": "cbdc1fdcb0b27dee3e25c8db08a93b7293ef35c583ea14e0656ee526a7d31f4f",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/f6b-admin-missing.expected.json": "87465c4b9eed9fc5fd9de7ef6db3b9e1364faab66306fc852ff21c842bf8b390",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/build_forms.py": "32e72baeb9f05b48059c0ca1b9ffc0b66cdb945b4ee7002d701c8c84d3ac1ab4",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/build_note_forms.py": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/long_answer_readback.py": "b43514b35a6a0ec6d1fd93d3adaadbfaba97c19d275540c0f125b5fe0cd20891",
+  "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics/docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/long-answer.txt": "919be558f73a23ebc46851d9be9321f570d28e8f89bea81ce63f8c75ba564e7f"
+ },
+ "positive_control": {
+  "source": "git 00a423a9 (the sets the checker read)",
+  "gated_hits": 28,
+  "files_with_hits": [
+   "checked:mapping/f1-guidance-confirmation.expected.json",
+   "checked:mapping/f2-leave-checkboxes.expected.json",
+   "checked:mapping/f5-negative-controls.expected.json",
+   "checked:notes/cases.json"
+  ],
+  "detects_the_reported_overlaps": true
+ },
+ "plan_phrases": [
+  "(please tick one)",
+  "(one box only)",
+  "Tick all that apply",
+  "You may tick more than one box",
+  "Select up to 3",
+  "Route (e.g., po)",
+  "Recipient(s)",
+  "Describe any abnormality",
+  "Normal / Abnormal / Not examined",
+  "Left knee / Right knee"
+ ],
+ "gated_hits": [],
+ "plan_phrase_hits_not_gated": [
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[1]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[2]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[3]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[4]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[5]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[6]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[7]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[8]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[9]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[10]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[11]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[12]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[13]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#15",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:p#32",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:text",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.docx:outline:word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[1]:preview",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "f4-exam-grid.expected.json:$.structure",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  },
+  {
+   "provider": "build_forms.py:literal@1",
+   "dev": "D09:slots/word/document.xml#b/tbl[0]/tr[14]/tc[1]",
+   "dev_field": "text",
+   "gated": true,
+   "windows": 4,
+   "windows_outside_plan_phrases": 0
+  }
+ ],
+ "info_hits_join_only": [
+  {
+   "provider": "f4-exam-grid.docx:word/document.xml:WHOLE",
+   "dev": "D10:slots/word/document.xml#b/tbl[1]/tr[29]/tc[0]",
+   "dev_field": "text",
+   "gated": false,
+   "windows": 3,
+   "windows_outside_plan_phrases": 3
+  }
+ ],
+ "verdict": "CLEAN"
+}

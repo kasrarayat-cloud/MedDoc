@@ -1,0 +1,300 @@
+{
+ "schema": "quillmd-sonnet5-diagnostics-freeze/1",
+ "written_at": "2026-09-29T00:57:26Z",
+ "candidate": {
+  "sha": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+  "short": "8e3dcfd0",
+  "rebuild_equals_candidate": true
+ },
+ "order_of_work": [
+  {
+   "step": "checked sets (defects included)",
+   "commit": "00a423a956b3a95bc41efdb7ede4ad72668443e7",
+   "committed_at": "2026-09-29T00:14:32+00:00"
+  },
+  {
+   "step": "expectations, graders, generators and notes cases re-frozen (EXPECTED-SHA256SUMS)",
+   "commit": "0beaf2b2f3f0786da6917fea9b9bcc5aa16054ea",
+   "committed_at": "2026-09-29T00:52:40+00:00"
+  },
+  {
+   "step": "deterministic mapping baseline recorded",
+   "recorded_at": "2026-09-29T00:52:50Z"
+  },
+  {
+   "step": "app-path grader self-test recorded",
+   "recorded_at": "2026-09-29T00:53:18Z"
+  },
+  {
+   "step": "long-answer fill and read-back recorded",
+   "recorded_at": "2026-09-29T00:53:18Z"
+  },
+  {
+   "step": "wording check recorded",
+   "recorded_at": "2026-09-29T00:53:39Z"
+  },
+  {
+   "step": "notes offline observations recorded",
+   "recorded_at": "2026-09-29T00:54:03Z"
+  },
+  {
+   "step": "notes app-path walk recorded",
+   "recorded_at": "2026-09-29T00:56:48Z"
+  },
+  {
+   "step": "this manifest",
+   "recorded_at": null
+  }
+ ],
+ "expected_sha256sums": [
+  "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae  f1-guidance-confirmation.expected.json",
+  "96dfba0669f5fa0de718992dcdaba7e7c44b5fae3336dbc336f042e0d4dd6eb0  f2-leave-checkboxes.expected.json",
+  "97e98a1f8b28859d5eef592e2f0fb37698d5243d4e78243b846c217790149809  f2b-leave-checkboxes-owner.expected.json",
+  "fd1911a1385ce6075297083520b5c52711791770cbc31ea100e83bd935c5ba78  f3-selection-instructions.expected.json",
+  "8c7dd094a3ec963fbc4751a2f3ec0a1e98159b6539f9d57abcf9ca532c082499  f4-exam-grid.expected.json",
+  "22ebd42a76a0104fb88903bf2e4abf8037149e6b70b9299056d946eb6d141379  f5-negative-controls.expected.json",
+  "cbdc1fdcb0b27dee3e25c8db08a93b7293ef35c583ea14e0656ee526a7d31f4f  f6a-long-answer.expected.json",
+  "87465c4b9eed9fc5fd9de7ef6db3b9e1364faab66306fc852ff21c842bf8b390  f6b-admin-missing.expected.json",
+  "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e  measure_baseline.py",
+  "5a51f113bbb459bc720825af445b57767e2307e08c0a64ce0e49c2b3f014e258  grade_app_path.py",
+  "b2fec94b3808be9d98c4a5d6e5b6bed6af8c1e20eaa2b61cfd1bca3da7b185ff  check_expected.py",
+  "e40012d9cb1a15a673ed850659ad94ace1a752bd172cbafa9575e34c72221878  wording_check.py",
+  "b43514b35a6a0ec6d1fd93d3adaadbfaba97c19d275540c0f125b5fe0cd20891  long_answer_readback.py",
+  "32e72baeb9f05b48059c0ca1b9ffc0b66cdb945b4ee7002d701c8c84d3ac1ab4  build_forms.py",
+  "919be558f73a23ebc46851d9be9321f570d28e8f89bea81ce63f8c75ba564e7f  long-answer.txt",
+  "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b  ../notes/cases.json",
+  "4c3965f72312a4201215e4a40c6c1502679c5a9c4c2d741745246bb78175c21b  ../notes/offline_replay.py",
+  "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e  ../notes/build_note_forms.py",
+  "5b733ad10f46420127656163fa813d898299f0dd78dbf999df2b8c07c6797c1a  ../notes/app_path_walk.py",
+  "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39  ../notes/app_path_settings.py",
+  "628daa226258d70a0fc8d36c0033c976c4ad169fad612f88918735fe05fcb76a  ../notes/run_app_path_walk.py"
+ ],
+ "records_match_the_freeze": {
+  "baseline_expectations_match_frozen": true,
+  "baseline_graders_frozen_with_maps": {
+   "../notes/app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
+   "../notes/app_path_walk.py": "5b733ad10f46420127656163fa813d898299f0dd78dbf999df2b8c07c6797c1a",
+   "../notes/build_note_forms.py": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
+   "../notes/cases.json": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+   "../notes/offline_replay.py": "4c3965f72312a4201215e4a40c6c1502679c5a9c4c2d741745246bb78175c21b",
+   "../notes/run_app_path_walk.py": "628daa226258d70a0fc8d36c0033c976c4ad169fad612f88918735fe05fcb76a",
+   "build_forms.py": "32e72baeb9f05b48059c0ca1b9ffc0b66cdb945b4ee7002d701c8c84d3ac1ab4",
+   "check_expected.py": "b2fec94b3808be9d98c4a5d6e5b6bed6af8c1e20eaa2b61cfd1bca3da7b185ff",
+   "grade_app_path.py": "5a51f113bbb459bc720825af445b57767e2307e08c0a64ce0e49c2b3f014e258",
+   "long-answer.txt": "919be558f73a23ebc46851d9be9321f570d28e8f89bea81ce63f8c75ba564e7f",
+   "long_answer_readback.py": "b43514b35a6a0ec6d1fd93d3adaadbfaba97c19d275540c0f125b5fe0cd20891",
+   "measure_baseline.py": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
+   "wording_check.py": "e40012d9cb1a15a673ed850659ad94ace1a752bd172cbafa9575e34c72221878"
+  },
+  "observations_cases_sha256": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+  "walk_cases_sha256": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+  "cases_sha256_now": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+  "selftest_script_sha256": "5a51f113bbb459bc720825af445b57767e2307e08c0a64ce0e49c2b3f014e258",
+  "selftest_checks_passed": true
+ },
+ "results": {
+  "baseline_totals": {
+   "inspect": {
+    "areas": 48,
+    "areas_right": 36,
+    "areas_wrong": 3,
+    "controls": 25,
+    "controls_right": 24,
+    "extras_answerable": 0,
+    "extras_protected": 0,
+    "areas_missed": 9,
+    "controls_wrong": 1
+   },
+   "layout_proposal": {
+    "areas": 48,
+    "areas_right": 43,
+    "areas_wrong": 3,
+    "controls": 25,
+    "controls_right": 24,
+    "extras_answerable": 0,
+    "extras_protected": 0,
+    "areas_missed": 2,
+    "controls_wrong": 1
+   }
+  },
+  "app_path_selftest_totals": {
+   "correct": {
+    "areas": 48,
+    "areas_right": 37,
+    "controls": 25,
+    "controls_right": 24,
+    "not_expressible_at_candidate": 11,
+    "areas_held_safe": 11,
+    "controls_held_safe": 1
+   },
+   "do_nothing": {
+    "areas": 48,
+    "areas_right": 36,
+    "areas_wrong": 3,
+    "controls": 25,
+    "controls_right": 24,
+    "not_expressible_at_candidate": 11,
+    "areas_missed": 9,
+    "controls_wrong": 1
+   },
+   "harmful": {
+    "areas": 48,
+    "areas_wrong": 4,
+    "controls": 25,
+    "controls_right": 20,
+    "controls_wrong": 5,
+    "not_expressible_at_candidate": 11,
+    "areas_right": 35,
+    "false_field": 4,
+    "areas_missed": 9
+   },
+   "app_fixture": {
+    "areas": 48,
+    "areas_held_safe": 47,
+    "controls": 25,
+    "controls_right": 24,
+    "not_expressible_at_candidate": 11,
+    "controls_wrong": 1,
+    "areas_right": 1
+   }
+  },
+  "long_answer": "ACCEPTED WHOLE (5835 characters)",
+  "wording_check": "CLEAN",
+  "wording_check_positive_control": {
+   "source": "git 00a423a9 (the sets the checker read)",
+   "gated_hits": 28,
+   "files_with_hits": [
+    "checked:mapping/f1-guidance-confirmation.expected.json",
+    "checked:mapping/f2-leave-checkboxes.expected.json",
+    "checked:mapping/f5-negative-controls.expected.json",
+    "checked:notes/cases.json"
+   ],
+   "detects_the_reported_overlaps": true
+  },
+  "notes_reference_verdicts_on_sent_paths": {
+   "default": {
+    "over_hold": 29,
+    "as_desired": 47
+   },
+   "field_relations": {
+    "as_desired": 13,
+    "over_hold": 2
+   }
+  },
+  "notes_entries_depending_on_other_fields": [
+   {
+    "case": "N02",
+    "field": "v3_3",
+    "kind": "forbidden",
+    "index": 0,
+    "path": "field_relations",
+    "observed_alone": {
+     "status": "supported",
+     "text": "The patient describes the pain as a tight band around her head.",
+     "review_status": "supported"
+    },
+    "observed_with_reference": {
+     "status": "held",
+     "text": ""
+    }
+   }
+  ],
+  "notes_walk_summary": {
+   "walks": 21,
+   "workflow_success": 21,
+   "failure_boundaries": {},
+   "exceptions": {},
+   "mapping_equals_cases_json": 21,
+   "fields_compared_with_replay": 91,
+   "fields_disagreeing_with_replay": []
+  },
+  "notes_budget": {
+   "cap_usd": "10.00",
+   "reserved_for_one_voice_transcription_usd": "0.30",
+   "available_for_this_set_usd": "9.70",
+   "source": "docs/rebuild/v1/V1-EXTERNAL-REQUEST.md (ordinary-notes line, still unapproved)",
+   "bound_basis": "per send: core.generation.maximum_cost for that path with the case's inspected fields = (serialized request bytes + 12000) x $2/M input + profile max_output_tokens (8,000 default, 20,000 field_relations) x $10/M output, claude-sonnet-5; then x1.1. No retries are budgeted.",
+   "planned_sends": {
+    "default": 14,
+    "field_relations": 7
+   },
+   "cases": 16,
+   "total_with_margin_usd": {
+    "default": "1.693984",
+    "field_relations": "1.795540",
+    "all": "3.489524"
+   },
+   "within_cap": true,
+   "computed_by": "notes/build_note_forms.py --update-cases (before the freeze; deterministic, no provider)"
+  }
+ },
+ "positive_controls_run_offline": {
+  "check_expected": "a copy with f2b.A2 option 0, one control slot and f4.A7 label altered: 4 mismatches, exit 1",
+  "measure_baseline": "a copy with f5.C2 altered: refused (map differs from EXPECTED-SHA256SUMS), exit 1",
+  "offline_replay_record": "a cases.json copy differing by one space: --record refused, nothing written, exit 1",
+  "offline_replay_drift": "an observations copy with N09 v3_1 default status changed: drift on cases, exit 1",
+  "offline_replay_repeat": "two unmodified drift checks after recording: exit 0 both",
+  "wording_check": "the checked sets read from git 00a423a9: 28 gated hits in 4 files",
+  "grade_app_path": "18 of 18 stated checks passed"
+ },
+ "files_sha256": {
+  "CHECK.md": "96b5e768a0a3f2c7f2c17bcfcfab7a433a585041a0a64c6ea932ce60ce243596",
+  "layout-path/REPORT.md": "7279420df9a60938fcc1bf9ef3cd64c7a00ba209483e12da5973101772ec70bc",
+  "mapping/EXPECTED-SHA256SUMS": "3beddaf52269c725d53bafc3f0e2381ef2b933bab2f960fd35e861316608ecd7",
+  "mapping/README.md": "d27aff69bb81e68ea4abcf50d9179a413b0e088f44eae0464a55d46fe0a3965f",
+  "mapping/app-path-selftest.json": "53a5ca8f98ba4cd7c35e9594c76518bec1dfc3a0ce99e85b7b42b85d37bbc7c6",
+  "mapping/baseline-deterministic.json": "aa09c858abcbae6010269acb04addc569997524bd52918444e1b296716c4a22b",
+  "mapping/build_forms.py": "32e72baeb9f05b48059c0ca1b9ffc0b66cdb945b4ee7002d701c8c84d3ac1ab4",
+  "mapping/check_expected.py": "b2fec94b3808be9d98c4a5d6e5b6bed6af8c1e20eaa2b61cfd1bca3da7b185ff",
+  "mapping/f1-guidance-confirmation.expected.json": "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae",
+  "mapping/f2-leave-checkboxes.expected.json": "96dfba0669f5fa0de718992dcdaba7e7c44b5fae3336dbc336f042e0d4dd6eb0",
+  "mapping/f2b-leave-checkboxes-owner.expected.json": "97e98a1f8b28859d5eef592e2f0fb37698d5243d4e78243b846c217790149809",
+  "mapping/f3-selection-instructions.expected.json": "fd1911a1385ce6075297083520b5c52711791770cbc31ea100e83bd935c5ba78",
+  "mapping/f4-exam-grid.expected.json": "8c7dd094a3ec963fbc4751a2f3ec0a1e98159b6539f9d57abcf9ca532c082499",
+  "mapping/f5-negative-controls.expected.json": "22ebd42a76a0104fb88903bf2e4abf8037149e6b70b9299056d946eb6d141379",
+  "mapping/f6a-long-answer.expected.json": "cbdc1fdcb0b27dee3e25c8db08a93b7293ef35c583ea14e0656ee526a7d31f4f",
+  "mapping/f6b-admin-missing.expected.json": "87465c4b9eed9fc5fd9de7ef6db3b9e1364faab66306fc852ff21c842bf8b390",
+  "mapping/grade_app_path.py": "5a51f113bbb459bc720825af445b57767e2307e08c0a64ce0e49c2b3f014e258",
+  "mapping/long-answer-readback.json": "53e405e45dd4a46a369fe6458cbcbfc0b23cb99668dcc16c7fc7d5abbf141ed9",
+  "mapping/long-answer.txt": "919be558f73a23ebc46851d9be9321f570d28e8f89bea81ce63f8c75ba564e7f",
+  "mapping/long_answer_readback.py": "b43514b35a6a0ec6d1fd93d3adaadbfaba97c19d275540c0f125b5fe0cd20891",
+  "mapping/measure_baseline.py": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
+  "mapping/wording-check.json": "60c69d053f7467b4906ed946995dc1b33de32914d9af3d3f302af3775e18ddf3",
+  "mapping/wording_check.py": "e40012d9cb1a15a673ed850659ad94ace1a752bd172cbafa9575e34c72221878",
+  "notes/README.md": "16a89215b340198ef83bc708ead3d01e5e74d4dbd6596f2867374c1ea9c53f58",
+  "notes/app-path-walk.json": "cfeb0f6fd69c2af4764c8a2e9cb3206e6364df5c59b9c216b908574d6e5f911d",
+  "notes/app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
+  "notes/app_path_walk.py": "5b733ad10f46420127656163fa813d898299f0dd78dbf999df2b8c07c6797c1a",
+  "notes/build_note_forms.py": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
+  "notes/cases.json": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+  "notes/note-forms-inspection.json": "6c8b540b8b9fef1b71525cd1cc3dcc9f3dbe456e57b284b2e79a795c9c4e09e2",
+  "notes/offline-observations.json": "6ee94382eb8b18a4573f0540408418a8a8756dbeab7b65ea27f3a6a74bb87f93",
+  "notes/offline_replay.py": "4c3965f72312a4201215e4a40c6c1502679c5a9c4c2d741745246bb78175c21b",
+  "notes/run_app_path_walk.py": "628daa226258d70a0fc8d36c0033c976c4ad169fad612f88918735fe05fcb76a",
+  "offline-replays/REPORT.md": "1ce35a376c1ace771806dfb2ce125a88be287af909fa148cb05cdb3977cdae3a",
+  "offline-replays/results.json": "169fb7a354e2d3ed0a8b605c2ca7f020ae1a5cebb925a1444336bed71d404178"
+ },
+ "runtime_forms_sha256": {
+  "mapping/f1-guidance-confirmation.docx": "ceac8361c341f92939295e6c34f6fbd82b66a71cfe54984c95fb2ac1a24f54bc",
+  "mapping/f2-leave-checkboxes.docx": "e4e14bcbd66b1b8f5809dbca9c8a4736602ff9b8a321905f86d2e97323bc85a8",
+  "mapping/f2b-leave-checkboxes-owner.docx": "c5b07b53ee3e769b1f626520627b0ad374410bb1154eb6f13612b76f0d1f02d0",
+  "mapping/f3-selection-instructions.docx": "830804ca0cdd48da1a59ab463d7e652bb390716b57012badc8ae75f6037faa6c",
+  "mapping/f4-exam-grid.docx": "db77451166d5e6fad3500b58c66ca6003aab4e6d5d01f041caf26cff6508540b",
+  "mapping/f5-negative-controls.docx": "9359629da52d34574820c3a2bd031531e405294c9e1b87dfc33f5c5fbe5b8756",
+  "mapping/f6a-long-answer.docx": "86530e5a681efe578d06abee25bef6ec3aff772a1620b37559a85637a3a12564",
+  "mapping/f6b-admin-missing.docx": "0162138eb645bdf51de3c9cf8deee6f34c981ffa29e633ccd106b1eeaae50f4b",
+  "notes/n02-repeated-other.docx": "96f9c3a7d2cf4bab1c87d3a74ed76f2cd2884d1183241ec76e77c9d8175b7e6b",
+  "notes/n03-order-question.docx": "ea6a432cb3072789e9797c790e278b2c711173c8d75db692293c1c5bfe61f07b",
+  "notes/n08-knee-and-findings.docx": "60c486ab1aa18b18ace4e4b04be4bca002325365a89d460c2f6ef393f85c9b61",
+  "notes/n09-knee-pair.docx": "79310a2ba7ef95bda06621a9baf9b426ae3f21fd82296ffbb690dcbfcdc882f8",
+  "notes/n10-smoker-allergies.docx": "7b8edc65f832ceb8094b8ac6f89153b048976f542d5598f6840117e48edd43d6",
+  "notes/n11-n12-correction.docx": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+  "notes/n13-risk-and-medication.docx": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+  "notes/n14-smoking-and-mental-state.docx": "e0d8133fba02ee2dc12912df8b998f27e52e9bcc00ea1cb0b64586a8017706e4",
+  "notes/n15-risk-and-arrangements.docx": "3804e0fa77aff59f2d6d6023b524c9e13936026aa4d2f03ad615577b12dc4f3c",
+  "notes/n16-mood-and-allergies.docx": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+  "notes/r1-11.docx": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa"
+ },
+ "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics",
+ "not_in_this_manifest": "REPAIR.md (written by the lead from this pass's report after this manifest)"
+}

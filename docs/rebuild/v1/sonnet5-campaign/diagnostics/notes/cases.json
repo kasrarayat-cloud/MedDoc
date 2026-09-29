@@ -1,0 +1,5559 @@
+{
+ "schema": "quillmd.sonnet5-diagnostics.ordinary-notes.v1",
+ "frozen": "2026-09-28; repaired and re-frozen 2026-09-29 (CHECK.md repair; see repairs)",
+ "candidate": {
+  "commit": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+  "worktree": "/opt/meddoc-pro/.worktrees/v1-sonnet5-diagnostics"
+ },
+ "scope": "A fixed synthetic diagnostic set that separates model selection from application adoption. It is not Sonnet 5 qualification, clinical quality, voice review, corpus/holdout evidence or Word compatibility. All text is synthetic probe or adversarial-test material; no corpus original text is included.",
+ "paths": {
+  "default": {
+   "env": {
+    "QUILLMD_V3_FIELD_RELATIONS": "0",
+    "QUILLMD_V3_HISTORY_CONTEXT": "0",
+    "QUILLMD_V3_GENERATION_BATCHES": "0",
+    "QUILLMD_WM_NARRATIVE": "0"
+   },
+   "model_response": "UnitSelections: fields[{key, unit_ids, conflict}]",
+   "note": "Production default. Options are filled only from a labelled line."
+  },
+  "field_relations": {
+   "env": {
+    "QUILLMD_V3_FIELD_RELATIONS": "1",
+    "QUILLMD_V3_HISTORY_CONTEXT": "0",
+    "QUILLMD_V3_GENERATION_BATCHES": "0",
+    "QUILLMD_WM_NARRATIVE": "0"
+   },
+   "isolated_qa_only": true,
+   "model_response": "FieldSelections: fields[{key, unit_ids, conflict, option_ids, context[one of answer|qualifier|independent|contrary|unresolved per unit]}]",
+   "note": "Paused contradiction veto (candidate-adversarial-pass-20260928: not converging, stays off). Never enable on the installed app."
+  }
+ },
+ "vocabulary": {
+  "classes": {
+   "V": "explicit, relevant stated content that should be supported; held today by the application",
+   "J": "field meaning, wording or ownership needs adjudication; must stay held",
+   "I": "a single-field positive selection would be invalid; a correct model selects nothing or sets conflict",
+   "S": "supported control (should be and is adopted on the app path with the inspected form)",
+   "M": "missing control (nothing stated; nothing may be adopted)",
+   "NR": "never requested (signing field)",
+   "SIDE": "laterality control",
+   "DENIAL": "denial control",
+   "CORRECTION": "spoken self-correction control",
+   "CONTRADICTION": "direct-opposite control: isolated QA of the paused field-relations veto (R3-1..R3-8); N13/N16 also measure the default path, which has no veto"
+  },
+  "raw_model_expectation": "acceptable: every listed selection is correct model behaviour; the FIRST is the reference selection the offline replay feeds the application. forbidden: model errors. units: exact complete source-unit quotes (map them to ids with the candidate's source_units() for the same form). conflict: the model's conflict flag. options and relations exist only on the field_relations path (relations lists units that are not \"independent\"; selected units are \"answer\"); a selection with \"paths\" is only expressible on those paths. A selection matches when its unit set, conflict flag and (field_relations) option set are equal; unit order is irrelevant (the application restores source order). Keys are the inspected field keys of the case's form (case_keys maps them to the earlier readable names).",
+  "app_adoption_expectation": "desired: what the application SHOULD do with the reference selection - supported (adopted), held (status \"conflict\", nothing written, a held_candidate may be shown), missing (blank). desired_texts: the adopted text accepted when supported - the stripped remainder the application writes today OR the full source unit(s) joined by a newline (CHECK.md N3: either is clinically right; a text_mismatch means neither). never: outcomes that are failures whatever the model returned. hold_basis: why this candidate holds a field desired supported, per path. An acceptable entry may carry its own desired: not_asserted (recorded only) or usefulness_loss (a silent blank on a J field: never a leak, never correct - CHECK.md N2); a forbidden entry carries app_should: not_supported (the application should catch it) or model_dependent (only the model can). missing_is_not_recall: \"missing\" is as desired for safety but must never count as recall. Observations are NOT in this file: offline-observations.json records what candidate 8e3dcfd0 did, recorded after this file was frozen.",
+  "adversarial_simulations": "offline-only inputs, never sent: model mistakes (app_guard), what production adopts when the model misses a conflict (default_exposure), destination trust (model_dependence) and the paused veto with every unselected unit wrongly called independent (veto_qa). expected: held | not_supported (held or missing) | not_yes | model_dependent (recorded only). meets_expected is recorded, not assumed.",
+  "send_paths": "the provider sends this case needs, one request per path. default = production configuration; field_relations = QUILLMD_V3_FIELD_RELATIONS=1 on an isolated QA stack only.",
+  "forms": "forms: one real synthetic .docx per distinct field set (notes/build_note_forms.py, runtime directory, sha256), with the fields exactly as the candidate's v3 inspect gives them (locators, fingerprints, contexts). The legacy engine refuses every one of these forms (no_fields): the app path must run with QUILLMD_WORD_ENGINE=v3.",
+  "cost_bound_usd": "per case and sent path: the application's maximum_cost with the inspected fields, and x1.1; budget.total_with_margin_usd sums the x1.1 figures."
+ },
+ "budget": {
+  "cap_usd": "10.00",
+  "reserved_for_one_voice_transcription_usd": "0.30",
+  "available_for_this_set_usd": "9.70",
+  "source": "docs/rebuild/v1/V1-EXTERNAL-REQUEST.md (ordinary-notes line, still unapproved)",
+  "bound_basis": "per send: core.generation.maximum_cost for that path with the case's inspected fields = (serialized request bytes + 12000) x $2/M input + profile max_output_tokens (8,000 default, 20,000 field_relations) x $10/M output, claude-sonnet-5; then x1.1. No retries are budgeted.",
+  "planned_sends": {
+   "default": 14,
+   "field_relations": 7
+  },
+  "cases": 16,
+  "total_with_margin_usd": {
+   "default": "1.693984",
+   "field_relations": "1.795540",
+   "all": "3.489524"
+  },
+  "within_cap": true,
+  "computed_by": "notes/build_note_forms.py --update-cases (before the freeze; deterministic, no provider)"
+ },
+ "sources": [
+  {
+   "path": "docs/rebuild/v1/patient-topics-20260927/evidence/refutation-1/04-retained-contained.json",
+   "sha256": "7ce1b703859d7f1251d6213441f8193de2d23183138b83b4123588e882219bee",
+   "bytes": 189375,
+   "drawn": "r1-note1/3/4/6/10 notes, the r1 11-field form and retained picks (verbatim); the t- notes informed the supported controls only"
+  },
+  {
+   "path": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+   "sha256": "66c9699806e75d9dec9492c89c2fa4754c60c5697cdeef27d70baa0b687680c9",
+   "bytes": 20629,
+   "drawn": "V/J/I class, next_group and original selection per held field (source_row)"
+  },
+  {
+   "path": "docs/rebuild/v1/patient-topics-20260927/REMAINING-51.md",
+   "sha256": "ea86fb5d5cea7b9f5d7e466bca56d4b36548b08331b137c401d8a497f1cc7639",
+   "bytes": 8636,
+   "drawn": "engineering-group meaning and required dispositions (J2/J1/I9/I1; allergy hold retained)"
+  },
+  {
+   "path": "rebuild/core/tests/test_v3_destination.py",
+   "sha256": "d1a822a7a1687113ab131a7599fb8420f21b9c860b6d620e539849973993708b",
+   "bytes": 3253,
+   "drawn": "side controls: opposite side held, same side supported"
+  },
+  {
+   "path": "rebuild/core/tests/test_v3_field_relations.py",
+   "sha256": "dffafba6467ef1176084a9bb1c04c668b914057aba8ab8f31b716230c146759b",
+   "bytes": 72433,
+   "drawn": "repeated Other: write-in shape, copular \"subject to\" allowance, ordinary predicate options, field_relations harness offered()"
+  },
+  {
+   "path": "rebuild/core/tests/test_v3_ordinary_notes.py",
+   "sha256": "ad54cb8892cdd25a5871306e2fc7efdc5785d93738e06a67364bff6aaa6c6670",
+   "bytes": 103839,
+   "drawn": "denial and correction controls, default-path harness run()/field()"
+  },
+  {
+   "path": "rebuild/core/tests/test_generation_batch.py",
+   "sha256": "6ca4275784d66f4776161110a0807de9a1d5ce6203a686d78b99123de70a20eb",
+   "bytes": 33391,
+   "drawn": "batch-path side gap and signing-field controls (never requested)"
+  },
+  {
+   "path": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+   "sha256": "016263a9a2c4733fd2b9ca9e04ed13112f05d59581e81ca724546c30deb05447",
+   "bytes": 126181,
+   "drawn": "copular-r3 findings R3-1..R3-8 (inputs, expected, verifier reproduction)"
+  }
+ ],
+ "forms": {
+  "r1-11": {
+   "docx": "r1-11.docx",
+   "sha256": "ffecf1b8a55e9a8a109582add698aa220b978f6d3fdd601d414fcd152c7ab3fa",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Chief complaint",
+     "kind": "text",
+     "context": "Clinic visit record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "History of present illness",
+     "kind": "long_text",
+     "context": "Clinic visit record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_3",
+     "label": "Past medical history",
+     "kind": "long_text",
+     "context": "Clinic visit record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[2]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[2]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_4",
+     "label": "Medications",
+     "kind": "long_text",
+     "context": "Clinic visit record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[3]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[3]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_5",
+     "label": "Allergies",
+     "kind": "text",
+     "context": "Clinic visit record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[4]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+     }
+    },
+    {
+     "key": "v3_6",
+     "label": "Smoker",
+     "kind": "choice",
+     "context": "Clinic visit record > Smoker",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[5]/tr[0]/tc[1]/p[0]/glyphs",
+      "target": {
+       "type": "checkboxes",
+       "boxes": [
+        {
+         "kind": "glyph",
+         "part": "word/document.xml",
+         "slot": "b/tbl[5]/tr[0]/tc[1]/p[0]/glyphs",
+         "glyph": 0
+        },
+        {
+         "kind": "glyph",
+         "part": "word/document.xml",
+         "slot": "b/tbl[5]/tr[0]/tc[1]/p[0]/glyphs",
+         "glyph": 1
+        }
+       ]
+      },
+      "fingerprint": "b17e68f7d5a37a55497deee326a5faf89ff0c5994985d79a53796a6540e2f77d"
+     },
+     "options": [
+      "Yes",
+      "No"
+     ]
+    },
+    {
+     "key": "v3_7",
+     "label": "Examination",
+     "kind": "long_text",
+     "context": "Clinic visit record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[6]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[6]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_8",
+     "label": "Assessment",
+     "kind": "long_text",
+     "context": "Clinic visit record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[7]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[7]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_9",
+     "label": "Plan",
+     "kind": "long_text",
+     "context": "Clinic visit record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[8]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[8]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_10",
+     "label": "Consent obtained",
+     "kind": "checkbox",
+     "context": "Sign-off",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[9]/tr[0]/tc[0]/p[0]/glyphs",
+      "target": {
+       "type": "checkboxes",
+       "boxes": [
+        {
+         "kind": "glyph",
+         "part": "word/document.xml",
+         "slot": "b/tbl[9]/tr[0]/tc[0]/p[0]/glyphs",
+         "glyph": 0
+        }
+       ]
+      },
+      "fingerprint": "7dd26b68b73b77a2eab27b9c8b8506a4d4a936122d11250686d1195d1191321e"
+     },
+     "options": [
+      "Consent obtained"
+     ]
+    },
+    {
+     "key": "v3_11",
+     "label": "Clinician signature",
+     "kind": "signature",
+     "context": "Sign-off",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/p[12]",
+      "target": {
+       "type": "span",
+       "start": 21,
+       "end": 51,
+       "shape": "blank"
+      },
+      "fingerprint": "4c54b116a859b9e5e32eadb7ef18731f4469d6e2f80e66406f44aa5f4c175883"
+     }
+    }
+   ]
+  },
+  "n02-repeated-other": {
+   "docx": "n02-repeated-other.docx",
+   "sha256": "96f9c3a7d2cf4bab1c87d3a74ed76f2cd2884d1183241ec76e77c9d8175b7e6b",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Other",
+     "kind": "text",
+     "context": "How would you describe the pain? (tick all that apply)",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "Other",
+     "kind": "text",
+     "context": "Do you notice anything before the headache begins? (tick all that apply)",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+     }
+    },
+    {
+     "key": "v3_3",
+     "label": "Other",
+     "kind": "text",
+     "context": "What makes the pain worse? (tick all that apply)",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[2]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+     }
+    }
+   ]
+  },
+  "n03-order-question": {
+   "docx": "n03-order-question.docx",
+   "sha256": "ea6a432cb3072789e9797c790e278b2c711173c8d75db692293c1c5bfe61f07b",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Does a Community Treatment Order (CTO) currently apply to this person?",
+     "kind": "long_text",
+     "context": "Community care review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[0]",
+      "target": {
+       "type": "cell"
+      },
+      "fingerprint": "dee09c83ec18df2f6bcef92901472373987d568bd45b133405a8af675374f31e"
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "Clinic attendance",
+     "kind": "long_text",
+     "context": "Community care review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "n08-knee-and-findings": {
+   "docx": "n08-knee-and-findings.docx",
+   "sha256": "60c486ab1aa18b18ace4e4b04be4bca002325365a89d460c2f6ef393f85c9b61",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "contract": "",
+    "fields": [
+     [
+      "Right knee",
+      "text"
+     ],
+     [
+      "Clinical findings",
+      "text"
+     ]
+    ],
+    "warnings": [
+     "DOCX answers expand and can change pagination. Review the exported document's layout."
+    ]
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Right knee",
+     "kind": "text",
+     "context": "Knee review > Right knee",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "target": {
+       "type": "cell"
+      },
+      "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "Clinical findings",
+     "kind": "long_text",
+     "context": "Knee review > Clinical findings",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[1]",
+      "target": {
+       "type": "cell"
+      },
+      "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+     }
+    }
+   ]
+  },
+  "n09-knee-pair": {
+   "docx": "n09-knee-pair.docx",
+   "sha256": "79310a2ba7ef95bda06621a9baf9b426ae3f21fd82296ffbb690dcbfcdc882f8",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "contract": "",
+    "fields": [
+     [
+      "Right knee",
+      "text"
+     ],
+     [
+      "Left knee",
+      "text"
+     ]
+    ],
+    "warnings": [
+     "DOCX answers expand and can change pagination. Review the exported document's layout."
+    ]
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Right knee",
+     "kind": "text",
+     "context": "Knee review > Right knee",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "target": {
+       "type": "cell"
+      },
+      "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "Left knee",
+     "kind": "text",
+     "context": "Knee review > Left knee",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "target": {
+       "type": "cell"
+      },
+      "fingerprint": "957083a7d23d5617e5c385195738c5dc16a539e9e800103e99539fe2d0099357"
+     }
+    }
+   ]
+  },
+  "n10-smoker-allergies": {
+   "docx": "n10-smoker-allergies.docx",
+   "sha256": "7b8edc65f832ceb8094b8ac6f89153b048976f542d5598f6840117e48edd43d6",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Smoker",
+     "kind": "choice",
+     "context": "Lifestyle and allergies > Smoker",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+      "target": {
+       "type": "checkboxes",
+       "boxes": [
+        {
+         "kind": "glyph",
+         "part": "word/document.xml",
+         "slot": "b/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+         "glyph": 0
+        },
+        {
+         "kind": "glyph",
+         "part": "word/document.xml",
+         "slot": "b/tbl[0]/tr[0]/tc[1]/p[0]/glyphs",
+         "glyph": 1
+        }
+       ]
+      },
+      "fingerprint": "b17e68f7d5a37a55497deee326a5faf89ff0c5994985d79a53796a6540e2f77d"
+     },
+     "options": [
+      "Yes",
+      "No"
+     ]
+    },
+    {
+     "key": "v3_2",
+     "label": "Allergies",
+     "kind": "text",
+     "context": "Lifestyle and allergies",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+     }
+    }
+   ]
+  },
+  "n11-n12-correction": {
+   "docx": "n11-n12-correction.docx",
+   "sha256": "bd031cb5c2589e5313e37348e05db8a197d7f326a9be497b568f8fed7bb9ffa4",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Chief complaint",
+     "kind": "text",
+     "context": "Skin clinic record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "Allergies",
+     "kind": "text",
+     "context": "Skin clinic record",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+     }
+    },
+    {
+     "key": "v3_3",
+     "label": "Smoker",
+     "kind": "choice",
+     "context": "Skin clinic record > Smoker",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs",
+      "target": {
+       "type": "checkboxes",
+       "boxes": [
+        {
+         "kind": "glyph",
+         "part": "word/document.xml",
+         "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs",
+         "glyph": 0
+        },
+        {
+         "kind": "glyph",
+         "part": "word/document.xml",
+         "slot": "b/tbl[2]/tr[0]/tc[1]/p[0]/glyphs",
+         "glyph": 1
+        }
+       ]
+      },
+      "fingerprint": "b17e68f7d5a37a55497deee326a5faf89ff0c5994985d79a53796a6540e2f77d"
+     },
+     "options": [
+      "Yes",
+      "No"
+     ]
+    }
+   ]
+  },
+  "n13-risk-and-medication": {
+   "docx": "n13-risk-and-medication.docx",
+   "sha256": "683fb3351b8ef5339c09cd367880c27efb9bb5da04b676c180d59b24648f6eb3",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Suicidal ideation",
+     "kind": "long_text",
+     "context": "Mental health review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "Medication",
+     "kind": "long_text",
+     "context": "Mental health review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "n14-smoking-and-mental-state": {
+   "docx": "n14-smoking-and-mental-state.docx",
+   "sha256": "e0d8133fba02ee2dc12912df8b998f27e52e9bcc00ea1cb0b64586a8017706e4",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Smoking status",
+     "kind": "long_text",
+     "context": "Mental health review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "Mental state",
+     "kind": "long_text",
+     "context": "Mental health review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "n15-risk-and-arrangements": {
+   "docx": "n15-risk-and-arrangements.docx",
+   "sha256": "3804e0fa77aff59f2d6d6023b524c9e13936026aa4d2f03ad615577b12dc4f3c",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Risk to self",
+     "kind": "long_text",
+     "context": "Risk review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "MAPPA status",
+     "kind": "long_text",
+     "context": "Risk review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "n16-mood-and-allergies": {
+   "docx": "n16-mood-and-allergies.docx",
+   "sha256": "66c7554970dcd2f2d4becb41f234a1f4788cabbe4d547445442a5fa38626b801",
+   "runtime_dir": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes",
+   "generator": "notes/build_note_forms.py",
+   "inspected_with": "documents.service.inspect_template(path, engine='v3') at 8e3dcfd0",
+   "legacy_engine": {
+    "refused": "no_fields: No supported fields found. Use labelled underlined answer tabs, {{Question}} placeholders, or two-column question/blank-answer tables. Unlabelled decorative lines are not fields."
+   },
+   "fields": [
+    {
+     "key": "v3_1",
+     "label": "Mental state",
+     "kind": "long_text",
+     "context": "Mental health review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[0]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[0]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    },
+    {
+     "key": "v3_2",
+     "label": "Allergies",
+     "kind": "long_text",
+     "context": "Mental health review",
+     "locator": {
+      "contract": "v3",
+      "part": "word/document.xml",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[1]",
+      "target": {
+       "type": "paragraph"
+      },
+      "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8",
+      "extra": [
+       {
+        "part": "word/document.xml",
+        "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
+        "fingerprint": "8cac30504be8764712432daec48878fead36a49a97cfa6035e920a0121a62ae8"
+       }
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "cases": [
+  {
+   "id": "N01",
+   "name": "v-r1-note4-patient-predicates-and-history",
+   "primary_class": "V",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "docs/rebuild/v1/patient-topics-20260927/evidence/refutation-1/04-retained-contained.json",
+    "item": "cases[name=r1-note4]",
+    "transformation": "verbatim notes and 11-field form"
+   },
+   "form": "r1-11",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.",
+   "fields": {
+    "v3_1": {
+     "label": "Chief complaint",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "This is a 30-year-old female seen for headaches."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Complete history/source spans\": v3_scope_selection requires a complete owned block and validate_tab_selections rejects competing unowned destinations.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "This is a 30-year-old female seen for headaches."
+      ]
+     },
+     "rationale": "Explicit presenting reason with an explicit patient anchor; held today by the complete-owned-block history rule.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note4",
+      "field": "Chief complaint",
+      "classification": "V",
+      "next_group": "history_spans",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "This is a 30-year-old female seen for headaches."
+      ]
+     },
+     "engineering_group": "history_spans"
+    },
+    "v3_2": {
+     "label": "History of present illness",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The headaches started two months ago and are worse in the morning.",
+         "She denies visual changes, nausea, or weakness."
+        ],
+        "conflict": false
+       },
+       {
+        "units": [
+         "This is a 30-year-old female seen for headaches.",
+         "The headaches started two months ago and are worse in the morning.",
+         "She denies visual changes, nausea, or weakness."
+        ],
+        "conflict": false,
+        "desired": "supported",
+        "desired_texts": [
+         "This is a 30-year-old female seen for headaches.\nThe headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness."
+        ]
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "She denies visual changes, nausea, or weakness."
+        ],
+        "conflict": false,
+        "app_should": "model_dependent",
+        "note": "Incomplete history (onset dropped); a model completeness error, not an unsafe one."
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "supported without the denial sentence when the denial sentence was selected"
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Complete history/source spans\": v3_scope_selection requires a complete owned block and validate_tab_selections rejects competing unowned destinations.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness."
+      ]
+     },
+     "rationale": "Onset/time course plus pertinent negatives; the denial must travel with the history, never be dropped.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note4",
+      "field": "History of present illness",
+      "classification": "V",
+      "next_group": "history_spans",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "The headaches started two months ago and are worse in the morning.",
+       "She denies visual changes, nausea, or weakness."
+      ]
+     },
+     "engineering_group": "history_spans"
+    },
+    "v3_3": {
+     "label": "Past medical history",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ]
+     },
+     "rationale": "Nothing in the note states this field."
+    },
+    "v3_4": {
+     "label": "Medications",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "She takes ibuprofen as needed."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "text without \"as needed\""
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Patient predicate evidence\": the actor reader recognizes the patient statement but supplies no destination/option conversion.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "She takes ibuprofen as needed."
+      ]
+     },
+     "rationale": "Complete patient-owned medication predicate; the actor reader recognizes it but supplies no destination.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note4",
+      "field": "Medications",
+      "classification": "V",
+      "next_group": "patient_predicate_evidence",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "She takes ibuprofen as needed."
+      ]
+     },
+     "engineering_group": "patient_predicate_evidence"
+    },
+    "v3_5": {
+     "label": "Allergies",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "No known drug allergies."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "note": "REMAINING-51 keeps this hold until a reviewed contextual-acceptance design exists; a hold here is the retained design, not a model failure.",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Allergy contextual consistency\": hold kept until a reviewed contextual acceptance design and adverse evidence exist.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "No known drug allergies."
+      ]
+     },
+     "rationale": "Complete NKA statement; attribution does not yet prove independence from Assessment.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note4",
+      "field": "Allergies",
+      "classification": "V",
+      "next_group": "allergy_context",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "No known drug allergies."
+      ]
+     },
+     "engineering_group": "allergy_context"
+    },
+    "v3_6": {
+     "label": "Smoker",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "She is a nonsmoker."
+        ],
+        "conflict": false,
+        "options": [
+         "No"
+        ]
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "She is a nonsmoker."
+        ],
+        "conflict": false,
+        "options": [
+         "Yes"
+        ],
+        "paths": [
+         "field_relations"
+        ],
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "Yes"
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Patient predicate evidence\": the actor reader recognizes the patient statement but supplies no destination/option conversion.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "No"
+      ]
+     },
+     "rationale": "Explicit patient nonsmoker predicate; default path fills options only from a labelled line, so it is held today.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note4",
+      "field": "Smoker",
+      "classification": "V",
+      "next_group": "patient_predicate_evidence",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "She is a nonsmoker."
+      ]
+     },
+     "engineering_group": "patient_predicate_evidence"
+    },
+    "v3_7": {
+     "label": "Examination",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Neurological examination is normal."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "Neurological examination is normal."
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "With the form's title as the field context ('Clinic visit record', as the candidate's v3 inspect supplies it for the real N6 form), the default path holds this prose statement with the 'line shown with it may change what it means' reason; with the empty context of the pre-repair synthetic field it was supported. Measured by the N6 dry-run replay on 2026-09-29, BEFORE this freeze; the desired outcome is unchanged.",
+        "documented_before_this_set": false
+       }
+      ]
+     },
+     "rationale": "Supported control (retained status_text_changes: conflict -> supported). Relabelled S -> V (2026-09-29): held on the app path with the inspected context.",
+     "class_before_repair": "S"
+    },
+    "v3_8": {
+     "label": "Assessment",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Assessment is tension-type headache."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "tension-type headache.",
+       "Assessment is tension-type headache."
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "With the form's title as the field context ('Clinic visit record', as the candidate's v3 inspect supplies it for the real N6 form), the default path holds this prose statement with the 'line shown with it may change what it means' reason; with the empty context of the pre-repair synthetic field it was supported. Measured by the N6 dry-run replay on 2026-09-29, BEFORE this freeze; the desired outcome is unchanged.",
+        "documented_before_this_set": false
+       }
+      ]
+     },
+     "rationale": "Supported control. Relabelled S -> V (2026-09-29): held on the app path with the inspected context.",
+     "class_before_repair": "S"
+    },
+    "v3_9": {
+     "label": "Plan",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Plan is to start amitriptyline 10 mg at night.",
+         "She will follow up in six weeks."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.",
+       "Plan is to start amitriptyline 10 mg at night.\nShe will follow up in six weeks."
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "With the form's title as the field context ('Clinic visit record', as the candidate's v3 inspect supplies it for the real N6 form), the default path holds this prose statement with the 'line shown with it may change what it means' reason; with the empty context of the pre-repair synthetic field it was supported. Measured by the N6 dry-run replay on 2026-09-29, BEFORE this freeze; the desired outcome is unchanged.",
+        "documented_before_this_set": false
+       }
+      ]
+     },
+     "rationale": "Supported control; both plan sentences, in source order. Relabelled S -> V (2026-09-29): held on the app path with the inspected context.",
+     "class_before_repair": "S"
+    },
+    "v3_10": {
+     "label": "Consent obtained",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "checked"
+      ]
+     },
+     "rationale": "No consent statement; never inferred."
+    },
+    "v3_11": {
+     "label": "Clinician signature",
+     "class": "NR",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "any generated text"
+      ],
+      "note": "Never requested from the model (not in the request's field list); the application keeps it blank with the reason \"Signed by hand on the printed form; never filled.\""
+     },
+     "rationale": "Signature is never generated (test_generation_batch signing-field test; retained answers)."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "nonsmoker_as_yes_option",
+     "path": "field_relations",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_6": {
+       "units": [
+        "She is a nonsmoker."
+       ],
+       "conflict": false,
+       "options": [
+        "Yes"
+       ]
+      }
+     },
+     "expected": {
+      "v3_6": "not_yes"
+     }
+    }
+   ],
+   "case_keys": {},
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.116794",
+     "with_margin_x1_1": "0.128474",
+     "customer_hold_max": "0.1751910"
+    }
+   }
+  },
+  {
+   "id": "N02",
+   "name": "v-twin-repeated-other-write-in",
+   "primary_class": "V",
+   "send_paths": [
+    "default",
+    "field_relations"
+   ],
+   "requires_field_relations": "only for its field_relations send",
+   "source": {
+    "file": "rebuild/core/tests/test_v3_field_relations.py",
+    "item": "repeated() / test_different_complete_questions_can_own_an_ordinary_other_answer / test_event_relative_destination_requires_explicit_matching_source_scope",
+    "transformation": "synthetic twin of the D03 A28-style write-in (three literal \"Other:\" labels under distinct complete question contexts); new wording, no corpus text"
+   },
+   "form": "n02-repeated-other",
+   "notes": "The patient describes the pain as a tight band around her head. The patient sees zigzag lines before the headache begins.",
+   "fields": {
+    "v3_1": {
+     "label": "Other: (describe the pain)",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient describes the pain as a tight band around her head."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "the same sentence supported in a second \"Other:\" field"
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "Repeated literal \"Other:\" labels are held by the shared clinical reader on the default path (word-writein-workflow-20260928.md, ordinary source).",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "The patient describes the pain as a tight band around her head."
+      ]
+     },
+     "rationale": "Explicit pain description; its destination is fixed by the complete question context, not the repeated short label. The default path holds repeated literal \"Other:\" labels (word-writein-workflow-20260928: \"The shared clinical reader holds it because four literal labels are Other:\")."
+    },
+    "v3_2": {
+     "label": "Other: (before the headache begins)",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient sees zigzag lines before the headache begins."
+        ],
+        "conflict": false
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient describes the pain as a tight band around her head."
+        ],
+        "conflict": false,
+        "app_should": "model_dependent"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "supported from the pain-description sentence"
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "As sensation.",
+        "documented_before_this_set": true
+       },
+       {
+        "path": "field_relations",
+        "why": "Held as \"This question appears 3 times on the form\". The same sentence with \"reports\" instead of \"sees\" is supported (offline_controls), so repeated-label ownership on this path depends on the verb.",
+        "documented_before_this_set": false
+       }
+      ],
+      "desired_texts": [
+       "The patient sees zigzag lines before the headache begins."
+      ]
+     },
+     "rationale": "Explicit event-relative statement whose scope (\"before the headache begins\") matches this question."
+    },
+    "v3_3": {
+     "label": "Other: (what makes it worse)",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient describes the pain as a tight band around her head."
+        ],
+        "conflict": false,
+        "app_should": "model_dependent",
+        "note": "Among distinct complete contexts the destination is the model's call (v3_field_relations: server provenance never establishes a destination's clinical truth)."
+       },
+       {
+        "units": [
+         "The patient sees zigzag lines before the headache begins."
+        ],
+        "conflict": false,
+        "app_should": "model_dependent"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ]
+     },
+     "rationale": "Nothing in the note says what worsens the pain; neither sentence may be reused here."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "same_sentence_into_two_repeated_other_fields",
+     "path": "both",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient describes the pain as a tight band around her head."
+       ],
+       "conflict": false
+      },
+      "v3_2": {
+       "units": [
+        "The patient describes the pain as a tight band around her head."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "not_supported",
+      "v3_2": "not_supported"
+     }
+    },
+    {
+     "name": "pain_sentence_into_worse",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_3": {
+       "units": [
+        "The patient describes the pain as a tight band around her head."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_3": "not_supported"
+     }
+    },
+    {
+     "name": "pain_sentence_into_worse_relations",
+     "path": "field_relations",
+     "purpose": "model_dependence",
+     "selection": {
+      "v3_3": {
+       "units": [
+        "The patient describes the pain as a tight band around her head."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_3": "model_dependent"
+     },
+     "note": "Among distinct complete contexts the application adopts the model's destination; only the raw selection guards this field on the relations path."
+    }
+   ],
+   "offline_controls": [
+    {
+     "name": "warning_with_reports_verb",
+     "path": "field_relations",
+     "notes": "The patient describes the pain as a tight band around her head. The patient reports zigzag lines before the headache begins.",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient describes the pain as a tight band around her head."
+       ],
+       "conflict": false
+      },
+      "v3_2": {
+       "units": [
+        "The patient reports zigzag lines before the headache begins."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "supported"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "sensation",
+    "v3_2": "warning",
+    "v3_3": "worse"
+   },
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.10693",
+     "with_margin_x1_1": "0.117623",
+     "customer_hold_max": "0.160395"
+    },
+    "field_relations": {
+     "provider_cost_max": "0.23324400000",
+     "with_margin_x1_1": "0.256569",
+     "customer_hold_max": "0.349866000000"
+    }
+   }
+  },
+  {
+   "id": "N03",
+   "name": "v-twin-copular-subject-to",
+   "primary_class": "V",
+   "send_paths": [
+    "default",
+    "field_relations"
+   ],
+   "requires_field_relations": "only for its field_relations send",
+   "source": {
+    "file": "rebuild/core/tests/test_v3_field_relations.py",
+    "item": "test_complete_patient_copular_complements_retain_every_source_word (MAPPA question)",
+    "transformation": "synthetic twin of the MAPPA \"is subject to\" copular statement with a different arrangement name; second field added as an independent destination"
+   },
+   "form": "n03-order-question",
+   "notes": "The patient is subject to a Community Treatment Order (CTO). She attends the clinic every week.",
+   "fields": {
+    "v3_1": {
+     "label": "Does a Community Treatment Order (CTO) currently apply to this person?",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient is subject to a Community Treatment Order (CTO)."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "text that drops \"subject to\" or the named order"
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "The patient copular \"subject to\" allowance exists only on the field_relations path (test_copular_source_still_requires_complete_context_and_original_contract).",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "The patient is subject to a Community Treatment Order (CTO)."
+      ]
+     },
+     "rationale": "Complete patient copular statement that answers the printed question; every source word retained. The label was reworded 2026-09-29 (CHECK.md W1); the copular allowance does not depend on the label wording (test_v3_field_relations: \"Status under the arrangements\")."
+    },
+    "v3_2": {
+     "label": "Clinic attendance",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "She attends the clinic every week."
+        ],
+        "conflict": false
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient is subject to a Community Treatment Order (CTO)."
+        ],
+        "conflict": false,
+        "app_should": "model_dependent"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "Held with the \"line shown with it may change what it means\" reason; alone, \"The patient attends the clinic every week.\" is supported (offline_controls).",
+        "documented_before_this_set": false
+       },
+       {
+        "path": "field_relations",
+        "why": "The pronoun \"She\" is held; \"The patient attends the clinic every week.\" after the same first sentence is supported (offline_controls).",
+        "documented_before_this_set": false
+       }
+      ],
+      "desired_texts": [
+       "She attends the clinic every week."
+      ]
+     },
+     "rationale": "Explicit attendance statement; the pronoun follows an explicit patient subject with no competing actor."
+    }
+   },
+   "adversarial_simulations": [],
+   "offline_controls": [
+    {
+     "name": "attendance_with_patient_subject",
+     "path": "both",
+     "notes": "The patient is subject to a Community Treatment Order (CTO). The patient attends the clinic every week.",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient is subject to a Community Treatment Order (CTO)."
+       ],
+       "conflict": false
+      },
+      "v3_2": {
+       "units": [
+        "The patient attends the clinic every week."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "recorded"
+     }
+    },
+    {
+     "name": "attendance_alone",
+     "path": "default",
+     "notes": "The patient attends the clinic every week.",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "The patient attends the clinic every week."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "supported"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "cto",
+    "v3_2": "attendance"
+   },
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.10648",
+     "with_margin_x1_1": "0.117128",
+     "customer_hold_max": "0.159720"
+    },
+    "field_relations": {
+     "provider_cost_max": "0.23269400000",
+     "with_margin_x1_1": "0.255964",
+     "customer_hold_max": "0.349041000000"
+    }
+   }
+  },
+  {
+   "id": "N04",
+   "name": "j-r1-note1-combined-pmh-medication-sentence",
+   "primary_class": "J",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "docs/rebuild/v1/patient-topics-20260927/evidence/refutation-1/04-retained-contained.json",
+    "item": "cases[name=r1-note1]",
+    "transformation": "verbatim notes and 11-field form"
+   },
+   "form": "r1-11",
+   "notes": "45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an MRI of the right knee and physiotherapy referral.",
+   "fields": {
+    "v3_1": {
+     "label": "Chief complaint",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "45-year-old man presents with right knee pain for three weeks after a fall."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Complete history/source spans\": v3_scope_selection requires a complete owned block and validate_tab_selections rejects competing unowned destinations.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "45-year-old man presents with right knee pain for three weeks after a fall."
+      ]
+     },
+     "rationale": "Explicit presenting complaint with a patient anchor.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note1",
+      "field": "Chief complaint",
+      "classification": "V",
+      "next_group": "history_spans",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "45-year-old man presents with right knee pain for three weeks after a fall."
+      ]
+     },
+     "engineering_group": "history_spans"
+    },
+    "v3_2": {
+     "label": "History of present illness",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "45-year-old man presents with right knee pain for three weeks after a fall."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Complete history/source spans\": v3_scope_selection requires a complete owned block and validate_tab_selections rejects competing unowned destinations.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "45-year-old man presents with right knee pain for three weeks after a fall."
+      ]
+     },
+     "rationale": "Same complete sentence serves the distinct HPI destination (Chief/HPI sharing contract not yet established).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note1",
+      "field": "History of present illness",
+      "classification": "V",
+      "next_group": "history_spans",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "45-year-old man presents with right knee pain for three weeks after a fall."
+      ]
+     },
+     "engineering_group": "history_spans"
+    },
+    "v3_3": {
+     "label": "Past medical history",
+     "class": "J",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "He has hypertension and takes lisinopril 10 mg daily."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "He has hypertension and takes lisinopril 10 mg daily."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "the combined sentence supported in BOTH Past medical history and Medications"
+      ]
+     },
+     "rationale": "One sentence carries a diagnosis and a medication; separate clause evidence and field wording need adjudication (J2). Selecting the unit is legitimate; adoption must not be.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note1",
+      "field": "Past medical history",
+      "classification": "J",
+      "next_group": "expected_map_adjudication",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "He has hypertension and takes lisinopril 10 mg daily."
+      ]
+     },
+     "engineering_group": "expected_map_adjudication"
+    },
+    "v3_4": {
+     "label": "Medications",
+     "class": "J",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "He has hypertension and takes lisinopril 10 mg daily."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "He has hypertension and takes lisinopril 10 mg daily."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "the combined sentence supported in BOTH Past medical history and Medications"
+      ]
+     },
+     "rationale": "As Past medical history (J2).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note1",
+      "field": "Medications",
+      "classification": "J",
+      "next_group": "expected_map_adjudication",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "He has hypertension and takes lisinopril 10 mg daily."
+      ]
+     },
+     "engineering_group": "expected_map_adjudication"
+    },
+    "v3_5": {
+     "label": "Allergies",
+     "class": "S",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Allergies: penicillin."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "penicillin.",
+       "Allergies: penicillin."
+      ]
+     },
+     "rationale": "Labelled line; supported control."
+    },
+    "v3_6": {
+     "label": "Smoker",
+     "class": "S",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Smoker: No."
+        ],
+        "conflict": false,
+        "options": [
+         "No"
+        ]
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "Yes"
+      ],
+      "desired_texts": [
+       "No"
+      ]
+     },
+     "rationale": "Labelled option line; supported control."
+    },
+    "v3_7": {
+     "label": "Examination",
+     "class": "S",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "On examination there is a small effusion and medial joint line tenderness."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "On examination there is a small effusion and medial joint line tenderness."
+      ]
+     },
+     "rationale": "Supported control."
+    },
+    "v3_8": {
+     "label": "Assessment",
+     "class": "S",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Assessment is a probable medial meniscus tear."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "text without \"probable\""
+      ],
+      "desired_texts": [
+       "a probable medial meniscus tear.",
+       "Assessment is a probable medial meniscus tear."
+      ]
+     },
+     "rationale": "Supported control; the uncertainty word must survive."
+    },
+    "v3_9": {
+     "label": "Plan",
+     "class": "S",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Plan is an MRI of the right knee and physiotherapy referral."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "an MRI of the right knee and physiotherapy referral.",
+       "Plan is an MRI of the right knee and physiotherapy referral."
+      ]
+     },
+     "rationale": "Supported control."
+    },
+    "v3_10": {
+     "label": "Consent obtained",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "checked"
+      ]
+     },
+     "rationale": "No consent statement; never inferred."
+    },
+    "v3_11": {
+     "label": "Clinician signature",
+     "class": "NR",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "any generated text"
+      ],
+      "note": "Never requested from the model (not in the request's field list); the application keeps it blank with the reason \"Signed by hand on the printed form; never filled.\""
+     },
+     "rationale": "Signature is never generated (test_generation_batch signing-field test; retained answers)."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "combined_sentence_both_fields_no_conflict",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_3": {
+       "units": [
+        "He has hypertension and takes lisinopril 10 mg daily."
+       ],
+       "conflict": false
+      },
+      "v3_4": {
+       "units": [
+        "He has hypertension and takes lisinopril 10 mg daily."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_3": "not_supported",
+      "v3_4": "not_supported"
+     }
+    }
+   ],
+   "case_keys": {},
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.116162",
+     "with_margin_x1_1": "0.127779",
+     "customer_hold_max": "0.1742430"
+    }
+   }
+  },
+  {
+   "id": "N05",
+   "name": "j-r1-note10-pronoun-after-family-statement",
+   "primary_class": "J",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "docs/rebuild/v1/patient-topics-20260927/evidence/refutation-1/04-retained-contained.json",
+    "item": "cases[name=r1-note10]",
+    "transformation": "verbatim notes and 11-field form"
+   },
+   "form": "r1-11",
+   "notes": "Patient presents with chest tightness on exertion for one month. His father had a heart attack at 55. He has high cholesterol. He takes rosuvastatin. Allergies: none known. Smoker: Yes. Examination is normal. Assessment is possible stable angina. Plan is an exercise stress test and aspirin 81 mg daily.",
+   "fields": {
+    "v3_1": {
+     "label": "Chief complaint",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Patient presents with chest tightness on exertion for one month."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Complete history/source spans\": v3_scope_selection requires a complete owned block and validate_tab_selections rejects competing unowned destinations.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "Patient presents with chest tightness on exertion for one month."
+      ]
+     },
+     "rationale": "Explicit presenting complaint before the family statement.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "Chief complaint",
+      "classification": "V",
+      "next_group": "history_spans",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "Patient presents with chest tightness on exertion for one month."
+      ]
+     },
+     "engineering_group": "history_spans"
+    },
+    "v3_2": {
+     "label": "History of present illness",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Patient presents with chest tightness on exertion for one month."
+        ],
+        "conflict": false
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "Patient presents with chest tightness on exertion for one month.",
+         "His father had a heart attack at 55."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Complete history/source spans\": v3_scope_selection requires a complete owned block and validate_tab_selections rejects competing unowned destinations.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "Patient presents with chest tightness on exertion for one month."
+      ]
+     },
+     "rationale": "Same sentence for HPI; the family statement is not HPI.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "History of present illness",
+      "classification": "V",
+      "next_group": "history_spans",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "Patient presents with chest tightness on exertion for one month."
+      ]
+     },
+     "engineering_group": "history_spans"
+    },
+    "v3_3": {
+     "label": "Past medical history",
+     "class": "J",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "He has high cholesterol."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [],
+        "conflict": true
+       },
+       {
+        "units": [],
+        "conflict": false,
+        "desired": "usefulness_loss",
+        "note": "A silent blank drops a stated but ambiguous fact from clinician review: scored as a usefulness loss (not correct, not a leak). 2026-09-29 repair (CHECK.md N2)"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "He has high cholesterol."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "His father had a heart attack at 55."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported"
+      ]
+     },
+     "rationale": "\"He\" follows \"His father...\"; the antecedent is genuinely ambiguous and the model must not guess it (J2).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "Past medical history",
+      "classification": "J",
+      "next_group": "expected_map_adjudication",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "He has high cholesterol."
+      ]
+     },
+     "engineering_group": "expected_map_adjudication"
+    },
+    "v3_4": {
+     "label": "Medications",
+     "class": "J",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "He takes rosuvastatin."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [],
+        "conflict": true
+       },
+       {
+        "units": [],
+        "conflict": false,
+        "desired": "usefulness_loss",
+        "note": "A silent blank drops a stated but ambiguous fact from clinician review: scored as a usefulness loss (not correct, not a leak). 2026-09-29 repair (CHECK.md N2)"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "He takes rosuvastatin."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported"
+      ]
+     },
+     "rationale": "As Past medical history (J2).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "Medications",
+      "classification": "J",
+      "next_group": "expected_map_adjudication",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "He takes rosuvastatin."
+      ]
+     },
+     "engineering_group": "expected_map_adjudication"
+    },
+    "v3_5": {
+     "label": "Allergies",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Allergies: none known."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Named topics after a family statement\": no automatic ownership proof after \"His father... He...\".",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "none known.",
+       "Allergies: none known."
+      ]
+     },
+     "rationale": "Labelled answer after the family statement; useful, but no automatic ownership proof exists today.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "Allergies",
+      "classification": "V",
+      "next_group": "post_family_source_ownership",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "Allergies: none known."
+      ]
+     },
+     "engineering_group": "post_family_source_ownership"
+    },
+    "v3_6": {
+     "label": "Smoker",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Smoker: Yes."
+        ],
+        "conflict": false,
+        "options": [
+         "Yes"
+        ]
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Named topics after a family statement\": no automatic ownership proof after \"His father... He...\".",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "Yes"
+      ]
+     },
+     "rationale": "As Allergies.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "Smoker",
+      "classification": "V",
+      "next_group": "post_family_source_ownership",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "Smoker: Yes."
+      ]
+     },
+     "engineering_group": "post_family_source_ownership"
+    },
+    "v3_7": {
+     "label": "Examination",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Examination is normal."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Named topics after a family statement\": no automatic ownership proof after \"His father... He...\".",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "normal.",
+       "Examination is normal."
+      ]
+     },
+     "rationale": "As Allergies.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "Examination",
+      "classification": "V",
+      "next_group": "post_family_source_ownership",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "Examination is normal."
+      ]
+     },
+     "engineering_group": "post_family_source_ownership"
+    },
+    "v3_8": {
+     "label": "Assessment",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Assessment is possible stable angina."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "text without \"possible\""
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Named topics after a family statement\": no automatic ownership proof after \"His father... He...\".",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "possible stable angina.",
+       "Assessment is possible stable angina."
+      ]
+     },
+     "rationale": "As Allergies; \"possible\" must survive.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "Assessment",
+      "classification": "V",
+      "next_group": "post_family_source_ownership",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "Assessment is possible stable angina."
+      ]
+     },
+     "engineering_group": "post_family_source_ownership"
+    },
+    "v3_9": {
+     "label": "Plan",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Plan is an exercise stress test and aspirin 81 mg daily."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Named topics after a family statement\": no automatic ownership proof after \"His father... He...\".",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "an exercise stress test and aspirin 81 mg daily.",
+       "Plan is an exercise stress test and aspirin 81 mg daily."
+      ]
+     },
+     "rationale": "As Allergies; the full plan is kept.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note10",
+      "field": "Plan",
+      "classification": "V",
+      "next_group": "post_family_source_ownership",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "Plan is an exercise stress test and aspirin 81 mg daily."
+      ]
+     },
+     "engineering_group": "post_family_source_ownership"
+    },
+    "v3_10": {
+     "label": "Consent obtained",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "checked"
+      ]
+     },
+     "rationale": "No consent statement; never inferred."
+    },
+    "v3_11": {
+     "label": "Clinician signature",
+     "class": "NR",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "any generated text"
+      ],
+      "note": "Never requested from the model (not in the request's field list); the application keeps it blank with the reason \"Signed by hand on the printed form; never filled.\""
+     },
+     "rationale": "Signature is never generated (test_generation_batch signing-field test; retained answers)."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "pronoun_units_without_conflict",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_3": {
+       "units": [
+        "He has high cholesterol."
+       ],
+       "conflict": false
+      },
+      "v3_4": {
+       "units": [
+        "He takes rosuvastatin."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_3": "not_supported",
+      "v3_4": "not_supported"
+     }
+    }
+   ],
+   "case_keys": {},
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.116286",
+     "with_margin_x1_1": "0.127915",
+     "customer_hold_max": "0.1744290"
+    }
+   }
+  },
+  {
+   "id": "N06",
+   "name": "j-i-r1-note6-consent-procedure-plan",
+   "primary_class": "J",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "docs/rebuild/v1/patient-topics-20260927/evidence/refutation-1/04-retained-contained.json",
+    "item": "cases[name=r1-note6]",
+    "transformation": "verbatim notes and 11-field form"
+   },
+   "form": "r1-11",
+   "notes": "The patient was seen for removal of a skin lesion on the left forearm. The risks and benefits were discussed. Consent obtained: yes. The lesion was excised under local anesthesia and closed with sutures. She tolerated the procedure well. Plan is suture removal in ten days.",
+   "fields": {
+    "v3_1": {
+     "label": "Chief complaint",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient was seen for removal of a skin lesion on the left forearm."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "REMAINING-51 group \"Complete history/source spans\": v3_scope_selection requires a complete owned block and validate_tab_selections rejects competing unowned destinations.",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "The patient was seen for removal of a skin lesion on the left forearm."
+      ]
+     },
+     "rationale": "Explicit reason for the visit.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note6",
+      "field": "Chief complaint",
+      "classification": "V",
+      "next_group": "history_spans",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "The patient was seen for removal of a skin lesion on the left forearm."
+      ]
+     },
+     "engineering_group": "history_spans"
+    },
+    "v3_2": {
+     "label": "History of present illness",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "The patient was seen for removal of a skin lesion on the left forearm."
+        ],
+        "conflict": false,
+        "desired": "not_asserted"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "note": "Selecting the visit-reason sentence here is acceptable model behaviour and not scored as a model error; its adoption is recorded, not asserted."
+     },
+     "rationale": "No history beyond the visit reason; the retained selection left it empty."
+    },
+    "v3_3": {
+     "label": "Past medical history",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ]
+     },
+     "rationale": "Nothing in the note states this field."
+    },
+    "v3_4": {
+     "label": "Medications",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ]
+     },
+     "rationale": "Nothing in the note states this field."
+    },
+    "v3_5": {
+     "label": "Allergies",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ]
+     },
+     "rationale": "Nothing in the note states this field."
+    },
+    "v3_6": {
+     "label": "Smoker",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "Yes",
+       "No"
+      ]
+     },
+     "rationale": "Nothing in the note states this field."
+    },
+    "v3_7": {
+     "label": "Examination",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The lesion was excised under local anesthesia and closed with sutures."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported with the excision sentence"
+      ]
+     },
+     "rationale": "The excision sentence describes the procedure, not an examination (I1); a correct model leaves it empty.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note6",
+      "field": "Examination",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "The lesion was excised under local anesthesia and closed with sutures."
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection"
+    },
+    "v3_8": {
+     "label": "Assessment",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ]
+     },
+     "rationale": "No assessment is stated; the procedure is not an assessment."
+    },
+    "v3_9": {
+     "label": "Plan",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Plan is suture removal in ten days."
+        ],
+        "conflict": false
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "She tolerated the procedure well.",
+         "Plan is suture removal in ten days."
+        ],
+        "conflict": false,
+        "app_should": "not_supported",
+        "note": "Scope error: procedure tolerance is not plan. This is the earlier model's retained pick (REMAINING-51 r1-note6); the application should hold it. 2026-09-29 repair (CHECK.md N1)"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "suture removal in ten days.",
+       "Plan is suture removal in ten days."
+      ],
+      "never": [
+       "the tolerance sentence adopted as plan",
+       "the tolerance sentence silently dropped from a two-unit selection and the rest supported"
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "The plan sentence alone is held at 8e3dcfd0 on the default path (first recorded by this set's 2026-09-28 replay as acceptable[1], over_hold); the REMAINING-51 row records only the two-unit pick (expected_map_adjudication).",
+        "documented_before_this_set": false
+       }
+      ],
+      "note": "Repaired (CHECK.md N1): the reference was the earlier model's retained two-unit pick, whose desired \"held\" made the field look as desired while the clinically right plan-only selection was over-held. The plan sentence alone is an explicit, complete plan."
+     },
+     "rationale": "The plan sentence alone is the plan; the procedure-tolerance sentence is not plan scope, so a two-unit pick is a model scope error the application should hold.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note6",
+      "field": "Plan",
+      "classification": "J",
+      "next_group": "expected_map_adjudication",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "She tolerated the procedure well.",
+       "Plan is suture removal in ten days."
+      ]
+     },
+     "engineering_group": "expected_map_adjudication",
+     "class_before_repair": "J"
+    },
+    "v3_10": {
+     "label": "Consent obtained",
+     "class": "J",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Consent obtained: yes."
+        ],
+        "conflict": false,
+        "options": [
+         "Consent obtained"
+        ]
+       },
+       {
+        "units": [
+         "Consent obtained: yes."
+        ],
+        "conflict": true
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "checked while the consent line sits inside the procedure paragraph"
+      ],
+      "note": "Recording a source consent fact versus attesting authority is unadjudicated (J2)."
+     },
+     "rationale": "Consent is never inferred from procedure facts; this labelled consent sits mid-paragraph.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note6",
+      "field": "Consent obtained",
+      "classification": "J",
+      "next_group": "expected_map_adjudication",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "Consent obtained: yes."
+      ]
+     },
+     "engineering_group": "expected_map_adjudication"
+    },
+    "v3_11": {
+     "label": "Clinician signature",
+     "class": "NR",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "any generated text"
+      ],
+      "note": "Never requested from the model (not in the request's field list); the application keeps it blank with the reason \"Signed by hand on the printed form; never filled.\""
+     },
+     "rationale": "Signature is never generated (test_generation_batch signing-field test; retained answers)."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "excision_as_examination",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_7": {
+       "units": [
+        "The lesion was excised under local anesthesia and closed with sutures."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_7": "not_supported"
+     }
+    }
+   ],
+   "case_keys": {},
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.115716",
+     "with_margin_x1_1": "0.127288",
+     "customer_hold_max": "0.1735740"
+    }
+   }
+  },
+  {
+   "id": "N07",
+   "name": "i-r1-note3-unpunctuated-run-on",
+   "primary_class": "I",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "docs/rebuild/v1/patient-topics-20260927/evidence/refutation-1/04-retained-contained.json",
+    "item": "cases[name=r1-note3]",
+    "transformation": "verbatim notes and 11-field form"
+   },
+   "form": "r1-11",
+   "notes": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months",
+   "fields": {
+    "v3_1": {
+     "label": "Chief complaint",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "Chief complaint",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_2": {
+     "label": "History of present illness",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "History of present illness",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_3": {
+     "label": "Past medical history",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "Past medical history",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_4": {
+     "label": "Medications",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "Medications",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_5": {
+     "label": "Allergies",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "Allergies",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_6": {
+     "label": "Smoker",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported",
+       "Yes"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "Smoker",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_7": {
+     "label": "Examination",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "Examination",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_8": {
+     "label": "Assessment",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9). Nothing is assessed in the note.",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "Assessment",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_9": {
+     "label": "Plan",
+     "class": "I",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "\"missing\" here means \"not selectable as one field\" (the whole note is one unit), not \"not stated\": it is as desired for safety but must never count as recall. 2026-09-29 repair (CHECK.md N2)"
+     },
+     "rationale": "The whole unpunctuated note is ONE unit mixing every topic; selecting it into a single field is an invalid per-field positive (I9).",
+     "source_row": {
+      "file": "docs/rebuild/v1/patient-topics-20260927/evidence/remaining-51-classification.json",
+      "case": "r1-note3",
+      "field": "Plan",
+      "classification": "I",
+      "next_group": "invalid_single_field_selection",
+      "recorded_status": "conflict",
+      "original_selection": [
+       "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+      ]
+     },
+     "engineering_group": "invalid_single_field_selection",
+     "missing_is_not_recall": true
+    },
+    "v3_10": {
+     "label": "Consent obtained",
+     "class": "M",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "checked"
+      ]
+     },
+     "rationale": "No consent statement; never inferred."
+    },
+    "v3_11": {
+     "label": "Clinician signature",
+     "class": "NR",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "any generated text"
+      ],
+      "note": "Never requested from the model (not in the request's field list); the application keeps it blank with the reason \"Signed by hand on the printed form; never filled.\""
+     },
+     "rationale": "Signature is never generated (test_generation_batch signing-field test; retained answers)."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "whole_run_on_into_every_field",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      },
+      "v3_2": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      },
+      "v3_3": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      },
+      "v3_4": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      },
+      "v3_5": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      },
+      "v3_6": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      },
+      "v3_7": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      },
+      "v3_8": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      },
+      "v3_9": {
+       "units": [
+        "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "not_supported",
+      "v3_2": "not_supported",
+      "v3_3": "not_supported",
+      "v3_4": "not_supported",
+      "v3_5": "not_supported",
+      "v3_6": "not_supported",
+      "v3_7": "not_supported",
+      "v3_8": "not_supported",
+      "v3_9": "not_supported"
+     }
+    }
+   ],
+   "case_keys": {},
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.115014",
+     "with_margin_x1_1": "0.126516",
+     "customer_hold_max": "0.1725210"
+    }
+   }
+  },
+  {
+   "id": "N08",
+   "name": "side-left-knee-pain-vs-right-knee-field",
+   "primary_class": "SIDE",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "rebuild/core/tests/test_v3_destination.py",
+    "item": "test_opposite_side_never_gains_a_unique_destination; test_same_explicit_side_and_unscoped_destination_still_work",
+    "also": "rebuild/core/tests/test_generation_batch.py test_known_existing_single_field_side_gap_is_not_clinical_acceptance"
+   },
+   "form": "n08-knee-and-findings",
+   "notes": "The patient has left knee pain.",
+   "fields": {
+    "v3_1": {
+     "label": "Right knee",
+     "class": "SIDE",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "The patient has left knee pain."
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient has left knee pain."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "If the model selects the sentence anyway, the app must hold it."
+     },
+     "rationale": "Left-sided pain never answers a Right-knee destination."
+    },
+    "v3_2": {
+     "label": "Clinical findings",
+     "class": "S",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient has left knee pain."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "The patient has left knee pain."
+      ]
+     },
+     "rationale": "Unscoped destination keeps the explicit left-sided finding useful."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "left_pain_into_right_knee",
+     "path": "both",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient has left knee pain."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "not_supported"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "site",
+    "v3_2": "findings"
+   },
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.10563",
+     "with_margin_x1_1": "0.116193",
+     "customer_hold_max": "0.158445"
+    }
+   }
+  },
+  {
+   "id": "N09",
+   "name": "side-right-knee-pain-supported",
+   "primary_class": "SIDE",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "rebuild/core/tests/test_v3_field_relations.py",
+    "item": "test_explicit_same_side_is_useful_and_opposite_unknown_or_mixed_sides_hold; rebuild/core/tests/test_v3_destination.py test_same_explicit_side_and_unscoped_destination_still_work"
+   },
+   "form": "n09-knee-pair",
+   "notes": "The patient has right knee pain.",
+   "fields": {
+    "v3_1": {
+     "label": "Right knee",
+     "class": "SIDE",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient has right knee pain."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "\"The patient has right knee pain.\" is held with the \"line shown with it may change what it means\" reason; \"right-sided knee pain\" is supported (offline_controls and test_same_explicit_side_and_unscoped_destination_still_work).",
+        "documented_before_this_set": false
+       }
+      ],
+      "desired_texts": [
+       "The patient has right knee pain."
+      ]
+     },
+     "rationale": "Explicit same side is a useful answer."
+    },
+    "v3_2": {
+     "label": "Left knee",
+     "class": "SIDE",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [],
+        "conflict": false
+       },
+       {
+        "units": [
+         "The patient has right knee pain."
+        ],
+        "conflict": true,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient has right knee pain."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "missing",
+      "never": [
+       "supported"
+      ],
+      "note": "If the model selects the sentence anyway, the app must hold it."
+     },
+     "rationale": "Right-sided pain never answers a Left-knee destination."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "right_pain_into_left_knee",
+     "path": "both",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "The patient has right knee pain."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "not_supported"
+     }
+    }
+   ],
+   "offline_controls": [
+    {
+     "name": "right_sided_wording",
+     "path": "default",
+     "notes": "The patient has right-sided knee pain.",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient has right-sided knee pain."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "supported"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "right",
+    "v3_2": "left"
+   },
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.105592",
+     "with_margin_x1_1": "0.116152",
+     "customer_hold_max": "0.1583880"
+    }
+   }
+  },
+  {
+   "id": "N10",
+   "name": "denial-does-not-smoke-never-yes",
+   "primary_class": "DENIAL",
+   "send_paths": [
+    "default",
+    "field_relations"
+   ],
+   "requires_field_relations": "only for its field_relations send",
+   "source": {
+    "file": "rebuild/core/tests/test_v3_ordinary_notes.py",
+    "item": "test_an_unlabelled_sentence_never_becomes_an_option",
+    "also": "rebuild/core/tests/test_v3_field_relations.py test_ordinary_predicate_selects_the_original_option_and_keeps_full_evidence; test_wrong_binary_polarity_and_an_omitted_opposite_predicate_cannot_be_model_permissions",
+    "transformation": "verbatim test note"
+   },
+   "form": "n10-smoker-allergies",
+   "notes": "The patient does not smoke. Allergies: none known.",
+   "fields": {
+    "v3_1": {
+     "label": "Smoker",
+     "class": "DENIAL",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient does not smoke."
+        ],
+        "conflict": false,
+        "options": [
+         "No"
+        ]
+       },
+       {
+        "units": [
+         "The patient does not smoke."
+        ],
+        "conflict": false,
+        "desired": "held",
+        "paths": [
+         "field_relations"
+        ],
+        "note": "No option selected: nothing can be written to a choice."
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient does not smoke."
+        ],
+        "conflict": false,
+        "options": [
+         "Yes"
+        ],
+        "paths": [
+         "field_relations"
+        ],
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "Yes"
+      ],
+      "note": "Default path: an unlabelled sentence never becomes an option (test_an_unlabelled_sentence_never_becomes_an_option), so a hold there is the designed, documented over-hold (the same patient_predicate_evidence gap as r1-note4 Smoker); field_relations: the ordinary predicate may select the printed No option.",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "By design an unlabelled sentence never becomes an option (test_an_unlabelled_sentence_never_becomes_an_option); same gap as REMAINING-51 \"Patient predicate evidence\".",
+        "documented_before_this_set": true
+       }
+      ],
+      "desired_texts": [
+       "No"
+      ]
+     },
+     "rationale": "An explicit denial of smoking; the only unacceptable outcome is Yes."
+    },
+    "v3_2": {
+     "label": "Allergies",
+     "class": "S",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Allergies: none known."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "desired_texts": [
+       "none known.",
+       "Allergies: none known."
+      ]
+     },
+     "rationale": "Labelled line; supported control."
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "denial_with_yes_option",
+     "path": "field_relations",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient does not smoke."
+       ],
+       "conflict": false,
+       "options": [
+        "Yes"
+       ]
+      }
+     },
+     "expected": {
+      "v3_1": "not_yes"
+     }
+    },
+    {
+     "name": "denial_unit_on_default_path",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient does not smoke."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "not_yes"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "smoker",
+    "v3_2": "allergies"
+   },
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.106368",
+     "with_margin_x1_1": "0.117005",
+     "customer_hold_max": "0.1595520"
+    },
+    "field_relations": {
+     "provider_cost_max": "0.23278400000",
+     "with_margin_x1_1": "0.256063",
+     "customer_hold_max": "0.349176000000"
+    }
+   }
+  },
+  {
+   "id": "N11",
+   "name": "correction-same-line-penicillin-amoxicillin",
+   "primary_class": "CORRECTION",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "rebuild/core/tests/test_v3_ordinary_notes.py",
+    "item": "test_a_line_that_begins_with_a_form_label_is_one_unit_and_its_answer_is_the_rest_of_the_line",
+    "transformation": "test correction line embedded between an independent complaint and a labelled Smoker line"
+   },
+   "form": "n11-n12-correction",
+   "notes": "Patient presents with a rash on both forearms.\nAllergies: penicillin. Sorry, I mean amoxicillin.\nSmoker: No.",
+   "fields": {
+    "v3_1": {
+     "label": "Chief complaint",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Patient presents with a rash on both forearms."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "The allergy correction line holds this unrelated answer with the \"line shown with it may change what it means (... a correction)\" reason; without the correction line it is supported (offline_controls).",
+        "documented_before_this_set": false
+       }
+      ],
+      "desired_texts": [
+       "Patient presents with a rash on both forearms."
+      ]
+     },
+     "rationale": "Independent complaint; a correction about an allergy must not blank unrelated answers.",
+     "class_before_repair": "S"
+    },
+    "v3_2": {
+     "label": "Allergies",
+     "class": "CORRECTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Allergies: penicillin. Sorry, I mean amoxicillin."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "Allergies: penicillin. Sorry, I mean amoxicillin."
+        ],
+        "conflict": false,
+        "desired": "held"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported \"penicillin.\" (the corrected-away value)",
+       "supported text naming both penicillin and amoxicillin as the answer"
+      ],
+      "note": "Held (held_candidate = the whole remainder \"penicillin. Sorry, I mean amoxicillin.\") or, on a future contract, corrected to amoxicillin alone; never both."
+     },
+     "rationale": "A spoken self-correction inside the labelled line; one unit carries both values."
+    },
+    "v3_3": {
+     "label": "Smoker",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Smoker: No."
+        ],
+        "conflict": false,
+        "options": [
+         "No"
+        ]
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "Yes"
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "As cc; the labelled Smoker line FOLLOWS the correction.",
+        "documented_before_this_set": false
+       }
+      ],
+      "desired_texts": [
+       "No"
+      ]
+     },
+     "rationale": "Labelled option line after the correction; the correction does not concern smoking.",
+     "class_before_repair": "S"
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "correction_line_without_conflict",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "Allergies: penicillin. Sorry, I mean amoxicillin."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "not_supported"
+     }
+    }
+   ],
+   "offline_controls": [
+    {
+     "name": "without_the_correction_line",
+     "path": "default",
+     "notes": "Patient presents with a rash on both forearms.\nAllergies: penicillin.\nSmoker: No.",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "Patient presents with a rash on both forearms."
+       ],
+       "conflict": false
+      },
+      "v3_2": {
+       "units": [
+        "Allergies: penicillin."
+       ],
+       "conflict": false
+      },
+      "v3_3": {
+       "units": [
+        "Smoker: No."
+       ],
+       "conflict": false,
+       "options": [
+        "No"
+       ]
+      }
+     },
+     "expected": {
+      "v3_1": "supported",
+      "v3_3": "supported"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "cc",
+    "v3_2": "allergies",
+    "v3_3": "smoker"
+   },
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.107346",
+     "with_margin_x1_1": "0.118081",
+     "customer_hold_max": "0.1610190"
+    }
+   }
+  },
+  {
+   "id": "N12",
+   "name": "correction-next-line-penicillin-amoxicillin",
+   "primary_class": "CORRECTION",
+   "send_paths": [
+    "default"
+   ],
+   "requires_field_relations": "no",
+   "source": {
+    "file": "rebuild/core/tests/test_v3_ordinary_notes.py",
+    "item": "RoundTwoRefutation.test_f2_a_correction_after_a_labelled_value_or_sentence_holds_it; RecoveredNoteContext.test_a_blank_line_cannot_hide_a_spoken_allergy_correction",
+    "transformation": "test correction pair placed in its own paragraph between two independent paragraphs"
+   },
+   "form": "n11-n12-correction",
+   "notes": "Patient presents with a rash on both forearms.\n\nAllergies: penicillin.\nSorry, I mean amoxicillin.\n\nSmoker: No.",
+   "fields": {
+    "v3_1": {
+     "label": "Chief complaint",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Patient presents with a rash on both forearms."
+        ],
+        "conflict": false
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "As N11 cc, across a blank line.",
+        "documented_before_this_set": false
+       }
+      ],
+      "desired_texts": [
+       "Patient presents with a rash on both forearms."
+      ]
+     },
+     "rationale": "Independent complaint in its own paragraph.",
+     "class_before_repair": "S"
+    },
+    "v3_2": {
+     "label": "Allergies",
+     "class": "CORRECTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Allergies: penicillin.",
+         "Sorry, I mean amoxicillin."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "Allergies: penicillin."
+        ],
+        "conflict": true,
+        "desired": "held"
+       },
+       {
+        "units": [
+         "Allergies: penicillin.",
+         "Sorry, I mean amoxicillin."
+        ],
+        "conflict": false,
+        "desired": "held"
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "Allergies: penicillin."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported \"penicillin.\" (the corrected-away value)",
+       "supported text naming both penicillin and amoxicillin as the answer"
+      ],
+      "note": "Held (held_candidate \"penicillin.\" with the correction shown as context) or corrected to amoxicillin alone; never both."
+     },
+     "rationale": "The correction is a separate unit; selecting \"Allergies: penicillin.\" alone without conflict is the model error this case exists to catch."
+    },
+    "v3_3": {
+     "label": "Smoker",
+     "class": "V",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Smoker: No."
+        ],
+        "conflict": false,
+        "options": [
+         "No"
+        ]
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "supported",
+      "never": [
+       "Yes"
+      ],
+      "hold_basis": [
+       {
+        "path": "default",
+        "why": "As N11 smoker, across a blank line.",
+        "documented_before_this_set": false
+       }
+      ],
+      "desired_texts": [
+       "No"
+      ]
+     },
+     "rationale": "Labelled option line in its own paragraph.",
+     "class_before_repair": "S"
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "penicillin_alone_without_conflict",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "Allergies: penicillin."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "not_supported"
+     }
+    },
+    {
+     "name": "correction_unit_alone",
+     "path": "default",
+     "purpose": "app_guard",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "Sorry, I mean amoxicillin."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "not_supported"
+     }
+    }
+   ],
+   "offline_controls": [
+    {
+     "name": "without_the_correction_line",
+     "path": "default",
+     "notes": "Patient presents with a rash on both forearms.\n\nAllergies: penicillin.\n\nSmoker: No.",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "Patient presents with a rash on both forearms."
+       ],
+       "conflict": false
+      },
+      "v3_2": {
+       "units": [
+        "Allergies: penicillin."
+       ],
+       "conflict": false
+      },
+      "v3_3": {
+       "units": [
+        "Smoker: No."
+       ],
+       "conflict": false,
+       "options": [
+        "No"
+       ]
+      }
+     },
+     "expected": {
+      "v3_1": "supported",
+      "v3_3": "supported"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "cc",
+    "v3_2": "allergies",
+    "v3_3": "smoker"
+   },
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.107502",
+     "with_margin_x1_1": "0.118253",
+     "customer_hold_max": "0.1612530"
+    }
+   }
+  },
+  {
+   "id": "N13",
+   "name": "contradiction-r3-1-label-and-r3-3-negated-list",
+   "primary_class": "CONTRADICTION",
+   "send_paths": [
+    "field_relations",
+    "default"
+   ],
+   "requires_field_relations": "only for its field_relations send",
+   "default_path_exposure": {
+    "field": "si",
+    "send_reason": "production path relies solely on the model conflict flag for this shape"
+   },
+   "source": {
+    "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+    "item": "lens copular-r3 R3-1 + R3-3",
+    "transformation": "each finding's first listed input, one pair per paragraph (blank-line separated), one long_text field per pair named as in the finding; newline separators (the verifier reproduced both findings with newline separation)"
+   },
+   "form": "n13-risk-and-medication",
+   "notes": "The patient is suicidal.\nSuicidal ideation: none.\n\nThe patient is on methadone.\nThe patient is not on diazepam or methadone.",
+   "fields": {
+    "v3_1": {
+     "label": "Suicidal ideation",
+     "class": "CONTRADICTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "Suicidal ideation: none."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "Suicidal ideation: none."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is suicidal.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "Suicidal ideation: none."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is suicidal.": "unresolved"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is suicidal."
+        ],
+        "conflict": false,
+        "relations": {
+         "Suicidal ideation: none.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [],
+        "conflict": true
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "Suicidal ideation: none."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "The patient is suicidal."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported 'none.'"
+      ],
+      "note": "A correct model marks the opposing statement contrary/unresolved or sets conflict; the veto must ALSO hold when the model wrongly calls it independent (see veto_qa)."
+     },
+     "rationale": "A labelled \"none\" is contradicted by an explicit copular positive; the veto never reads the label unit.",
+     "source_row": {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+      "lens": "copular-r3",
+      "id": "R3-1",
+      "severity": "HIGH",
+      "title": "The veto never reads a selected labelled answer: a label contradicted by a copular statement is released, but the mirror-image pick is held",
+      "expected_by_finding": "conflict. A direct opposite has to hold whichever of the two statements is picked. Today the veto only compares claims read from the picked unit against the others.",
+      "reproduced_by_verifier": true,
+      "verifier_severity": "HIGH",
+      "recorded_at_bf8f7b78_all_independent": "supported"
+     }
+    },
+    "v3_2": {
+     "label": "Medication",
+     "class": "CONTRADICTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient is on methadone."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "The patient is on methadone."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is not on diazepam or methadone.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is on methadone."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is not on diazepam or methadone.": "unresolved"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is not on diazepam or methadone."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is on methadone.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [],
+        "conflict": true
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient is on methadone."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "The patient is not on diazepam or methadone."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported 'The patient is on methadone.'"
+      ],
+      "note": "A correct model marks the opposing statement contrary/unresolved or sets conflict; the veto must ALSO hold when the model wrongly calls it independent (see veto_qa)."
+     },
+     "rationale": "A later item in a negated list (\"not on diazepam or methadone\") directly opposes the pick.",
+     "source_row": {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+      "lens": "copular-r3",
+      "id": "R3-3",
+      "severity": "HIGH",
+      "title": "A later item in a negated list is read as the first item's topic, so 'not on diazepam or methadone' releases 'on methadone'",
+      "expected_by_finding": "conflict",
+      "reproduced_by_verifier": true,
+      "verifier_severity": "HIGH",
+      "recorded_at_bf8f7b78_all_independent": "supported"
+     }
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "default_label_after_statement_no_conflict",
+     "path": "default",
+     "purpose": "default_exposure",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "Suicidal ideation: none."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "held"
+     },
+     "note": "No veto exists on the default path; this records what production adopts if the model misses the conflict."
+    },
+    {
+     "name": "default_statement_before_label_no_conflict",
+     "path": "default",
+     "purpose": "default_exposure",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient is suicidal."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "held"
+     }
+    },
+    {
+     "name": "veto_qa_r31_si",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "Suicidal ideation: none."
+       ],
+       "conflict": false
+      }
+     },
+     "unselected_relation": "independent",
+     "expected": {
+      "v3_1": "held"
+     },
+     "source_finding": "R3-1",
+     "recorded_at_bf8f7b78": {
+      "si": "supported"
+     }
+    },
+    {
+     "name": "veto_qa_r33_med",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "The patient is on methadone."
+       ],
+       "conflict": false
+      }
+     },
+     "unselected_relation": "independent",
+     "expected": {
+      "v3_2": "held"
+     },
+     "source_finding": "R3-3",
+     "recorded_at_bf8f7b78": {
+      "med": "supported"
+     }
+    }
+   ],
+   "offline_controls": [
+    {
+     "name": "default_exposure_standalone_space_separated",
+     "path": "default",
+     "notes": "The patient is suicidal. Suicidal ideation: none.",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "Suicidal ideation: none."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "recorded"
+     }
+    },
+    {
+     "name": "default_label_first_control",
+     "path": "default",
+     "notes": "Suicidal ideation: none.\nThe patient is suicidal.",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "Suicidal ideation: none."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_1": "recorded"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "si",
+    "v3_2": "med"
+   },
+   "cost_bound_usd": {
+    "field_relations": {
+     "provider_cost_max": "0.23342600000",
+     "with_margin_x1_1": "0.256769",
+     "customer_hold_max": "0.350139000000"
+    },
+    "default": {
+     "provider_cost_max": "0.107116",
+     "with_margin_x1_1": "0.117828",
+     "customer_hold_max": "0.1606740"
+    }
+   }
+  },
+  {
+   "id": "N14",
+   "name": "contradiction-r3-2-non-copular-and-r3-4-double-negation",
+   "primary_class": "CONTRADICTION",
+   "send_paths": [
+    "field_relations"
+   ],
+   "requires_field_relations": "yes",
+   "source": {
+    "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+    "item": "lens copular-r3 R3-2 + R3-4",
+    "transformation": "each finding's first listed input, one pair per paragraph (blank-line separated), one long_text field per pair named as in the finding; newline separators (the verifier reproduced both findings with newline separation)"
+   },
+   "form": "n14-smoking-and-mental-state",
+   "notes": "The patient smokes.\nThe patient does not smoke.\n\nThe patient is oriented.\nThe patient is not agitated and not oriented.",
+   "fields": {
+    "v3_1": {
+     "label": "Smoking status",
+     "class": "CONTRADICTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient smokes."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "The patient smokes."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient does not smoke.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient smokes."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient does not smoke.": "unresolved"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient does not smoke."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient smokes.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [],
+        "conflict": true
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient smokes."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "The patient does not smoke."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported 'The patient smokes.'"
+      ],
+      "note": "A correct model marks the opposing statement contrary/unresolved or sets conflict; the veto must ALSO hold when the model wrongly calls it independent (see veto_qa)."
+     },
+     "rationale": "A plain \"does not\" opposite is not copular and never reaches the veto.",
+     "source_row": {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+      "lens": "copular-r3",
+      "id": "R3-2",
+      "severity": "HIGH",
+      "title": "Direct opposites that are not copular never reach the veto",
+      "expected_by_finding": "conflict, or the veto's scope stated as copular-only and the relations path held off for other predicates.",
+      "reproduced_by_verifier": true,
+      "verifier_severity": "HIGH",
+      "recorded_at_bf8f7b78_all_independent": "supported"
+     }
+    },
+    "v3_2": {
+     "label": "Mental state",
+     "class": "CONTRADICTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient is oriented."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "The patient is oriented."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is not agitated and not oriented.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is oriented."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is not agitated and not oriented.": "unresolved"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is not agitated and not oriented."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is oriented.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [],
+        "conflict": true
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient is oriented."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "The patient is not agitated and not oriented."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported 'The patient is oriented.'"
+      ],
+      "note": "A correct model marks the opposing statement contrary/unresolved or sets conflict; the veto must ALSO hold when the model wrongly calls it independent (see veto_qa)."
+     },
+     "rationale": "Two explicit negations are cancelled by parity and read as positive \"oriented\".",
+     "source_row": {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+      "lens": "copular-r3",
+      "id": "R3-4",
+      "severity": "HIGH",
+      "title": "Two explicit negations cancel by parity: 'is not X and not Y' is read as positive Y",
+      "expected_by_finding": "conflict",
+      "reproduced_by_verifier": true,
+      "verifier_severity": "HIGH",
+      "recorded_at_bf8f7b78_all_independent": "supported"
+     }
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "veto_qa_r32_smoking",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient smokes."
+       ],
+       "conflict": false
+      }
+     },
+     "unselected_relation": "independent",
+     "expected": {
+      "v3_1": "held"
+     },
+     "source_finding": "R3-2",
+     "recorded_at_bf8f7b78": {
+      "smoking": "supported"
+     }
+    },
+    {
+     "name": "veto_qa_r34_mental",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "The patient is oriented."
+       ],
+       "conflict": false
+      }
+     },
+     "unselected_relation": "independent",
+     "expected": {
+      "v3_2": "held"
+     },
+     "source_finding": "R3-4",
+     "recorded_at_bf8f7b78": {
+      "mental": "supported"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "smoking",
+    "v3_2": "mental"
+   },
+   "cost_bound_usd": {
+    "field_relations": {
+     "provider_cost_max": "0.23340400000",
+     "with_margin_x1_1": "0.256745",
+     "customer_hold_max": "0.350106000000"
+    }
+   }
+  },
+  {
+   "id": "N15",
+   "name": "contradiction-r3-5-but-contrast-and-r3-7-short-no",
+   "primary_class": "CONTRADICTION",
+   "send_paths": [
+    "field_relations"
+   ],
+   "requires_field_relations": "yes",
+   "source": {
+    "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+    "item": "lens copular-r3 R3-5 + R3-7",
+    "transformation": "each finding's first listed input, one pair per paragraph (blank-line separated), one long_text field per pair named as in the finding; newline separators (the verifier reproduced both findings with newline separation)"
+   },
+   "form": "n15-risk-and-arrangements",
+   "notes": "The patient is not suicidal.\nThe patient is not psychotic but suicidal.\n\nThe patient is subject to MAPPA.\nNo MAPPA involvement.",
+   "fields": {
+    "v3_1": {
+     "label": "Risk to self",
+     "class": "CONTRADICTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient is not suicidal."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "The patient is not suicidal."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is not psychotic but suicidal.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is not suicidal."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is not psychotic but suicidal.": "unresolved"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is not psychotic but suicidal."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is not suicidal.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [],
+        "conflict": true
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient is not suicidal."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "The patient is not psychotic but suicidal."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported 'The patient is not suicidal.'"
+      ],
+      "note": "A correct model marks the opposing statement contrary/unresolved or sets conflict; the veto must ALSO hold when the model wrongly calls it independent (see veto_qa)."
+     },
+     "rationale": "The copula negation is carried across \"but\", so the contrasted positive reads as agreeing.",
+     "source_row": {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+      "lens": "copular-r3",
+      "id": "R3-5",
+      "severity": "HIGH",
+      "title": "The copula's negation is carried across a contrastive 'but', so the contrasted positive reads as negative",
+      "expected_by_finding": "conflict, since the other statement says the patient is suicidal. At minimum the veto should hold whenever the polarity of a 'but' conjunct is not read.",
+      "reproduced_by_verifier": true,
+      "verifier_severity": "HIGH",
+      "recorded_at_bf8f7b78_all_independent": "supported"
+     }
+    },
+    "v3_2": {
+     "label": "MAPPA status",
+     "class": "CONTRADICTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient is subject to MAPPA."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "The patient is subject to MAPPA."
+        ],
+        "conflict": false,
+        "relations": {
+         "No MAPPA involvement.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is subject to MAPPA."
+        ],
+        "conflict": false,
+        "relations": {
+         "No MAPPA involvement.": "unresolved"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "No MAPPA involvement."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is subject to MAPPA.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [],
+        "conflict": true
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient is subject to MAPPA."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "No MAPPA involvement."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported 'The patient is subject to MAPPA.'"
+      ],
+      "note": "A correct model marks the opposing statement contrary/unresolved or sets conflict; the veto must ALSO hold when the model wrongly calls it independent (see veto_qa)."
+     },
+     "rationale": "A short \"No X\" negative with no separator is never read.",
+     "source_row": {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+      "lens": "copular-r3",
+      "id": "R3-7",
+      "severity": "HIGH",
+      "title": "Short 'No X' / 'X nil' negatives with no separator are never read",
+      "expected_by_finding": "conflict",
+      "reproduced_by_verifier": true,
+      "verifier_severity": "HIGH",
+      "recorded_at_bf8f7b78_all_independent": "supported"
+     }
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "veto_qa_r35_risk",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient is not suicidal."
+       ],
+       "conflict": false
+      }
+     },
+     "unselected_relation": "independent",
+     "expected": {
+      "v3_1": "held"
+     },
+     "source_finding": "R3-5",
+     "recorded_at_bf8f7b78": {
+      "risk": "supported"
+     }
+    },
+    {
+     "name": "veto_qa_r37_mappa",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "The patient is subject to MAPPA."
+       ],
+       "conflict": false
+      }
+     },
+     "unselected_relation": "independent",
+     "expected": {
+      "v3_2": "held"
+     },
+     "source_finding": "R3-7",
+     "recorded_at_bf8f7b78": {
+      "mappa": "supported"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "risk",
+    "v3_2": "mappa"
+   },
+   "cost_bound_usd": {
+    "field_relations": {
+     "provider_cost_max": "0.23340000000",
+     "with_margin_x1_1": "0.256740",
+     "customer_hold_max": "0.350100000000"
+    }
+   }
+  },
+  {
+   "id": "N16",
+   "name": "contradiction-r3-6-possessor-and-r3-8-word-form-label",
+   "primary_class": "CONTRADICTION",
+   "send_paths": [
+    "field_relations",
+    "default"
+   ],
+   "requires_field_relations": "only for its field_relations send",
+   "default_path_exposure": {
+    "field": "allergies",
+    "send_reason": "production path relies solely on the model conflict flag for this shape"
+   },
+   "source": {
+    "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+    "item": "lens copular-r3 R3-6 + R3-8",
+    "transformation": "each finding's first listed input, one pair per paragraph (blank-line separated), one long_text field per pair named as in the finding; newline separators (the verifier reproduced both findings with newline separation)"
+   },
+   "form": "n16-mood-and-allergies",
+   "notes": "The patient is not depressed.\nHer mood is depressed.\n\nThe patient is allergic to penicillin.\nAllergies: none.",
+   "fields": {
+    "v3_1": {
+     "label": "Mental state",
+     "class": "CONTRADICTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient is not depressed."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "The patient is not depressed."
+        ],
+        "conflict": false,
+        "relations": {
+         "Her mood is depressed.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is not depressed."
+        ],
+        "conflict": false,
+        "relations": {
+         "Her mood is depressed.": "unresolved"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "Her mood is depressed."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is not depressed.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [],
+        "conflict": true
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient is not depressed."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "Her mood is depressed."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported 'The patient is not depressed.'"
+      ],
+      "note": "A correct model marks the opposing statement contrary/unresolved or sets conflict; the veto must ALSO hold when the model wrongly calls it independent (see veto_qa)."
+     },
+     "rationale": "A possessed noun (\"her mood\") is treated as another person, so the opposite is ignored.",
+     "source_row": {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+      "lens": "copular-r3",
+      "id": "R3-6",
+      "severity": "HIGH",
+      "title": "Any noun with a possessor counts as another person, even when the possessor is the patient ('her mood', 'the patient's left knee')",
+      "expected_by_finding": "conflict. A possessed body part, mood or condition is not another actor, and 'her' or 'the patient's' may be the patient.",
+      "reproduced_by_verifier": true,
+      "verifier_severity": "HIGH",
+      "recorded_at_bf8f7b78_all_independent": "supported"
+     }
+    },
+    "v3_2": {
+     "label": "Allergies",
+     "class": "CONTRADICTION",
+     "raw_model_expectation": {
+      "acceptable": [
+       {
+        "units": [
+         "The patient is allergic to penicillin."
+        ],
+        "conflict": true
+       },
+       {
+        "units": [
+         "The patient is allergic to penicillin."
+        ],
+        "conflict": false,
+        "relations": {
+         "Allergies: none.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "The patient is allergic to penicillin."
+        ],
+        "conflict": false,
+        "relations": {
+         "Allergies: none.": "unresolved"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [
+         "Allergies: none."
+        ],
+        "conflict": false,
+        "relations": {
+         "The patient is allergic to penicillin.": "contrary"
+        },
+        "paths": [
+         "field_relations"
+        ]
+       },
+       {
+        "units": [],
+        "conflict": true
+       }
+      ],
+      "forbidden": [
+       {
+        "units": [
+         "The patient is allergic to penicillin."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       },
+       {
+        "units": [
+         "Allergies: none."
+        ],
+        "conflict": false,
+        "app_should": "not_supported"
+       }
+      ]
+     },
+     "app_adoption_expectation": {
+      "desired": "held",
+      "never": [
+       "supported 'The patient is allergic to penicillin.'"
+      ],
+      "note": "A correct model marks the opposing statement contrary/unresolved or sets conflict; the veto must ALSO hold when the model wrongly calls it independent (see veto_qa)."
+     },
+     "rationale": "A label naming the topic in another word form (\"Allergies\" vs \"allergic\") is treated as another topic.",
+     "source_row": {
+      "file": "/opt/meddoc-pro/rebuild/.runtime/v1-full-release-20260928/adversarial-pass-bf8f7b78/result.json",
+      "lens": "copular-r3",
+      "id": "R3-8",
+      "severity": "HIGH",
+      "title": "A label that names the topic in another word form is treated as another topic ('Allergies: none.' beside 'is allergic')",
+      "expected_by_finding": "conflict",
+      "reproduced_by_verifier": true,
+      "verifier_severity": "HIGH",
+      "recorded_at_bf8f7b78_all_independent": "supported"
+     }
+    }
+   },
+   "adversarial_simulations": [
+    {
+     "name": "default_label_after_statement_no_conflict",
+     "path": "default",
+     "purpose": "default_exposure",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "Allergies: none."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "held"
+     }
+    },
+    {
+     "name": "default_statement_before_label_no_conflict",
+     "path": "default",
+     "purpose": "default_exposure",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "The patient is allergic to penicillin."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "held"
+     }
+    },
+    {
+     "name": "veto_qa_r36_mood",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "selection": {
+      "v3_1": {
+       "units": [
+        "The patient is not depressed."
+       ],
+       "conflict": false
+      }
+     },
+     "unselected_relation": "independent",
+     "expected": {
+      "v3_1": "held"
+     },
+     "source_finding": "R3-6",
+     "recorded_at_bf8f7b78": {
+      "mood": "supported"
+     }
+    },
+    {
+     "name": "veto_qa_r38_allergies",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "The patient is allergic to penicillin."
+       ],
+       "conflict": false
+      }
+     },
+     "unselected_relation": "independent",
+     "expected": {
+      "v3_2": "held"
+     },
+     "source_finding": "R3-8",
+     "recorded_at_bf8f7b78": {
+      "allergies": "supported"
+     }
+    }
+   ],
+   "offline_controls": [
+    {
+     "name": "default_label_first_control",
+     "path": "default",
+     "notes": "Allergies: none.\nThe patient is allergic to penicillin.",
+     "selection": {
+      "v3_2": {
+       "units": [
+        "Allergies: none."
+       ],
+       "conflict": false
+      }
+     },
+     "expected": {
+      "v3_2": "recorded"
+     }
+    }
+   ],
+   "case_keys": {
+    "v3_1": "mood",
+    "v3_2": "allergies"
+   },
+   "cost_bound_usd": {
+    "field_relations": {
+     "provider_cost_max": "0.23335400000",
+     "with_margin_x1_1": "0.256690",
+     "customer_hold_max": "0.350031000000"
+    },
+    "default": {
+     "provider_cost_max": "0.107044",
+     "with_margin_x1_1": "0.117749",
+     "customer_hold_max": "0.1605660"
+    }
+   }
+  }
+ ],
+ "repairs": [
+  "stripped 294 observed_offline blocks and the offline_replay summary",
+  "N1 N06 v3_9: reference = plan-only (desired supported); two-unit pick forbidden (not_supported); class J->V",
+  "N2 N05 v3_3: silent blank desired missing -> usefulness_loss",
+  "N2 N05 v3_4: silent blank desired missing -> usefulness_loss",
+  "N2 N07: nine I fields flagged missing_is_not_recall",
+  "N3: 10 desired texts now also accept the full unit text",
+  "N4: N11/N12 cc and smoker relabelled S -> V",
+  "W1: N03 cto label reworded (2 occurrences)",
+  "N6: every case references a real synthetic .docx (sha256) and the fields the candidate's v3 inspect gives it; case keys mapped to inspected keys (case_keys); cost bound per case and in total recomputed with the inspected fields, x1.1",
+  "N6 dry run: N01 v3_7/v3_8/v3_9 relabelled S -> V (desired unchanged, supported): with the real form's inspected context they are held on the default path; S stays a set of controls that pass"
+ ],
+ "inspected_field_differences": [
+  {
+   "case": "N02",
+   "key": "v3_1",
+   "differences": {
+    "label": [
+     "Other:",
+     "Other"
+    ]
+   }
+  },
+  {
+   "case": "N02",
+   "key": "v3_2",
+   "differences": {
+    "label": [
+     "Other:",
+     "Other"
+    ]
+   }
+  },
+  {
+   "case": "N02",
+   "key": "v3_3",
+   "differences": {
+    "label": [
+     "Other:",
+     "Other"
+    ]
+   }
+  },
+  {
+   "case": "N08",
+   "key": "v3_2",
+   "differences": {
+    "kind": [
+     "text",
+     "long_text"
+    ]
+   }
+  }
+ ]
+}

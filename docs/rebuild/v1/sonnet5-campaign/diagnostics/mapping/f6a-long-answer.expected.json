@@ -1,0 +1,51 @@
+{
+  "schema": "quillmd-sonnet5-mapping-expected/1",
+  "form": "f6a-long-answer",
+  "docx": "f6a-long-answer.docx",
+  "origin_findings": ["D30 (long activity text, 12->15 pages)", "D31 (5,556-character long comment)", "long-answer render class D26/D27/D28/D29/D35"],
+  "structure": "A date blank in a body paragraph, then a two-row table whose second row is ONE large empty free-text cell (row height at least 10000 twips) meant for a narrative longer than 5,000 characters.",
+  "authored_from": "build_forms.py intent (f6a_long_answer), written before any engine run on this form",
+  "slot_grammar": "neutral v3 ground-truth grammar; see check_expected.py",
+  "areas": [
+    {
+      "id": "f6a.A1",
+      "label": "Date of letter",
+      "kind": "date",
+      "options": [],
+      "cardinality": "one date",
+      "destination": {
+        "description": "body paragraph b/p[1]: the underscore blank after 'Date of letter: '",
+        "label_slot": "b/p[1]",
+        "region": "b/p[1]",
+        "answer_at": "b/p[1]"
+      },
+      "must_name": ["Date"]
+    },
+    {
+      "id": "f6a.A2",
+      "label": "Full account of the admission: presentation, investigations, treatment, progress and the plan after discharge",
+      "kind": "long_text",
+      "options": [],
+      "cardinality": "one free-text value; the diagnostic answer is longer than 5,000 characters",
+      "destination": {
+        "description": "table 0, row 1, cell 0: the large empty cell under the header cell",
+        "label_slot": "b/tbl[0]/tr[0]/tc[0]/p[0]",
+        "region": "b/tbl[0]/tr[1]/tc[0]",
+        "answer_at": "b/tbl[0]/tr[1]/tc[0]/p[0]"
+      },
+      "must_name": ["admission"],
+      "min_capacity_chars": 5001,
+      "length_expectation": "A >5,000-character answer must be accepted whole: no max_chars below 5,001, no truncation, the header cell untouched."
+    }
+  ],
+  "controls": [
+    {
+      "id": "f6a.C1",
+      "type": "not_an_answer",
+      "printed": "Full account of the admission: presentation, investigations, treatment, progress and the plan after discharge",
+      "destination": {"description": "the header cell (question text)", "region": "b/tbl[0]/tr[0]/tc[0]"},
+      "reason": "The printed question; the answer goes in the cell below it."
+    }
+  ],
+  "extras_policy": "Any other answerable field (heading b/p[0], trailing b/p[2]) is a false field."
+}

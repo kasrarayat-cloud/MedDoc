@@ -1,0 +1,87 @@
+{
+  "schema": "quillmd-sonnet5-mapping-expected/1",
+  "form": "f2-leave-checkboxes",
+  "docx": "f2-leave-checkboxes.docx",
+  "origin_findings": ["D31"],
+  "structure": "An earlier question printed '(please tick one)' over three legacy FORMCHECKBOX paragraphs (genuine select-one), a heading, then an owner line and NINE legacy FORMCHECKBOX options in nine consecutive paragraphs with NO choose-one instruction anywhere in their block (genuine multi-select: several kinds of leave can be taken in one review period), then a free-text details table.",
+  "authored_from": "build_forms.py intent (f2_leave_checkboxes), written before any engine run on this form",
+  "slot_grammar": "neutral v3 ground-truth grammar; see check_expected.py",
+  "areas": [
+    {
+      "id": "f2.A1",
+      "label": "Outcome requested at this review",
+      "kind": "choice",
+      "options": [
+        "Remain in hospital under the current arrangements",
+        "Discharge with conditions",
+        "Discharge without conditions"
+      ],
+      "cardinality": "exactly one (the question itself prints '(please tick one)')",
+      "destination": {
+        "description": "three body paragraphs b/p[2..4], one legacy FORMCHECKBOX each, box before its option words",
+        "label_slot": "b/p[1]",
+        "controls": ["b/p[2]/ff[0]", "b/p[3]/ff[0]", "b/p[4]/ff[0]"]
+      },
+      "printed_on_form": [{"slot": "b/p[1]", "text": "(please tick one)"}]
+    },
+    {
+      "id": "f2.A2",
+      "label": "Types of leave taken",
+      "kind": "multi_choice",
+      "options": [
+        "Accompanied leave on the hospital site",
+        "Unaccompanied leave on the hospital site",
+        "Accompanied daytime leave away from the ward site",
+        "Unaccompanied daytime leave away from the ward site",
+        "Accompanied leave with an overnight stay",
+        "Unaccompanied leave with an overnight stay",
+        "Leave for an outpatient appointment",
+        "Leave for family reasons",
+        "Trial stay at a supported placement"
+      ],
+      "cardinality": "any number, 0..9 (independent completed events over a review period; nothing in this block says choose one)",
+      "destination": {
+        "description": "nine consecutive body paragraphs b/p[8..16], one legacy FORMCHECKBOX each, box before its option words; owner line b/p[7] under the heading b/p[6]",
+        "label_slot": "b/p[7]",
+        "controls": [
+          "b/p[8]/ff[0]", "b/p[9]/ff[0]", "b/p[10]/ff[0]", "b/p[11]/ff[0]", "b/p[12]/ff[0]",
+          "b/p[13]/ff[0]", "b/p[14]/ff[0]", "b/p[15]/ff[0]", "b/p[16]/ff[0]"
+        ]
+      },
+      "scope_note": "The '(please tick one)' printed at b/p[1] belongs to f2.A1 only; it is separated by a spacer and a heading and must NOT make this list single-choice.",
+      "repair_note": "2026-09-29 repair (CHECK.md) W2: the nine option texts were reworded with fresh wording (two shared a printed phrase with a development slot). A first rewording containing 'one night' was discarded: 'one' is selection wording and made the engine hold the list, which would have changed the structure under test. Kind, controls and cardinality are unchanged.",
+      "printed_on_form": [{"slot": "b/p[6]", "text": "Leave during the review period"}]
+    },
+    {
+      "id": "f2.A3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "kind": "long_text",
+      "options": [],
+      "cardinality": "one free-text value",
+      "destination": {
+        "description": "table 0, row 1, cell 0: the empty answer cell under the header cell",
+        "label_slot": "b/tbl[0]/tr[0]/tc[0]/p[0]",
+        "region": "b/tbl[0]/tr[1]/tc[0]",
+        "answer_at": "b/tbl[0]/tr[1]/tc[0]/p[0]"
+      },
+      "must_name": ["leave"]
+    }
+  ],
+  "controls": [
+    {
+      "id": "f2.C1",
+      "type": "not_an_answer",
+      "printed": "Types of leave taken",
+      "destination": {"description": "the owner line of the leave list (a question label, not a write-in)", "region": "b/p[7]"},
+      "reason": "The owner line names the list f2.A2. It must never become a text field or an option of its own."
+    },
+    {
+      "id": "f2.C2",
+      "type": "not_an_answer",
+      "printed": "Outcome requested at this review (please tick one)",
+      "destination": {"description": "the owner line of the tick-one question", "region": "b/p[1]"},
+      "reason": "The owner line names f2.A1; it has no write-in."
+    }
+  ],
+  "extras_policy": "Any other answerable field (spacers b/p[5], b/p[17], trailing b/p[18], headings) is a false field."
+}
