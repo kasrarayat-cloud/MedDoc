@@ -1,0 +1,7883 @@
+{
+ "schema": "quillmd.sonnet5-diagnostics.ordinary-notes.observations.v2",
+ "recorded_at": "2026-09-29T03:01:51Z",
+ "script_sha256": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
+ "what": "What candidate 8e3dcfd0 did, offline with a SIMULATED provider, with every listed selection (replayed alone), with each case's reference response, and with the adversarial simulations and controls. Recorded AFTER cases.json was frozen.",
+ "candidate_files": {
+  "core/generation.py": "abca2742fc330a40a4bb6362326b3e07164151c49472b69429ad0878857d9b27",
+  "core/v3_field_relations.py": "b980c42f45caca105d994767e1ba8cd3e2b8a66e71d31d5514b2806e148e67f0",
+  "core/v3_literal_facts.py": "3720d3dabfab198e4ddd9077450bc2017fc39cfe025706746f1a7ba5f3b5fe5b",
+  "core/v3_destination.py": "44e360e309dbfe3f1930dc76cf4d472aa5168cee8e73b2f18946a5982dad8bfc"
+ },
+ "cases_sha256": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+ "forms_checked": {
+  "r1-11": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n02-repeated-other": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n03-order-question": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n08-knee-and-findings": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n09-knee-pair": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n10-smoker-allergies": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n11-n12-correction": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n13-risk-and-medication": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n14-smoking-and-mental-state": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n15-risk-and-arrangements": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  },
+  "n16-mood-and-allergies": {
+   "sha256_matches": true,
+   "v3_inspect_equals_case_fields": true
+  }
+ },
+ "cases": {
+  "N01": {
+   "units": {
+    "default": [
+     "This is a 30-year-old female seen for headaches.",
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness.",
+     "She takes ibuprofen as needed.",
+     "No known drug allergies.",
+     "She is a nonsmoker.",
+     "Neurological examination is normal.",
+     "Assessment is tension-type headache.",
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ],
+    "field_relations": [
+     "This is a 30-year-old female seen for headaches.",
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness.",
+     "She takes ibuprofen as needed.",
+     "No known drug allergies.",
+     "She is a nonsmoker.",
+     "Neurological examination is normal.",
+     "Assessment is tension-type headache.",
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_6": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_7": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_9": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_10": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "supported",
+       "text": "This is a 30-year-old female seen for headaches.",
+       "review_status": "supported"
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_6": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_7": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "supported",
+       "text": "tension-type headache.",
+       "review_status": "supported"
+      },
+      "v3_9": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_10": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "This is a 30-year-old female seen for headaches.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_3": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_4": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_5": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_6": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_7": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_8": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "tension-type headache.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_9": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_10": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_11": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "This is a 30-year-old female seen for headaches."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "This is a 30-year-old female seen for headaches.\nThe headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "She denies visual changes, nausea, or weakness."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "She takes ibuprofen as needed."
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "No known drug allergies."
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "She is a nonsmoker."
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Neurological examination is normal."
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "tension-type headache."
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks."
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "This is a 30-year-old female seen for headaches.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "This is a 30-year-old female seen for headaches.\nThe headaches started two months ago and are worse in the morning.\nShe denies visual changes, nausea, or weakness."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "She denies visual changes, nausea, or weakness."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "She takes ibuprofen as needed."
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "No known drug allergies."
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "She is a nonsmoker."
+    },
+    {
+     "field": "v3_6",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "She is a nonsmoker."
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Neurological examination is normal."
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "tension-type headache.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "to start amitriptyline 10 mg at night.\nShe will follow up in six weeks."
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "nonsmoker_as_yes_option",
+     "path": "field_relations",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_6": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_6": true
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.116794",
+     "customer_hold_max": "0.1751910"
+    }
+   }
+  },
+  "N02": {
+   "units": {
+    "default": [
+     "The patient describes the pain as a tight band around her head.",
+     "The patient sees zigzag lines before the headache begins."
+    ],
+    "field_relations": [
+     "The patient describes the pain as a tight band around her head.",
+     "The patient sees zigzag lines before the headache begins."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient describes the pain as a tight band around her head.",
+       "review_status": "supported"
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "The patient describes the pain as a tight band around her head.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     }
+    },
+    "v3_3": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient describes the pain as a tight band around her head."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient sees zigzag lines before the headache begins."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient describes the pain as a tight band around her head."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient describes the pain as a tight band around her head."
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient sees zigzag lines before the headache begins."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient describes the pain as a tight band around her head.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient sees zigzag lines before the headache begins."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient describes the pain as a tight band around her head."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient describes the pain as a tight band around her head.",
+      "review_status": "supported"
+     },
+     "verdict": "adopted_model_dependent",
+     "depends_on_other_fields": true,
+     "observed_with_reference": {
+      "status": "held",
+      "text": ""
+     }
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient sees zigzag lines before the headache begins."
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "same_sentence_into_two_repeated_other_fields",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_1": true,
+      "v3_2": true
+     }
+    },
+    {
+     "name": "pain_sentence_into_worse",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_3": true
+     }
+    },
+    {
+     "name": "same_sentence_into_two_repeated_other_fields",
+     "path": "field_relations",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_1": true,
+      "v3_2": true
+     }
+    },
+    {
+     "name": "pain_sentence_into_worse_relations",
+     "path": "field_relations",
+     "purpose": "model_dependence",
+     "observed": {
+      "v3_3": {
+       "status": "supported",
+       "text": "The patient describes the pain as a tight band around her head.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_3": true
+     }
+    }
+   ],
+   "controls": [
+    {
+     "name": "warning_with_reports_verb",
+     "path": "field_relations",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient reports zigzag lines before the headache begins.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    }
+   ],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.10693",
+     "customer_hold_max": "0.160395"
+    },
+    "field_relations": {
+     "provider_cost_max": "0.23324400000",
+     "customer_hold_max": "0.349866000000"
+    }
+   }
+  },
+  "N03": {
+   "units": {
+    "default": [
+     "The patient is subject to a Community Treatment Order (CTO).",
+     "She attends the clinic every week."
+    ],
+    "field_relations": [
+     "The patient is subject to a Community Treatment Order (CTO).",
+     "She attends the clinic every week."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient is subject to a Community Treatment Order (CTO).",
+       "review_status": "supported"
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "The patient is subject to a Community Treatment Order (CTO).",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is subject to a Community Treatment Order (CTO)."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "She attends the clinic every week."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is subject to a Community Treatment Order (CTO)."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is subject to a Community Treatment Order (CTO).",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "She attends the clinic every week."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is subject to a Community Treatment Order (CTO).",
+      "review_status": "supported"
+     },
+     "verdict": "adopted_model_dependent",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [],
+   "controls": [
+    {
+     "name": "attendance_with_patient_subject",
+     "path": "default",
+     "observed": {
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    },
+    {
+     "name": "attendance_alone",
+     "path": "default",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient attends the clinic every week.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    },
+    {
+     "name": "attendance_with_patient_subject",
+     "path": "field_relations",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient attends the clinic every week.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    }
+   ],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.10648",
+     "customer_hold_max": "0.159720"
+    },
+    "field_relations": {
+     "provider_cost_max": "0.23269400000",
+     "customer_hold_max": "0.349041000000"
+    }
+   }
+  },
+  "N04": {
+   "units": {
+    "default": [
+     "45-year-old man presents with right knee pain for three weeks after a fall.",
+     "He has hypertension and takes lisinopril 10 mg daily.",
+     "Allergies: penicillin.",
+     "Smoker: No.",
+     "On examination there is a small effusion and medial joint line tenderness.",
+     "Assessment is a probable medial meniscus tear.",
+     "Plan is an MRI of the right knee and physiotherapy referral."
+    ],
+    "field_relations": [
+     "45-year-old man presents with right knee pain for three weeks after a fall.",
+     "He has hypertension and takes lisinopril 10 mg daily.",
+     "Allergies: penicillin.",
+     "Smoker: No.",
+     "On examination there is a small effusion and medial joint line tenderness.",
+     "Assessment is a probable medial meniscus tear.",
+     "Plan is an MRI of the right knee and physiotherapy referral."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "supported",
+       "text": "penicillin.",
+       "review_status": "supported"
+      },
+      "v3_6": {
+       "status": "supported",
+       "text": "No",
+       "review_status": "supported"
+      },
+      "v3_7": {
+       "status": "supported",
+       "text": "On examination there is a small effusion and medial joint line tenderness.",
+       "review_status": "supported"
+      },
+      "v3_8": {
+       "status": "supported",
+       "text": "a probable medial meniscus tear.",
+       "review_status": "supported"
+      },
+      "v3_9": {
+       "status": "supported",
+       "text": "an MRI of the right knee and physiotherapy referral.",
+       "review_status": "supported"
+      },
+      "v3_10": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "supported",
+       "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+       "review_status": "supported"
+      },
+      "v3_2": {
+       "status": "supported",
+       "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+       "review_status": "supported"
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "supported",
+       "text": "penicillin.",
+       "review_status": "supported"
+      },
+      "v3_6": {
+       "status": "supported",
+       "text": "No",
+       "review_status": "supported"
+      },
+      "v3_7": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "supported",
+       "text": "a probable medial meniscus tear.",
+       "review_status": "supported"
+      },
+      "v3_9": {
+       "status": "supported",
+       "text": "an MRI of the right knee and physiotherapy referral.",
+       "review_status": "supported"
+      },
+      "v3_10": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_3": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_4": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_5": {
+     "default": {
+      "status": "supported",
+      "text": "penicillin.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "penicillin.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_6": {
+     "default": {
+      "status": "supported",
+      "text": "No",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "No",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_7": {
+     "default": {
+      "status": "supported",
+      "text": "On examination there is a small effusion and medial joint line tenderness.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_8": {
+     "default": {
+      "status": "supported",
+      "text": "a probable medial meniscus tear.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "a probable medial meniscus tear.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_9": {
+     "default": {
+      "status": "supported",
+      "text": "an MRI of the right knee and physiotherapy referral.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "an MRI of the right knee and physiotherapy referral.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_10": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_11": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "45-year-old man presents with right knee pain for three weeks after a fall."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "45-year-old man presents with right knee pain for three weeks after a fall."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has hypertension and takes lisinopril 10 mg daily."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has hypertension and takes lisinopril 10 mg daily."
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has hypertension and takes lisinopril 10 mg daily."
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has hypertension and takes lisinopril 10 mg daily."
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "penicillin.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "No",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "On examination there is a small effusion and medial joint line tenderness.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "a probable medial meniscus tear.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "an MRI of the right knee and physiotherapy referral.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "45-year-old man presents with right knee pain for three weeks after a fall.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has hypertension and takes lisinopril 10 mg daily."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has hypertension and takes lisinopril 10 mg daily."
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has hypertension and takes lisinopril 10 mg daily."
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has hypertension and takes lisinopril 10 mg daily."
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "penicillin.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "No",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "On examination there is a small effusion and medial joint line tenderness."
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "a probable medial meniscus tear.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "an MRI of the right knee and physiotherapy referral.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "combined_sentence_both_fields_no_conflict",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_3": true,
+      "v3_4": true
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.116162",
+     "customer_hold_max": "0.1742430"
+    }
+   }
+  },
+  "N05": {
+   "units": {
+    "default": [
+     "Patient presents with chest tightness on exertion for one month.",
+     "His father had a heart attack at 55.",
+     "He has high cholesterol.",
+     "He takes rosuvastatin.",
+     "Allergies: none known.",
+     "Smoker: Yes.",
+     "Examination is normal.",
+     "Assessment is possible stable angina.",
+     "Plan is an exercise stress test and aspirin 81 mg daily."
+    ],
+    "field_relations": [
+     "Patient presents with chest tightness on exertion for one month.",
+     "His father had a heart attack at 55.",
+     "He has high cholesterol.",
+     "He takes rosuvastatin.",
+     "Allergies: none known.",
+     "Smoker: Yes.",
+     "Examination is normal.",
+     "Assessment is possible stable angina.",
+     "Plan is an exercise stress test and aspirin 81 mg daily."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_6": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_7": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_9": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_10": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "supported",
+       "text": "Patient presents with chest tightness on exertion for one month.",
+       "review_status": "supported"
+      },
+      "v3_2": {
+       "status": "supported",
+       "text": "Patient presents with chest tightness on exertion for one month.",
+       "review_status": "supported"
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "supported",
+       "text": "none known.",
+       "review_status": "supported"
+      },
+      "v3_6": {
+       "status": "supported",
+       "text": "Yes",
+       "review_status": "supported"
+      },
+      "v3_7": {
+       "status": "supported",
+       "text": "normal.",
+       "review_status": "supported"
+      },
+      "v3_8": {
+       "status": "supported",
+       "text": "possible stable angina.",
+       "review_status": "supported"
+      },
+      "v3_9": {
+       "status": "supported",
+       "text": "an exercise stress test and aspirin 81 mg daily.",
+       "review_status": "supported"
+      },
+      "v3_10": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "Patient presents with chest tightness on exertion for one month.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "Patient presents with chest tightness on exertion for one month.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_3": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_4": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_5": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "none known.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_6": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "Yes",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_7": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "normal.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_8": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "possible stable angina.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_9": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "an exercise stress test and aspirin 81 mg daily.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_10": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_11": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Patient presents with chest tightness on exertion for one month."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Patient presents with chest tightness on exertion for one month."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "Patient presents with chest tightness on exertion for one month.\nHis father had a heart attack at 55."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has high cholesterol."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "usefulness_loss",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has high cholesterol."
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "His father had a heart attack at 55."
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He takes rosuvastatin."
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "usefulness_loss",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "He takes rosuvastatin."
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "none known."
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Yes."
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "normal."
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "possible stable angina."
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "an exercise stress test and aspirin 81 mg daily."
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "Patient presents with chest tightness on exertion for one month.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "Patient presents with chest tightness on exertion for one month.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "Patient presents with chest tightness on exertion for one month.\nHis father had a heart attack at 55."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has high cholesterol."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "usefulness_loss",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "He has high cholesterol."
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "His father had a heart attack at 55."
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "He takes rosuvastatin."
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "usefulness_loss",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "He takes rosuvastatin."
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "none known.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "Yes",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "normal.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "possible stable angina.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "an exercise stress test and aspirin 81 mg daily.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "pronoun_units_without_conflict",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_3": true,
+      "v3_4": true
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.116286",
+     "customer_hold_max": "0.1744290"
+    }
+   }
+  },
+  "N06": {
+   "units": {
+    "default": [
+     "The patient was seen for removal of a skin lesion on the left forearm.",
+     "The risks and benefits were discussed.",
+     "Consent obtained: yes.",
+     "The lesion was excised under local anesthesia and closed with sutures.",
+     "She tolerated the procedure well.",
+     "Plan is suture removal in ten days."
+    ],
+    "field_relations": [
+     "The patient was seen for removal of a skin lesion on the left forearm.",
+     "The risks and benefits were discussed.",
+     "Consent obtained: yes.",
+     "The lesion was excised under local anesthesia and closed with sutures.",
+     "She tolerated the procedure well.",
+     "Plan is suture removal in ten days."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_6": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_7": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_9": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_10": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient was seen for removal of a skin lesion on the left forearm.",
+       "review_status": "supported"
+      },
+      "v3_2": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_6": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_7": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_9": {
+       "status": "supported",
+       "text": "suture removal in ten days.",
+       "review_status": "supported"
+      },
+      "v3_10": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "The patient was seen for removal of a skin lesion on the left forearm.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_3": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_4": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_5": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_6": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_7": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_8": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_9": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "suture removal in ten days.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_10": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_11": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient was seen for removal of a skin lesion on the left forearm."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "recorded",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient was seen for removal of a skin lesion on the left forearm."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The lesion was excised under local anesthesia and closed with sutures."
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "suture removal in ten days."
+    },
+    {
+     "field": "v3_9",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "She tolerated the procedure well.\nsuture removal in ten days."
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "yes."
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "yes."
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient was seen for removal of a skin lesion on the left forearm.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient was seen for removal of a skin lesion on the left forearm.",
+      "review_status": "supported"
+     },
+     "verdict": "recorded",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The lesion was excised under local anesthesia and closed with sutures."
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "suture removal in ten days.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "She tolerated the procedure well.\nsuture removal in ten days."
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "yes."
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "yes."
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "excision_as_examination",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_7": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_7": true
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.115716",
+     "customer_hold_max": "0.1735740"
+    }
+   }
+  },
+  "N07": {
+   "units": {
+    "default": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ],
+    "field_relations": [
+     "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_6": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_7": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_9": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_10": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_6": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_7": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_9": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_10": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_11": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_3": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_4": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_5": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_6": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_7": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_8": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_9": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_10": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_11": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_4",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_5",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_6",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_7",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_8",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_9",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_3",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_4",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_4",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_5",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_5",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_6",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_6",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_7",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_7",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_8",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_8",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_9",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_9",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "okay so this is a 60 year old woman here for follow up of her diabetes she says her sugars have been running about one fifty she takes metformin five hundred twice a day no allergies she does not smoke exam is unremarkable plan is to continue metformin and recheck a1c in three months"
+    },
+    {
+     "field": "v3_10",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_11",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "whole_run_on_into_every_field",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_4": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_5": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_6": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_7": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_8": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_9": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_1": true,
+      "v3_2": true,
+      "v3_3": true,
+      "v3_4": true,
+      "v3_5": true,
+      "v3_6": true,
+      "v3_7": true,
+      "v3_8": true,
+      "v3_9": true
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.115014",
+     "customer_hold_max": "0.1725210"
+    }
+   }
+  },
+  "N08": {
+   "units": {
+    "default": [
+     "The patient has left knee pain."
+    ],
+    "field_relations": [
+     "The patient has left knee pain."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient has left knee pain.",
+       "review_status": "supported"
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "missing",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient has left knee pain.",
+       "review_status": "supported"
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "supported",
+      "text": "The patient has left knee pain.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "The patient has left knee pain.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has left knee pain."
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has left knee pain."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient has left knee pain.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has left knee pain."
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has left knee pain."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient has left knee pain.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "left_pain_into_right_knee",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_1": true
+     }
+    },
+    {
+     "name": "left_pain_into_right_knee",
+     "path": "field_relations",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_1": true
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.10563",
+     "customer_hold_max": "0.158445"
+    }
+   }
+  },
+  "N09": {
+   "units": {
+    "default": [
+     "The patient has right knee pain."
+    ],
+    "field_relations": [
+     "The patient has right knee pain."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient has right knee pain.",
+       "review_status": "supported"
+      },
+      "v3_2": {
+       "status": "missing",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "The patient has right knee pain.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "missing",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has right knee pain."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has right knee pain."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has right knee pain."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient has right knee pain.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "missing",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has right knee pain."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient has right knee pain."
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "right_pain_into_left_knee",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    },
+    {
+     "name": "right_pain_into_left_knee",
+     "path": "field_relations",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    }
+   ],
+   "controls": [
+    {
+     "name": "right_sided_wording",
+     "path": "default",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient has right-sided knee pain.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": true
+     }
+    }
+   ],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.105592",
+     "customer_hold_max": "0.1583880"
+    }
+   }
+  },
+  "N10": {
+   "units": {
+    "default": [
+     "The patient does not smoke.",
+     "Allergies: none known."
+    ],
+    "field_relations": [
+     "The patient does not smoke.",
+     "Allergies: none known."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "supported",
+       "text": "none known.",
+       "review_status": "supported"
+      }
+     }
+    },
+    "field_relations": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "supported",
+       "text": "No",
+       "review_status": "supported"
+      },
+      "v3_2": {
+       "status": "supported",
+       "text": "none known.",
+       "review_status": "supported"
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "No",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "supported",
+      "text": "none known.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "supported",
+      "text": "none known.",
+      "review_status": "supported",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient does not smoke."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "none known.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "No",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient does not smoke."
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient does not smoke."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "none known.",
+      "review_status": "supported"
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "denial_unit_on_default_path",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_1": true
+     }
+    },
+    {
+     "name": "denial_with_yes_option",
+     "path": "field_relations",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_1": true
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.106368",
+     "customer_hold_max": "0.1595520"
+    },
+    "field_relations": {
+     "provider_cost_max": "0.23278400000",
+     "customer_hold_max": "0.349176000000"
+    }
+   }
+  },
+  "N11": {
+   "units": {
+    "default": [
+     "Patient presents with a rash on both forearms.",
+     "Allergies: penicillin. Sorry, I mean amoxicillin.",
+     "Smoker: No."
+    ],
+    "field_relations": [
+     "Patient presents with a rash on both forearms.",
+     "Allergies: penicillin. Sorry, I mean amoxicillin.",
+     "Smoker: No."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_3": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Patient presents with a rash on both forearms."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin. Sorry, I mean amoxicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin. Sorry, I mean amoxicillin."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "No."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Patient presents with a rash on both forearms."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin. Sorry, I mean amoxicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin. Sorry, I mean amoxicillin."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "No."
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "correction_line_without_conflict",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    }
+   ],
+   "controls": [
+    {
+     "name": "without_the_correction_line",
+     "path": "default",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "Patient presents with a rash on both forearms.",
+       "review_status": "supported"
+      },
+      "v3_3": {
+       "status": "supported",
+       "text": "No",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": true,
+      "v3_3": true
+     }
+    }
+   ],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.107346",
+     "customer_hold_max": "0.1610190"
+    }
+   }
+  },
+  "N12": {
+   "units": {
+    "default": [
+     "Patient presents with a rash on both forearms.",
+     "Allergies: penicillin.",
+     "Sorry, I mean amoxicillin.",
+     "Smoker: No."
+    ],
+    "field_relations": [
+     "Patient presents with a rash on both forearms.",
+     "Allergies: penicillin.",
+     "Sorry, I mean amoxicillin.",
+     "Smoker: No."
+    ]
+   },
+   "reference": {
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    },
+    "field_relations": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_3": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_3": {
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": true
+     },
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "over_hold",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Patient presents with a rash on both forearms."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin.\nSorry, I mean amoxicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin.\nSorry, I mean amoxicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "No."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "Patient presents with a rash on both forearms."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin.\nSorry, I mean amoxicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin.\nSorry, I mean amoxicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "penicillin."
+    },
+    {
+     "field": "v3_3",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "over_hold",
+     "depends_on_other_fields": false,
+     "held_candidate": "No."
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "penicillin_alone_without_conflict",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    },
+    {
+     "name": "correction_unit_alone",
+     "path": "default",
+     "purpose": "app_guard",
+     "observed": {
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    }
+   ],
+   "controls": [
+    {
+     "name": "without_the_correction_line",
+     "path": "default",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "Patient presents with a rash on both forearms.",
+       "review_status": "supported"
+      },
+      "v3_3": {
+       "status": "supported",
+       "text": "No",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": true,
+      "v3_3": true
+     }
+    }
+   ],
+   "cost_bound_usd": {
+    "default": {
+     "provider_cost_max": "0.107502",
+     "customer_hold_max": "0.1612530"
+    }
+   }
+  },
+  "N13": {
+   "units": {
+    "field_relations": [
+     "The patient is suicidal.",
+     "Suicidal ideation: none.",
+     "The patient is on methadone.",
+     "The patient is not on diazepam or methadone."
+    ],
+    "default": [
+     "The patient is suicidal.",
+     "Suicidal ideation: none.",
+     "The patient is on methadone.",
+     "The patient is not on diazepam or methadone."
+    ]
+   },
+   "reference": {
+    "field_relations": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    },
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    },
+    "v3_2": {
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "none."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "none."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "none."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 3,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is suicidal."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "none.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is suicidal."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is on methadone."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is on methadone."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is on methadone."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 3,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not on diazepam or methadone."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is on methadone.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not on diazepam or methadone."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "none."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "none.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is suicidal.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is on methadone."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is on methadone."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not on diazepam or methadone."
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "veto_qa_r31_si",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "none.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": false
+     }
+    },
+    {
+     "name": "veto_qa_r33_med",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient is on methadone.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": false
+     }
+    },
+    {
+     "name": "default_label_after_statement_no_conflict",
+     "path": "default",
+     "purpose": "default_exposure",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "none.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": false
+     }
+    },
+    {
+     "name": "default_statement_before_label_no_conflict",
+     "path": "default",
+     "purpose": "default_exposure",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient is suicidal.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": false
+     }
+    }
+   ],
+   "controls": [
+    {
+     "name": "default_exposure_standalone_space_separated",
+     "path": "default",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "none.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": true
+     }
+    },
+    {
+     "name": "default_label_first_control",
+     "path": "default",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "none.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": true
+     }
+    }
+   ],
+   "cost_bound_usd": {
+    "field_relations": {
+     "provider_cost_max": "0.23342600000",
+     "customer_hold_max": "0.350139000000"
+    },
+    "default": {
+     "provider_cost_max": "0.107116",
+     "customer_hold_max": "0.1606740"
+    }
+   }
+  },
+  "N14": {
+   "units": {
+    "field_relations": [
+     "The patient smokes.",
+     "The patient does not smoke.",
+     "The patient is oriented.",
+     "The patient is not agitated and not oriented."
+    ],
+    "default": [
+     "The patient smokes.",
+     "The patient does not smoke.",
+     "The patient is oriented.",
+     "The patient is not agitated and not oriented."
+    ]
+   },
+   "reference": {
+    "field_relations": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    },
+    "default": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient smokes."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient smokes."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient smokes."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 3,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient does not smoke."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient smokes.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient does not smoke.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is oriented."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is oriented."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is oriented."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 3,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not agitated and not oriented."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is oriented.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is not agitated and not oriented.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient smokes."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient smokes."
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient does not smoke."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is oriented."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is oriented."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not agitated and not oriented."
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "veto_qa_r32_smoking",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient smokes.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": false
+     }
+    },
+    {
+     "name": "veto_qa_r34_mental",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient is oriented.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": false
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "field_relations": {
+     "provider_cost_max": "0.23340400000",
+     "customer_hold_max": "0.350106000000"
+    }
+   }
+  },
+  "N15": {
+   "units": {
+    "field_relations": [
+     "The patient is not suicidal.",
+     "The patient is not psychotic but suicidal.",
+     "The patient is subject to MAPPA.",
+     "No MAPPA involvement."
+    ],
+    "default": [
+     "The patient is not suicidal.",
+     "The patient is not psychotic but suicidal.",
+     "The patient is subject to MAPPA.",
+     "No MAPPA involvement."
+    ]
+   },
+   "reference": {
+    "field_relations": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    },
+    "default": {
+     "sent": false,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    },
+    "v3_2": {
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": false
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not suicidal."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not suicidal."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not suicidal."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 3,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not psychotic but suicidal."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is not suicidal.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not psychotic but suicidal."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is subject to MAPPA."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is subject to MAPPA."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is subject to MAPPA."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 3,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "No MAPPA involvement."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is subject to MAPPA.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "No MAPPA involvement."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not suicidal."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not suicidal."
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not psychotic but suicidal."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is subject to MAPPA."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is subject to MAPPA."
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": false,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "No MAPPA involvement."
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "veto_qa_r35_risk",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient is not suicidal.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": false
+     }
+    },
+    {
+     "name": "veto_qa_r37_mappa",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient is subject to MAPPA.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": false
+     }
+    }
+   ],
+   "controls": [],
+   "cost_bound_usd": {
+    "field_relations": {
+     "provider_cost_max": "0.23340000000",
+     "customer_hold_max": "0.350100000000"
+    }
+   }
+  },
+  "N16": {
+   "units": {
+    "field_relations": [
+     "The patient is not depressed.",
+     "Her mood is depressed.",
+     "The patient is allergic to penicillin.",
+     "Allergies: none."
+    ],
+    "default": [
+     "The patient is not depressed.",
+     "Her mood is depressed.",
+     "The patient is allergic to penicillin.",
+     "Allergies: none."
+    ]
+   },
+   "reference": {
+    "field_relations": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    },
+    "default": {
+     "sent": true,
+     "fields": {
+      "v3_1": {
+       "status": "held",
+       "text": ""
+      },
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     }
+    }
+   },
+   "fields": {
+    "v3_1": {
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    },
+    "v3_2": {
+     "field_relations": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     },
+     "default": {
+      "status": "held",
+      "text": "",
+      "verdict": "as_desired",
+      "sent": true
+     }
+    }
+   },
+   "entries": [
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not depressed."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not depressed."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not depressed."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 3,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "Her mood is depressed."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is not depressed.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "Her mood is depressed."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is allergic to penicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is allergic to penicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 2,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is allergic to penicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 3,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "none."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is allergic to penicillin.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "field_relations",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "none.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not depressed."
+    },
+    {
+     "field": "v3_1",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is not depressed."
+    },
+    {
+     "field": "v3_1",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "caught",
+     "depends_on_other_fields": false,
+     "held_candidate": "Her mood is depressed."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false,
+     "held_candidate": "The patient is allergic to penicillin."
+    },
+    {
+     "field": "v3_2",
+     "kind": "acceptable",
+     "index": 4,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "held",
+      "text": ""
+     },
+     "verdict": "as_desired",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 0,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "The patient is allergic to penicillin.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    },
+    {
+     "field": "v3_2",
+     "kind": "forbidden",
+     "index": 1,
+     "path": "default",
+     "sent": true,
+     "observed_alone": {
+      "status": "supported",
+      "text": "none.",
+      "review_status": "supported"
+     },
+     "verdict": "leak",
+     "depends_on_other_fields": false
+    }
+   ],
+   "adversarial": [
+    {
+     "name": "veto_qa_r36_mood",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "observed": {
+      "v3_1": {
+       "status": "supported",
+       "text": "The patient is not depressed.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_1": false
+     }
+    },
+    {
+     "name": "veto_qa_r38_allergies",
+     "path": "field_relations",
+     "purpose": "veto_qa",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient is allergic to penicillin.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": false
+     }
+    },
+    {
+     "name": "default_label_after_statement_no_conflict",
+     "path": "default",
+     "purpose": "default_exposure",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "none.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": false
+     }
+    },
+    {
+     "name": "default_statement_before_label_no_conflict",
+     "path": "default",
+     "purpose": "default_exposure",
+     "observed": {
+      "v3_2": {
+       "status": "supported",
+       "text": "The patient is allergic to penicillin.",
+       "review_status": "supported"
+      }
+     },
+     "meets_expected": {
+      "v3_2": false
+     }
+    }
+   ],
+   "controls": [
+    {
+     "name": "default_label_first_control",
+     "path": "default",
+     "observed": {
+      "v3_2": {
+       "status": "held",
+       "text": ""
+      }
+     },
+     "meets_expected": {
+      "v3_2": true
+     }
+    }
+   ],
+   "cost_bound_usd": {
+    "field_relations": {
+     "provider_cost_max": "0.23335400000",
+     "customer_hold_max": "0.350031000000"
+    },
+    "default": {
+     "provider_cost_max": "0.107044",
+     "customer_hold_max": "0.1605660"
+    }
+   }
+  }
+ },
+ "planned_sends": {
+  "default": 14,
+  "field_relations": 7
+ },
+ "provider_cost_max_total_usd": {
+  "default": "1.539980",
+  "field_relations": "1.63230600000",
+  "all": "3.17228600000"
+ },
+ "reference_verdicts_on_sent_paths": {
+  "default": {
+   "over_hold": 29,
+   "as_desired": 47
+  },
+  "field_relations": {
+   "as_desired": 13,
+   "over_hold": 2
+  }
+ },
+ "adversarial_not_met": [
+  {
+   "case": "N13",
+   "simulation": "veto_qa_r31_si",
+   "path": "field_relations",
+   "field": "v3_1",
+   "observed": {
+    "status": "supported",
+    "text": "none.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N13",
+   "simulation": "veto_qa_r33_med",
+   "path": "field_relations",
+   "field": "v3_2",
+   "observed": {
+    "status": "supported",
+    "text": "The patient is on methadone.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N13",
+   "simulation": "default_label_after_statement_no_conflict",
+   "path": "default",
+   "field": "v3_1",
+   "observed": {
+    "status": "supported",
+    "text": "none.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N13",
+   "simulation": "default_statement_before_label_no_conflict",
+   "path": "default",
+   "field": "v3_1",
+   "observed": {
+    "status": "supported",
+    "text": "The patient is suicidal.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N14",
+   "simulation": "veto_qa_r32_smoking",
+   "path": "field_relations",
+   "field": "v3_1",
+   "observed": {
+    "status": "supported",
+    "text": "The patient smokes.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N14",
+   "simulation": "veto_qa_r34_mental",
+   "path": "field_relations",
+   "field": "v3_2",
+   "observed": {
+    "status": "supported",
+    "text": "The patient is oriented.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N15",
+   "simulation": "veto_qa_r35_risk",
+   "path": "field_relations",
+   "field": "v3_1",
+   "observed": {
+    "status": "supported",
+    "text": "The patient is not suicidal.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N15",
+   "simulation": "veto_qa_r37_mappa",
+   "path": "field_relations",
+   "field": "v3_2",
+   "observed": {
+    "status": "supported",
+    "text": "The patient is subject to MAPPA.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N16",
+   "simulation": "veto_qa_r36_mood",
+   "path": "field_relations",
+   "field": "v3_1",
+   "observed": {
+    "status": "supported",
+    "text": "The patient is not depressed.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N16",
+   "simulation": "veto_qa_r38_allergies",
+   "path": "field_relations",
+   "field": "v3_2",
+   "observed": {
+    "status": "supported",
+    "text": "The patient is allergic to penicillin.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N16",
+   "simulation": "default_label_after_statement_no_conflict",
+   "path": "default",
+   "field": "v3_2",
+   "observed": {
+    "status": "supported",
+    "text": "none.",
+    "review_status": "supported"
+   }
+  },
+  {
+   "case": "N16",
+   "simulation": "default_statement_before_label_no_conflict",
+   "path": "default",
+   "field": "v3_2",
+   "observed": {
+    "status": "supported",
+    "text": "The patient is allergic to penicillin.",
+    "review_status": "supported"
+   }
+  }
+ ],
+ "controls_not_met": [],
+ "entries_depending_on_other_fields": [
+  {
+   "case": "N02",
+   "field": "v3_3",
+   "kind": "forbidden",
+   "index": 0,
+   "path": "field_relations",
+   "observed_alone": {
+    "status": "supported",
+    "text": "The patient describes the pain as a tight band around her head.",
+    "review_status": "supported"
+   },
+   "observed_with_reference": {
+    "status": "held",
+    "text": ""
+   }
+  }
+ ],
+ "rates_used": {
+  "input_per_million": "2",
+  "output_per_million": "10",
+  "source": "core/tests/test_v3_ordinary_notes.LIVE (documented Sonnet 5 $2/$10)"
+ }
+}

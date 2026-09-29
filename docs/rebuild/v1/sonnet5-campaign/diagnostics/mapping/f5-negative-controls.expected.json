@@ -1,0 +1,91 @@
+{
+  "schema": "quillmd-sonnet5-mapping-expected/1",
+  "form": "f5-negative-controls",
+  "docx": "f5-negative-controls.docx",
+  "origin_findings": ["D25 (signing area)", "D31 (protected guidance control, attestation roles)", "F1 c781024d side-label class (Lt./Rt. knee)"],
+  "structure": "Negative controls around one genuine side pair: a guidance-only paragraph with no answer area; a Left knee / Right knee findings table (the only genuine answers); a consent declaration printed beside a legacy checkbox; a signature line; and an initials box cell.",
+  "authored_from": "build_forms.py intent (f5_negative_controls), written before any engine run on this form",
+  "slot_grammar": "neutral v3 ground-truth grammar; see check_expected.py",
+  "areas": [
+    {
+      "id": "f5.A1",
+      "label": "Left knee",
+      "kind": "text",
+      "options": [],
+      "cardinality": "one free-text value (examination findings for the LEFT knee only)",
+      "destination": {
+        "description": "table 0, row 1, column 1 ('Examination findings' column, 'Left knee' row): blank cell",
+        "label_slot": "b/tbl[0]/tr[1]/tc[0]/p[0]",
+        "region": "b/tbl[0]/tr[1]/tc[1]",
+        "answer_at": "b/tbl[0]/tr[1]/tc[1]/p[0]"
+      },
+      "must_name": ["Left"],
+      "must_not_name": ["Right"]
+    },
+    {
+      "id": "f5.A2",
+      "label": "Right knee",
+      "kind": "text",
+      "options": [],
+      "cardinality": "one free-text value (examination findings for the RIGHT knee only)",
+      "destination": {
+        "description": "table 0, row 2, column 1: blank cell",
+        "label_slot": "b/tbl[0]/tr[2]/tc[0]/p[0]",
+        "region": "b/tbl[0]/tr[2]/tc[1]",
+        "answer_at": "b/tbl[0]/tr[2]/tc[1]/p[0]"
+      },
+      "must_name": ["Right"],
+      "must_not_name": ["Left"]
+    }
+  ],
+  "controls": [
+    {
+      "id": "f5.C1",
+      "type": "not_an_answer",
+      "printed": "The reviewing clinician completes this page after discussing the findings with the patient. Record only what was examined at this visit.",
+      "destination": {"description": "body paragraph b/p[1]: guidance only, no blank, no box", "region": "b/p[1]"},
+      "reason": "Guidance-only text has no answer area. Any field anchored here is a false field; writing into it would corrupt the instruction."
+    },
+    {
+      "id": "f5.C2",
+      "type": "must_refuse",
+      "printed": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
+      "repair_note": "2026-09-29 repair (CHECK.md) W1: the declaration was reworded with fresh wording (the first wording shared a short phrase with two development labels). It remains a first-person clinician attestation beside a legacy checkbox; must_refuse is unchanged.",
+      "destination": {
+        "description": "body paragraph b/p[4]: a consent/attestation declaration with a legacy checkbox before it",
+        "controls": ["b/p[4]/ff[0]"]
+      },
+      "reason": "A consent declaration is an attestation by the clinician. It is never ticked from a note or by a model: it must be absent from the answerable fields, or present only as a protected/signing area."
+    },
+    {
+      "id": "f5.C3",
+      "type": "must_refuse",
+      "printed": "Signature of examining clinician: ______________________________",
+      "destination": {"description": "body paragraph b/p[5]: signature line", "region": "b/p[5]"},
+      "reason": "A signature is never generated. It must be absent from the answerable fields, or present only as a signature/protected area."
+    },
+    {
+      "id": "f5.C4",
+      "type": "must_refuse",
+      "printed": "Clinician initials",
+      "destination": {"description": "table 1, row 0, column 1: the empty initials box beside the printed label", "region": "b/tbl[1]/tr[0]/tc[1]"},
+      "reason": "Initials are a signing act. Absent, or protected/initials kind only."
+    },
+    {
+      "id": "f5.C5",
+      "type": "must_refuse",
+      "printed": "Left knee / Right knee",
+      "applies_to": ["f5.A1", "f5.A2"],
+      "destination": {"description": "the pair of findings cells b/tbl[0]/tr[1]/tc[1] and b/tbl[0]/tr[2]/tc[1]"},
+      "reason": "Side collapse: any mapping that gives one field to both knees, drops the side from either label, or names the other side must be refused - a left-knee finding must never be able to reach the right-knee cell (the 'left knee pain accepted into a Right knee field' defect class)."
+    },
+    {
+      "id": "f5.C6",
+      "type": "not_an_answer",
+      "printed": "Declaration",
+      "destination": {"description": "heading b/p[3]", "region": "b/p[3]"},
+      "reason": "A heading has no answer area."
+    }
+  ],
+  "extras_policy": "Any other answerable field (header cells 'Joint' / 'Examination findings', spacer b/p[2], trailing b/p[6], the label cell 'Clinician initials') is a false field."
+}

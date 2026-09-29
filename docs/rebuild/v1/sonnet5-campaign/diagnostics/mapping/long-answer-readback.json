@@ -1,0 +1,41 @@
+{
+ "schema": "quillmd-sonnet5-long-answer-readback/1",
+ "recorded_at": "2026-09-29T00:53:18Z",
+ "script_sha256": "b43514b35a6a0ec6d1fd93d3adaadbfaba97c19d275540c0f125b5fe0cd20891",
+ "form": "f6a-long-answer.docx",
+ "form_sha256": "86530e5a681efe578d06abee25bef6ec3aff772a1620b37559a85637a3a12564",
+ "answer_file": "long-answer.txt",
+ "answer_sha256": "919be558f73a23ebc46851d9be9321f570d28e8f89bea81ce63f8c75ba564e7f",
+ "answer_characters": 5835,
+ "answer_paragraphs": 24,
+ "network": "socket connect/create_connection/getaddrinfo denied in-process",
+ "field": {
+  "key": "v3_2",
+  "label": "Full account of the admission: presentation, investigations, treatment, progress",
+  "kind": "text",
+  "max_chars": null,
+  "target_type": "cell"
+ },
+ "fill": {
+  "filled": 1,
+  "missing": [
+   "v3_1"
+  ],
+  "contract": "v3"
+ },
+ "effective_values": {
+  "type": "str",
+  "characters": 5835,
+  "equals_answer": true
+ },
+ "export": {
+  "answer_cell_characters": 5835,
+  "answer_cell_equals_answer": true,
+  "answer_cell_paragraphs": 1,
+  "answer_cell_line_breaks": 23,
+  "question_cell_unchanged": true,
+  "zip_members_unchanged": true,
+  "original_unchanged": true
+ },
+ "verdict": "ACCEPTED WHOLE"
+}

@@ -1,0 +1,4075 @@
+{
+ "schema": "quillmd-sonnet5-mapping-baseline/1",
+ "what": "Pre-model deterministic baseline for the Sonnet 5 MAPPING-stage diagnostics. Measurement only.",
+ "recorded_at": "2026-09-29T03:03:35Z",
+ "order_of_work": "Forms generated and expected maps written and checked (check_expected.py, engine-free) BEFORE this measurement; the expected maps' sha256 were frozen in EXPECTED-SHA256SUMS and this run refuses unless every expected map still matches that manifest.",
+ "expectations": {
+  "manifest": "EXPECTED-SHA256SUMS",
+  "manifest_sha256": "7a141d05bcd92d2d522dff773bea74150793ff2c0149aceefbdc8231cde6afe3",
+  "frozen_meta": {},
+  "manifest_mtime_utc": "2026-09-29T03:00:51Z",
+  "files": {
+   "f1-guidance-confirmation.expected.json": "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae",
+   "f2-leave-checkboxes.expected.json": "96dfba0669f5fa0de718992dcdaba7e7c44b5fae3336dbc336f042e0d4dd6eb0",
+   "f2b-leave-checkboxes-owner.expected.json": "97e98a1f8b28859d5eef592e2f0fb37698d5243d4e78243b846c217790149809",
+   "f3-selection-instructions.expected.json": "fd1911a1385ce6075297083520b5c52711791770cbc31ea100e83bd935c5ba78",
+   "f4-exam-grid.expected.json": "8c7dd094a3ec963fbc4751a2f3ec0a1e98159b6539f9d57abcf9ca532c082499",
+   "f5-negative-controls.expected.json": "22ebd42a76a0104fb88903bf2e4abf8037149e6b70b9299056d946eb6d141379",
+   "f6a-long-answer.expected.json": "cbdc1fdcb0b27dee3e25c8db08a93b7293ef35c583ea14e0656ee526a7d31f4f",
+   "f6b-admin-missing.expected.json": "87465c4b9eed9fc5fd9de7ef6db3b9e1364faab66306fc852ff21c842bf8b390"
+  },
+  "frozen_with_them": {
+   "../freeze_check.py": "cbd0e79331e5780eb505b843cb71db481b3b773135c8c54d9a1156e82c84d9c5",
+   "../notes/app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
+   "../notes/app_path_steps.py": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
+   "../notes/app_path_walk.py": "0f407081859522077983ef5d570fd9692774cc840b2d0c48348278617c629433",
+   "../notes/build_note_forms.py": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
+   "../notes/cases.json": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
+   "../notes/offline_replay.py": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
+   "../notes/run_app_path_walk.py": "f42bc3a0d08de040bf27ac99ea8d3b7b64c8e2f392caa8e9be570facf9c2fb14",
+   "build_forms.py": "32e72baeb9f05b48059c0ca1b9ffc0b66cdb945b4ee7002d701c8c84d3ac1ab4",
+   "check_expected.py": "b2fec94b3808be9d98c4a5d6e5b6bed6af8c1e20eaa2b61cfd1bca3da7b185ff",
+   "grade_app_path.py": "a03685f5df649dc6c63cbe4fb11500257c02e93406f0444802395b320adaf1d1",
+   "long-answer.txt": "919be558f73a23ebc46851d9be9321f570d28e8f89bea81ce63f8c75ba564e7f",
+   "long_answer_readback.py": "b43514b35a6a0ec6d1fd93d3adaadbfaba97c19d275540c0f125b5fe0cd20891",
+   "measure_baseline.py": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
+   "wording_check.py": "e40012d9cb1a15a673ed850659ad94ace1a752bd172cbafa9575e34c72221878"
+  },
+  "match_frozen": true
+ },
+ "candidate": {
+  "worktree": "/opt/meddoc-pro/.worktrees/v1-sonnet5-campaign",
+  "head": "10db4197b7aca86896d57e7ef9caa82a82485951",
+  "engine_files_clean": true,
+  "engine_sha256": {
+   "rebuild/documents/word_v3.py": "4e2ea03d7fb3e1050d0702b7ca960f9cd2e160ecf0552e2fedeba74922d5b04f",
+   "rebuild/documents/source_policy.py": "3af27ea7337d815d4c0174c0cf9f3116c1a0a5104ba795d1746e2d6993734e0a",
+   "rebuild/documents/mapping_limits.py": "bdebe9b5f9ec8268164177600176404917af22537e60ef7b971f065b8d396802"
+  },
+  "engine_imported_from": "/opt/meddoc-pro/.worktrees/v1-sonnet5-campaign/rebuild/documents/word_v3.py"
+ },
+ "harness": {
+  "script": "mapping",
+  "script_sha256": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
+  "python": "3.12.3",
+  "network": "denied (socket() and create_connection() both raised PermissionError before the engine import)",
+  "calls": [
+   "documents.word_v3.inspect",
+   "documents.word_v3.Detector(layout_proposal=True).detect + mapped_fields"
+  ],
+  "not_run": "no fill/export, no renderer, no provider/model/token-count call, no database"
+ },
+ "forms": {
+  "f1-guidance-confirmation.docx": "ceac8361c341f92939295e6c34f6fbd82b66a71cfe54984c95fb2ac1a24f54bc",
+  "f2-leave-checkboxes.docx": "e4e14bcbd66b1b8f5809dbca9c8a4736602ff9b8a321905f86d2e97323bc85a8",
+  "f2b-leave-checkboxes-owner.docx": "c5b07b53ee3e769b1f626520627b0ad374410bb1154eb6f13612b76f0d1f02d0",
+  "f3-selection-instructions.docx": "830804ca0cdd48da1a59ab463d7e652bb390716b57012badc8ae75f6037faa6c",
+  "f4-exam-grid.docx": "db77451166d5e6fad3500b58c66ca6003aab4e6d5d01f041caf26cff6508540b",
+  "f5-negative-controls.docx": "9359629da52d34574820c3a2bd031531e405294c9e1b87dfc33f5c5fbe5b8756",
+  "f6a-long-answer.docx": "86530e5a681efe578d06abee25bef6ec3aff772a1620b37559a85637a3a12564",
+  "f6b-admin-missing.docx": "0162138eb645bdf51de3c9cf8deee6f34c981ffa29e633ccd106b1eeaae50f4b"
+ },
+ "grading_rules": {
+  "coverage": "An engine field COVERS an expected option area when any of its box refs is one of the area's controls (a 'cell' box ref covers every expected control inside that cell). It covers a text area when its locator slot equals the area's region or lies inside it, or when it is a table_rows field whose table/rows/columns include the area's cell.",
+  "accepted_engine_kinds": {
+   "text": [
+    "text",
+    "long_text"
+   ],
+   "long_text": [
+    "long_text",
+    "text"
+   ],
+   "measurement": [
+    "text",
+    "long_text"
+   ],
+   "date": [
+    "date"
+   ],
+   "choice": [
+    "choice"
+   ],
+   "multi_choice": [
+    "multi_choice"
+   ],
+   "checkbox": [
+    "checkbox"
+   ],
+   "table_group member": [
+    "table_rows (one field for the whole group)"
+   ]
+  },
+  "area_right": "Exactly one covering field; accepted kind; answerable (not write_protected, not signature/initials); for option areas: its box refs are exactly the expected controls in the expected order and its printed options equal the expected options verbatim (whitespace runs as one space) in that order, and no option is a response code the map forbids; for text areas: no options, and an anchor at the answer paragraph or at the region cell; every must_name token appears in label+context and no must_not_name token appears in the label (in label AND context when the map says must_not_name_scope=label_and_context; added 2026-09-29, CHECK.md M6); guidance/instruction preserved (target type cell_append, cell_replace with all=true, or paragraph/span anchored on the answer paragraph; a plain 'cell' or 'cell_replace' target rewrites the first paragraph and so fails wherever the map lists preserved text in that cell); max_chars absent or >= min_capacity_chars.",
+  "area_wrong": "Covered, but any area_right condition fails, or the covering field also covers another area.",
+  "area_missed": "No covering field. 'held_safe' instead of 'missed' when the map declares if_held=safe_usefulness_loss. Notes naming the area's slots are quoted as evidence.",
+  "not_an_answer": "right iff no answerable field is anchored in the region(s).",
+  "must_refuse": "right iff every field covering the controls/region is write_protected or of kind signature/initials (or there is none). Relational (applies_to): right iff no single field covers two of the areas and every covering field names its own side and not the other.",
+  "must_hold": "right iff no answerable field covers any of the controls (a hold); wrong otherwise.",
+  "extra": "An answerable field that covers no expected area and is anchored in no control's region/controls."
+ },
+ "totals": {
+  "inspect": {
+   "areas": 48,
+   "areas_right": 36,
+   "areas_wrong": 3,
+   "controls": 25,
+   "controls_right": 24,
+   "extras_answerable": 0,
+   "extras_protected": 0,
+   "areas_missed": 9,
+   "controls_wrong": 1
+  },
+  "layout_proposal": {
+   "areas": 48,
+   "areas_right": 43,
+   "areas_wrong": 3,
+   "controls": 25,
+   "controls_right": 24,
+   "extras_answerable": 0,
+   "extras_protected": 0,
+   "areas_missed": 2,
+   "controls_wrong": 1
+  }
+ },
+ "per_form": {
+  "f1-guidance-confirmation": {
+   "inspect": {
+    "layout_pending": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
+      "kind": "text",
+      "context": "Section 3: Public protection > Does a formal offender supervision scheme currently apply to this person?",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell_append",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Date the lead agency was last informed — State yes or no. If yes, give the management level and category, and confirm tha",
+      "kind": "date",
+      "context": "Section 3: Public protection > Date the lead agency was last informed > State yes or no. If yes, give the management level and category, and confirm tha",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f1.A1",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Does a formal offender supervision scheme currently apply to this person?",
+        "kind": "text",
+        "target_type": "cell_append",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f1.A2",
+      "label": "Date the lead agency was last informed",
+      "expected_kind": "date",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Date the lead agency was last informed — State yes or no. If yes, give the management level and category, and confirm tha",
+        "kind": "date",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "wrong",
+      "problems": [
+       "label names 'State yes or no'",
+       "label names 'management level'"
+      ]
+     }
+    ],
+    "controls": [
+     {
+      "id": "f1.C1",
+      "type": "not_an_answer",
+      "printed": "State yes or no. If yes, give the management level and category, and confirm that the lead agency knows this report is b",
+      "outcome": "right"
+     },
+     {
+      "id": "f1.C2",
+      "type": "not_an_answer",
+      "printed": "Section 3: Public protection",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 2,
+     "areas_right": 1,
+     "areas_wrong": 1,
+     "controls": 2,
+     "controls_right": 2,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
+      "kind": "text",
+      "context": "Section 3: Public protection > Does a formal offender supervision scheme currently apply to this person?",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell_append",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Date the lead agency was last informed — State yes or no. If yes, give the management level and category, and confirm tha",
+      "kind": "date",
+      "context": "Section 3: Public protection > Date the lead agency was last informed > State yes or no. If yes, give the management level and category, and confirm tha",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f1.A1",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Does a formal offender supervision scheme currently apply to this person?",
+        "kind": "text",
+        "target_type": "cell_append",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f1.A2",
+      "label": "Date the lead agency was last informed",
+      "expected_kind": "date",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Date the lead agency was last informed — State yes or no. If yes, give the management level and category, and confirm tha",
+        "kind": "date",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "wrong",
+      "problems": [
+       "label names 'State yes or no'",
+       "label names 'management level'"
+      ]
+     }
+    ],
+    "controls": [
+     {
+      "id": "f1.C1",
+      "type": "not_an_answer",
+      "printed": "State yes or no. If yes, give the management level and category, and confirm that the lead agency knows this report is b",
+      "outcome": "right"
+     },
+     {
+      "id": "f1.C2",
+      "type": "not_an_answer",
+      "printed": "Section 3: Public protection",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 2,
+     "areas_right": 1,
+     "areas_wrong": 1,
+     "controls": 2,
+     "controls_right": 2,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  },
+  "f2-leave-checkboxes": {
+   "inspect": {
+    "layout_pending": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Outcome requested at this review (please tick one)",
+      "kind": "choice",
+      "context": "Part B: Leave and discharge",
+      "options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "printed_options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[2]/ff[0]",
+      "boxes": [
+       "b/p[2]/ff[0]",
+       "b/p[3]/ff[0]",
+       "b/p[4]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Types of leave taken",
+      "kind": "multi_choice",
+      "context": "Part B: Leave and discharge > Leave during the review period",
+      "options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "printed_options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[8]/ff[0]",
+      "boxes": [
+       "b/p[8]/ff[0]",
+       "b/p[9]/ff[0]",
+       "b/p[10]/ff[0]",
+       "b/p[11]/ff[0]",
+       "b/p[12]/ff[0]",
+       "b/p[13]/ff[0]",
+       "b/p[14]/ff[0]",
+       "b/p[15]/ff[0]",
+       "b/p[16]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": "",
+      "source_questions": [
+       {
+        "relation": "native_checkbox_history",
+        "question": "Types of leave taken",
+        "context": "Part B: Leave and discharge > Leave during the review period",
+        "options": [
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
+        ],
+        "cardinality": "multi_choice",
+        "sources": [
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[7]",
+          "fingerprint": "0db3dc94d52f1c7bb31037c03cb685f6b38cbb903be6a34a008399ea79c05814"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[8]",
+          "fingerprint": "bd2bb42f537f4925d0b3cb56edee69aef702e038c1febcef31a01295ceb367b0"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[9]",
+          "fingerprint": "64422ba78853b3a95a0c8002f868d72e00706e98704f42fc6f95b312d3ef026e"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[10]",
+          "fingerprint": "f6baca029760a89828b52a38b6fd29439d34f243d85a699cd0e33e38e4dcb2f2"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[11]",
+          "fingerprint": "a9f784ebcbd8287ee16dff5e47201802e667b430c24d437453547b897e32dc71"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[12]",
+          "fingerprint": "f7c5fa04bff39ac89a6fc9bf12a8639457a3799ee7272d4a5af45cf1c92d128d"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[13]",
+          "fingerprint": "6502949f0879d957bd97113346f1bfd622673cb31371d4760b3f7731e017cc0f"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[14]",
+          "fingerprint": "1c18bb2801130a855b1543acec4697fae967d720da53fcc7f3678dcdc54e2410"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[15]",
+          "fingerprint": "f630984706b37804cb02c2800b589330d4a745d036147c4c0302e8f5768b1f90"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[16]",
+          "fingerprint": "b540127ba97e98c9cbcd5a53c315d90cb102660765229715fc7f1aa8a161dbed"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "v3_3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "kind": "long_text",
+      "context": "Leave during the review period > Details of the leave (dates, destinations and any incidents)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f2.A1",
+      "label": "Outcome requested at this review",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Outcome requested at this review (please tick one)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[2]/ff[0]",
+        "options": [
+         "Remain in hospital under the current arrangements",
+         "Discharge with conditions",
+         "Discharge without conditions"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f2.A2",
+      "label": "Types of leave taken",
+      "expected_kind": "multi_choice",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Types of leave taken",
+        "kind": "multi_choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[8]/ff[0]",
+        "options": [
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f2.A3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "expected_kind": "long_text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Details of the leave (dates, destinations and any incidents)",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[0]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f2.C1",
+      "type": "not_an_answer",
+      "printed": "Types of leave taken",
+      "outcome": "right"
+     },
+     {
+      "id": "f2.C2",
+      "type": "not_an_answer",
+      "printed": "Outcome requested at this review (please tick one)",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 3,
+     "areas_right": 3,
+     "controls": 2,
+     "controls_right": 2,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Outcome requested at this review (please tick one)",
+      "kind": "choice",
+      "context": "Part B: Leave and discharge",
+      "options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "printed_options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[2]/ff[0]",
+      "boxes": [
+       "b/p[2]/ff[0]",
+       "b/p[3]/ff[0]",
+       "b/p[4]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Types of leave taken",
+      "kind": "multi_choice",
+      "context": "Part B: Leave and discharge > Leave during the review period",
+      "options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "printed_options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[8]/ff[0]",
+      "boxes": [
+       "b/p[8]/ff[0]",
+       "b/p[9]/ff[0]",
+       "b/p[10]/ff[0]",
+       "b/p[11]/ff[0]",
+       "b/p[12]/ff[0]",
+       "b/p[13]/ff[0]",
+       "b/p[14]/ff[0]",
+       "b/p[15]/ff[0]",
+       "b/p[16]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": "",
+      "source_questions": [
+       {
+        "relation": "native_checkbox_history",
+        "question": "Types of leave taken",
+        "context": "Part B: Leave and discharge > Leave during the review period",
+        "options": [
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
+        ],
+        "cardinality": "multi_choice",
+        "sources": [
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[7]",
+          "fingerprint": "0db3dc94d52f1c7bb31037c03cb685f6b38cbb903be6a34a008399ea79c05814"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[8]",
+          "fingerprint": "bd2bb42f537f4925d0b3cb56edee69aef702e038c1febcef31a01295ceb367b0"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[9]",
+          "fingerprint": "64422ba78853b3a95a0c8002f868d72e00706e98704f42fc6f95b312d3ef026e"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[10]",
+          "fingerprint": "f6baca029760a89828b52a38b6fd29439d34f243d85a699cd0e33e38e4dcb2f2"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[11]",
+          "fingerprint": "a9f784ebcbd8287ee16dff5e47201802e667b430c24d437453547b897e32dc71"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[12]",
+          "fingerprint": "f7c5fa04bff39ac89a6fc9bf12a8639457a3799ee7272d4a5af45cf1c92d128d"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[13]",
+          "fingerprint": "6502949f0879d957bd97113346f1bfd622673cb31371d4760b3f7731e017cc0f"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[14]",
+          "fingerprint": "1c18bb2801130a855b1543acec4697fae967d720da53fcc7f3678dcdc54e2410"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[15]",
+          "fingerprint": "f630984706b37804cb02c2800b589330d4a745d036147c4c0302e8f5768b1f90"
+         },
+         {
+          "part": "word/document.xml",
+          "slot": "b/p[16]",
+          "fingerprint": "b540127ba97e98c9cbcd5a53c315d90cb102660765229715fc7f1aa8a161dbed"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "key": "v3_3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "kind": "long_text",
+      "context": "Leave during the review period > Details of the leave (dates, destinations and any incidents)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f2.A1",
+      "label": "Outcome requested at this review",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Outcome requested at this review (please tick one)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[2]/ff[0]",
+        "options": [
+         "Remain in hospital under the current arrangements",
+         "Discharge with conditions",
+         "Discharge without conditions"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f2.A2",
+      "label": "Types of leave taken",
+      "expected_kind": "multi_choice",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Types of leave taken",
+        "kind": "multi_choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[8]/ff[0]",
+        "options": [
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f2.A3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "expected_kind": "long_text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Details of the leave (dates, destinations and any incidents)",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[0]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f2.C1",
+      "type": "not_an_answer",
+      "printed": "Types of leave taken",
+      "outcome": "right"
+     },
+     {
+      "id": "f2.C2",
+      "type": "not_an_answer",
+      "printed": "Outcome requested at this review (please tick one)",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 3,
+     "areas_right": 3,
+     "controls": 2,
+     "controls_right": 2,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  },
+  "f2b-leave-checkboxes-owner": {
+   "inspect": {
+    "layout_pending": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Outcome requested at this review (please tick one)",
+      "kind": "choice",
+      "context": "Part B: Leave and discharge",
+      "options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "printed_options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[2]/ff[0]",
+      "boxes": [
+       "b/p[2]/ff[0]",
+       "b/p[3]/ff[0]",
+       "b/p[4]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Leave arrangements used since the last review",
+      "kind": "choice",
+      "context": "Leave during the review period",
+      "options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "printed_options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[8]/ff[0]",
+      "boxes": [
+       "b/p[8]/ff[0]",
+       "b/p[9]/ff[0]",
+       "b/p[10]/ff[0]",
+       "b/p[11]/ff[0]",
+       "b/p[12]/ff[0]",
+       "b/p[13]/ff[0]",
+       "b/p[14]/ff[0]",
+       "b/p[15]/ff[0]",
+       "b/p[16]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "kind": "long_text",
+      "context": "Leave during the review period > Details of the leave (dates, destinations and any incidents)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f2b.A1",
+      "label": "Outcome requested at this review",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Outcome requested at this review (please tick one)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[2]/ff[0]",
+        "options": [
+         "Remain in hospital under the current arrangements",
+         "Discharge with conditions",
+         "Discharge without conditions"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f2b.A2",
+      "label": "Leave arrangements used since the last review",
+      "expected_kind": "multi_choice",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Leave arrangements used since the last review",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[8]/ff[0]",
+        "options": [
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "wrong",
+      "problems": [
+       "kind choice, expected multi_choice (accepted ['multi_choice'])"
+      ]
+     },
+     {
+      "id": "f2b.A3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "expected_kind": "long_text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Details of the leave (dates, destinations and any incidents)",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[0]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f2b.C1",
+      "type": "not_an_answer",
+      "printed": "Leave arrangements used since the last review",
+      "outcome": "right"
+     },
+     {
+      "id": "f2b.C2",
+      "type": "not_an_answer",
+      "printed": "Outcome requested at this review (please tick one)",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 3,
+     "areas_right": 2,
+     "areas_wrong": 1,
+     "controls": 2,
+     "controls_right": 2,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Outcome requested at this review (please tick one)",
+      "kind": "choice",
+      "context": "Part B: Leave and discharge",
+      "options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "printed_options": [
+       "Remain in hospital under the current arrangements",
+       "Discharge with conditions",
+       "Discharge without conditions"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[2]/ff[0]",
+      "boxes": [
+       "b/p[2]/ff[0]",
+       "b/p[3]/ff[0]",
+       "b/p[4]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Leave arrangements used since the last review",
+      "kind": "choice",
+      "context": "Leave during the review period",
+      "options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "printed_options": [
+       "Accompanied leave on the hospital site",
+       "Unaccompanied leave on the hospital site",
+       "Accompanied daytime leave away from the ward site",
+       "Unaccompanied daytime leave away from the ward site",
+       "Accompanied leave with an overnight stay",
+       "Unaccompanied leave with an overnight stay",
+       "Leave for an outpatient appointment",
+       "Leave for family reasons",
+       "Trial stay at a supported placement"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[8]/ff[0]",
+      "boxes": [
+       "b/p[8]/ff[0]",
+       "b/p[9]/ff[0]",
+       "b/p[10]/ff[0]",
+       "b/p[11]/ff[0]",
+       "b/p[12]/ff[0]",
+       "b/p[13]/ff[0]",
+       "b/p[14]/ff[0]",
+       "b/p[15]/ff[0]",
+       "b/p[16]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "kind": "long_text",
+      "context": "Leave during the review period > Details of the leave (dates, destinations and any incidents)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f2b.A1",
+      "label": "Outcome requested at this review",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Outcome requested at this review (please tick one)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[2]/ff[0]",
+        "options": [
+         "Remain in hospital under the current arrangements",
+         "Discharge with conditions",
+         "Discharge without conditions"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f2b.A2",
+      "label": "Leave arrangements used since the last review",
+      "expected_kind": "multi_choice",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Leave arrangements used since the last review",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[8]/ff[0]",
+        "options": [
+         "Accompanied leave on the hospital site",
+         "Unaccompanied leave on the hospital site",
+         "Accompanied daytime leave away from the ward site",
+         "Unaccompanied daytime leave away from the ward site",
+         "Accompanied leave with an overnight stay",
+         "Unaccompanied leave with an overnight stay",
+         "Leave for an outpatient appointment",
+         "Leave for family reasons",
+         "Trial stay at a supported placement"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "wrong",
+      "problems": [
+       "kind choice, expected multi_choice (accepted ['multi_choice'])"
+      ]
+     },
+     {
+      "id": "f2b.A3",
+      "label": "Details of the leave (dates, destinations and any incidents)",
+      "expected_kind": "long_text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Details of the leave (dates, destinations and any incidents)",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[0]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f2b.C1",
+      "type": "not_an_answer",
+      "printed": "Leave arrangements used since the last review",
+      "outcome": "right"
+     },
+     {
+      "id": "f2b.C2",
+      "type": "not_an_answer",
+      "printed": "Outcome requested at this review (please tick one)",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 3,
+     "areas_right": 2,
+     "areas_wrong": 1,
+     "controls": 2,
+     "controls_right": 2,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  },
+  "f3-selection-instructions": {
+   "inspect": {
+    "layout_pending": 0,
+    "notes": [
+     "Checkbox question at word/document.xml#b/p[5]: its all-that-apply instruction conflicts with a limited selection instruction printed elsewhere in the form (word/document.xml: Goals for this admission (select up to 3)) whose reach is unresolved; nothing was guessed. Printed question: Symptoms during the past week. Tick all that apply.",
+     "Checkbox question at word/document.xml#b/p[11]: its all-that-apply instruction conflicts with a limited selection instruction printed elsewhere in the form (word/document.xml: Goals for this admission (select up to 3)) whose reach is unresolved; nothing was guessed. Printed question: Services already involved. You may tick more than one box.",
+     "Checkbox question at word/document.xml#b/p[14] carries a printed selection count the form's choices cannot represent ('up to 3'); nothing was guessed. Printed question: Goals for this admission (select up to 3)",
+     "Checkbox question at word/document.xml#b/p[21] keeps one choice: its printed wording ('(s)') suggests several answers may apply, but no complete all-that-apply instruction governs it; review it before relying on one answer. Printed question: Recipient(s) of this summary",
+     "Checkbox question at word/document.xml#b/tbl[0]/tr[1]/tc[1] carries a printed selection count the form's choices cannot represent ('up to 3'); nothing was guessed. Printed question: Select up to 3"
+    ],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Smoking status (one box only)",
+      "kind": "choice",
+      "context": "Admission questionnaire",
+      "options": [
+       "Never smoked",
+       "Ex-smoker",
+       "Current smoker"
+      ],
+      "printed_options": [
+       "Never smoked",
+       "Ex-smoker",
+       "Current smoker"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[2]/sdt[0]",
+      "boxes": [
+       "b/p[2]/sdt[0]",
+       "b/p[2]/sdt[1]",
+       "b/p[2]/sdt[2]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Recipient(s) of this summary",
+      "kind": "choice",
+      "context": "Admission questionnaire",
+      "options": [
+       "Family doctor",
+       "Referring specialist",
+       "Patient",
+       "Community pharmacist"
+      ],
+      "printed_options": [
+       "Family doctor",
+       "Referring specialist",
+       "Patient",
+       "Community pharmacist"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[21]/glyphs",
+      "boxes": [
+       "b/p[21]/glyphs#0",
+       "b/p[21]/glyphs#1",
+       "b/p[21]/glyphs#2",
+       "b/p[21]/glyphs#3"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Medicines on discharge",
+      "kind": "table_rows",
+      "context": "Medicines on discharge > Medicine",
+      "options": [
+       "Medicine",
+       "Dose",
+       "Route (e.g., po)",
+       "How often"
+      ],
+      "printed_options": [
+       "Medicine",
+       "Dose",
+       "Route (e.g., po)",
+       "How often"
+      ],
+      "target_type": "table_rows",
+      "slot": "b/tbl[1]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": "",
+      "table": {
+       "table": "b/tbl[1]",
+       "rows": [
+        1,
+        2,
+        3
+       ],
+       "columns": [
+        0,
+        1,
+        2,
+        3
+       ]
+      }
+     }
+    ],
+    "areas": [
+     {
+      "id": "f3.A1",
+      "label": "Smoking status",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Smoking status (one box only)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[2]/sdt[0]",
+        "options": [
+         "Never smoked",
+         "Ex-smoker",
+         "Current smoker"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A2",
+      "label": "Symptoms during the past week.",
+      "expected_kind": "multi_choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Checkbox question at word/document.xml#b/p[5]: its all-that-apply instruction conflicts with a limited selection instruction printed elsewhere in the form (word/document.xml: Goals for this admission (select up to 3)) whose reach is unresolved; nothing was guessed. Printed question: Symptoms during "
+      ]
+     },
+     {
+      "id": "f3.A3",
+      "label": "Services already involved.",
+      "expected_kind": "multi_choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Checkbox question at word/document.xml#b/p[11]: its all-that-apply instruction conflicts with a limited selection instruction printed elsewhere in the form (word/document.xml: Goals for this admission (select up to 3)) whose reach is unresolved; nothing was guessed. Printed question: Services alread"
+      ]
+     },
+     {
+      "id": "f3.A4",
+      "label": "Recipient(s) of this summary",
+      "expected_kind": "multi_choice",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Recipient(s) of this summary",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[21]/glyphs",
+        "options": [
+         "Family doctor",
+         "Referring specialist",
+         "Patient",
+         "Community pharmacist"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "wrong",
+      "problems": [
+       "kind choice, expected multi_choice (accepted ['multi_choice'])"
+      ]
+     },
+     {
+      "id": "f3.A5",
+      "label": "Medicine (row 1)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A6",
+      "label": "Dose (row 1)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A7",
+      "label": "Route (e.g., po) (row 1)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A8",
+      "label": "How often (row 1)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A9",
+      "label": "Medicine (row 2)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A10",
+      "label": "Dose (row 2)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A11",
+      "label": "Route (e.g., po) (row 2)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A12",
+      "label": "How often (row 2)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A13",
+      "label": "Medicine (row 3)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A14",
+      "label": "Dose (row 3)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A15",
+      "label": "Route (e.g., po) (row 3)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A16",
+      "label": "How often (row 3)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f3.C1",
+      "type": "must_hold",
+      "printed": "Goals for this admission (select up to 3)",
+      "outcome": "right",
+      "notes_evidence": [
+       "Checkbox question at word/document.xml#b/p[14] carries a printed selection count the form's choices cannot represent ('up to 3'); nothing was guessed. Printed question: Goals for this admission (select up to 3)"
+      ]
+     },
+     {
+      "id": "f3.C2",
+      "type": "must_hold",
+      "printed": "Select up to 3",
+      "outcome": "right"
+     },
+     {
+      "id": "f3.C3",
+      "type": "not_an_answer",
+      "printed": "Route (e.g., po)",
+      "outcome": "right"
+     },
+     {
+      "id": "f3.C4",
+      "type": "not_an_answer",
+      "printed": "Select up to 3",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 16,
+     "areas_missed": 2,
+     "areas_right": 13,
+     "areas_wrong": 1,
+     "controls": 4,
+     "controls_right": 4,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 0,
+    "notes": [
+     "Checkbox question at word/document.xml#b/p[5]: its all-that-apply instruction conflicts with a limited selection instruction printed elsewhere in the form (word/document.xml: Goals for this admission (select up to 3)) whose reach is unresolved; nothing was guessed. Printed question: Symptoms during the past week. Tick all that apply.",
+     "Checkbox question at word/document.xml#b/p[11]: its all-that-apply instruction conflicts with a limited selection instruction printed elsewhere in the form (word/document.xml: Goals for this admission (select up to 3)) whose reach is unresolved; nothing was guessed. Printed question: Services already involved. You may tick more than one box.",
+     "Checkbox question at word/document.xml#b/p[14] carries a printed selection count the form's choices cannot represent ('up to 3'); nothing was guessed. Printed question: Goals for this admission (select up to 3)",
+     "Checkbox question at word/document.xml#b/p[21] keeps one choice: its printed wording ('(s)') suggests several answers may apply, but no complete all-that-apply instruction governs it; review it before relying on one answer. Printed question: Recipient(s) of this summary",
+     "Checkbox question at word/document.xml#b/tbl[0]/tr[1]/tc[1] carries a printed selection count the form's choices cannot represent ('up to 3'); nothing was guessed. Printed question: Select up to 3"
+    ],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Smoking status (one box only)",
+      "kind": "choice",
+      "context": "Admission questionnaire",
+      "options": [
+       "Never smoked",
+       "Ex-smoker",
+       "Current smoker"
+      ],
+      "printed_options": [
+       "Never smoked",
+       "Ex-smoker",
+       "Current smoker"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[2]/sdt[0]",
+      "boxes": [
+       "b/p[2]/sdt[0]",
+       "b/p[2]/sdt[1]",
+       "b/p[2]/sdt[2]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Recipient(s) of this summary",
+      "kind": "choice",
+      "context": "Admission questionnaire",
+      "options": [
+       "Family doctor",
+       "Referring specialist",
+       "Patient",
+       "Community pharmacist"
+      ],
+      "printed_options": [
+       "Family doctor",
+       "Referring specialist",
+       "Patient",
+       "Community pharmacist"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[21]/glyphs",
+      "boxes": [
+       "b/p[21]/glyphs#0",
+       "b/p[21]/glyphs#1",
+       "b/p[21]/glyphs#2",
+       "b/p[21]/glyphs#3"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Medicines on discharge",
+      "kind": "table_rows",
+      "context": "Medicines on discharge > Medicine",
+      "options": [
+       "Medicine",
+       "Dose",
+       "Route (e.g., po)",
+       "How often"
+      ],
+      "printed_options": [
+       "Medicine",
+       "Dose",
+       "Route (e.g., po)",
+       "How often"
+      ],
+      "target_type": "table_rows",
+      "slot": "b/tbl[1]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": "",
+      "table": {
+       "table": "b/tbl[1]",
+       "rows": [
+        1,
+        2,
+        3
+       ],
+       "columns": [
+        0,
+        1,
+        2,
+        3
+       ]
+      }
+     }
+    ],
+    "areas": [
+     {
+      "id": "f3.A1",
+      "label": "Smoking status",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Smoking status (one box only)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[2]/sdt[0]",
+        "options": [
+         "Never smoked",
+         "Ex-smoker",
+         "Current smoker"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A2",
+      "label": "Symptoms during the past week.",
+      "expected_kind": "multi_choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Checkbox question at word/document.xml#b/p[5]: its all-that-apply instruction conflicts with a limited selection instruction printed elsewhere in the form (word/document.xml: Goals for this admission (select up to 3)) whose reach is unresolved; nothing was guessed. Printed question: Symptoms during "
+      ]
+     },
+     {
+      "id": "f3.A3",
+      "label": "Services already involved.",
+      "expected_kind": "multi_choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Checkbox question at word/document.xml#b/p[11]: its all-that-apply instruction conflicts with a limited selection instruction printed elsewhere in the form (word/document.xml: Goals for this admission (select up to 3)) whose reach is unresolved; nothing was guessed. Printed question: Services alread"
+      ]
+     },
+     {
+      "id": "f3.A4",
+      "label": "Recipient(s) of this summary",
+      "expected_kind": "multi_choice",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Recipient(s) of this summary",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/p[21]/glyphs",
+        "options": [
+         "Family doctor",
+         "Referring specialist",
+         "Patient",
+         "Community pharmacist"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "wrong",
+      "problems": [
+       "kind choice, expected multi_choice (accepted ['multi_choice'])"
+      ]
+     },
+     {
+      "id": "f3.A5",
+      "label": "Medicine (row 1)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A6",
+      "label": "Dose (row 1)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A7",
+      "label": "Route (e.g., po) (row 1)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A8",
+      "label": "How often (row 1)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A9",
+      "label": "Medicine (row 2)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A10",
+      "label": "Dose (row 2)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A11",
+      "label": "Route (e.g., po) (row 2)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A12",
+      "label": "How often (row 2)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A13",
+      "label": "Medicine (row 3)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A14",
+      "label": "Dose (row 3)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A15",
+      "label": "Route (e.g., po) (row 3)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f3.A16",
+      "label": "How often (row 3)",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Medicines on discharge",
+        "kind": "table_rows",
+        "target_type": "table_rows",
+        "slot": "b/tbl[1]/tr[1]/tc[0]",
+        "options": [
+         "Medicine",
+         "Dose",
+         "Route (e.g., po)",
+         "How often"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f3.C1",
+      "type": "must_hold",
+      "printed": "Goals for this admission (select up to 3)",
+      "outcome": "right",
+      "notes_evidence": [
+       "Checkbox question at word/document.xml#b/p[14] carries a printed selection count the form's choices cannot represent ('up to 3'); nothing was guessed. Printed question: Goals for this admission (select up to 3)"
+      ]
+     },
+     {
+      "id": "f3.C2",
+      "type": "must_hold",
+      "printed": "Select up to 3",
+      "outcome": "right"
+     },
+     {
+      "id": "f3.C3",
+      "type": "not_an_answer",
+      "printed": "Route (e.g., po)",
+      "outcome": "right"
+     },
+     {
+      "id": "f3.C4",
+      "type": "not_an_answer",
+      "printed": "Select up to 3",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 16,
+     "areas_missed": 2,
+     "areas_right": 13,
+     "areas_wrong": 1,
+     "controls": 4,
+     "controls_right": 4,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  },
+  "f4-exam-grid": {
+   "inspect": {
+    "layout_pending": 7,
+    "notes": [
+     "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[2]. Printed question: Overall pulse. Section: Vascular and skin examination > Overall pulse",
+     "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[2]. Printed question: Overall skin and limb. Section: Vascular and skin examination > Overall skin and limb",
+     "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[3]. Printed question: Skin colour. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
+     "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[4]. Printed question: Nail beds. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
+     "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[5]. Printed question: Capillary refill. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
+     "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[3]. Printed question: Ankle. Section: Vascular and skin examination > Lower-limb swelling | None\tPitting\tNon-pitting | Ankle\t1 ☐\t2 ☐\t3 ☐ | Mid-calf\t1 ☐\t2 ☐\t3 ☐",
+     "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[4]. Printed question: Mid-calf. Section: Vascular and skin examination > Lower-limb swelling | None\tPitting\tNon-pitting | Ankle\t1 ☐\t2 ☐\t3 ☐ | Mid-calf\t1 ☐\t2 ☐\t3 ☐"
+    ],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Radial — Left",
+      "kind": "text",
+      "context": "Vascular and skin examination > Radial > Left",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Radial — Right",
+      "kind": "text",
+      "context": "Vascular and skin examination > Radial > Right",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Femoral — Left",
+      "kind": "text",
+      "context": "Vascular and skin examination > Femoral > Left",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[2]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_4",
+      "label": "Femoral — Right",
+      "kind": "text",
+      "context": "Vascular and skin examination > Femoral > Right",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[2]/tc[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_5",
+      "label": "Dorsalis pedis — Left",
+      "kind": "text",
+      "context": "Vascular and skin examination > Dorsalis pedis > Left",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[3]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_6",
+      "label": "Dorsalis pedis — Right",
+      "kind": "text",
+      "context": "Vascular and skin examination > Dorsalis pedis > Right",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[3]/tc[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_7",
+      "label": "Describe any abnormality",
+      "kind": "long_text",
+      "context": "Vascular and skin examination · occurrence 1 of 2 (table row 2: Pulse findingsDescribe any abnormality____________________________________________________________)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "span",
+      "slot": "b/tbl[1]/tr[1]/tc[0]/p[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_8",
+      "label": "Describe any abnormality",
+      "kind": "long_text",
+      "context": "Vascular and skin examination · occurrence 2 of 2 (table row 6: Skin and limb findingsDescribe any abnormality______________________________________________________)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "span",
+      "slot": "b/tbl[1]/tr[5]/tc[0]/p[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f4.A1",
+      "label": "Radial pulse, Left",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Radial — Left",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A2",
+      "label": "Radial pulse, Right",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Radial — Right",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A3",
+      "label": "Femoral pulse, Left",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Femoral — Left",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A4",
+      "label": "Femoral pulse, Right",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_4",
+        "label": "Femoral — Right",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[2]/tc[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A5",
+      "label": "Dorsalis pedis pulse, Left",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_5",
+        "label": "Dorsalis pedis — Left",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A6",
+      "label": "Dorsalis pedis pulse, Right",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_6",
+        "label": "Dorsalis pedis — Right",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[3]/tc[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A7",
+      "label": "Overall pulse",
+      "expected_kind": "choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[0]/tc[0]/p[2]. Printed question: Overall pulse. Section: Vascular and skin examination > Overall pulse"
+      ]
+     },
+     {
+      "id": "f4.A8",
+      "label": "Describe any abnormality",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_7",
+        "label": "Describe any abnormality",
+        "kind": "long_text",
+        "target_type": "span",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/p[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A9",
+      "label": "Skin colour",
+      "expected_kind": "choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[3]. Printed question: Skin colour. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐"
+      ]
+     },
+     {
+      "id": "f4.A10",
+      "label": "Nail beds",
+      "expected_kind": "choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[4]. Printed question: Nail beds. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐"
+      ]
+     },
+     {
+      "id": "f4.A11",
+      "label": "Capillary refill",
+      "expected_kind": "choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[2]/tc[0]/p[5]. Printed question: Capillary refill. Section: Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐"
+      ]
+     },
+     {
+      "id": "f4.A12",
+      "label": "Ankle",
+      "expected_kind": "choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[3]. Printed question: Ankle. Section: Vascular and skin examination > Lower-limb swelling | None\tPitting\tNon-pitting | Ankle\t1 ☐\t2 ☐\t3 ☐ | Mid-calf\t1 ☐\t2 ☐\t3 ☐"
+      ]
+     },
+     {
+      "id": "f4.A13",
+      "label": "Mid-calf",
+      "expected_kind": "choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Layout verification required for coded-column answer at word/document.xml#b/tbl[1]/tr[3]/tc[0]/p[4]. Printed question: Mid-calf. Section: Vascular and skin examination > Lower-limb swelling | None\tPitting\tNon-pitting | Ankle\t1 ☐\t2 ☐\t3 ☐ | Mid-calf\t1 ☐\t2 ☐\t3 ☐"
+      ]
+     },
+     {
+      "id": "f4.A14",
+      "label": "Overall skin and limb",
+      "expected_kind": "choice",
+      "outcome": "missed",
+      "notes_evidence": [
+       "Layout verification required for tab-column answer at word/document.xml#b/tbl[1]/tr[4]/tc[0]/p[2]. Printed question: Overall skin and limb. Section: Vascular and skin examination > Overall skin and limb"
+      ]
+     },
+     {
+      "id": "f4.A15",
+      "label": "Describe any abnormality",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_8",
+        "label": "Describe any abnormality",
+        "kind": "long_text",
+        "target_type": "span",
+        "slot": "b/tbl[1]/tr[5]/tc[0]/p[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f4.C1",
+      "type": "not_an_answer",
+      "printed": "<TAB>Normal<TAB>Abnormal<TAB>Not examined",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C2",
+      "type": "not_an_answer",
+      "printed": "<TAB>Normal<TAB>Abnormal",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C3",
+      "type": "not_an_answer",
+      "printed": "<TAB>None<TAB>Pitting<TAB>Non-pitting",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C4",
+      "type": "not_an_answer",
+      "printed": "<TAB>Normal<TAB>Abnormal<TAB>Not examined",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C5",
+      "type": "not_an_answer",
+      "printed": "Describe any abnormality",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C6",
+      "type": "not_an_answer",
+      "printed": "Describe any abnormality",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C7",
+      "type": "not_an_answer",
+      "printed": "Pulse / Left / Right",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 15,
+     "areas_missed": 7,
+     "areas_right": 8,
+     "controls": 7,
+     "controls_right": 7,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 7,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Radial — Left",
+      "kind": "text",
+      "context": "Vascular and skin examination > Radial > Left",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Radial — Right",
+      "kind": "text",
+      "context": "Vascular and skin examination > Radial > Right",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Femoral — Left",
+      "kind": "text",
+      "context": "Vascular and skin examination > Femoral > Left",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[2]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_4",
+      "label": "Femoral — Right",
+      "kind": "text",
+      "context": "Vascular and skin examination > Femoral > Right",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[2]/tc[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_5",
+      "label": "Dorsalis pedis — Left",
+      "kind": "text",
+      "context": "Vascular and skin examination > Dorsalis pedis > Left",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[3]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_6",
+      "label": "Dorsalis pedis — Right",
+      "kind": "text",
+      "context": "Vascular and skin examination > Dorsalis pedis > Right",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[3]/tc[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_7",
+      "label": "Overall pulse",
+      "kind": "choice",
+      "context": "Vascular and skin examination > Overall pulse",
+      "options": [
+       "Normal",
+       "Abnormal",
+       "Not examined"
+      ],
+      "printed_options": [
+       "Normal",
+       "Abnormal",
+       "Not examined"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
+      "boxes": [
+       "b/tbl[1]/tr[0]/tc[0]/p[2]/ff[0]",
+       "b/tbl[1]/tr[0]/tc[0]/p[2]/ff[1]",
+       "b/tbl[1]/tr[0]/tc[0]/p[2]/ff[2]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_8",
+      "label": "Describe any abnormality",
+      "kind": "long_text",
+      "context": "Vascular and skin examination · occurrence 1 of 2 (table row 2: Pulse findingsDescribe any abnormality____________________________________________________________)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "span",
+      "slot": "b/tbl[1]/tr[1]/tc[0]/p[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_9",
+      "label": "Skin colour",
+      "kind": "choice",
+      "context": "Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
+      "options": [
+       "Normal",
+       "Abnormal"
+      ],
+      "printed_options": [
+       "Normal",
+       "Abnormal"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[1]/tr[2]/tc[0]/p[3]",
+      "boxes": [
+       "b/tbl[1]/tr[2]/tc[0]/p[3]/ff[0]",
+       "b/tbl[1]/tr[2]/tc[0]/p[3]/ff[1]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_10",
+      "label": "Nail beds",
+      "kind": "choice",
+      "context": "Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
+      "options": [
+       "Normal",
+       "Abnormal"
+      ],
+      "printed_options": [
+       "Normal",
+       "Abnormal"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[1]/tr[2]/tc[0]/p[4]",
+      "boxes": [
+       "b/tbl[1]/tr[2]/tc[0]/p[4]/ff[0]",
+       "b/tbl[1]/tr[2]/tc[0]/p[4]/ff[1]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_11",
+      "label": "Capillary refill",
+      "kind": "choice",
+      "context": "Vascular and skin examination > Skin and nails | Normal\tAbnormal | Skin colour\t1 ☐\t2 ☐ | Nail beds\t1 ☐\t2 ☐ | Capillary refill\t1 ☐\t2 ☐",
+      "options": [
+       "Normal",
+       "Abnormal"
+      ],
+      "printed_options": [
+       "Normal",
+       "Abnormal"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[1]/tr[2]/tc[0]/p[5]",
+      "boxes": [
+       "b/tbl[1]/tr[2]/tc[0]/p[5]/ff[0]",
+       "b/tbl[1]/tr[2]/tc[0]/p[5]/ff[1]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_12",
+      "label": "Ankle",
+      "kind": "choice",
+      "context": "Vascular and skin examination > Lower-limb swelling | None\tPitting\tNon-pitting | Ankle\t1 ☐\t2 ☐\t3 ☐ | Mid-calf\t1 ☐\t2 ☐\t3 ☐",
+      "options": [
+       "None",
+       "Pitting",
+       "Non-pitting"
+      ],
+      "printed_options": [
+       "None",
+       "Pitting",
+       "Non-pitting"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[1]/tr[3]/tc[0]/p[3]",
+      "boxes": [
+       "b/tbl[1]/tr[3]/tc[0]/p[3]/ff[0]",
+       "b/tbl[1]/tr[3]/tc[0]/p[3]/ff[1]",
+       "b/tbl[1]/tr[3]/tc[0]/p[3]/ff[2]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_13",
+      "label": "Mid-calf",
+      "kind": "choice",
+      "context": "Vascular and skin examination > Lower-limb swelling | None\tPitting\tNon-pitting | Ankle\t1 ☐\t2 ☐\t3 ☐ | Mid-calf\t1 ☐\t2 ☐\t3 ☐",
+      "options": [
+       "None",
+       "Pitting",
+       "Non-pitting"
+      ],
+      "printed_options": [
+       "None",
+       "Pitting",
+       "Non-pitting"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[1]/tr[3]/tc[0]/p[4]",
+      "boxes": [
+       "b/tbl[1]/tr[3]/tc[0]/p[4]/ff[0]",
+       "b/tbl[1]/tr[3]/tc[0]/p[4]/ff[1]",
+       "b/tbl[1]/tr[3]/tc[0]/p[4]/ff[2]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_14",
+      "label": "Overall skin and limb",
+      "kind": "choice",
+      "context": "Vascular and skin examination > Overall skin and limb",
+      "options": [
+       "Normal",
+       "Abnormal",
+       "Not examined"
+      ],
+      "printed_options": [
+       "Normal",
+       "Abnormal",
+       "Not examined"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[1]/tr[4]/tc[0]/p[2]",
+      "boxes": [
+       "b/tbl[1]/tr[4]/tc[0]/p[2]/ff[0]",
+       "b/tbl[1]/tr[4]/tc[0]/p[2]/ff[1]",
+       "b/tbl[1]/tr[4]/tc[0]/p[2]/ff[2]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_15",
+      "label": "Describe any abnormality",
+      "kind": "long_text",
+      "context": "Vascular and skin examination · occurrence 2 of 2 (table row 6: Skin and limb findingsDescribe any abnormality______________________________________________________)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "span",
+      "slot": "b/tbl[1]/tr[5]/tc[0]/p[2]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f4.A1",
+      "label": "Radial pulse, Left",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Radial — Left",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A2",
+      "label": "Radial pulse, Right",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Radial — Right",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A3",
+      "label": "Femoral pulse, Left",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Femoral — Left",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A4",
+      "label": "Femoral pulse, Right",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_4",
+        "label": "Femoral — Right",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[2]/tc[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A5",
+      "label": "Dorsalis pedis pulse, Left",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_5",
+        "label": "Dorsalis pedis — Left",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A6",
+      "label": "Dorsalis pedis pulse, Right",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_6",
+        "label": "Dorsalis pedis — Right",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[3]/tc[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A7",
+      "label": "Overall pulse",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_7",
+        "label": "Overall pulse",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[1]/tr[0]/tc[0]/p[2]",
+        "options": [
+         "Normal",
+         "Abnormal",
+         "Not examined"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A8",
+      "label": "Describe any abnormality",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_8",
+        "label": "Describe any abnormality",
+        "kind": "long_text",
+        "target_type": "span",
+        "slot": "b/tbl[1]/tr[1]/tc[0]/p[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A9",
+      "label": "Skin colour",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_9",
+        "label": "Skin colour",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[1]/tr[2]/tc[0]/p[3]",
+        "options": [
+         "Normal",
+         "Abnormal"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A10",
+      "label": "Nail beds",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_10",
+        "label": "Nail beds",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[1]/tr[2]/tc[0]/p[4]",
+        "options": [
+         "Normal",
+         "Abnormal"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A11",
+      "label": "Capillary refill",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_11",
+        "label": "Capillary refill",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[1]/tr[2]/tc[0]/p[5]",
+        "options": [
+         "Normal",
+         "Abnormal"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A12",
+      "label": "Ankle",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_12",
+        "label": "Ankle",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[1]/tr[3]/tc[0]/p[3]",
+        "options": [
+         "None",
+         "Pitting",
+         "Non-pitting"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A13",
+      "label": "Mid-calf",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_13",
+        "label": "Mid-calf",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[1]/tr[3]/tc[0]/p[4]",
+        "options": [
+         "None",
+         "Pitting",
+         "Non-pitting"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A14",
+      "label": "Overall skin and limb",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_14",
+        "label": "Overall skin and limb",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[1]/tr[4]/tc[0]/p[2]",
+        "options": [
+         "Normal",
+         "Abnormal",
+         "Not examined"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f4.A15",
+      "label": "Describe any abnormality",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_15",
+        "label": "Describe any abnormality",
+        "kind": "long_text",
+        "target_type": "span",
+        "slot": "b/tbl[1]/tr[5]/tc[0]/p[2]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f4.C1",
+      "type": "not_an_answer",
+      "printed": "<TAB>Normal<TAB>Abnormal<TAB>Not examined",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C2",
+      "type": "not_an_answer",
+      "printed": "<TAB>Normal<TAB>Abnormal",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C3",
+      "type": "not_an_answer",
+      "printed": "<TAB>None<TAB>Pitting<TAB>Non-pitting",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C4",
+      "type": "not_an_answer",
+      "printed": "<TAB>Normal<TAB>Abnormal<TAB>Not examined",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C5",
+      "type": "not_an_answer",
+      "printed": "Describe any abnormality",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C6",
+      "type": "not_an_answer",
+      "printed": "Describe any abnormality",
+      "outcome": "right"
+     },
+     {
+      "id": "f4.C7",
+      "type": "not_an_answer",
+      "printed": "Pulse / Left / Right",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 15,
+     "areas_right": 15,
+     "controls": 7,
+     "controls_right": 7,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  },
+  "f5-negative-controls": {
+   "inspect": {
+    "layout_pending": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Left knee — Examination findings",
+      "kind": "long_text",
+      "context": "Knee review and sign-off > Left knee > Examination findings",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Right knee — Examination findings",
+      "kind": "long_text",
+      "context": "Knee review and sign-off > Right knee > Examination findings",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[2]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
+      "kind": "checkbox",
+      "context": "Declaration > Declaration",
+      "options": [
+       "I declare the person examined agreed to this examination and to these results being sent to the referring team."
+      ],
+      "printed_options": [
+       "I declare the person examined agreed to this examination and to these results being sent to the referring team."
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[4]/ff[0]",
+      "boxes": [
+       "b/p[4]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_4",
+      "label": "Signature of examining clinician",
+      "kind": "signature",
+      "context": "Declaration",
+      "options": [],
+      "printed_options": [],
+      "target_type": "span",
+      "slot": "b/p[5]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_5",
+      "label": "Clinician initials",
+      "kind": "initials",
+      "context": "Declaration > Clinician initials",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[1]/tr[0]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f5.A1",
+      "label": "Left knee",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Left knee — Examination findings",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f5.A2",
+      "label": "Right knee",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Right knee — Examination findings",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f5.C1",
+      "type": "not_an_answer",
+      "printed": "The reviewing clinician completes this page after discussing the findings with the patient. Record only what was examine",
+      "outcome": "right"
+     },
+     {
+      "id": "f5.C2",
+      "type": "must_refuse",
+      "printed": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
+      "protected_fields": [],
+      "outcome": "wrong",
+      "offending_fields": [
+       {
+        "key": "v3_3",
+        "label": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
+        "kind": "checkbox",
+        "target_type": "checkboxes",
+        "slot": "b/p[4]/ff[0]",
+        "options": [
+         "I declare the person examined agreed to this examination and to these results being sent to the referring team."
+        ]
+       }
+      ]
+     },
+     {
+      "id": "f5.C3",
+      "type": "must_refuse",
+      "printed": "Signature of examining clinician: ______________________________",
+      "protected_fields": [
+       "v3_4 signature"
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f5.C4",
+      "type": "must_refuse",
+      "printed": "Clinician initials",
+      "protected_fields": [
+       "v3_5 initials"
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f5.C5",
+      "type": "must_refuse",
+      "printed": "Left knee / Right knee",
+      "outcome": "right",
+      "fields": {
+       "f5.A1": [
+        "v3_1 'Left knee — Examination findings'"
+       ],
+       "f5.A2": [
+        "v3_2 'Right knee — Examination findings'"
+       ]
+      }
+     },
+     {
+      "id": "f5.C6",
+      "type": "not_an_answer",
+      "printed": "Declaration",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 2,
+     "areas_right": 2,
+     "controls": 6,
+     "controls_right": 5,
+     "controls_wrong": 1,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Left knee — Examination findings",
+      "kind": "long_text",
+      "context": "Knee review and sign-off > Left knee > Examination findings",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Right knee — Examination findings",
+      "kind": "long_text",
+      "context": "Knee review and sign-off > Right knee > Examination findings",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[2]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
+      "kind": "checkbox",
+      "context": "Declaration > Declaration",
+      "options": [
+       "I declare the person examined agreed to this examination and to these results being sent to the referring team."
+      ],
+      "printed_options": [
+       "I declare the person examined agreed to this examination and to these results being sent to the referring team."
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[4]/ff[0]",
+      "boxes": [
+       "b/p[4]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_4",
+      "label": "Signature of examining clinician",
+      "kind": "signature",
+      "context": "Declaration",
+      "options": [],
+      "printed_options": [],
+      "target_type": "span",
+      "slot": "b/p[5]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_5",
+      "label": "Clinician initials",
+      "kind": "initials",
+      "context": "Declaration > Clinician initials",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[1]/tr[0]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f5.A1",
+      "label": "Left knee",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Left knee — Examination findings",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f5.A2",
+      "label": "Right knee",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Right knee — Examination findings",
+        "kind": "long_text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[2]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f5.C1",
+      "type": "not_an_answer",
+      "printed": "The reviewing clinician completes this page after discussing the findings with the patient. Record only what was examine",
+      "outcome": "right"
+     },
+     {
+      "id": "f5.C2",
+      "type": "must_refuse",
+      "printed": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
+      "protected_fields": [],
+      "outcome": "wrong",
+      "offending_fields": [
+       {
+        "key": "v3_3",
+        "label": "I declare the person examined agreed to this examination and to these results being sent to the referring team.",
+        "kind": "checkbox",
+        "target_type": "checkboxes",
+        "slot": "b/p[4]/ff[0]",
+        "options": [
+         "I declare the person examined agreed to this examination and to these results being sent to the referring team."
+        ]
+       }
+      ]
+     },
+     {
+      "id": "f5.C3",
+      "type": "must_refuse",
+      "printed": "Signature of examining clinician: ______________________________",
+      "protected_fields": [
+       "v3_4 signature"
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f5.C4",
+      "type": "must_refuse",
+      "printed": "Clinician initials",
+      "protected_fields": [
+       "v3_5 initials"
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f5.C5",
+      "type": "must_refuse",
+      "printed": "Left knee / Right knee",
+      "outcome": "right",
+      "fields": {
+       "f5.A1": [
+        "v3_1 'Left knee — Examination findings'"
+       ],
+       "f5.A2": [
+        "v3_2 'Right knee — Examination findings'"
+       ]
+      }
+     },
+     {
+      "id": "f5.C6",
+      "type": "not_an_answer",
+      "printed": "Declaration",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 2,
+     "areas_right": 2,
+     "controls": 6,
+     "controls_right": 5,
+     "controls_wrong": 1,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  },
+  "f6a-long-answer": {
+   "inspect": {
+    "layout_pending": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Date of letter",
+      "kind": "date",
+      "context": "Discharge letter",
+      "options": [],
+      "printed_options": [],
+      "target_type": "span",
+      "slot": "b/p[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Full account of the admission: presentation, investigations, treatment, progress",
+      "kind": "text",
+      "context": "Discharge letter > Full account of the admission: presentation, investigations, treatment, progress",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f6a.A1",
+      "label": "Date of letter",
+      "expected_kind": "date",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Date of letter",
+        "kind": "date",
+        "target_type": "span",
+        "slot": "b/p[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6a.A2",
+      "label": "Full account of the admission: presentation, investigations, treatment, progress and the plan after discharge",
+      "expected_kind": "long_text",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Full account of the admission: presentation, investigations, treatment, progress",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[0]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f6a.C1",
+      "type": "not_an_answer",
+      "printed": "Full account of the admission: presentation, investigations, treatment, progress and the plan after discharge",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 2,
+     "areas_right": 2,
+     "controls": 1,
+     "controls_right": 1,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Date of letter",
+      "kind": "date",
+      "context": "Discharge letter",
+      "options": [],
+      "printed_options": [],
+      "target_type": "span",
+      "slot": "b/p[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Full account of the admission: presentation, investigations, treatment, progress",
+      "kind": "text",
+      "context": "Discharge letter > Full account of the admission: presentation, investigations, treatment, progress",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[0]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f6a.A1",
+      "label": "Date of letter",
+      "expected_kind": "date",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Date of letter",
+        "kind": "date",
+        "target_type": "span",
+        "slot": "b/p[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6a.A2",
+      "label": "Full account of the admission: presentation, investigations, treatment, progress and the plan after discharge",
+      "expected_kind": "long_text",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Full account of the admission: presentation, investigations, treatment, progress",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[0]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f6a.C1",
+      "type": "not_an_answer",
+      "printed": "Full account of the admission: presentation, investigations, treatment, progress and the plan after discharge",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 2,
+     "areas_right": 2,
+     "controls": 1,
+     "controls_right": 1,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  },
+  "f6b-admin-missing": {
+   "inspect": {
+    "layout_pending": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Wound site",
+      "kind": "text",
+      "context": "Wound review > Wound site",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Wound length (cm)",
+      "kind": "text",
+      "context": "Wound review > Wound length (cm)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Exudate (one box only)",
+      "kind": "choice",
+      "context": "Wound review > Exudate (one box only)",
+      "options": [
+       "None",
+       "Light",
+       "Heavy"
+      ],
+      "printed_options": [
+       "None",
+       "Light",
+       "Heavy"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+      "boxes": [
+       "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#0",
+       "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#1",
+       "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#2"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_4",
+      "label": "Date of next dressing change",
+      "kind": "date",
+      "context": "Wound review > Date of next dressing change",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[3]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_5",
+      "label": "Wound photographed at this visit",
+      "kind": "checkbox",
+      "context": "Wound review > Wound review",
+      "options": [
+       "Wound photographed at this visit"
+      ],
+      "printed_options": [
+       "Wound photographed at this visit"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[1]/ff[0]",
+      "boxes": [
+       "b/p[1]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f6b.A1",
+      "label": "Wound site",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Wound site",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6b.A2",
+      "label": "Wound length (cm)",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Wound length (cm)",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6b.A3",
+      "label": "Exudate",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Exudate (one box only)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+        "options": [
+         "None",
+         "Light",
+         "Heavy"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6b.A4",
+      "label": "Date of next dressing change",
+      "expected_kind": "date",
+      "fields": [
+       {
+        "key": "v3_4",
+        "label": "Date of next dressing change",
+        "kind": "date",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6b.A5",
+      "label": "Wound photographed at this visit",
+      "expected_kind": "checkbox",
+      "fields": [
+       {
+        "key": "v3_5",
+        "label": "Wound photographed at this visit",
+        "kind": "checkbox",
+        "target_type": "checkboxes",
+        "slot": "b/p[1]/ff[0]",
+        "options": [
+         "Wound photographed at this visit"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f6b.C1",
+      "type": "not_an_answer",
+      "printed": "Wound review",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 5,
+     "areas_right": 5,
+     "controls": 1,
+     "controls_right": 1,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   },
+   "layout_proposal": {
+    "layout_candidates": 0,
+    "notes": [],
+    "fields": [
+     {
+      "key": "v3_1",
+      "label": "Wound site",
+      "kind": "text",
+      "context": "Wound review > Wound site",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[0]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_2",
+      "label": "Wound length (cm)",
+      "kind": "text",
+      "context": "Wound review > Wound length (cm)",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[1]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_3",
+      "label": "Exudate (one box only)",
+      "kind": "choice",
+      "context": "Wound review > Exudate (one box only)",
+      "options": [
+       "None",
+       "Light",
+       "Heavy"
+      ],
+      "printed_options": [
+       "None",
+       "Light",
+       "Heavy"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+      "boxes": [
+       "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#0",
+       "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#1",
+       "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#2"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_4",
+      "label": "Date of next dressing change",
+      "kind": "date",
+      "context": "Wound review > Date of next dressing change",
+      "options": [],
+      "printed_options": [],
+      "target_type": "cell",
+      "slot": "b/tbl[0]/tr[3]/tc[1]",
+      "boxes": [],
+      "write_protected": false,
+      "review_reason": ""
+     },
+     {
+      "key": "v3_5",
+      "label": "Wound photographed at this visit",
+      "kind": "checkbox",
+      "context": "Wound review > Wound review",
+      "options": [
+       "Wound photographed at this visit"
+      ],
+      "printed_options": [
+       "Wound photographed at this visit"
+      ],
+      "target_type": "checkboxes",
+      "slot": "b/p[1]/ff[0]",
+      "boxes": [
+       "b/p[1]/ff[0]"
+      ],
+      "write_protected": false,
+      "review_reason": ""
+     }
+    ],
+    "areas": [
+     {
+      "id": "f6b.A1",
+      "label": "Wound site",
+      "expected_kind": "text",
+      "fields": [
+       {
+        "key": "v3_1",
+        "label": "Wound site",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[0]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6b.A2",
+      "label": "Wound length (cm)",
+      "expected_kind": "measurement",
+      "fields": [
+       {
+        "key": "v3_2",
+        "label": "Wound length (cm)",
+        "kind": "text",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[1]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6b.A3",
+      "label": "Exudate",
+      "expected_kind": "choice",
+      "fields": [
+       {
+        "key": "v3_3",
+        "label": "Exudate (one box only)",
+        "kind": "choice",
+        "target_type": "checkboxes",
+        "slot": "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs",
+        "options": [
+         "None",
+         "Light",
+         "Heavy"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6b.A4",
+      "label": "Date of next dressing change",
+      "expected_kind": "date",
+      "fields": [
+       {
+        "key": "v3_4",
+        "label": "Date of next dressing change",
+        "kind": "date",
+        "target_type": "cell",
+        "slot": "b/tbl[0]/tr[3]/tc[1]",
+        "options": [],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     },
+     {
+      "id": "f6b.A5",
+      "label": "Wound photographed at this visit",
+      "expected_kind": "checkbox",
+      "fields": [
+       {
+        "key": "v3_5",
+        "label": "Wound photographed at this visit",
+        "kind": "checkbox",
+        "target_type": "checkboxes",
+        "slot": "b/p[1]/ff[0]",
+        "options": [
+         "Wound photographed at this visit"
+        ],
+        "write_protected": false
+       }
+      ],
+      "outcome": "right"
+     }
+    ],
+    "controls": [
+     {
+      "id": "f6b.C1",
+      "type": "not_an_answer",
+      "printed": "Wound review",
+      "outcome": "right"
+     }
+    ],
+    "extras": [],
+    "summary": {
+     "areas": 5,
+     "areas_right": 5,
+     "controls": 1,
+     "controls_right": 1,
+     "extras_answerable": 0,
+     "extras_protected": 0
+    }
+   }
+  }
+ }
+}
