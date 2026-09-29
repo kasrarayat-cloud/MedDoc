@@ -94,7 +94,13 @@ class MappingAssistance(TestCase):
         foreign_slot = payload['fields'][1]['slots'][0]
         foreign = copy.deepcopy(body)
         foreign['x'][0][1] = next(n for n, row in enumerate(payload['slots']) if row['slot'] == foreign_slot)
-        with self.assertRaises(ValidationError): mapping.validate_proposal(self.version, self.compiled, foreign)
+        # Moving a prior label to another field's destination is never adopted; the field is kept and held.
+        result = mapping.validate_proposal(self.version, self.compiled, foreign)
+        self.assertEqual(result['fields'], self.version.fields)
+        self.assertEqual(result['review']['changes'], [])
+        record = next(row for row in result['review']['unresolved'] if row['key'] == prior['key'])
+        self.assertEqual((record['slot'], record['proposed_slot']), (slot, foreign_slot))
+        self.assertIn('Replacement target belongs to another field destination.', record['reason'])
 
     def test_complete_long_labels_are_priced_in_actual_request_and_old_profile_refuses(self):
         original_fields = copy.deepcopy(self.version.fields)
@@ -147,13 +153,18 @@ class MappingAssistance(TestCase):
             raise AssertionError('Synthetic target text missing from source')
         return [fid,sid,mapping.wire.KINDS.index(kind),*reference(label),-1]+[n for option in options for n in reference(option)]
 
-    def test_wrong_slots_and_references_refuse_and_overlap_stays_visible(self):
+    def test_wrong_slots_and_references_are_not_adopted_and_overlap_stays_visible(self):
         body=self.body();prior=self.version.fields[0]
         slot=next(iter(mapping.v3_mapping.mapped_slots([prior])))
         target=self.target(slot,prior['label'])
-        for index,value in [(1,1199),(3,399999)]:
+        for index,value,reason in [(1,1199,'Unknown mapping change destination'),(3,399999,'Unknown source text reference.')]:
             altered=target.copy();altered[index]=value;body['x']=[altered]
-            with self.assertRaises((ValidationError,ValueError)):mapping.validate_proposal(self.version,self.compiled,body)
+            with self.subTest(index=index):
+                result=mapping.validate_proposal(self.version,self.compiled,body)
+                self.assertEqual(result['fields'],self.version.fields)
+                self.assertEqual(result['review']['changes'],[])
+                self.assertTrue(any(reason in row['reason'] for row in result['review']['unresolved']))
+                self.assertEqual([r['wire'] for r in result['review']['rejected_changes']],[altered])
         body['x']=[target]
         result=mapping.validate_proposal(self.version,self.compiled,body)
         self.assertEqual(result['fields'],self.version.fields)
@@ -508,6 +519,89 @@ class MappingAssistance(TestCase):
         result=mapping.validate_proposal(self.version,self.compiled,body)
         self.assertIn(prior,result['fields'])
         self.assertTrue(any('Signature' in row['reason'] for row in result['review']['unresolved']))
+        # The writer-level refusal is recorded in the stored proposal with its wire change.
+        self.assertEqual([(r['change'],r['wire'],r['type'],r['key'],r['check']) for r in result['review']['rejected_changes']],
+                         [(0,body['x'][0],'replacement',prior['key'],'source')])
+        self.assertIn('Signature or initials areas cannot become generated answers.',result['review']['rejected_changes'][0]['reason'])
+
+    def test_harmful_changes_are_never_adopted_beside_an_adopted_one(self):
+        missing=next(f for f in self.version.fields if f['label']=='Plan')
+        fields=[f for f in self.version.fields if f['key']!=missing['key']]
+        self.version=TemplateVersion.objects.create(template=self.template,number=2,fields=fields,contract='v3',created_by=self.user)
+        self.compiled=mapping.compile_request(self.version,self.config)
+        payload=json.loads(self.compiled['request']['messages'][0]['content'])
+        history=next(f for f in fields if f['label']=='History')
+        signing=next(f for f in fields if f['kind']=='signature')
+        signature_slot=next(iter(mapping.v3_mapping.mapped_slots([signing])))
+        fid=[f['key'] for f in payload['fields']].index(history['key'])
+        body=self.body();body['f']['k'].remove(fid);body['f']['r']=[fid]
+        body['x']=[self.target(next(iter(mapping.v3_mapping.mapped_slots([missing]))),'Plan',missing['kind']),  # good
+                   self.target(signature_slot,'Signature','text'),                        # a signature area as a text answer
+                   self.target(signature_slot,'Signature','text',fid),                    # History moved to the signature line
+                   self.target(signature_slot,'Signature','text')[:3]+[0,0,4,-1]]         # a foreign text reference
+        result=mapping.validate_proposal(self.version,self.compiled,body)
+        review=result['review']
+        # Only the valid addition is adopted; History and the signature field are preserved exactly.
+        added=[f for f in result['fields'] if f.get('origin')=='model_assisted']
+        self.assertEqual([(f['label'],f['kind']) for f in added],[('Plan',missing['kind'])])
+        self.assertEqual(review['changes'],[{'addition':added[0]['key']}])
+        self.assertEqual(len(result['fields']),len(fields)+1)
+        self.assertIn(history,result['fields']);self.assertIn(signing,result['fields'])
+        self.assertFalse(any(f['kind'] not in ('signature','initials') and mapping.v3_mapping.is_mapped(signature_slot,
+                             mapping.v3_mapping.mapped_slots([f])) for f in result['fields']))
+        rejected={r['change']:r for r in review['rejected_changes']}
+        self.assertEqual(sorted(rejected),[1,2,3])
+        self.assertEqual((rejected[1]['check'],rejected[2]['check'],rejected[3]['check']),('source','wire','wire'))
+        self.assertIn('Signature or initials areas cannot become generated answers.',rejected[1]['reason'])
+        self.assertIn('Replacement target belongs to another field destination.',rejected[2]['reason'])
+        self.assertIn('Source text belongs to another destination.',rejected[3]['reason'])
+        held=next(row for row in review['unresolved'] if row['key']==history['key'])
+        self.assertEqual(held['slot'],next(iter(sorted(mapping.v3_mapping.mapped_slots([history])))))
+        self.assertEqual(held['proposed_slot'],signature_slot)
+        self.assertEqual(next(v for v in review['verdicts']['fields'] if v['key']==history['key'])['verdict'],'uncertain')
+        self.assertEqual(sum(1 for row in review['unresolved'] if row['slot']==signature_slot and not row['key']),2)
+        # The stored review areas carry no request presentation.
+        self.assertTrue(all('refs' not in area for area in review['areas']))
+
+    def test_a_text_answer_at_an_unmapped_signature_line_is_never_adopted(self):
+        # With no signature field covering it (so no overlap guard), the printed 'Signature: ____' line still refuses
+        # a generated-answer kind; a protected signing kind is the only writable proposal there.
+        signing=next(f for f in self.version.fields if f['kind']=='signature')
+        signature_slot=next(iter(mapping.v3_mapping.mapped_slots([signing])))
+        fields=[f for f in self.version.fields if f['key']!=signing['key']]
+        self.version=TemplateVersion.objects.create(template=self.template,number=2,fields=fields,contract='v3',created_by=self.user)
+        self.compiled=mapping.compile_request(self.version,self.config)
+        for kind,adopted in (('text',False),('long_text',False),('date',False),('signature',True)):
+            with self.subTest(kind=kind):
+                body=self.body();body['x']=[self.target(signature_slot,'Signature',kind)]
+                result=mapping.validate_proposal(self.version,self.compiled,body)
+                added=[f for f in result['fields'] if f.get('origin')=='model_assisted']
+                self.assertEqual([f['kind'] for f in added],[kind] if adopted else [])
+                if not adopted:
+                    self.assertIn('Signature or initials areas cannot become generated answers.',
+                                  result['review']['rejected_changes'][0]['reason'])
+                    self.assertTrue(any(row['slot']==signature_slot for row in result['review']['unresolved']))
+        for text,signing in (('Signature: ____________',True),('Initials: ______',True),('Signature ……',True),
+                             ('Patient signature: ________',True),('Signed by (witness)',True),('Patient initials',True),
+                             ('Initial:',True),('Initial: ______',True),('Initial ……',True),('Sign here',True),('Signature date',False),('Date of signature',False),
+                             ('Date signed',False),('Initial assessment',False),('Initial diagnosis',False),('Plan',False)):
+            with self.subTest(text=text):
+                self.assertEqual(mapping.signing_caption(text),signing)
+
+    def test_integrity_failure_while_locating_refuses_the_whole_response(self):
+        prior=self.version.fields[0];fid=0
+        slot=next(iter(mapping.v3_mapping.mapped_slots([prior])))
+        real=mapping.locate_fields
+        def changed(path,targets):
+            located=real(path,targets);return {**located,'sha256':'0'*64}
+        for name,owner in (('addition',-1),('replacement',fid)):
+            body=self.body();body['x']=[self.target(slot,prior['label'],prior['kind'],owner)]
+            if owner>=0:body['f']['k'].remove(fid);body['f']['r']=[fid]
+            with self.subTest(name),patch.object(mapping,'locate_fields',side_effect=changed),\
+                    self.assertRaises(ValidationError) as caught:
+                mapping.validate_proposal(self.version,self.compiled,body)
+            self.assertIn('Original integrity check failed.',caught.exception.messages)
+            self.assertIsInstance(caught.exception,mapping.Refusal)
 
     def test_tampered_mapping_profile_or_hash_refuses_unsent(self):
         job=self.enqueue()

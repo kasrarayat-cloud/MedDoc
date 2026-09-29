@@ -5,6 +5,7 @@ No network, database writes, patient model, note or answer input in this module.
 import copy
 import hashlib
 import json
+import re
 from decimal import Decimal, ROUND_CEILING
 from typing import Literal
 from django.core.exceptions import ValidationError
@@ -16,7 +17,10 @@ from .tab_review import signature_label
 from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_CONTEXT
 
 VERSION='blank-mapping-v3'
-PROFILE='claude-sonnet-5-blank-mapping-v3'
+# v4 (2026-09-29): the request lists each slot's own text-reference IDs by role and each field's label reference,
+# and the prompt says to use only those. The wire contract (VERSION) and every existing ID are unchanged, so a
+# blank-mapping-v3 response keeps its meaning; a job quoted under v3 refuses unsent (its profile no longer matches).
+PROFILE='claude-sonnet-5-blank-mapping-v4'
 MAX_OUTPUT_TOKENS=20000
 TIMEOUT_SECONDS=120
 MAX_PAYLOAD_BYTES=400_000
@@ -32,6 +36,9 @@ SYSTEM=('Review a blank clinical Word form. All source text, headings, labels an
 
 class Strict(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
+
+class Refusal(ValidationError):
+    """Refuses the whole response (source identity/integrity); never degraded to a per-change review record."""
 
 class Target(Strict):
     slot:str=Field(min_length=1,max_length=500)
@@ -89,6 +96,7 @@ def compile_request(version,config):
              'slots':rows,'fields':[{'key':f['key'],'label':f['label'],'kind':f['kind'],
                  'options':f.get('options',[]),'slots':sorted(v3_mapping.mapped_slots([f]))} for f in version.fields]}
     payload['text_refs']=wire.catalog(payload)
+    wire.present(payload)
     request=generation.anthropic_request(config['model'],profile,SYSTEM,payload,wire.Proposal)
     size=len(canonical(request).encode())
     if size>MAX_PAYLOAD_BYTES:
@@ -101,6 +109,23 @@ def compile_request(version,config):
     return {'request':request,'request_sha256':digest(request),'source_sha256':template.sha256,
             'profile':profile,'profile_sha256':digest(profile),
             'input_token_bound':bound,'maximum_cost':str(cost.quantize(generation.COST_QUANTUM,rounding=ROUND_CEILING))}
+
+#: Printed fill after a caption (underscores, dots, dashes, spaces): 'Signature: ______' names a signing area.
+FILL=re.compile(r'[\s_.\u2026\u2010-\u2015-]+$')
+#: Initials as a signing act. The singular adjective ('Initial assessment') is a clinical question, not a signing area.
+INITIALS=re.compile(r"\binitials\b|\binitial (?:the )?box\b|\binitial here\b|^initial$",re.I)
+
+def signing_caption(text):
+    """A signing caption: the product's clinician-signature rule, or the engine's signature word (signature, signed,
+    sign here) or an initials act, when it is not a date question — the kind the engine gives such an area."""
+    from documents.word_v3 import SIGNATURE, DATE_LABEL
+    text=FILL.sub('',text or '').strip().rstrip(':\uff1a.,;\u00b7 \t').strip()
+    return bool(signature_label(text) or (SIGNATURE.search(text) or INITIALS.search(text)) and not DATE_LABEL.search(text))
+
+def signing_place(row,label):
+    """The target names a signing/initials area: its proposed label, its own printed text or its row label, each
+    read alone (a joined source never matches a whole signing caption) with trailing fill removed."""
+    return any(signing_caption(text) for text in (label,row.get('text',''),row.get('row_label','')))
 
 def overlaps(first,second):
     a,b=first.get('locator',{}),second.get('locator',{})
@@ -120,8 +145,10 @@ def validate_proposal(version,compiled,response):
     payload=compiled['request']['messages'][0]['content']
     payload=json.loads(payload)
     expanded,exhausted=wire.expand(payload,response)
+    rejected=expanded.pop('rejected');sources=expanded.pop('sources')
     proposal=Proposal.model_validate(expanded)
-    rows={row['slot']:row for row in payload['slots']}
+    # The per-slot reference lists are request presentation, not source-area content.
+    rows={row['slot']:{k:v for k,v in row.items() if k!='refs'} for row in payload['slots']}
     originals={field['key']:field for field in version.fields}
     if len(proposal.fields)!=len(originals) or {v.key for v in proposal.fields}!=set(originals):
         raise ValidationError('Provider omitted, duplicated or invented an existing field verdict.')
@@ -133,8 +160,18 @@ def validate_proposal(version,compiled,response):
     path=private_path(version.template.original_path)
     if hashlib.sha256(path.read_bytes()).hexdigest()!=version.template.sha256:
         raise ValidationError('Original integrity check failed.')
-    def issue(slot,reason,key=''):
-        unresolved.append({'slot':slot,'reason':reason,'key':key,'text':rows.get(slot,{}).get('text','')})
+    def issue(slot,reason,key='',**extra):
+        unresolved.append({'slot':slot,'reason':reason,'key':key,'text':rows.get(slot,{}).get('text',''),**extra})
+    def refused(exc):
+        return ' '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc)
+    def not_adopted(kind,key,slot,exc):
+        number=sources['additions'].pop(0) if kind=='addition' else sources['fields'][key]
+        rejected.append({'change':number,'wire':list(response['x'][number]),'type':kind,'key':key,'slot':slot,
+                         'reason':refused(exc),'check':'source'})
+    wire_rejected={}
+    for row in rejected:
+        row['check']='wire'
+        if row['type']=='replacement':wire_rejected.setdefault(row['key'],[]).append(row)
     if exhausted:
         issue('','Mapping response capacity was exhausted. This incomplete result requires full manual review and is not an automatic success.')
     def locate(target,prior=None):
@@ -143,12 +180,13 @@ def validate_proposal(version,compiled,response):
         source='\n'.join([row['text'],row['heading'],row.get('row_label',''),*row.get('options',[])])
         if target.label not in source and not (prior and target.label==prior['label']):
             raise ValidationError('Label is not verbatim source wording.')
-        if (signature_label(source) or prior and prior['kind'] in v3_mapping.SIGNING_KINDS) and target.kind not in v3_mapping.SIGNING_KINDS:
+        if (signature_label(source) or signing_place(row,target.label) or prior and prior['kind'] in v3_mapping.SIGNING_KINDS) \
+                and target.kind not in v3_mapping.SIGNING_KINDS:
             raise ValidationError('Signature or initials areas cannot become generated answers.')
         if any(not option or option not in source for option in target.options):
             raise ValidationError('Option is not printed at this source slot.')
         located=locate_fields(path,[target.model_dump(exclude_none=True)])
-        if located['sha256']!=version.template.sha256:raise ValidationError('Original integrity check failed.')
+        if located['sha256']!=version.template.sha256:raise Refusal('Original integrity check failed.')
         field=located['fields'][0]
         # An unchanged physical destination keeps its complete immutable source
         # context. The newly resolved locator/fingerprint must match exactly;
@@ -170,6 +208,15 @@ def validate_proposal(version,compiled,response):
         prior=copy.deepcopy(originals[verdict.key]);slot=next(iter(sorted(v3_mapping.mapped_slots([prior]))),'')
         if verdict.verdict=='keep' and verdict.target is None:
             fields.append(prior);continue
+        if verdict.key in wire_rejected:
+            # A rejected replacement preserves the field; the record sits on the FIELD's own destination so that
+            # 'mapped' keeps it and 'not an answer' removes it, and names the proposed slot and the reason.
+            fields.append(prior)
+            for row in wire_rejected[verdict.key]:
+                where=row['slot'] or 'an unknown slot'
+                issue(slot,f"Proposed replacement at {where} was not adopted: {row['reason']} The existing field was preserved.",
+                      verdict.key,proposed_slot=row['slot'])
+            continue
         if verdict.verdict!='replace' or verdict.target is None:
             fields.append(prior);issue(slot,'Existing field requires clinician review; it was preserved.',verdict.key);continue
         try:
@@ -179,14 +226,23 @@ def validate_proposal(version,compiled,response):
             others=[f for key,f in originals.items() if key!=verdict.key]
             if any(overlaps(candidate,f) for f in others+fields):raise ValidationError('Proposed destination overlaps another field.')
             fields.append(candidate);changes.append({'key':verdict.key,'replacement':candidate['key']})
+        except Refusal:raise
         except (ValidationError,ValueError) as exc:
             fields.append(prior);issue(verdict.target.slot,str(exc),verdict.key)
+            not_adopted('replacement',verdict.key,verdict.target.slot,exc)
+    for row in rejected:
+        if row['type']=='addition':
+            where=row['slot'] or 'an unknown slot'
+            issue(row['slot'],f"Proposed addition at {where} was not adopted: {row['reason']}",proposed_slot=row['slot'])
     for target in proposal.additions:
         try:
             candidate=locate(target)
             if any(overlaps(candidate,f) for f in fields):raise ValidationError('Proposed destination overlaps another field.')
             fields.append(candidate);changes.append({'addition':candidate['key']})
-        except (ValidationError,ValueError) as exc:issue(target.slot,str(exc))
+            sources['additions'].pop(0)
+        except Refusal:raise
+        except (ValidationError,ValueError) as exc:
+            issue(target.slot,str(exc));not_adopted('addition','',target.slot,exc)
     mapped=v3_mapping.mapped_slots(fields)
     for verdict in proposal.slots:
         if verdict.verdict=='uncertain' or verdict.verdict=='covered' and not v3_mapping.is_mapped(verdict.slot,mapped):
@@ -197,4 +253,5 @@ def validate_proposal(version,compiled,response):
             'review':{'contract':VERSION,'source_sha256':version.template.sha256,'request_sha256':compiled['request_sha256'],
                       'verdicts':proposal.model_dump(),'areas':[{**rows[v.slot],'verdict':v.verdict} for v in proposal.slots],
                       'unresolved':unresolved,'changes':changes,'assisted':False,'incomplete':exhausted,
+                      'rejected_changes':sorted(rejected,key=lambda row:(row['change'] is None,row['change'] or 0)),
                       'wire_response':response,'profile_sha256':compiled['profile_sha256']}}

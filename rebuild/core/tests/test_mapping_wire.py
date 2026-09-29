@@ -31,13 +31,17 @@ class MappingWire(SimpleTestCase):
                     self.assertEqual(expanded['additions'][0]['label'], label)
                     self.assertEqual(Target.model_validate(target).label, label)
                 else:
-                    with self.assertRaises(ValidationError): wire.expand(payload, body)
+                    # An over-long label is one invalid change: not adopted, recorded, and nothing is shortened.
+                    expanded, _ = wire.expand(payload, body)
+                    self.assertEqual(expanded['additions'], [])
+                    self.assertIn('Invalid Unicode source span', expanded['rejected'][0]['reason'])
                     with self.assertRaises(ValueError): Target.model_validate(target)
 
     def test_minimum_empty_complete_and_unicode_source_expansion(self):
         payload=self.payload(0,0)
         result,exhausted=wire.expand(payload,wire.fixture(payload))
-        self.assertEqual(result,{'fields':[],'slots':[],'additions':[]});self.assertFalse(exhausted)
+        self.assertEqual(result,{'fields':[],'slots':[],'additions':[],'rejected':[],'sources':{'fields':{},'additions':[]}})
+        self.assertFalse(exhausted)
         payload=self.payload();body=wire.fixture(payload);body['x']=[self.target(payload,1)]
         result,_=wire.expand(payload,body)
         self.assertEqual(result['additions'][0]['label'],'Plan')
@@ -71,7 +75,7 @@ class MappingWire(SimpleTestCase):
         for body in candidates:
             with self.subTest(body=body),self.assertRaises((ValidationError,ValueError)):wire.expand(payload,body)
 
-    def test_spans_refuse_foreign_context_wrong_destination_and_invalid_unicode_bounds(self):
+    def test_spans_never_adopt_foreign_context_wrong_destination_or_invalid_unicode_bounds(self):
         payload=self.payload(2,2);good=wire.fixture(payload)
         target=self.target(payload)
         changes=[]
@@ -83,18 +87,29 @@ class MappingWire(SimpleTestCase):
         for bad in changes:
             body=copy.deepcopy(good);body['x']=[bad]
             if bad[0]>=0:body['f']['k'].remove(bad[0]);body['f']['r']=[bad[0]]
-            with self.subTest(change=bad),self.assertRaises((ValidationError,ValueError)):wire.expand(payload,body)
+            with self.subTest(change=bad):
+                # One invalid change is not adopted and does not refuse the rest: it is recorded, and a replacement's
+                # field is held (uncertain, no target).
+                result,_=wire.expand(payload,body)
+                self.assertEqual(result['additions'],[])
+                self.assertTrue(all(f['target'] is None for f in result['fields']))
+                self.assertEqual([(r['change'],r['wire']) for r in result['rejected']],[(0,bad)])
+                if bad[0]>=0:self.assertEqual(result['fields'][bad[0]]['verdict'],'uncertain')
         payload['text_refs'][0][0]=1
         with self.assertRaises(ValidationError):wire.expand(payload,good)
 
     def test_replacement_ownership_is_complete_and_unique(self):
         payload=self.payload();body=wire.fixture(payload)
         body['f']['k']=[];body['f']['r']=[0]
-        with self.assertRaises(ValidationError):wire.expand(payload,body)
+        # A replace verdict without its change is held and recorded, not adopted and not a whole refusal.
+        field=wire.expand(payload,body)[0]['fields'][0]
+        self.assertEqual((field['verdict'],field['target']),('uncertain',None))
         body['x']=[self.target(payload,0,0)]
         self.assertEqual(wire.expand(payload,body)[0]['fields'][0]['target']['label'],'Plan')
         body['x']*=2
-        with self.assertRaises(ValidationError):wire.expand(payload,body)
+        result=wire.expand(payload,body)[0]
+        self.assertEqual((result['fields'][0]['verdict'],result['fields'][0]['target']),('uncertain',None))
+        self.assertEqual([r['change'] for r in result['rejected']],[0,1])
         body['x']=[self.target(payload,0,0)+[0]]
         with self.assertRaises(ValidationError):wire.expand(payload,body)
 
