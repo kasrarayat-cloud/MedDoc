@@ -235,8 +235,11 @@ class InlineOwnershipRefutation(SimpleTestCase):
             self.assertEqual((answer['status'], answer['text']), ('conflict', ''), repr(separator))
             reading = g.governance_for(notes, FIELDS)[11]['preceding']
             self.assertEqual(reading['inline_options'], set())
-        answer = run('Father: MI at 50.\n\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']
-        self.assertEqual((answer['status'], answer['text']), ('supported', 'Yes'))
+        # ⚠️ DELIBERATE CHANGE 2026-09-29 (round 3, RR5/X1): a blank line proves nothing about whose attribute a
+        # subject-less labelled line is, so the other person's run is not reset there and the line is held too.
+        for gap in ('\n\n', '\r\n\r\n', '\n \n', '\n\t\n'):
+            answer = run('Father: MI at 50.' + gap + 'Smoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''), repr(gap))
 
 
 class CompleteValueEvidenceContext(SimpleTestCase):

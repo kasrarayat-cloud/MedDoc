@@ -107,12 +107,14 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
             self.assertEqual(answer['held_candidate']['evidence'][0]['quote'], quote, notes)
         # ⚠️ DELIBERATE CHANGE 2026-09-29 (X1, step 1 of the notes-usefulness change): on the next line of the SAME
         # paragraph as another person's line, a subject-less labelled person attribute cannot be shown to be the
-        # patient's, so it is held (it was filled 'Yes'). A line in its own paragraph still names its option: actor
-        # resolution is paragraph-scoped, like every neighbour rule.
+        # patient's, so it is held (it was filled 'Yes'). ⚠️ Round 3 (RR5): the same across a blank line - the other
+        # person's run is the NOTE's, not the paragraph's.
         smoker = run('Father: MI at 50.\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']
         self.assertEqual((smoker['status'], smoker['text']), ('conflict', ''))
         self.assertEqual(smoker['held_candidate']['context'][0]['quote'], 'Father: MI at 50.')
-        self.assertEqual(run('Father: MI at 50.\n\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']['text'], 'Yes')
+        blank = run('Father: MI at 50.\n\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']
+        self.assertEqual((blank['status'], blank['text']), ('conflict', ''))
+        self.assertIn('Father: MI at 50.', [entry['quote'] for entry in blank['held_candidate']['context']])
 
     def test_an_unlabelled_sentence_never_becomes_an_option(self):
         notes = 'The patient does not smoke. Allergies: none known.'
@@ -1171,7 +1173,9 @@ class RoundThreeCost(SimpleTestCase):
             adopted = g.v3_adopted(v3_fields, answers, notes, asked, context)
         self.assertLess(time.monotonic() - started, 2.0)
         self.assertLessEqual(len(calls), 1, 'one line, split once')
-        self.assertEqual((adopted['q']['status'], adopted['q']['text']), ('supported', 'No'))
+        # ⚠️ DELIBERATE CHANGE 2026-09-29 (round 3, RR4-1): a note of more units than the actor reader reads
+        # (`v3_actors.MAX_UNITS`) is unread, so every unit in it is held (fail closed); the cost pin is unchanged.
+        self.assertEqual((adopted['q']['status'], adopted['q']['text']), ('conflict', ''))
         # Split once for every option question of the adoption, not once per question.
         notes = ' '.join(['Q1: No. Q2: Yes.'] * 400)
         fields = [field('q', 'Q1', 'choice', ['Yes', 'No']), field('r', 'Q2', 'choice', ['Yes', 'No'])]
@@ -1185,7 +1189,7 @@ class RoundThreeCost(SimpleTestCase):
         with patch.object(g, 'sentence_boundaries', side_effect=counted):
             adopted = g.v3_adopted(v3_fields, answers, notes, asked, context)
         self.assertLessEqual(len(calls), 1, 'one line, split once for both questions')
-        self.assertEqual((adopted['q']['text'], adopted['r']['text']), ('No', 'Yes'))
+        self.assertEqual((adopted['q']['text'], adopted['r']['text']), ('', ''))   # 800 units: unread, held (RR4-1)
 
 
 @override_settings(**LIVE)

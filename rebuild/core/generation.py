@@ -6,7 +6,6 @@ import functools
 import json
 import hashlib
 import heapq
-import itertools
 import re
 import unicodedata
 from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_DOWN, ROUND_HALF_EVEN
@@ -1209,9 +1208,16 @@ V3_HELD_REASON = ('Read from the notes but NOT used as an answer: on its own it 
 V3_OTHER_PERSON_REASON = ('Read from the notes but NOT offered as an answer: this line may be about someone other than the '
                           'patient (another person is named as who it is about or whose it is). Read it in the full '
                           'note, then type your own answer, or choose "Leave blank — reviewed".')
+#: Contract v3: a candidate held because the reader of who each line is about could not read it (RR4-1/C3, 2026-09-29):
+#: a note longer than that reader reads, or a line too long for it. Nothing in such a note is released on who it is about.
+V3_UNREAD_REASON = ('Read from the notes but NOT offered as an answer: this line could not be checked for who it is '
+                    'about (the note, or this line, is longer than that check reads). Read it in the full note, then '
+                    'type your own answer, or choose "Leave blank — reviewed".')
 
 
 def held_reason(context, word_form, disagree=False):
+    if context and not word_form and all(entry.get('unread') for entry in context):
+        return V3_UNREAD_REASON
     if context and not word_form and all(entry.get('other_person') for entry in context):
         return V3_OTHER_PERSON_REASON
     if context and not word_form and all(entry.get('syntax_incomplete') for entry in context):
@@ -1768,16 +1774,7 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
     `index` None: `evidence` alone."""
     if len(governance) > 11 and evidence:
         scope = governance[11]
-        # A bare speech repair (G-H) of a LABELLED answer does not reach a later plain labelled value of another
-        # question that shares no word with it (`v3_bare_repair_reach`); every other correction, and a bare repair
-        # of anything else, is note-wide (F4: 'Patient presents with chest pain, sorry, I mean abdominal pain.' /
-        # 'Chief complaint: chest pain.' is held).
-        bare = scope.get('bare_repairs') or {}
-        found = [(scope.get('preceding') or {}).get('evidence_units', {}).get(v3_evidence_span(entry))
-                 for entry in evidence]
-        ids = [unit['id'] if unit else None for unit in found]
-        warnings = [unit for unit in scope['corrections'] if unit['id'] not in bare
-                    or not ids or any(uid is None or uid not in bare[unit['id']] for uid in ids)]
+        warnings = list(scope['corrections'])
         warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence,
                                           history_context=history_context, answer_text=answer_text,
                                           ordinary_relation=ordinary_relation, field_key=field_key)
@@ -1793,11 +1790,14 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
             unique = {unit['id']: unit for unit in warnings}
             first = v3_evidence_span(evidence[0])
             first_start, first_end = first[:2] if first else (0, 0)
+            # A line that also corrects itself is shown as a correction, not only as another person's (RR2-8).
+            corrections = {unit['id'] for unit in scope['corrections']}
             return [{'quote': unit['quote'], 'start': unit['start'], 'end': unit['end'],
                      'after': unit['start'] >= first_end,
                      'same': not re.search(r'[\r\n]', notes[min(unit['end'], first_end):max(unit['start'], first_start)]),
                      **({'syntax_incomplete': True} if unit.get('syntax_incomplete') else {}),
-                     **({'other_person': True} if unit.get('other_person') else {})}
+                     **({'other_person': True} if unit.get('other_person') and unit['id'] not in corrections else {}),
+                     **({'unread': True} if unit.get('unread') else {})}
                     for unit in unique.values()]
     if not index or not evidence:
         return governed_context(governance, notes, evidence)
@@ -1855,19 +1855,14 @@ def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_unit
         try:
             note_units = v3_units if v3_units is not None else source_units(notes, asked, context_labels=context)[0]
             corrections = [unit for unit in note_units if v3_note_correction(unit['quote'])]
-            readable = True
         except ValidationError:
             # An existing draft must remain reviewable even when its notes exceed generation's unit limit.
             # No automatic answer is released when this reader cannot establish its context.
             note_units = [{'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)}]
             corrections = note_units
-            readable = False
         preceding = v3_preceding_reading(notes, asked, context, note_units, v3_parsed)
-        # G-H: read from the actor reading's own parse (no unit is parsed twice, R3-4); none when it could not read.
-        bare_repairs = v3_bare_repair_reach(preceding, note_units, corrections) if readable else {}
         if getattr(settings, 'V3_FIELD_RELATIONS', False): preceding['catalogue'] = fields
-        result += ({'units': note_units, 'corrections': corrections, 'bare_repairs': bare_repairs,
-                    'preceding': preceding},)
+        result += ({'units': note_units, 'corrections': corrections, 'preceding': preceding},)
     return result
 
 
@@ -2067,8 +2062,12 @@ V3_RETRACTION_WORDS = frozenset(('delete deletes deleted deleting deletion delet
     'invalidate invalidates invalidated invalidating invalidation invalidations').split())
 V3_RETRACTION_ACTION = re.compile(LETTER_BEFORE + '(?:' + '|'.join(sorted(V3_RETRACTION_WORDS))
                                  + ')' + LETTER_AFTER, re.I)
+#: HOLD-ONLY (round 3, PRE-1): the rest of a dictation is a record object too ('Strike the rest.', 'Delete the rest of
+#: this dictation.'), read only as the object of a retraction action; 'rest' anywhere else ('bed rest') is not.
 V3_RECORD_REFERENCE = re.compile(LETTER_BEFORE + r'(?:entr(?:y|ies)|statements?|declarations?'
-    r'|records?|chart|documentation|annotations?|notes?)' + LETTER_AFTER, re.I)
+    r'|records?|chart|documentation|annotations?|notes?|dictations?|transcriptions?|everything'
+    r'|(?:the\s+)?(?:rest|remainder)(?=\s*(?:[.!?;]|$|of\s+(?:(?:the|this|that|my)\s+)?(?:dictation|transcription|note|'
+    r'notes|entry|entries|record|letter|message|it|that|this))))' + LETTER_AFTER, re.I)
 V3_RECORD_EVENT = re.compile(r'(?P<action>' + V3_RETRACTION_ACTION.pattern + r')|(?P<reference>'
     + V3_RECORD_REFERENCE.pattern + r')|(?P<boundary>[.!?;\n])', re.I)
 
@@ -2103,74 +2102,6 @@ def v3_record_retraction(text):
 def v3_note_correction(text):
     return any(SELF_CORRECTION.search(reading) or v3_record_retraction(reading)
         for reading in safety_readings(text))
-
-
-#: Words by which a repair's replacement points FORWARD or at a place in the record rather than replacing a value.
-REPAIR_TARGET_WORDS = re.compile(LETTER_BEFORE + r'(?:next|following|below|beneath|overleaf|later|subsequent(?:ly)?|'
-                                 r'after|afterwards|coming|upcoming|line|lines|entry|entries|item|items|one|ones|'
-                                 r'statement|statements|record|records|note|notes|answer|answers)' + LETTER_AFTER, re.I)
-
-
-def v3_bare_repair(text, doc):
-    """⚠️ G-H (2026-09-29): a BARE SPEECH REPAIR ('Sorry, I mean amoxicillin.') replaces something already said. Bare
-    means: a self-correction phrase whose replacement (everything after the LAST such phrase) has no clause of its own
-    (no finite verb, no subject: the pinned parser's reading, `doc`), names no place or direction ('next', 'line',
-    'entry', ...), and no record retraction, pointer or scope reader fires anywhere in the unit. Every other correction
-    ('Sorry, the next one is wrong.', 'Strike the next entry.', 'Disregard the following.', 'Actually, she smokes.')
-    keeps its note-wide reach. No parse (`doc` None) fails closed (not bare). Its reach: `v3_bare_repair_reach`."""
-    if doc is None or any(v3_record_retraction(reading) or INHERITED_SCOPE.search(reading) or SCOPE_POINTER.search(reading)
-                          or points_elsewhere(reading) for reading in safety_readings(text)):
-        return False
-    found = list(SELF_CORRECTION.finditer(text))
-    if not found or not text.isascii():
-        return False
-    cut = found[-1].end()
-    if REPAIR_TARGET_WORDS.search(text[cut:]):
-        return False
-    return not any(token.idx >= cut and (token.dep_ in ('nsubj', 'nsubjpass', 'expl')
-                                         or (token.pos_ in ('VERB', 'AUX') and 'Fin' in token.morph.get('VerbForm')))
-                   for token in doc)
-
-
-def v3_bare_repair_reach(reading, units, corrections):
-    """⚠️ G-H, REPAIRED (F4, 2026-09-29): {bare repair unit id: ids of the LATER units outside its reach}.
-
-    A bare repair replaces something already said, so what follows it cannot be its target, EXCEPT a later line that
-    says the replaced thing again: 'Patient presents with chest pain, sorry, I mean abdominal pain.' / 'Chief
-    complaint: chest pain.', 'The patient takes warfarin. Scratch that.' / 'Medications: warfarin.', 'Allergies:
-    penicillin. Sorry, I mean amoxicillin.' / 'The patient is allergic to penicillin.' were adopted past the repair.
-    So a later unit is outside its reach only when it is proven to be about something else, by structure:
-      - the repaired statement is a LABELLED answer (its own text before the repair phrase, or else the unit written
-        just before it), so the question it answers is known; an unlabelled statement's question is not, and its
-        repair stays note-wide;
-      - the later unit is a PLAIN labelled value (`plain_values`, R3-1) of ANOTHER asked question; and
-      - it shares no content word (the pinned parser's lemmas) with the repair or the repaired statement.
-    Anything unread (no parse, more units than the actor reader reads) is not bare: note-wide (fail closed)."""
-    position = {unit['id']: index for index, unit in enumerate(units)}
-    reach = {}
-    for unit in corrections:
-        index = position.get(unit['id'])
-        if index is None or unit['id'] not in reading.get('bare_units', ()):
-            continue
-        first = SELF_CORRECTION.search(unit['quote'])
-        repaired = unit if re.search(r'[^\W_]', unit['quote'][:first.start()]) else (units[index - 1] if index else None)
-        if repaired is None:
-            continue
-        own = reading['parsed'].get(repaired['id'])
-        if not (reading['colon'].get(repaired['id']) and own and own[0] in reading['named']):
-            continue
-        mine, theirs = reading['actors'].get(unit['id']), reading['actors'].get(repaired['id'])
-        if not (mine and theirs and mine['readable'] and theirs['readable']):
-            continue
-        words = mine['content'] | theirs['content']
-        outside = set()
-        for later in units[index + 1:]:
-            info, value = reading['actors'].get(later['id']), reading['parsed'].get(later['id'])
-            if (reading['plain_values'].get(later['id']) and reading['colon'].get(later['id']) and value
-                    and value[0] != own[0] and info and info['readable'] and not (info['content'] & words)):
-                outside.add(later['id'])
-        reach[unit['id']] = frozenset(outside)
-    return reach
 
 
 #: ⚠️ NARROWED ONLY WHERE THE SHAPE PROVES IT IS NOT A POINTER (round 3, R3-6), so every round-2 pointer is still held.
@@ -2342,6 +2273,60 @@ def paragraph_neighbours(notes, units, plain):
     return found
 
 
+#: HOLD-ONLY (round 3, PRE-2): words by which a labelled value says the side, the person or the record is wrong
+#: ('Left knee: wrong side.', 'Clinical findings: opposite side.', 'Allergies: wrong patient.'). Such a value is not
+#: PLAIN for rule (a), so it may change what was written before it. A miss here leaves debaefd9's reading, nothing else.
+V3_IDENTITY_WORDS = re.compile(LETTER_BEFORE + r'(?:wrong|opposite|other|another|mistake|mistaken|mistakenly|error|'
+                               r'errors|erroneous|incorrect|amend(?:ed|ment)?|swapped|mix-up|mixed\s+up|typo|reversed|'
+                               r'instead)' + LETTER_AFTER, re.I)
+
+
+def v3_identity_value(value):
+    return any(V3_IDENTITY_WORDS.search(text) for text in safety_readings(str(value or '')))
+
+
+def v3_cross_paragraph(groups, plain, standing):
+    """⚠️ ROUND 3 (RR5, 2026-09-29): A BLANK LINE ENDS A PARAGRAPH ONLY FOR A SELF-STANDING LINE. For every unit: its
+    paragraph's number, the LAST unit of the paragraph before its own (None in the first), and the first LEADING unit
+    of a LATER paragraph (only other questions' plain labelled values before it in its paragraph) that is neither
+    another asked question's plain labelled value (`plain`, by id) nor self-standing (`standing`, by id: `v3_actors`
+    'standalone' - an explicit-patient, labelled, 'Label is ...', thing or other-person sentence with no pronoun
+    standing for something said before and no opening connective). Rules (a) and (b) of debaefd9 read the paragraph;
+    `v3_added_causes` reads these so that a later paragraph can still change an answer ('It was postponed.', 'Not
+    anymore.', 'But he quit only last month.') and an earlier one can still frame it."""
+    paragraph_of, cross_before, cross_changer = {}, {}, {}
+    last = None
+    for number, group in enumerate(groups):
+        for unit in group:
+            paragraph_of[unit['id']] = number
+            cross_before[unit['id']] = last
+        last = group[-1]
+    later = None
+    for group in reversed(groups):
+        for unit in group:
+            cross_changer[unit['id']] = later
+        # Only the paragraph's LEADING lines can reach back across the break: a line after a self-standing one
+        # continues its own paragraph ('Findings are as follows.' / 'Seen today.').
+        for unit in group:
+            if plain[unit['id']]:
+                continue
+            if not standing[unit['id']]:
+                later = unit
+            break
+    return paragraph_of, cross_before, cross_changer
+
+
+@functools.lru_cache(maxsize=256)
+def v3_label_pattern(label):
+    """A question label as it may be written in prose (the same variants `v3_related_source_blocks` reads)."""
+    variants = {label}
+    if label.endswith('ies'): variants.add(label[:-3] + 'y')
+    elif label.endswith('s') and not label.endswith(('ss', 'us', 'is')): variants.add(label[:-1])
+    elif label.endswith('y'): variants.add(label[:-1] + 'ies')
+    else: variants.add(label + 's')
+    return re.compile(LETTER_BEFORE + '(?:' + '|'.join(re.escape(v) for v in variants) + ')' + LETTER_AFTER, re.I)
+
+
 # This is a destination contract, not a clinical synonym list. Specific questions,
 # side/row fields, options and consent cannot use the general narrative exception.
 GENERAL_NARRATIVE_FIELDS = frozenset(('history', 'history of present illness', 'hpi', 'chief complaint',
@@ -2376,52 +2361,7 @@ def v3_medication_complement_holds(value):
                for text in readings(source))
 
 
-#: ⚠️ G-A (2026-09-29): A FORM'S TITLE IS NOT A FIELD'S QUALIFIER. The v3 inspect gives every field of a form the
-#: heading path it sits under ('Clinic visit record', 'Clinic visit record > Smoker'), and the unscoped routes below
-#: accepted only an EMPTY context or the label itself, so a plain title turned every one of them off. A field's own
-#: qualifier is its path minus (i) the leading segments every general narrative destination of the form shares (its
-#: title; a form with no general destination strips nothing) and (ii) a trailing segment equal to its own label. The
-#: existing tests apply to what remains, unchanged: 'Family history', 'Cardiovascular examination' or 'Mother' still
-#: qualify the field and keep it held. Structure only: no heading word list.
-V3_PATH_SEPARATOR = ' > '
-
-
-def v3_context_path(field):
-    return [part.strip() for part in str(field.get('context') or '').split(V3_PATH_SEPARATOR) if part.strip()]
-
-
-def v3_general_prefix(named, general):
-    """The leading path segments shared by every general narrative destination of the form ([] when it has none)."""
-    paths = []
-    for label in sorted(general):
-        path = v3_context_path(named[label][0])
-        if path and question_key(path[-1]) == label:
-            path = path[:-1]
-        paths.append(path)
-    if not paths:
-        return []
-    prefix = paths[0]
-    for path in paths[1:]:
-        common = 0
-        while common < min(len(prefix), len(path)) and prefix[common] == path[common]:
-            common += 1
-        prefix = prefix[:common]
-    return prefix
-
-
-def v3_field_qualifier(field, prefix):
-    """A field's own qualifier (see above), as text for the existing `question_key(...) in ('', label)` tests."""
-    path = v3_context_path(field)
-    if prefix and path[:len(prefix)] == prefix:
-        path = path[len(prefix):]
-    if path and question_key(path[-1]) == question_key(field.get('label') or ''):
-        path = path[:-1]
-    return V3_PATH_SEPARATOR.join(path)
-
-
-def v3_field_subjects(units, named, parsed, qualifier=None):
-    if qualifier is None:
-        qualifier = lambda field: field.get('context') or ''
+def v3_field_subjects(units, named, parsed):
     eligible = {label for label, matches in named.items() if label in CLINICAL_SUBJECT_FIELDS
                 and len(matches) == 1 and matches[0].get('kind') in ('text', 'long_text')}
     # Recognize a candidate head broadly enough to mark unsupported ownership
@@ -2448,7 +2388,7 @@ def v3_field_subjects(units, named, parsed, qualifier=None):
         allergies = named.get('allergies', ())
         if (unit['quote'] == 'No known drug allergies.' and len(allergies) == 1
                 and allergies[0].get('kind') in ('text', 'long_text')
-                and question_key(qualifier(allergies[0])) in ('', 'allergies')):
+                and question_key(allergies[0].get('context') or '') in ('', 'allergies')):
             subjects[unit['id']] = 'allergies'
             spans[unit['id']] = {'label': 'allergies', 'start': unit['start'], 'end': unit['end'],
                                  'complete_declaration': True}
@@ -2464,7 +2404,7 @@ def v3_field_subjects(units, named, parsed, qualifier=None):
             local_words = LOCAL_SUBJECT_QUALIFIERS.get(label, ())
             if (prefix not in prefixes[label] or not factual_predicate.match(predicate)
                     or (label == 'examination' and prefix in ('neurological', 'heart and lung')
-                        and question_key(qualifier(named[label][0])) not in ('', 'examination'))
+                        and question_key(named[label][0].get('context') or '') not in ('', 'examination'))
                     or (label == 'medications' and v3_medication_complement_holds(predicate))
                     or any(m.group().casefold() not in local_words for text in safety_readings(unit['quote'])
                            for m in UNSETTLED.finditer(text))
@@ -2487,16 +2427,9 @@ def v3_field_subjects(units, named, parsed, qualifier=None):
     return subjects, spans, eligible, ambiguous, unresolved
 
 
-def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresolved, ends_read, shapes_read,
-                             self_ok=frozenset()):
+def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresolved, ends_read, shapes_read):
     """Link literal references to another documented question. This is structural
-    coupling for review, not a semantic contradiction classifier.
-
-    `self_ok` (G-D, 2026-09-29): block indices that are ONE explicit-patient sentence (`patient_sentence`: no
-    'possibly', family word, correction or pointer) whose root verb is in the present tense by the pinned parser's
-    morphology. Such a block naming exactly one question's label, with no other block owning or referencing that
-    question, names ITS OWN destination ('The patient has right knee pain.' for 'Right knee'): no coupling is recorded
-    for it. A second label, a past tense, another referent or another referencing block keeps the coupling."""
+    coupling for review, not a semantic contradiction classifier."""
     patterns, visit_purposes = {}, {}
     for label in named:
         variants = {label}
@@ -2533,8 +2466,6 @@ def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresol
         block = blocks[index]
         for target in targets:
             referents = sources.get(target, [])
-            if index in self_ok and targets == {target} and not referents and referring[target] == {index}:
-                continue
             # Only this whole unchanged reference can pass without coupling: one
             # exact Plan clause, one complete safe source statement, and no other
             # statement modifying/referencing the same question. No text is stripped.
@@ -2580,10 +2511,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                and matches[0].get('kind') in ('text', 'long_text') and label in GENERAL_NARRATIVE_FIELDS}
     parsed = ({u['id']: value for u, value in zip(units, parsed_units)} if parsed_units is not None else
               {u['id']: tab_source_value(u['quote'], labels) for u in units})
-    prefix = v3_general_prefix(named, general)
-    qualifier = lambda field: v3_field_qualifier(field, prefix)
-    subjects, subject_spans, clinical, ambiguous_subjects, unresolved_subjects = v3_field_subjects(units, named, parsed,
-                                                                                                   qualifier)
+    subjects, subject_spans, clinical, ambiguous_subjects, unresolved_subjects = v3_field_subjects(units, named, parsed)
     declarations = {key for key, span in subject_spans.items() if span.get('complete_declaration')}
     colon_values = {u['id']: labelled_value(u['quote'], labels) for u in units}
     colon = {key: bool(value) for key, value in colon_values.items()}
@@ -2648,16 +2576,6 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
         prefix_safe = prefix_safe and (plain[unit['id']] or patient)
         previous = unit
     if group: groups.append(group)
-    # ONE actor reading for the neighbour rule (`v3_neighbour_causes`): who each sentence is about, paragraph by
-    # paragraph, by the pinned parser. It only ever HOLDS. Unreadable units fail closed there.
-    from .v3_actors import read as actors_read
-    explicit_patient = {u['id'] for u in units if EXPLICIT_PATIENT_SUBJECT.match(u['quote']) or u['id'] in age_presentations}
-    actors = actors_read(units, groups, colon=colon, parsed=parsed, subjects=subjects, explicit=explicit_patient,
-                         ages=age_presentations)
-    # G-H: bare speech repairs, read from the actor reading's own parse (no unit is parsed twice, R3-4). The parse
-    # itself is not kept in the reading: two readings of the same note must compare equal (one governance reader).
-    bare_units = {u['id'] for u in units if u['id'] in actors['docs'] and SELF_CORRECTION.search(u['quote'])
-                  and v3_bare_repair(u['quote'], actors['docs'][u['id']])}
     from .v3_patient_topics import patient_relations
     def actor_shape_holds(unit):
         text = unit['quote']
@@ -2683,7 +2601,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
         # independent of an Assessment. Keep its original context requirements.
         and label in (CLINICAL_SUBJECT_FIELDS | PLAN_FIELDS)
         and matches[0].get('kind') in ('text', 'long_text')
-        and question_key(qualifier(matches[0])) in ('', label)}
+        and question_key(matches[0].get('context') or '') in ('', label)}
     ancillary_relations = {}
     smoker = named.get('smoker', ())
     if len(smoker) == 1 and smoker[0].get('kind') == 'choice':
@@ -2819,6 +2737,8 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             blocks.append({'units': block, 'owner': owner, 'position': position,
                            'group_start': index - position, 'group_count': len(group_blocks)})
             for unit in block: block_of[unit['id']] = index
+    coupled, unchanged_references, neutral_references = v3_related_source_blocks(blocks, named, parsed, barriers,
+        ambiguous_subjects, unresolved_subjects, ends_read, shapes_read)
     from documents.word_v3 import side_phrase
     # A repeated label cannot establish which side its value describes. Reuse
     # the document reader's side syntax only to withhold that ambiguous context,
@@ -2831,48 +2751,103 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
                          and (plain_value(parsed[u['id']][1]) or (len(named[parsed[u['id']][0]]) == 1
                               and plain_printed_side_option(named[parsed[u['id']][0]][0], parsed[u['id']][1]))))
                     for u in units]
-    # G-D, REPAIRED (F9, 2026-09-29): the self-reference exemption needs the rest of the NOTE to be unable to reframe
-    # the sentence. Coupling is the only note-wide reader of a label named in prose, and a correction in another
-    # paragraph ('The patient has right knee pain.' / blank line / 'Wrong side: it is the left knee.') is read by no
-    # other: so every other unit of the note must be another asked question's PLAIN labelled value (R3-1).
-    not_plain = {u['id'] for u, plain in zip(units, plain_values) if not plain}
-    self_ok = {index for index, block in enumerate(blocks) if len(block['units']) == 1 and block['owner'] is None
-               and patients[block['units'][0]['id']]
-               and (actors['units'].get(block['units'][0]['id']) or {}).get('present')
-               and actors['units'][block['units'][0]['id']].get('kind') == 'patient'
-               and len(not_plain) <= 1 and not_plain <= {block['units'][0]['id']}}
-    coupled, unchanged_references, neutral_references = v3_related_source_blocks(blocks, named, parsed, barriers,
-        ambiguous_subjects, unresolved_subjects, ends_read, shapes_read, self_ok)
     from .v3_syntax import complete_ids
     # The parser supplies syntax only. The source actor must already be explicit
     # by the deterministic source grammar or proven by its complete actor ledger.
     # No context, destination or clinical-polarity rule uses this new allowance.
-    syntax_candidates, syntax_subjects, adverbial = [], {}, set()
+    syntax_candidates, syntax_subjects = [], {}
     for unit in units:
         text = unit['quote']
         if ':' in text or FINITE_STATEMENT_V3.search(text):
             continue
-        # G-E (2026-09-29): one admissible adverbial clause (`v3_syntax._admissible_adverbials`) is accepted for an
-        # explicit patient subject or a pronoun the actor reading resolved to the patient, only where no scope
-        # reframer or pointer is read anywhere in the sentence. The parser still binds the exact subject token.
-        admissible = not any(INHERITED_SCOPE.search(reading) or SCOPE_POINTER.search(reading)
-                             for reading in safety_readings(text))
-        info, state = actors['units'].get(unit['id']) or {}, actors['resolved'].get(unit['id']) or {}
         if match := EXPLICIT_PATIENT_SUBJECT.match(text):
             end = len(match.group().rstrip())
             span = (end - len('patient'), end)
-            if admissible: adverbial.add(unit['id'])
         elif unit['id'] in actor['units'] and (match := re.match(r'(?:He|She)\b', text)):
             span = (0, match.end())
-        elif info.get('kind') == 'pronoun' and state.get('actor') == 'patient' and info.get('subject_span'):
-            span = info['subject_span']
-            if admissible: adverbial.add(unit['id'])
         else:
             continue
         # A prefix is not a subject: in "patient advocate" the grammatical
         # subject is advocate. Bind the already named actor to its exact token.
         syntax_candidates.append(unit); syntax_subjects[unit['id']] = span
-    syntax_complete = complete_ids(syntax_candidates, subject_spans=syntax_subjects, adverbial=adverbial)
+    syntax_complete = complete_ids(syntax_candidates, subject_spans=syntax_subjects)
+    # ⚠️ ROUND 3 (2026-09-29): EVERYTHING BELOW ONLY EVER HOLDS (`v3_added_causes`, `v3_scope_selection`). Everything
+    # above is debaefd9's reading, unchanged.
+    # Who each unit may be about: ONE run over the whole note (`v3_actors`), never reset at a blank line (RR5, X1).
+    from .v3_actors import read as actors_read
+    explicit_patient = {u['id'] for u in units if EXPLICIT_PATIENT_SUBJECT.match(u['quote']) or u['id'] in age_presentations}
+    actors = actors_read(units, groups, colon=colon, parsed=parsed, subjects=subjects, explicit=explicit_patient,
+                         ages=age_presentations)
+    # PRE-2: a labelled value naming a side, an identity or an error ('Left knee: wrong side.', 'Allergies: wrong
+    # patient.') is not PLAIN for rule (a): it may change what came before it.
+    strict_plain = [is_plain and not v3_identity_value(parsed[u['id']][1]) for u, is_plain in zip(units, plain_values)]
+    standing = {u['id']: actors['units'][u['id']]['standalone'] for u in units}
+    paragraph_of, cross_before, cross_changer = v3_cross_paragraph(
+        groups, {u['id']: p for u, p in zip(units, strict_plain)}, standing)
+    # ANY line of a later paragraph (self-standing or not, leading or not) still holds an answer whose core word it
+    # repeats (a word may only add a hold): 'The patient is on methadone.' / blank line / 'The patient is not on
+    # diazepam or methadone.'; 'The patient presents with chest pain.' / blank line / 'His father had angina. The pain
+    # resolved yesterday.'.
+    paragraph_first, first_position = {}, 0
+    for number, group in enumerate(groups):
+        paragraph_first[number] = first_position
+        first_position += len(group)
+    paragraph_first[len(groups)] = first_position
+    core_index = {}
+    for index, u in enumerate(units):
+        if not strict_plain[index]:
+            for key in actors['units'][u['id']]['core_keys']:
+                core_index.setdefault(key, []).append(index)
+    # Rule (b)'s plain-prefix independence, read over the NOTE (a blank line does not restart the prefix); used only to
+    # exempt the added cross-paragraph hold, exactly as the paragraph's own prefix exempts rule (b).
+    independent_note, previous, prefix_safe = {}, None, True
+    for unit in units:
+        own = parsed[unit['id']]
+        if previous is not None and prefix_safe and plain[previous['id']]:
+            destinations = general & HISTORY_NARRATIVE_FIELDS if patients[unit['id']] and own is None else (
+                {own[0]} if own and own[0] in general and not colon[unit['id']]
+                and not UNSETTLED.search(own[1]) else set())
+            for label in destinations:
+                independent_note.setdefault(label, set()).add(unit['id'])
+        prefix_safe = prefix_safe and (plain[unit['id']] or patients[unit['id']])
+        previous = unit
+    position = {u['id']: index for index, u in enumerate(units)}
+    # A LABELLED line here: a colon-labelled value or a 'Label is ...' sentence (the kept reading counted both).
+    labelled_lines = [u for u in units if colon[u['id']] or parsed[u['id']]]
+    # A labelled line that names an asked question (its own label, or the label written in its value).
+    # debaefd9's two reviewed reference exemptions ('Plan: continue current medications.' with its one referent, and
+    # 'Patient presents for medication review.': `v3_related_source_blocks`) stay exemptions: no word hold overrides them.
+    reviewed_references = {}
+    for index, record in unchanged_references.items():
+        reviewed_references.setdefault(record['label'], set()).update(u['id'] for u in blocks[index]['units'])
+    for record in neutral_references.values():
+        for label in record['labels']:
+            reviewed_references.setdefault(label, set()).update(record['units'])
+    label_mentions = {label: [u['id'] for u in labelled_lines if ((parsed[u['id']] and parsed[u['id']][0] == label)
+                                                                   or v3_label_pattern(label).search(u['quote']))
+                              and u['id'] not in reviewed_references.get(label, ())] for label in named}
+    # Word indexes for the word holds (`v3_word_causes`): every word of each colon-labelled line, and the CORE words of
+    # each statement about the patient (an explicit-patient sentence, or a pronoun the run resolved to the patient).
+    key_index = {'labelled': {}, 'statement': {}}
+    for u in units:
+        found = actors['units'][u['id']]
+        if colon[u['id']]:
+            for key in found['keys']:
+                key_index['labelled'].setdefault(key, []).append(position[u['id']])
+        elif found['kind'] == 'patient' or (found['kind'] == 'pronoun'
+                                            and actors['resolved'][u['id']]['actor'] == 'patient'):
+            for key in found['core_keys']:
+                key_index['statement'].setdefault(key, []).append(position[u['id']])
+    block_keys = {index: frozenset().union(*(actors['units'][u['id']]['core_keys'] for u in block['units']))
+                  for index, block in enumerate(blocks)}
+    block_unread = {index for index, block in enumerate(blocks)
+                    if any(not actors['units'][u['id']]['readable'] for u in block['units'])}
+    # RR4-2: an explicit-patient sentence stating a past event ('The patient was seen in the emergency department.').
+    block_past = {index for index, block in enumerate(blocks)
+                  if any(actors['units'][u['id']]['patient_past'] for u in block['units'])}
+    # PRE-2: a block whose labelled value names a side, an identity or an error is independent of nothing.
+    block_identity = {index for index, block in enumerate(blocks)
+                      if any(colon[u['id']] and parsed[u['id']] and v3_identity_value(parsed[u['id']][1]) for u in block['units'])}
     return {'units': units, 'evidence_units': evidence_units, 'parsed': parsed,
             'fields': fields, 'context_labels': list(context_labels),
             'source': {'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)},
@@ -2887,11 +2862,13 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'coupled': coupled, 'unchanged_references': unchanged_references,
             'neutral_references': neutral_references,
             'ancillary_relations': ancillary_relations,
-            'neighbours': paragraph_neighbours(notes, units, plain_values),
-            'plain_values': {u['id']: plain for u, plain in zip(units, plain_values)},
-            'actors': actors['units'], 'resolved': actors['resolved'], 'bare_units': bare_units,
-            'position': {u['id']: (number, index) for number, group in enumerate(groups)
-                         for index, u in enumerate(group)},
+            'neighbours': paragraph_neighbours(notes, units, strict_plain),
+            'actors': actors['units'], 'resolved': actors['resolved'], 'patient_gender': actors['gender'],
+            'paragraph_of': paragraph_of, 'cross_before': cross_before, 'cross_changer': cross_changer,
+            'paragraph_first': paragraph_first, 'core_index': core_index,
+            'independent_note': independent_note, 'position': position, 'label_mentions': label_mentions,
+            'key_index': key_index, 'block_keys': block_keys, 'block_unread': block_unread, 'block_past': block_past,
+            'block_identity': block_identity, 'reviewed_references': reviewed_references,
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
             'conditional_multisentence': conditional_multisentence, 'conditional_unsafe': conditional_unsafe,
             'inherited_causes': [cause for cause in getattr(units, 'scope_causes', ())
@@ -2923,12 +2900,35 @@ def v3_scope_selection(reading, label, evidence):
     """
     label = question_key(label)
     if label in reading['ambiguous_subjects'] or label in reading['coupled']:
-        return {'before': set(), 'after': set(), 'complete': set(), 'deniers': {}}
+        return {'before': set(), 'after': set(), 'complete': set(), 'before_note': set(), 'after_note': set()}
     chosen = set(v3_evidence_units(reading, evidence))
-    def independent_block(index):
-        return reading['barriers'][index] and (index not in reading['actor_barriers']
-                                               or label in reading['actor_destinations'])
-    before, after, complete, deniers = set(), set(), set(), {}
+    # ⚠️ ROUND 3 (2026-09-29), HOLD-ONLY: fewer blocks are independent, never more.
+    #  X4: a colon-labelled block sharing a core word with the answer may change it ('The patient has a swollen right
+    #      knee.' / 'Examination: the swelling is in the left knee, not the right.'), so it is not independent of it.
+    #  RR4-2: an explicit-patient block stating a past event ('The patient was seen in the emergency department.') may
+    #      set the frame of what follows it, so it is not independent BEFORE the answer.
+    #  A block the actor reader could not read is independent of nothing (fail closed).
+    chosen_keys = frozenset().union(*(reading['actors'][unit]['core_keys'] for unit in chosen
+                                      if unit in reading['actors'])) if chosen else frozenset()
+    reviewed = reading['reviewed_references'].get(label, set())
+
+    def independent_block(index, earlier):
+        if not (reading['barriers'][index] and (index not in reading['actor_barriers']
+                                                or label in reading['actor_destinations'])):
+            return False
+        if index in reading['block_unread'] or index in reading['block_identity']:
+            return False
+        if (reading['colon'][reading['blocks'][index]['units'][0]['id']] and reading['block_keys'][index] & chosen_keys
+                and not {u['id'] for u in reading['blocks'][index]['units']} <= reviewed):
+            return False
+        return not (earlier and index in reading['block_past'])
+    count = len(reading['blocks'])
+    denied_before = [index for index in range(count) if not independent_block(index, True)]
+    denied_after = [index for index in range(count) if not independent_block(index, False)]
+
+    def all_independent(denied, low, high):
+        return bisect.bisect_left(denied, low) == bisect.bisect_left(denied, high)
+    before, after, complete, before_note, after_note = set(), set(), set(), set(), set()
     after.update(chosen & reading['ancillary_relations'].get(label, {}).keys())
     for index in {reading['block_of'][unit] for unit in chosen}:
         block = reading['blocks'][index]
@@ -2947,179 +2947,17 @@ def v3_scope_selection(reading, label, evidence):
         # The complete block retains its own preceding source sentences.
         before.update(unit['id'] for unit in block['units'][1:])
         low, high = block['group_start'], block['group_start'] + block['group_count']
-        earlier = [other for other in range(low, index) if not independent_block(other)]
-        later = [other for other in range(index + 1, high) if not independent_block(other)]
-        if not earlier:
+        if all_independent(denied_before, low, index):
             before.update(ids)
-        if not later:
+            # Across the whole note (round 3): every EARLIER block of the note is independent too.
+            if all_independent(denied_before, 0, low):
+                before_note.update(ids)
+        if all_independent(denied_after, index + 1, high):
             after.update(ids)
-        # X3 (2026-09-29): the blocks that DENIED an exemption are what actually hold it; the neighbour rule shows
-        # their units instead of the adjacent one (N06 Plan: the consent block, not 'She tolerated the procedure well.').
-        for unit_id in ids:
-            deniers[unit_id] = ([u for other in earlier for u in reading['blocks'][other]['units']],
-                                [u for other in later for u in reading['blocks'][other]['units']])
-    return {'before': before, 'after': after, 'complete': complete, 'deniers': deniers}
-
-
-@functools.lru_cache(maxsize=256)
-def v3_label_pattern(label):
-    """A question label as it may be written in prose (the same variants `v3_related_source_blocks` reads)."""
-    variants = {label}
-    if label.endswith('ies'): variants.add(label[:-3] + 'y')
-    elif label.endswith('s') and not label.endswith(('ss', 'us', 'is')): variants.add(label[:-1])
-    elif label.endswith('y'): variants.add(label[:-1] + 'ies')
-    else: variants.add(label + 's')
-    return re.compile(LETTER_BEFORE + '(?:' + '|'.join(re.escape(v) for v in variants) + ')' + LETTER_AFTER, re.I)
-
-
-def v3_repeats(reading, unit, later, label):
-    """HOLD-ONLY (2026-09-29, kept by the repair): whether a later PLAIN labelled value names this question's label
-    or repeats a core word of this UNLABELLED answer ('The patient is allergic to penicillin.' / 'Allergies: none.',
-    'The patient is suicidal.' / 'Suicidal ideation: none.': both were adopted past R3-1). Unreadable: True."""
-    mine, theirs = reading['actors'].get(unit['id']), reading['actors'].get(later['id'])
-    if not mine or not theirs or not mine['readable'] or not theirs['readable']:
-        return True
-    return bool(v3_label_pattern(label).search(later['quote']) or (mine['core'] & theirs['nominal']))
-
-
-def v3_changer(reading, unit, label):
-    """The first later unit of the paragraph that may change this one: `reading['neighbours']`'s (the first that is not
-    another asked question's PLAIN labelled value, R3-1), or, for an UNLABELLED answer, an earlier plain labelled value
-    that repeats its word or names its question (`v3_repeats`). Reads only the plain values before that neighbour."""
-    changer = reading['neighbours'][unit['id']][1]
-    if reading['colon'][unit['id']]:
-        return changer
-    number, index = reading['position'][unit['id']]
-    for later in itertools.islice(reading['groups'][number], index + 1, None):
-        if changer is not None and later['id'] == changer['id']:
-            break
-        if v3_repeats(reading, unit, later, label):
-            return later
-    return changer
-
-
-def v3_neighbour_causes(reading, unit, label, scoped, complete=frozenset(), proven=frozenset()):
-    """⚠️ THE ONE PARAGRAPH-NEIGHBOUR RULE for generation (`validate_tab_selections`) and the page, save and
-    finalization (`v3_preceding_warnings`): the source units that may change this selected unit, as [(cause, after)];
-    empty when none. `cause` is the unit that actually causes the hold (X3): the selected unit itself for (b''), the
-    other person's line for an actor hold, the blocks that denied an exemption for a positional hold.
-
-    ⚠️ REPAIRED 2026-09-29 (refutation round 1: R1-1..R1-9, R3-1, R3-2, F1-F9 and the replay set): THE POSITIONAL RULES
-    ARE BACK, UNCHANGED. The same-day change replaced them with a LINK reading (a later unit held only when it repeated a
-    word of this one, was a pronoun, opened with a connective, carried a clause-level status word, ...) and an ACTOR
-    reading of the unit before (released when it resolved to the patient). Neither can prove that a sentence does not
-    change another: a later sentence changes an earlier one by MEANING, through a class word ('Anticoagulation was
-    discontinued.' after 'The patient takes warfarin.'), an antonym ('The patient is a lifelong non-smoker.'), a
-    negation inside a noun phrase ('She has no thoughts of self-harm.'), a status verb in a reported clause ('The
-    diabetes nurse reports the tablets were stopped in June.') or a restated reason ('She came in for palpitations.');
-    and a sentence before it sets its FRAME, not only its subject ('The patient had an admission in 2019.' / 'She
-    presented with chest pain.', 'Chemotherapy is an option depending on the biopsy result.' / 'She will start
-    chemotherapy next month.', 'The patient was seen in A&E yesterday.' / 'Examination was normal.'). Every one of those
-    was supported. No word list closes that class, so nothing is released on it: the usefulness it bought is withdrawn
-    and stated (the notes-usefulness report), not papered over.
-
-    What stays from the same-day change, all of it HOLD-ONLY:
-      (b'') ANOTHER PERSON'S unit holds itself (`v3_actors`: another person as a subject anywhere or as a possessor,
-            named where the explicit patient is not the subject, pronoun subjects of two genders, a pronoun that
-            disagrees with the patient's gender), unless a separately reviewed relation reader bound it (`proven`).
-      ACTOR (never exempted): a labelled line after another person's run in its paragraph ('His father had a heart
-            attack at 55. He is allergic to penicillin. Allergies: penicillin.', X1), and an unlabelled pronoun,
-            possessed, thing or 'Label is' unit whose actor is another person or not uniquely the patient.
-            ⚠️ G-J ENGINEERING BASELINE, REVISED (reversible; not an owner ruling): an encounter topic ('Examination/
-            Assessment/Plan is ...') after another person's run is NOT released as the encounter's. The only structural
-            sign that could close the run is a labelled line between them, and that line is itself held as possibly
-            the other person's (R1-6: 'Assessment: breast cancer.' held beside 'Plan is chemotherapy.' supported), so a
-            run is closed only by the explicit patient.
-      BEFORE (positional (b), unchanged): an unlabelled or 'Label is' sentence (or an inline option) depends on the one
-            before it in its paragraph for its subject and scope, unless its complete block is exempt (`scoped`), it is
-            `independent`, or its paragraph is complete (`complete`).
-      AFTER (positional (a)): anything written after it in its paragraph other than another asked question's PLAIN
-            labelled value may change it (`reading['neighbours']`), unless its complete block is exempt or the unit is
-            in the same complete block; for an UNLABELLED answer, a plain labelled value that names its question or
-            repeats its core word may change it too (`v3_changer`, hold-only, kept from the same-day change).
-    Existing exemptions (a complete paragraph/block, `independent`, `scoped`) apply to the positional holds exactly as
-    before."""
-    uid = unit['id']
-    label = question_key(label)
-    info = reading['actors'].get(uid)
-    state = reading['resolved'].get(uid) or {}
-    causes = []
-    # `proven`: units a separately reviewed relation reader (field relations, history context; both off by default)
-    # already bound to this destination, foreign actor included ('the patient said the partner knows ...').
-    if (not info or info['other'] or state.get('self_other')) and uid not in proven:
-        causes.append((unit, False))
-    before = reading['neighbours'][uid][0]
-    changer = v3_changer(reading, unit, label)
-    colon = reading['colon'][uid]
-    inline = uid in reading['inline_options']
-    actor_cause = state.get('hold_cause') or before
-    if info and info['readable'] and actor_cause is not None and actor_cause['id'] != uid:
-        if colon and state.get('current') in ('other', 'ambiguous'):
-            causes.append((actor_cause, False))    # X1: a labelled person attribute (or topic) after another's run
-        elif (not colon and info['kind'] in ('pronoun', 'thing', 'label_is', 'patient', 'missing')
-              and state.get('actor') in ('other', 'ambiguous')):
-            causes.append((actor_cause, False))    # its actor is another person, or not uniquely the patient
-    deniers = scoped.get('deniers', {}).get(uid, ((), ()))
-    if (before is not None and (not colon or inline) and uid not in complete
-            and uid not in reading['independent'].get(label, ()) and uid not in scoped['before']):
-        causes.extend((cause, False) for cause in (deniers[0] or [before]))
-    if (changer is not None and uid not in complete and uid not in scoped['after']
-            and not (uid in scoped['complete'] and changer['id'] in scoped['complete']
-                     and reading['block_of'][uid] == reading['block_of'][changer['id']])):
-        # A complete block carries every continuation in its source order.
-        causes.extend((cause, True) for cause in (deniers[1] or [changer]))
-    return causes
-
-
-@functools.lru_cache(maxsize=512)
-def v3_context_words(text):
-    """Content lemmas (pinned parser) of one printed parent question, or None when it cannot be read."""
-    from .v3_syntax import docs
-    from .v3_actors import _content
-    parsed = docs([text])
-    return None if parsed is None else frozenset(_content(parsed[0]))
-
-
-def v3_distinct_write_ins(fields):
-    """G-F (2026-09-29): keys of fields whose label the form repeats but whose (context path, label) is unique: every
-    field sharing the label has a non-empty context path, and no two paths are the same. Such a field is identified by
-    its path; a repeated label under one path, or any field without one, is not."""
-    groups = {}
-    for field in fields:
-        groups.setdefault(question_key(field['label']), []).append(field)
-    found = set()
-    for group in groups.values():
-        paths = [V3_PATH_SEPARATOR.join(v3_context_path(field)).casefold() for field in group]
-        if len(group) > 1 and all(paths) and len(set(paths)) == len(paths):
-            found.update(field['key'] for field in group)
-    return found
-
-
-def v3_write_in_identified(reading, matches, field_key, selected):
-    """G-F: whether a selection for a repeated-label field identified by its context path may stand on that identity.
-    Held (False) when (i) a selected unit is a LABELLED line (its label names every one of them: 'Other: tight band.'),
-    or when the selected sentence does not point to its own parent question more than to any sibling's: the content
-    lemmas it shares with its own printed parent question must strictly outnumber those it shares with every other
-    (F3: the aura sentence put into the pain-description 'Other' shares 'headache'/'begin' with its sibling's question
-    and nothing with its own). (ii) One unit selected into two of them is held at adoption (`v3_adopted`), where both
-    selections are visible. Unreadable fails closed."""
-    own = next((field for field in matches if field.get('key') == field_key), None)
-    if own is None or field_key not in v3_distinct_write_ins(matches):
-        return False
-    for unit in selected.values():
-        info = reading['actors'].get(unit['id'])
-        if reading['colon'][unit['id']] or not info or not info['readable']:
-            return False
-        words = {}
-        for field in matches:
-            context = v3_context_words(V3_PATH_SEPARATOR.join(v3_context_path(field)))
-            if context is None:
-                return False
-            words[field['key']] = len(info['content'] & context)
-        mine = words[field_key]
-        if not mine or any(count >= mine for key, count in words.items() if key != field_key):
-            return False
-    return True
+            if all_independent(denied_after, high, count):
+                after_note.update(ids)
+    return {'before': before, 'after': after, 'complete': complete, 'before_note': before_note,
+            'after_note': after_note}
 
 
 def v3_preceding_warnings(reading, label, evidence, *, history_context=None, answer_text=None,
@@ -3162,8 +3000,7 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
                 option_warnings(matches[0], reading['units'], selected.values(), str(answer_text).splitlines()))
     warnings.update((unit['id'], unit) for unit in history['warnings'])
     warnings.update((unit['id'], unit) for unit in ordinary['warnings'])
-    if len(matches) > 1 and selected and not ordinary['valid'] and not v3_write_in_identified(
-            reading, matches, field_key, selected):
+    if len(matches) > 1 and selected and not ordinary['valid']:
         warnings.update(selected)
     starts = [unit['start'] for unit in reading['units']]
     for kind, start, end in reading['inherited_causes']:
@@ -3178,15 +3015,154 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
         if (unit['id'] in reading['unresolved_subjects'] or (subject and subject != label)
                 or (own and own[0] != label)):
             warnings[unit['id']] = unit
-        # The paragraph-neighbour rule: the SAME function generation calls (`v3_neighbour_causes`). A unit that holds
-        # itself as another person's is flagged, so the page names that reason (F3-set2), not 'the line shown with it'.
-        for cause, _after in v3_neighbour_causes(reading, unit, label, scoped, complete,
-                                                 proven=set(history['ids']) | set(ordinary['ids'])):
+        before, changer = reading['neighbours'][unit['id']]
+        if (before and (not reading['colon'][unit['id']] or unit['id'] in reading['inline_options']) and unit['id'] not in complete
+                and unit['id'] not in reading['independent'].get(label, ()) and unit['id'] not in scoped['before']):
+            warnings[before['id']] = before
+        if changer and unit['id'] not in complete and unit['id'] not in scoped['after']:
+            # A complete block carries every continuation in its source order.
+            if not (unit['id'] in scoped['complete'] and changer['id'] in scoped['complete']
+                    and reading['block_of'][unit['id']] == reading['block_of'][changer['id']]):
+                warnings[changer['id']] = changer
+        # ⚠️ ROUND 3 (2026-09-29): the hold-only additions, read by the page, save, finalization and (through
+        # `judged_context`) generation alike. Everything above in this loop is debaefd9's rule, unchanged.
+        for cause, flag in v3_added_causes(reading, unit, label, scoped, complete, set(selected),
+                                           proven=set(history['ids']) | set(ordinary['ids'])):
             if cause['id'] == unit['id']:
-                warnings[unit['id']] = {**warnings.get(unit['id'], unit), 'other_person': True}
+                warnings[unit['id']] = {**warnings.get(unit['id'], unit), **({flag: True} if flag else {})}
             else:
                 warnings.setdefault(cause['id'], cause)
     return list(warnings.values())
+
+
+def v3_nearest(positions, at, exclude=frozenset()):
+    """The nearest position before `at` and the nearest after it in a sorted list (None where there is none), skipping
+    `exclude`."""
+    found = []
+    index = bisect.bisect_left(positions, at)
+    earlier = next((p for p in reversed(positions[:index]) if p not in exclude), None)
+    later = next((p for p in positions[index:] if p != at and p not in exclude), None)
+    for position in (earlier, later):
+        if position is not None:
+            found.append(position)
+    return found
+
+
+def v3_added_causes(reading, unit, label, scoped, complete, selected, proven=frozenset()):
+    """⚠️ ROUND 3 (2026-09-29): EVERY HOLD ADDED TO debaefd9's POSITIONAL RULES, AND NOTHING THAT RELEASES. Returns
+    [(cause unit, flag)] for one selected unit; `flag` ('unread', 'syntax_incomplete', 'other_person') marks the unit
+    itself, None another unit shown with it. An empty list leaves debaefd9's reading unchanged. Each rule is structural
+    or only HOLDS on a word: a shared word may add a hold, never release one. The page, save, finalization and
+    generation (through `judged_context`) all read it. At most a few units per selected unit are shown (linear: C1).
+
+      UNREAD (RR4-1): in a note the actor reader cannot read (more than `v3_actors.MAX_UNITS` units, or no verified
+            parser) every unit is held, fail closed; a single line longer than the parser reads is held when a word in
+            it may name a person (`v3_actors._unread`).
+      BOUNDED (PRE-3, RR2): a statement bounded or conditioned by a subordinate clause ('... when the bleeding stops.',
+            '... until the order expired.', '... unless the order lapses.') is not proven current.
+      ACROSS A BLANK LINE (RR5): a blank line ends the paragraph only for a SELF-STANDING line (`v3_cross_paragraph`).
+            Rule (a) reads the first later-paragraph unit that is neither another asked question's plain labelled value
+            nor self-standing, or a self-standing one repeating this answer's core word; rule (b) reads the last unit of
+            the paragraph before when this unit is not self-standing, when the two share a core word, or when that
+            unit states a past event. Both unless every earlier (or later) block of the NOTE is independent
+            (`scoped['before_note']`, `scoped['after_note']`) or the note's plain prefix makes it independent
+            (`independent_note`). STATED RESIDUAL: a self-standing sentence in another paragraph that changes an answer
+            by meaning alone, with no shared core word, is not held (as on debaefd9).
+      WORD OVERLAPS, anywhere in the note: for an UNLABELLED answer, a labelled line naming its question, or a
+            colon-labelled line repeating its core word (kept from the same-day change: 'The patient is allergic to
+            penicillin.' / 'Allergies: none.'); for a LABELLED answer, a statement about the patient whose core word (or
+            its stem) is in the label or the value (RR4-4, the mirror: 'The patient is suicidal.' / 'Suicidal ideation:
+            none.').
+      (b'') another person's unit holds itself (`v3_actors`): a person as subject or possessor, an indefinite person,
+            a kinship compound (RR7), another patient, a clinician bearing a medication, allergy or history (RR8), a
+            relative named by an appositive or given a relative clause (RR9), a pronoun of the other gender (RR6).
+      ACTOR (X1, RR5, RR4-8): a labelled line while the note's run is another person's or not uniquely the patient's;
+            an unlabelled unit whose actor is another person or not uniquely the patient. The run is the NOTE's.
+    `proven` (units a separately reviewed relation reader bound; both readers are off by default) keeps debaefd9's
+    exemption from every added hold but UNREAD and the WORD OVERLAPS: the relation proof is the model's declaration
+    that nothing else changes the unit, which is exactly what a line repeating its words can contradict (the frozen N13
+    and N16 vetoes)."""
+    uid = unit['id']
+    info = reading['actors'].get(uid)
+    state = reading['resolved'].get(uid) or {}
+    colon = reading['colon'][uid]
+    readable = bool(info and info['readable'])
+    causes = [] if readable or (info and not info.get('hold')) else [(unit, 'unread')]
+    # Word overlaps HOLD even a unit a relation reader bound (its proof is the model's declaration that nothing else
+    # changes it, which is exactly what a line repeating its words can contradict: the N13 and N16 vetoes).
+    causes.extend(v3_word_causes(reading, unit, label, selected, info, colon))
+    # Every other added hold keeps debaefd9's exemption for a unit a relation reader bound (`proven`).
+    if uid in proven:
+        return causes
+    if readable and any(not any(low <= unit['start'] + at < high for low, high in reading['conditional_spans'])
+                        for at in info['bounded']):
+        # PRE-3, RR2: bounded or conditioned by a subordinate clause ('The patient will start warfarin when the
+        # bleeding stops.', 'The patient had attended the clinic every week until the order expired.'); debaefd9's
+        # own reviewed return instruction ('Return if symptoms worsen.', `RETURN_IF_INSTRUCTION`) is not this.
+        causes.append((unit, 'syntax_incomplete'))
+    # Rules (b) and (a) across a blank line, where debaefd9's paragraph rule did not already hold.
+    inline = uid in reading['inline_options']
+    before, changer = reading['neighbours'][uid]
+    held_b = (before is not None and (not colon or inline) and uid not in complete
+              and uid not in reading['independent'].get(label, ()) and uid not in scoped['before'])
+    crossed = reading['cross_before'].get(uid)
+    if (crossed is not None and (not colon or inline) and not held_b and uid not in scoped['before_note']
+            and uid not in reading['independent_note'].get(label, ())):
+        before_info = reading['actors'].get(crossed['id'])
+        # It depends on the paragraph before when it does not stand on its own ('She presented with chest pain.'), when
+        # either repeats the other's core word, or when that paragraph ends on an explicit-patient past event, which may
+        # set its frame ('The patient was seen in A&E yesterday.' / blank line / 'Examination is normal.').
+        if (not info or not info['readable'] or not info['standalone'] or not before_info or not before_info['readable']
+                or before_info['patient_past'] or info['core_keys'] & before_info['core_keys']):
+            causes.append((crossed, None))
+    held_a = (changer is not None and uid not in complete and uid not in scoped['after']
+              and not (uid in scoped['complete'] and changer['id'] in scoped['complete']
+                       and reading['block_of'][uid] == reading['block_of'][changer['id']]))
+    if not held_a and uid not in scoped['after_note']:
+        later = reading['cross_changer'].get(uid)
+        if info and info['readable']:
+            # ... or any line of a later paragraph that repeats this answer's core word.
+            start = reading['paragraph_first'][reading['paragraph_of'][uid] + 1]
+            repeats = [positions[bisect.bisect_left(positions, start)] for key in info['core_keys']
+                       if (positions := reading['core_index'].get(key)) and positions[-1] >= start]
+            if repeats and (later is None or min(repeats) < reading['position'][later['id']]):
+                later = reading['units'][min(repeats)]
+        if later is not None:
+            causes.append((later, None))
+    if not readable:
+        return causes
+    if info['other'] or state.get('self_other'):
+        causes.append((unit, 'other_person'))
+    actor_cause = state.get('hold_cause') or unit
+    if colon and state.get('current') in ('other', 'ambiguous'):
+        causes.append((actor_cause, None))
+    elif not colon and state.get('actor') in ('other', 'ambiguous'):
+        causes.append((actor_cause, None))
+    return causes
+
+
+def v3_word_causes(reading, unit, label, selected, info, colon):
+    """Word overlaps that only HOLD, note-wide (`v3_added_causes`): for an UNLABELLED answer, a labelled line (colon or
+    'Label is ...') naming its question, or a colon-labelled line with its core word; for a LABELLED answer, a statement
+    about the patient whose core word (or its stem) is in its label or value. The nearest such unit before this one and
+    the nearest after it; nothing when unread (the unit is held as unread anyway)."""
+    if not info or not info['readable']:
+        return []
+    units, position = reading['units'], reading['position']
+    at = position[unit['id']]
+    exclude = {position[other] for other in selected if other in position}
+    found = set()
+    if not colon:
+        positions = sorted(position[other] for other in reading['label_mentions'].get(label, ()))
+        found.update(v3_nearest(positions, at, exclude))
+        reviewed = {position[other] for other in reading['reviewed_references'].get(label, ())}
+        for key in info['core_keys']:
+            found.update(v3_nearest(reading['key_index']['labelled'].get(key, ()), at, exclude | reviewed))
+    else:
+        for key in info['keys']:
+            found.update(v3_nearest(reading['key_index']['statement'].get(key, ()), at, exclude))
+    nearest = [max((p for p in found if p < at), default=None), min((p for p in found if p > at), default=None)]
+    return [(units[p], None) for p in nearest if p is not None]
 
 
 def v3_complete_statement(reading, unit, scoped):
@@ -3252,11 +3228,14 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         if unit['id'] not in shape_read:
             shape_read[unit['id']]=(ends_inside(unit) and not printed_side.get(unit['id'])) or v3_shape_holds(unit['quote'],own_value[1] if own_value else unit['quote'])
         return shape_read[unit['id']]
-    # ⚠️ CONTRACT v3: A 'Label is ...' SENTENCE IS AN ORDINARY SENTENCE FOR THE NEIGHBOUR RULE (R3-2): read as a labelled
+    # ⚠️ CONTRACT v3: A 'Label is ...' SENTENCE IS AN ORDINARY SENTENCE FOR RULES (a) AND (b) (R3-2): read as a labelled
     # value it neither changed what came before it ('Consent obtained: yes.' / 'Plan is to proceed once consent is signed
-    # tomorrow.') nor was changed ('Her sister was seen in oncology last month. Diagnosis was breast cancer.'). The
-    # paragraph neighbours are the governance reading's own (`reading['neighbours']`, `reading['plain_values']`), read by
-    # the ONE rule both readers call (`v3_neighbour_causes`), never a second copy with a second `plain`.
+    # tomorrow.') nor was changed ('Her sister was seen in oncology last month. Diagnosis was breast cancer.'). Only a
+    # colon-labelled value names its question for rule (b); either passes rule (a) only as an asked question's plain value.
+    asked={question_key(f['label']) for f in fields}
+    plain=[bool(parsed and parsed[0] in asked and (plain_value(parsed[1]) or printed_side[unit['id']]))
+           for unit,parsed in zip(units,parsed_units)] if v3 else []
+    paragraph=paragraph_neighbours(notes,units,plain) if v3 else {}
     selected={item.key:item for item in selections.fields}
     complete_paragraphs = {}
     if v3:
@@ -3286,6 +3265,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                     and name in {'history', 'history of present illness', 'hpi', 'reason for visit',
                                  'plan', 'treatment plan', 'management plan'}):
                 complete_paragraphs.setdefault(key, set()).update(ids)
+    # HOLD-ONLY (kept from 2026-09-29): which specific text questions select each unit (see (b2) below).
     specific_claims={}
     if v3:
         for f in fields:
@@ -3343,7 +3323,7 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             competitors = set().union(*(set(other.unit_ids) for key, other in selected.items()
                                       if key != item.key and isinstance(other, UnitSelection)))
             if unowned & competitors:
-                scoped = {name: (ids - unowned if isinstance(ids, set) else ids) for name, ids in scoped.items()}
+                scoped = {name: ids - unowned for name, ids in scoped.items()}
         if v3:
             scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
             scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
@@ -3382,18 +3362,27 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
                 # F2/F3). STRUCTURE, NOT WORDS: no list of correction or denial words decides it, so nothing a list misses
                 # is adopted. 'Allergies: penicillin.' above 'Sorry, I mean amoxicillin.', 'Consent obtained: yes.' above
                 # 'To be obtained tomorrow.' and 'Warfarin 5 mg daily.' before 'Stopped last month.' were adopted.
-                # (a)/(b): ONE rule for generation, the page, save and finalization (`v3_neighbour_causes`): the
-                # positional rules, plus the hold-only actor reading (another person's unit holds itself; a line after
-                # another person's run is held); the shown line is the unit that actually causes the hold (X3).
-                for cause,after in v3_neighbour_causes(governance[11]['preceding'],unit,label,scoped,
-                                                       complete_paragraphs.get(item.key,set()),
-                                                       proven=set(history['ids'])|set(ordinary['ids'])):
-                    guarded=True
-                    if cause['id']!=unit['id']: nearby.setdefault(cause['id'],(unit,cause,after))
-                # ONE STATEMENT, TWO SPECIFIC QUESTIONS (2026-09-29): an unlabelled source statement selected into two
+                before,changer=paragraph[unit['id']]
+                # (a) Anything written after it in its paragraph other than another asked question's PLAIN labelled value
+                #     may change it (the lead's rule held only for the NEXT unit; a correction one labelled line further on
+                #     was adopted past; round 3: a split-off 'Plan: to be obtained tomorrow.' was exempt as labelled).
+                if (changer is not None and unit['id'] not in complete_paragraphs.get(item.key, ())
+                        and unit['id'] not in scoped['after'] and not (unit['id'] in scoped['complete']
+                            and changer['id'] in scoped['complete']
+                            and governance[11]['preceding']['block_of'][unit['id']] == governance[11]['preceding']['block_of'][changer['id']])):
+                    guarded=True; nearby.setdefault(changer['id'],(unit,changer,True))
+                # (b) An unlabelled or 'Label is ...' sentence depends on the one before it in its paragraph for its subject
+                #     and scope ('He had a myocardial infarction' after a sentence about her father; 'Diagnosis was breast
+                #     cancer.' after one about her sister). A colon-labelled value names its question.
+                if (before is not None and (not colon_labelled[unit['id']]
+                        or unit['id'] in governance[11]['preceding']['inline_options']) and unit['id'] not in complete_paragraphs.get(item.key, ())
+                        and unit['id'] not in governance[11]['preceding']['independent'].get(label, ())
+                        and unit['id'] not in scoped['before']):
+                    guarded=True; nearby.setdefault(before['id'],(unit,before,False))
+                # (b2) HOLD-ONLY, kept: ONE STATEMENT, TWO SPECIFIC QUESTIONS. An unlabelled statement selected into two
                 # or more text questions that are not general narrative destinations is owned by none of them ('He has
-                # hypertension and takes lisinopril 10 mg daily.' for both Past medical history and Medications). The
-                # positional rule (b) holds this shape only when a sentence stands before it; this holds it alone too.
+                # hypertension and takes lisinopril 10 mg daily.' for both Past medical history and Medications); rule
+                # (b) holds this shape only when a sentence stands before it.
                 if (label not in governance[11]['preceding']['general'] and not colon_labelled[unit['id']]
                         and field.get('kind') in ('text','long_text') and len(specific_claims.get(unit['id'],()))>1):
                     guarded=True
@@ -3883,18 +3872,6 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
     question_key, a labelled line fills NONE of them; each is held for the clinician."""
     labels = recognized_labels(generated, context_labels)
     repeats = collections.Counter(question_key(f['label']) for f in generated)
-    # G-F (2026-09-29): a repeated label under distinct context paths names one question per path. Two of them that
-    # take the SAME source unit are held both (ii); the governance reader holds (i) and the parent-question contest.
-    distinct = v3_distinct_write_ins(generated)
-    taken = {}
-    for field in generated:
-        if field['key'] in distinct:
-            answer = answers.get(field['key']) or {}
-            held_evidence = (answer.get('held_candidate') or {}).get('evidence') or []
-            for entry in (answer.get('own_evidence') or answer.get('evidence') or []) + held_evidence:
-                if (span := v3_evidence_span(entry)):
-                    taken.setdefault((question_key(field['label']), span[0], span[1]), set()).add(field['key'])
-    shared_units = {key for keys in taken.values() if len(keys) > 1 for key in keys}
     lines = LabelledLines(notes, labels)            # each line split once, for every option question (R3-5)
     relation_reading = None
     if any(answer.get('ordinary_relation') for answer in answers.values()):
@@ -3911,8 +3888,6 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
             continue
         answer = answers[field['key']]
         count = repeats[question_key(field['label'])]
-        if field['key'] in distinct and field['key'] not in shared_units:
-            count = 1
         relation = None
         if relation_reading is not None and answer.get('ordinary_relation'):
             from .v3_field_relations import read as ordinary_read

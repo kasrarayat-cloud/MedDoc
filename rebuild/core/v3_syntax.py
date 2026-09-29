@@ -72,45 +72,13 @@ def _parser():
         return None
 
 
-def _present(head):
-    """A clause head in the present tense by the pinned parser's morphology: it, or an auxiliary under it, carries
-    Tense=Pres ('sees', 'is starting', 'has stopped'), and no modal is among them."""
-    tokens = [head] + [child for child in head.children if child.dep_ in ('aux', 'auxpass')]
-    return any('Pres' in token.morph.get('Tense') for token in tokens) and not any(token.tag_ == 'MD' for token in tokens)
-
-
-def _admissible_adverbials(doc, root):
-    """Token indices inside adverbial clauses the caller may accept (G-E, 2026-09-29): an `advcl` attached to the root
-    whose own subject, when it has one, is a THING (a noun or proper noun that names no person; never a personal or
-    demonstrative pronoun), with no modal anywhere inside it. The caller has already refused every unit carrying a
-    scope reframer or pointer (`INHERITED_SCOPE`), so 'if'/'would'/'could'/'might' clauses never reach this.
-    ⚠️ R1-9 (repair, 2026-09-29): BOTH clauses must be in the present tense by the parser's morphology. A past clause
-    bounded by another ('The patient attended the clinic every week until the order expired.', '... before the order
-    lapsed.') describes a state that ENDED, and a present clause bounded by a past one is not proven current either."""
-    from .v3_actors import names_person
-    allowed = set()
-    if not _present(root):
-        return allowed
-    for head in root.children:
-        if head.dep_ != 'advcl':
-            continue
-        inner = list(head.subtree)
-        if any(token.tag_ == 'MD' for token in inner) or not _present(head):
-            continue
-        subjects = [token for token in inner if token.dep_ in ('nsubj', 'nsubjpass')]
-        if any(token.pos_ not in ('NOUN', 'PROPN') or names_person(token) for token in subjects):
-            continue
-        allowed.update(token.i for token in inner)
-    return allowed
-
-
 @lru_cache(maxsize=1)
 def _reader():
     """The same verified bytes as `_parser`, with the model's own rule lemmatizer kept (its lookups file is in the
-    manifest). Used only by the actor reader (`v3_actors`) and the readers built on its reading; `_parser` and every
-    existing caller are unchanged. The entity recognizer stays excluded: measured on this model it tags drugs PERSON
-    ('Lisinopril 10 mg daily.', 'Apixaban was discontinued ...', 'Morphine was given.', a label's 'Urine') and misses
-    names ('Ahmed', 'Priya', 'Wei'), so it cannot say who a sentence is about (repair, 2026-09-29)."""
+    manifest). Used only by the actor reader (`v3_actors`), which only ever HOLDS; `_parser` and every existing caller
+    are unchanged. The entity recognizer stays excluded: measured on this model it tags drugs PERSON ('Lisinopril 10 mg
+    daily.', 'Apixaban was discontinued ...', 'Morphine was given.', a label's 'Urine') and misses names ('Ahmed',
+    'Priya', 'Wei'), so it cannot say who a sentence is about."""
     if _parser() is None:
         return None
     try:
@@ -125,7 +93,7 @@ def _reader():
 def docs(texts):
     """Parse bounded source texts with `_reader`, in order: a list with a Doc per text, or None in its place when that
     text is out of bounds (over `MAX_CHARACTERS` characters or `MAX_TOKENS` tokens); None instead of the list when the
-    verified model is missing or the parser fails. Every caller fails closed on a None."""
+    verified model is missing or the parser fails. Every caller fails closed on a None (the unit is HELD)."""
     texts = list(texts)
     bounded = [index for index, text in enumerate(texts) if isinstance(text, str) and 0 < len(text) <= MAX_CHARACTERS]
     try:
@@ -142,21 +110,17 @@ def docs(texts):
     return out
 
 
-def _complete(doc, subject_span=None, adverbial=False):
+def _complete(doc, subject_span=None):
     if len(doc) > MAX_TOKENS or len(list(doc.sents)) != 1:
         return False
     sentence = next(iter(doc.sents))
     root = sentence.root
     if root.pos_ not in ('VERB', 'AUX'):
         return False
-    # An adverbial clause is accepted only when the caller asked for it (explicit-patient units and pronouns already
-    # resolved to the patient) and only in the admissible shape above. Everything else is exactly as before.
-    inside = _admissible_adverbials(doc, root) if adverbial else set()
     # Only a simple declarative clause gets this additional syntax allowance.
     # Quoted/embedded, relative, conditional, passive and infinitival clauses
     # need a separately qualified source relation, not inferred actor/scope.
-    if any(token.tag_ == 'MD' or (token.dep_ in ('ccomp', 'xcomp', 'advcl', 'relcl', 'acl', 'parataxis', 'csubj', 'csubjpass', 'auxpass')
-                                  and not (token.dep_ == 'advcl' and token.i in inside))
+    if any(token.tag_ == 'MD' or token.dep_ in ('ccomp', 'xcomp', 'advcl', 'relcl', 'acl', 'parataxis', 'csubj', 'csubjpass', 'auxpass')
            for token in doc):
         return False
     finite = [token for token in [root, *root.children]
@@ -167,7 +131,7 @@ def _complete(doc, subject_span=None, adverbial=False):
         return False
     # A second explicit subject in a coordinated clause is a separate actor;
     # shared-subject coordination retains just this one subject token.
-    if sum(token.dep_ in ('nsubj', 'nsubjpass') and token.i not in inside for token in doc) != 1:
+    if sum(token.dep_ in ('nsubj', 'nsubjpass') for token in doc) != 1:
         return False
     if any(token.dep_ == 'conj' for token in subjects[0].children):
         return False
@@ -185,7 +149,7 @@ def _complete(doc, subject_span=None, adverbial=False):
     return bool(words and words[-1].pos_ not in ('CCONJ', 'SCONJ', 'ADP', 'DET', 'AUX', 'PART'))
 
 
-def complete_ids(units, *, subject_spans=None, adverbial=frozenset()):
+def complete_ids(units, *, subject_spans=None):
     """Syntax proof for at most 64 bounded source units in their original order.
 
     A missing model, excess unit, long text or parser error yields no new allowance.
@@ -193,7 +157,6 @@ def complete_ids(units, *, subject_spans=None, adverbial=frozenset()):
     which lack the existing finite-word proof, never labelled values or options.
     When the caller supplies already established actor spans, syntax must bind
     that exact token to the sole subject; it cannot invent or expand the actor.
-    `adverbial`: unit ids for which one admissible adverbial clause is accepted (`_admissible_adverbials`).
     """
     candidates = [unit for unit in units[:MAX_UNITS]
                   if isinstance(unit.get('quote'), str) and 0 < len(unit['quote']) <= MAX_CHARACTERS]
@@ -209,7 +172,7 @@ def complete_ids(units, *, subject_spans=None, adverbial=frozenset()):
                 if subject_spans is not None and unit['id'] not in subject_spans:
                     continue
                 span = None if subject_spans is None else subject_spans[unit['id']]
-                if _complete(doc, span, unit['id'] in adverbial) or _bare_patient_clause(unit['quote'], span):
+                if _complete(doc, span) or _bare_patient_clause(unit['quote'], span):
                     result.add(unit['id'])
             return result
     except (ValueError, TypeError, RuntimeError, OSError, KeyError, importlib.metadata.PackageNotFoundError):

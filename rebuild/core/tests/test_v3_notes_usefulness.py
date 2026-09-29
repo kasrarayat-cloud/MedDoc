@@ -7,8 +7,14 @@ the names of the over-hold analysis (phase-a/overholds.txt).
 
 ⚠️ REPAIRED after the refutation round (test_v3_notes_repair.py pins every confirmed finding): the link reading of a
 later unit, the actor release of the unit before, the actor-ledger subsets (G-B1) and the encounter release after a run
-(G-J) are withdrawn; the positional rules hold again. What stays: G-A, G-D, G-E, G-F, G-H (each narrowed where it was
-refuted), the hold-only actor reading ((b''), X1) and X3.
+(G-J) are withdrawn; the positional rules hold again.
+
+⚠️ ROUND 3 (2026-09-29, test_v3_notes_tightening.py pins the round-2 findings): TIGHTENING ONLY. Every release that relied
+on structure to prove two statements independent is WITHDRAWN and debaefd9's behaviour restored exactly: G-A (the form
+title as a qualifier), G-D (the self-reference coupling exemption), G-E (the adverbial clause admission), G-F (repeated
+write-ins identified by context), G-H (the bare repair's forward reach), F2-set2 (the age and titled-name presentation
+release) and X3 (the denying blocks shown, quadratic: C1). The tests below that pinned those releases now pin
+debaefd9's hold. What stays is hold-only: (b''), X1, the kept word hold, the one-statement-two-questions guard.
 """
 import copy
 
@@ -112,11 +118,15 @@ class NotesUsefulness(SimpleTestCase):
                 stored = {'text': notes, 'status': 'supported', 'reviewed': True,
                           'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}
                 self.assertEqual(g.governed_decisions(notes, fields, {key: stored}), [label])
-        # In its own paragraph the patient's sentence is its own; in the same paragraph the positional rule holds it.
+        # In its own paragraph the patient's SELF-STANDING sentence is its own (round 3: a blank line still ends the
+        # paragraph for a self-standing line that shares no core word); in the same paragraph the positional rule holds.
         self.assertSupported("The patient's neighbour takes warfarin.\n\nThe patient takes aspirin.", 'Medications',
                              ['The patient takes aspirin.'], 'The patient takes aspirin.')
         self.assertHeld("The patient's neighbour takes warfarin. The patient takes aspirin.", 'Medications',
                         ['The patient takes aspirin.'])
+        # ... but a line that does not stand on its own reaches back across it (RR5).
+        self.assertHeld("The patient's neighbour takes warfarin.\n\nShe takes aspirin.", 'Medications',
+                        ['She takes aspirin.'])
 
     def test_labelled_person_attribute_after_an_other_person_run_is_held(self):
         for notes, label, quote in (
@@ -226,8 +236,8 @@ class NotesUsefulness(SimpleTestCase):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, label, [quote])
 
-    # ── G-A: the title is not a qualifier ──────────────────────────────────────────────────────────────────────────
-    def test_the_form_title_is_not_a_qualifier(self):
+    # ── G-A WITHDRAWN (round 3, RR2-5): the form's title qualifies its fields again, as on debaefd9 ───────────────────
+    def test_the_form_title_qualifies_its_fields_again(self):
         fields = form()
         picks = {'v3_1': ['This is a 30-year-old female seen for headaches.'],
                  'v3_2': ['The headaches started two months ago and are worse in the morning.',
@@ -237,92 +247,85 @@ class NotesUsefulness(SimpleTestCase):
                  'v3_8': ['Assessment is tension-type headache.'],
                  'v3_9': ['Plan is to start amitriptyline 10 mg at night.', 'She will follow up in six weeks.']}
         out = adopt(N01, picks, fields)
-        expected = {'v3_7': 'Neurological examination is normal.', 'v3_8': 'tension-type headache.',
-                    'v3_9': 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'}
-        for key, text in expected.items():
-            self.assertEqual((out[key]['status'], out[key]['text']), ('supported', text), key)
-            self.assertEqual(g.governed_decisions(N01, fields, {key: {**out[key], 'reviewed': True}}), [], key)
-        # Held by position (a later sentence can change them by meaning), G-I (allergy consistency) and G-G (an option
-        # from prose): the actor-ledger subsets (G-B1) are withdrawn.
-        for key in ('v3_1', 'v3_2', 'v3_4', 'v3_5', 'v3_6'):
+        for key in picks:
             self.assertNotEqual(out[key]['status'], 'supported', key)
+        # RR2-5: the structural exemption carried onto the titled form adopted answers an adjacent block contradicts.
+        for notes, label, quote in (
+                ('The patient presents with a rash.\nNo known drug allergies.\nMedications are an adrenaline auto-injector '
+                 'for penicillin anaphylaxis.', 'Allergies', 'No known drug allergies.'),
+                ('The patient presents with a rash. Assessment is an allergic reaction to amoxicillin. No known drug '
+                 'allergies.', 'Assessment', 'Assessment is an allergic reaction to amoxicillin.'),
+                ('The patient presents with cough. Medications are varenicline. She is a nonsmoker.', 'Medications',
+                 'Medications are varenicline.'),
+                ('The patient presents with cough. Plan is to start varenicline 1 mg twice daily. She is a nonsmoker.',
+                 'Plan', 'Plan is to start varenicline 1 mg twice daily.')):
+            with self.subTest(notes=notes):
+                self.assertHeld(notes, label, [quote])
+        self.assertFalse(hasattr(g, 'v3_field_qualifier'))
 
-    def test_a_qualifier_that_remains_after_the_title_still_holds(self):
+    def test_a_qualifier_still_holds(self):
         for label, context, notes in (('Allergies', 'Family history', 'No known drug allergies.'),               # A1
                                       ('Allergies', TITLE + ' > Family history', 'No known drug allergies.'),     # A4
-                                      ('Examination', 'Cardiovascular examination', 'Neurological examination is normal.')):  # A2
+                                      ('Examination', 'Cardiovascular examination', 'Neurological examination is normal.'),  # A2
+                                      ('Examination', TITLE, 'Neurological examination is normal.')):            # the title
             with self.subTest(context=context):
                 self.assertHeld(notes, label, [notes], fields=form(**{label: context}))
-        self.assertSupported('Neurological examination is normal.', 'Examination',
-                             ['Neurological examination is normal.'], 'Neurological examination is normal.')
-        self.assertEqual(g.v3_field_qualifier({'label': 'Smoker', 'context': TITLE + ' > Smoker'}, [TITLE]), '')
-        self.assertEqual(g.v3_field_qualifier({'label': 'Smoker', 'context': 'Mother > Smoker'}, []), 'Mother')
 
-    # ── G-D: a present-tense patient sentence naming its own field, with nothing else in the note ─────────────────
-    def test_a_patient_sentence_naming_its_own_side_field(self):
+    # ── G-D WITHDRAWN (round 3, RR1, RR2-4): a sentence naming its own field stays coupled, as on debaefd9 ───────────
+    def test_a_patient_sentence_naming_its_own_side_field_stays_coupled(self):
         right, left = field('v3_1', 'Right knee'), field('v3_2', 'Left knee')
         right['context'], left['context'] = 'Knee review > Right knee', 'Knee review > Left knee'
         fields = [right, left]
-        self.assertSupported('The patient has right knee pain.', 'Right knee', ['The patient has right knee pain.'],
-                             'The patient has right knee pain.', fields=fields)
-        # F9: another paragraph can reframe it, and only the coupling reader reads the note that far.
-        self.assertHeld('The patient has right knee pain.\n\nWrong side: it is the left knee.', 'Right knee',
-                        ['The patient has right knee pain.'], fields=fields)
-        findings = field('v3_3', 'Clinical findings', 'long_text')
-        findings['context'] = 'Knee review > Clinical findings'
-        self.assertHeld('The patient has right knee pain and normal clinical findings.', 'Right knee',
-                        ['The patient has right knee pain and normal clinical findings.'], fields=[right, findings])
-        for notes in ("The patient's mother has right knee pain.",                          # D1
-                      'The patient has right knee pain and the left knee is swollen.',     # D2
-                      'The patient has left knee pain.',                                    # D4
-                      'The patient had right knee pain last year.',                         # D5
+        for notes in ('The patient has right knee pain.',
+                      'The patient has right knee pain.\n\nWrong side: it is the left knee.',              # F9
+                      'The patient has right knee pain.\nLeft knee: the painful side.',                     # RR2-4
+                      'The patient is the carer for a friend with right knee pain.',                        # RR1
+                      'The patient is at risk of right knee pain.',
+                      'The patient describes right knee pain in childhood.',
+                      "The patient's mother has right knee pain.",                                          # D1
                       'The patient had right knee pain.',
-                      'Does the patient have right knee pain?',                             # D6
-                      'The patient possibly has right knee pain.'):                         # D7
+                      'The patient possibly has right knee pain.'):                                         # D7
             with self.subTest(notes=notes):
-                self.assertHeld(notes, 'Right knee', [notes], fields=fields)
+                first = notes.split('\n')[0]
+                self.assertHeld(notes, 'Right knee', [first], fields=fields)
 
-    # ── G-E: one admissible adverbial clause, both clauses present tense ───────────────────────────────────────────
-    def test_an_admissible_adverbial_clause(self):
-        self.assertHeld('The patient sleeps poorly because she worries.', 'History of present illness',
-                        ['The patient sleeps poorly because she worries.'])  # a pronoun subject: no admissible adverbial
-        self.assertSupported('The patient sleeps poorly because the knee hurts.', 'History of present illness',
-                             ['The patient sleeps poorly because the knee hurts.'])  # a thing subject: admissible
-        self.assertHeld('The patient slept poorly until the knee healed.', 'History of present illness',
-                        ['The patient slept poorly until the knee healed.'])   # R1-9: an ended state
+    # ── G-E WITHDRAWN (round 3, RR2, RR2-7): no adverbial clause is admitted, and a bounding clause holds ────────────
+    def test_no_adverbial_clause_is_admitted(self):
+        for notes in ('The patient sleeps poorly because she worries.',
+                      'The patient sleeps poorly because the knee hurts.',
+                      'The patient slept poorly until the knee healed.',                                    # R1-9
+                      'The patient starts warfarin when the bleeding stops.',                               # RR2
+                      'The patient will start warfarin when the bleeding stops.',                           # RR2, older gap
+                      'The patient takes insulin when the sugar exceeds twenty.'):
+            with self.subTest(notes=notes):
+                label = 'Medications' if 'warfarin' in notes or 'insulin' in notes else 'History of present illness'
+                self.assertHeld(notes, label, [notes])
 
-    # ── G-H: a bare repair of a labelled answer does not reach a later unrelated plain labelled value ──────────────
-    def test_a_bare_repairs_reach(self):
+    # ── G-H WITHDRAWN (round 3, RR3, RR2-1..RR2-3, RR2-6): every repair is note-wide again, as on debaefd9 ─────────────
+    def test_every_repair_is_note_wide(self):
         fields = [field('v3_1', 'Chief complaint'), field('v3_2', 'Allergies'), field('v3_3', 'Smoker', 'choice', ['Yes', 'No'])]
         for f in fields:
             f['context'] = 'Skin clinic record' + (' > Smoker' if f['label'] == 'Smoker' else '')
         cc = 'Patient presents with a rash on both forearms.'
         for notes in (cc + '\nAllergies: penicillin. Sorry, I mean amoxicillin.\nSmoker: No.',              # N11
-                      cc + '\n\nAllergies: penicillin.\nSorry, I mean amoxicillin.\n\nSmoker: No.'):         # N12
+                      cc + '\n\nAllergies: penicillin.\nSorry, I mean amoxicillin.\n\nSmoker: No.',         # N12
+                      cc + ' Sorry, wrong patient.\nAllergies: penicillin.\nSmoker: Yes.',                   # RR3
+                      'Allergies: none.\nDisregard the rest.\nSmoker: Yes.',                                 # RR2-2
+                      'Allergies: none.\nStrike the rest.\nSmoker: Yes.',                                    # PRE-1
+                      'Allergies: none.\nDelete the rest of this dictation.\nSmoker: Yes.'):
             with self.subTest(notes=notes):
-                self.assertSupported(notes, 'Smoker', ['Smoker: No.'], 'No', fields=fields)
-                self.assertHeld(notes, 'Chief complaint', [cc], fields=fields)
-        for notes, quote in (('Smoker: No. Sorry, I mean yes.', 'Smoker: No. Sorry, I mean yes.'),                 # H1
-                             ('Allergies: penicillin.\nSmoker: No.\nSorry, I mean amoxicillin.', 'Smoker: No.'),   # H2
-                             ('Strike the next entry.\nSmoker: Yes.', 'Smoker: Yes.'),                              # H3
-                             ('Disregard the following.\nSmoker: Yes.', 'Smoker: Yes.'),                            # H4
-                             ('Sorry, the next one is wrong.\nSmoker: Yes.', 'Smoker: Yes.'),                       # H5
-                             ('Sorry, next line is wrong.\nSmoker: Yes.', 'Smoker: Yes.'),
-                             ('Allergies: none.\nActually, she smokes daily.\nSmoker: No.', 'Smoker: No.'),
-                             # F4: the repaired statement is unlabelled, so its question is unknown: note-wide.
-                             ('Patient presents with a rash, sorry, I mean a wound.\nSmoker: No.', 'Smoker: No.'),
-                             # A later line of the SAME question stays in the repair's reach.
-                             ('Smoker: No.\nSorry, I mean yes.\nSmoker: Yes.', 'Smoker: Yes.')):
-            with self.subTest(notes=notes):
+                quote = [line for line in notes.split('\n') if line.startswith('Smoker')][0]
                 self.assertHeld(notes, 'Smoker', [quote], fields=fields)
-        self.assertHeld(cc + '\n\nAllergies: none. Sorry, I meant both legs.', 'Chief complaint', [cc], fields=fields)  # H6
-        # A bare repair in a LATER paragraph still governs what precedes it (only the note-wide reader sees it).
-        self.assertHeld('Smoker: No.\n\nSorry, I mean yes.', 'Smoker', ['Smoker: No.'], fields=fields)
-        # A replacement naming a place or a direction is not bare: note-wide as before.
-        self.assertHeld('Sorry, next one.\nSmoker: Yes.', 'Smoker', ['Smoker: Yes.'], fields=fields)
+        # RR2-6: the held answer shows the correction line again.
+        n13 = 'The patient has no suicidal ideation.\nMedication: sertraline.\nSorry, I mean daily thoughts of overdose.'
+        held = self.assertHeld(n13 + '\nChief complaint: none.', 'Chief complaint', ['Chief complaint: none.'],
+                               fields=fields)
+        self.assertIn('Sorry, I mean daily thoughts of overdose.',
+                      [entry['quote'] for entry in held['held_candidate']['context']])
+        self.assertFalse(hasattr(g, 'v3_bare_repair_reach'))
 
-    # ── G-F: repeated write-in labels identified by their printed parent question ───────────────────────────────────
-    def test_repeated_write_ins_identified_by_their_parent_question(self):
+    # ── G-F WITHDRAWN (round 3, RR4-GF): a repeated write-in label is held, as on debaefd9 ───────────────────────────
+    def test_repeated_write_ins_are_held(self):
         fields = []
         for key, context in (('v3_1', 'How would you describe the pain? (tick all that apply)'),
                              ('v3_2', 'Do you notice anything before the headache begins? (tick all that apply)'),
@@ -332,31 +335,14 @@ class NotesUsefulness(SimpleTestCase):
             fields.append(f)
         pain = 'The patient describes the pain as a tight band around her head.'
         aura = 'The patient sees zigzag lines before the headache begins.'
-        notes = pain + '\n\n' + aura
-        out = adopt(notes, {'v3_1': [pain], 'v3_2': [aura]}, fields)
-        self.assertEqual((out['v3_1']['status'], out['v3_1']['text']), ('supported', pain))
-        self.assertEqual((out['v3_2']['status'], out['v3_2']['text']), ('supported', aura))
-        for key in ('v3_1', 'v3_2'):
-            self.assertEqual(g.governed_decisions(notes, fields, {key: {**out[key], 'reviewed': True}}), [])
-        # In ONE paragraph each is held by position, as any sentence beside another.
-        joined = adopt(pain + ' ' + aura, {'v3_1': [pain], 'v3_2': [aura]}, fields)
-        for key in ('v3_1', 'v3_2'):
-            self.assertNotEqual(joined[key]['status'], 'supported', key)
-        for picks in ({'v3_1': [aura]},                                   # F3: the model misassigns it
-                      {'v3_1': [pain], 'v3_2': [pain]},                   # F2: one sentence into two of them
-                      {'v3_1': [aura], 'v3_2': [pain]}):
-            with self.subTest(picks=picks):
+        grandmother = 'The patient describes the pain in her grandmother as a tight band.'
+        for notes, picks in ((pain + '\n\n' + aura, {'v3_1': [pain], 'v3_2': [aura]}),
+                             (pain, {'v3_1': [pain]}), (grandmother, {'v3_1': [grandmother]})):
+            with self.subTest(notes=notes):
                 out = adopt(notes, picks, fields)
                 for key in picks:
-                    self.assertNotEqual(out[key]['status'], 'supported', (picks, key))
-        out = adopt('Other: tight band.', {'v3_1': ['Other: tight band.']}, fields)                           # F1
-        self.assertNotEqual(out['v3_1']['status'], 'supported')
-        # (i) a labelled line names every one of them, even when its words point to one parent question.
-        labelled = 'Other: described as a tight band.'
-        self.assertNotEqual(adopt(labelled, {'v3_1': [labelled]}, fields)['v3_1']['status'], 'supported')
-        same = copy.deepcopy(fields)
-        same[1]['context'] = same[0]['context']
-        self.assertNotEqual(adopt(notes, {'v3_1': [pain]}, same)['v3_1']['status'], 'supported')
+                    self.assertNotEqual(out[key]['status'], 'supported', (notes, key))
+        self.assertFalse(hasattr(g, 'v3_write_in_identified'))
 
     def test_one_statement_for_two_specific_questions_is_held(self):
         sentence = 'He has hypertension and takes lisinopril 10 mg daily.'
@@ -365,17 +351,17 @@ class NotesUsefulness(SimpleTestCase):
             self.assertNotEqual(out['v3_3']['status'], 'supported', notes)
             self.assertNotEqual(out['v3_4']['status'], 'supported', notes)
 
-    # ── X3: the line shown with a hold is the one that causes it ───────────────────────────────────────────────────
-    def test_the_line_shown_with_a_hold_is_its_cause(self):
+    # ── X3 WITHDRAWN (round 3, C1): a held answer shows debaefd9's lines (the adjacent one) plus the cause of any added
+    # hold, never every denying block (that made the stored and shown context quadratic) ───────────────────────────────
+    def test_the_lines_shown_with_a_hold(self):
         notes = 'His father had a heart attack at 55. He is allergic to penicillin. Allergies: penicillin.'
         held = self.assertHeld(notes, 'Allergies', ['Allergies: penicillin.'])
         shown = [entry['quote'] for entry in held['held_candidate']['context']]
-        self.assertIn('His father had a heart attack at 55.', shown)
-        self.assertNotIn('He is allergic to penicillin.', shown)
-        # A positional hold whose exemption another block denied shows that block (N06: the consent block).
+        self.assertIn('His father had a heart attack at 55.', shown)       # X1: the other person's run
+        self.assertNotIn('He is allergic to penicillin.', shown)           # 'He' is the father's: not about the patient
         n06 = ('The patient was seen for removal of a skin lesion on the left forearm. The risks and benefits were '
                'discussed. Consent obtained: yes. The lesion was excised under local anesthesia and closed with '
                'sutures. She tolerated the procedure well. Plan is suture removal in ten days.')
         held = self.assertHeld(n06, 'Plan', ['Plan is suture removal in ten days.'])
         shown = [entry['quote'] for entry in held['held_candidate']['context']]
-        self.assertIn('Consent obtained: yes.', shown)
+        self.assertEqual(shown, ['She tolerated the procedure well.'])

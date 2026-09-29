@@ -214,6 +214,28 @@ class SentenceWorkflow(V3Fixture, TestCase):
         self.client.post(f'/encounters/{e.pk}/finalize/', {'revision': e.revision, 'reviewed': 'on'})
         e.refresh_from_db(); self.assertNotEqual(e.status, 'finalized')
 
+    def test_a_stored_answer_in_a_note_too_long_to_read_is_held_and_says_so_on_the_page(self):
+        """RR4-1/C3 (round 3, 2026-09-29): above the actor reader's unit cap every unit is held (fail closed), and the
+        page says the line was not checked, not that it is about someone else."""
+        from core import v3_actors
+        doc = Document(); doc.add_paragraph('What medications does the patient take?'); box(doc)
+        template, version = self.uploaded(data=data(doc), name='SYNTHETIC unread reason')
+        self.confirm(template, version)
+        target = version.fields[0]
+        first = 'The patient takes aspirin.'
+        notes = first + ''.join('\n\nLine %d is recorded.' % n for n in range(1, v3_actors.MAX_UNITS + 5))
+        self.new_encounter(version, notes=notes)
+        e = Encounter.objects.latest('created_at')
+        e.answers = {target['key']: {'text': first, 'status': 'supported', 'reviewed': True,
+            'reviewed_by': str(self.user.pk), 'evidence': [{'quote': first, 'start': 0, 'end': len(first)}]}}
+        e.save()
+        page = self.client.get(f'/encounters/{e.pk}/')
+        self.assertContains(page, 'data-held-candidate')
+        self.assertContains(page, 'Not checked for who it is about:')
+        self.assertNotContains(page, 'May be about someone other than the patient:')
+        self.client.post(f'/encounters/{e.pk}/finalize/', {'revision': e.revision, 'reviewed': 'on'})
+        e.refresh_from_db(); self.assertNotEqual(e.status, 'finalized')
+
     def test_forced_old_supported_fragment_or_foreign_subject_stays_held_on_page_save_finalize(self):
         doc = Document(); doc.add_paragraph('What activities does the patient attend?'); box(doc)
         template, version = self.uploaded(data=data(doc), name='SYNTHETIC stored syntax guards')

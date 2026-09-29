@@ -903,15 +903,10 @@ class OrdinaryFieldRelations(SimpleTestCase):
         fields = repeated(); original = offered(notes, fields, {'sensation': [notes]})
         for mutate in (lambda a: a['sensation'].update(text=notes + ' Changed.'),
                        lambda a: a['sensation'].update(ordinary_relation=a['sensation']['ordinary_relation'] + 'bad'),
-                       lambda a: a['sensation']['evidence'][0].update(end=1)):
+                       lambda a: a['sensation']['evidence'][0].update(end=1),
+                       lambda a: a['sensation'].pop('ordinary_relation')):
             answers = copy.deepcopy(original); mutate(answers)
             self.assertIn('Other:', g.governed_decisions(notes, fields, answers))
-        # ⚠️ DELIBERATE CHANGE 2026-09-29 (notes usefulness, G-F): an answer WITHOUT its relation record is decided by
-        # the default reader, which now identifies a repeated write-in label by its printed parent question. This
-        # sentence shares more words with its own question than with its sibling's, so the default reader (and a fresh
-        # default generation) supports it; it was held as an unidentifiable repeated label.
-        legacy = copy.deepcopy(original); legacy['sensation'].pop('ordinary_relation')
-        self.assertEqual(g.governed_decisions(notes, fields, legacy), [])
         moved = {'sensation': original['prodrome'], 'prodrome': original['sensation']}
         self.assertIn('Other:', g.governed_decisions(notes, fields, moved))
         altered = copy.deepcopy(fields); altered[0]['locator']['fingerprint'] = '1' * 64

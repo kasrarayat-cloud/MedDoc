@@ -4,6 +4,9 @@ Each test is named for a CONFIRMED finding (verify/ cases, reproduced on 0350b4e
 refuter's own synthetic shapes. Every one FAILS on 0350b4ea and passes on the repair: the repair restored the positional
 neighbour rules (`generation.v3_neighbour_causes`) and kept only hold-only readings on top of them. Forms are the frozen
 synthetic diagnostic forms (docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/cases.json), read-only.
+
+⚠️ ROUND 3 (2026-09-29): the releases this module pinned as 'still standing' (G-D, G-E, G-H, F2-set2) are WITHDRAWN
+(round-2 refutation: RR1, RR2, RR3, RR9, RR2-1..RR2-4); each such assertion now pins debaefd9's hold instead, and says so.
 """
 import copy
 import functools
@@ -311,7 +314,12 @@ class AfterSideFindings(RepairTestCase):
                         {'Allergies': ['The patient is allergic to penicillin.']}, form='n16-mood-and-allergies')
         self.assertHeld('The patient is suicidal.\nSuicidal ideation: none.',
                         {'Suicidal ideation': ['The patient is suicidal.']}, form='n13-risk-and-medication')
-        self.assertHeld('The patient takes ibuprofen as needed. Assessment is ibuprofen overuse.',
+        # ⚠️ Round 3: the kept hold is what the round-3 brief keeps - a labelled line NAMING the question, or a colon-
+        # labelled line with the answer's core word. A 'Label is' sentence repeating a word is debaefd9's positional
+        # reading again (supported there and here: its block is independent).
+        self.assertSupported('The patient takes ibuprofen as needed. Assessment is ibuprofen overuse.',
+                             {'Medications': ['The patient takes ibuprofen as needed.']})
+        self.assertHeld('The patient takes ibuprofen as needed. Medications: ibuprofen.',
                         {'Medications': ['The patient takes ibuprofen as needed.']})
         self.assertSupported('The patient takes aspirin.\nAllergies: none.', {'Medications': ['The patient takes aspirin.']})
 
@@ -354,9 +362,9 @@ class NoteWideFindings(RepairTestCase):
         answers = g.validate_selections(notes, asked, selections, context_labels=context,
                                         evidence_contract=g.TAB_CONTRACT)
         self.assertNotEqual(g.v3_adopted(v3_fields, answers, notes, asked, context)['v3_1']['status'], 'supported')
-        # G-H's own shape still stands: the repair of the allergy does not reach a later, unrelated labelled value.
-        self.assertSupported('Patient presents with a rash on both forearms.\nAllergies: penicillin. Sorry, I mean '
-                             'amoxicillin.\nSmoker: No.', {'Smoker': ['Smoker: No.']}, form='n11-n12-correction')
+        # ⚠️ Round 3: G-H WITHDRAWN (RR3, RR2-1..RR2-3). Every repair is note-wide again, as on debaefd9.
+        self.assertHeld('Patient presents with a rash on both forearms.\nAllergies: penicillin. Sorry, I mean '
+                        'amoxicillin.\nSmoker: No.', {'Smoker': ['Smoker: No.']}, form='n11-n12-correction')
 
     def test_F9_a_correction_in_another_paragraph_keeps_the_self_reference_coupled(self):
         for later in ('Wrong side: it is the left knee.', 'The left knee is affected, not the right.',
@@ -365,9 +373,9 @@ class NoteWideFindings(RepairTestCase):
                             {'Right knee': ['The patient has right knee pain.']}, form='n09-knee-pair')
         self.assertHeld('The patient has right knee pain.\n\nDictation error, left knee.',
                         {'Right knee': ['The patient has right knee pain.']}, form='n08-knee-and-findings')
-        # G-D's own shape still stands: the sentence alone names its own field.
-        self.assertSupported('The patient has right knee pain.', {'Right knee': ['The patient has right knee pain.']},
-                             form='n09-knee-pair')
+        # ⚠️ Round 3: G-D WITHDRAWN (RR1, RR2-4). The sentence alone stays coupled to the field it names, as on debaefd9.
+        self.assertHeld('The patient has right knee pain.', {'Right knee': ['The patient has right knee pain.']},
+                        form='n09-knee-pair')
 
     def test_R1_9_a_state_bounded_by_a_past_clause_is_not_a_complete_current_statement(self):
         for notes, quote in (
@@ -385,9 +393,9 @@ class NoteWideFindings(RepairTestCase):
         self.assertSupported('The patient attended the clinic every week.',
                              {'Clinic attendance': ['The patient attended the clinic every week.']},
                              form='n03-order-question')
-        # G-E's own shape still stands: both clauses in the present tense.
-        self.assertSupported('The patient sees zigzag lines before the headache begins.',
-                             {'History of present illness': ['The patient sees zigzag lines before the headache begins.']})
+        # ⚠️ Round 3: G-E WITHDRAWN (RR2, RR2-7), and a bounding clause holds (PRE-3): both clauses present is not current.
+        self.assertHeld('The patient sees zigzag lines before the headache begins.',
+                        {'History of present illness': ['The patient sees zigzag lines before the headache begins.']})
 
 
 class ReplaySetFindings(RepairTestCase):
@@ -410,14 +418,24 @@ class ReplaySetFindings(RepairTestCase):
                'headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.')
         self.assertHeld(n01, {'History of present illness': ['She denies visual changes, nausea, or weakness.']})
 
-    def test_F2_set2_a_patient_presented_by_age_or_by_name_is_the_patient(self):
+    def test_F2_set2_withdrawn_a_person_presented_by_age_or_by_name_is_read_like_any_person(self):
+        """⚠️ Round 3: F2-set2 WITHDRAWN (RR9: an appositive naming the presented person as the patient's relative was
+        released). Only the deterministic age grammar (`AGE_PATIENT_PRESENTATION`) presents the patient; these shapes are
+        held again, as on 0350b4ea (an over-hold: debaefd9 supported them only because it had no actor reader)."""
         for notes, label in (('A 45-year-old man presents with cough.', 'Chief complaint'),
                              ('Mrs Jones presents with chest pain.', 'Chief complaint'),
                              ('This is a 60-year-old woman here for follow up of her diabetes.', 'Chief complaint'),
                              ('This is a 60-year-old woman here for follow up of her diabetes.', 'History of present illness'),
                              ('Pleasant 70-year-old gentleman seen for review of his COPD.', 'Chief complaint'),
-                             ('She is a 60-year-old woman who takes metformin.', 'Medications')):
-            self.assertSupported(notes, {label: [notes]})
+                             ('She is a 60-year-old woman who takes metformin.', 'Medications'),
+                             ("A 70-year-old woman, the patient's mother, presents with chest pain.", 'Chief complaint'),
+                             ('A 12-year-old boy presents with his mother, who has chest pain.', 'Chief complaint')):
+            self.assertHeld(notes, {label: [notes]})
+        # The deterministic grammar still presents the patient ...
+        self.assertSupported('45-year-old man presents with cough.', {'Chief complaint': ['45-year-old man presents with cough.']})
+        # ... unless a relative clause gives another person something (RR9).
+        self.assertHeld('12-year-old boy presents with his mother, who has chest pain.',
+                        {'Chief complaint': ['12-year-old boy presents with his mother, who has chest pain.']})
         # A presented patient after another person's line in the same paragraph may be that person (unchanged), and a
         # named person who is not presenting cannot be shown to be the patient (a stated over-hold).
         self.assertHeld('Her brother was seen yesterday. A 45-year-old man presents with cough.',
@@ -454,10 +472,11 @@ class CostFindings(SimpleTestCase):
             g.v3_preceding_warnings(reading, 'Medications', evidence)
         self.assertLessEqual(readings.call_count, 2 * len(words))
 
-    def test_R3_4_bare_repairs_are_read_from_the_actor_readings_own_parse(self):
+    def test_R3_4_the_note_is_parsed_once(self):
+        """⚠️ Round 3: G-H (the bare repair reader) is WITHDRAWN; the actor reader still parses the note in ONE call."""
         fields = fields_of('r1-11')
         notes = '\n'.join('Allergies: drug%d. Sorry, I mean drug%d.' % (n, n + 1) for n in range(12))
         with patch.object(v3_syntax, 'docs', wraps=v3_syntax.docs) as docs:
             governance = g.governance_for(notes, fields)
         self.assertEqual(docs.call_count, 1)
-        self.assertTrue(governance[11]['bare_repairs'])
+        self.assertNotIn('bare_repairs', governance[11])
