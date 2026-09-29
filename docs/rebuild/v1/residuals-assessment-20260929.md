@@ -293,3 +293,154 @@ RB-M1 (the receipt ignored again) killed by both.
 To rerun the search: the Django test runner with this directory on `PYTHONPATH`, label `settle_interleavings`,
 `RESID_EXPLORER_OUTPUT=<file>`, against a throwaway database (about four minutes). Tests: `rebuild/core/tests/test_invitation_account_race.py`,
 `rebuild/core/tests/test_settlement_database_error.py`.
+
+## Second refutation (RR2): five findings reproduced and repaired
+
+A second refutation of this assessment and of its repairs (RS-1..RS-5, RA-LOW-1 on `d5367521`) verified five findings.
+Each was first reproduced as a failing test on `d5367521` (tests added, no application change), then repaired in the
+app's idiom, then mutation-proved. Environment as above, except the throwaway test database `quillmd_qa_resid3_t1` and
+a `sitecustomize` that refuses every non-loopback connection and name lookup; providers, Stripe and email were fakes
+(the mapping provider client is a mock; invitation delivery is replaced). The installed application, its database and
+the campaign's runtime state were not touched. No environment file was read.
+
+| | Severity | RED on `d5367521` | Change | Proof |
+|---|---|---|---|---|
+| **RR2-ACC-1** address longer than the username column | MEDIUM | 151–254 characters passed every form; `/register/` and both acceptances answered 500, `bootstrap_first_admin` raised `DataError` (varchar(150)); the department door issued an invitation at 151; 255–320 passed both invitation forms and department issuance raised `DataError` (varchar(254)) (the clinic door at 300 was not measured: that failure aborted the test's transaction) | `forms.account_email` refuses an address longer than every column it is written to (150, derived from the model fields): a form error, no account, the invitation row unchanged | 4 tests RED → GREEN, 2 boundary controls (150 still issued, accepted, registered, bootstrapped); 3 mutants killed |
+| **RR2-M1** mapping handler overwrote a committed adoption | MEDIUM | adoption COMMIT answer lost after it committed: `('failed', 'platform_failure: …')`, charge reversed, new mapping version left on the template; the handler's own first statement failing raised `OperationalError` out of `run_one`, job left `running` | `mapping_jobs.end_failed_job`: `core.jobs.end_failed_job`'s guard (decided and written under the job row lock; a committed outcome never overwritten; an in-doubt settlement COMMIT held with its key); the handler's own `DatabaseError` holds the job, as `core.jobs.run_one` | 4 tests RED → GREEN (2 of them RED only on the message, below), 2 controls; 6 mutants killed |
+| **RR2-ACC-2** quoted local part | LOW | `"sam"@…` and `"s\am"@…` each created another account beside `sam@…` at `/register/`, and `"sam"@…` one at a department invitation (the clinic subtest then met that account, so the clinic door was not measured on its own); both invitation forms accepted it and the department door issued it; `bootstrap_first_admin` created it | `forms.account_email` refuses a quoted local part ("Enter the email address without quotation marks.") | 5 tests RED → GREEN; 1 mutant killed |
+| **RR2-ACC-3** one invitation accepted twice at once | LOW | the second request answered a bare 404 (department `[404, 200]`, clinic `[200, 404]`) | under the invitation's row lock, an already accepted invitation answers with the sign-in page and "This invitation has already been accepted: the account for this email address exists. Sign in to continue."; it wrote nothing | 2 tests RED → GREEN; 2 mutants killed |
+| **RR2-L1** charged mapping output not downloadable | LOW | its requester got 404 from `/jobs/<id>/result/` | `job_result` scopes a mapping job by its template's department, under the generation rule (an active member of the job's department; charged outcomes only); the mapping page links it | 1 test RED → GREEN, 1 control; 4 mutants killed |
+
+### RR2-ACC-1 — an address longer than the account columns
+
+The address is the account's username (`register`, `invite_accept` and `clinic_invitations.accept` set
+`username = email`), a 150-character column; `User.email`, `Invitation.email` and `ClinicInvitation.email` hold 254,
+and Django's form `EmailField` admits 320. `account_email` — the one rule every door that chooses an address already
+applies (registration and both acceptances through `RegisterForm`, both issuances, `bootstrap_first_admin`) — now
+refuses an address longer than `ACCOUNT_EMAIL_MAX_LENGTH`, the minimum of those four model fields (150), with "Enter an
+email address of at most 150 characters." Measured after stripping, as stored.
+
+Tests (`test_account_email_rule.AccountEmailBounds`, `FirstAdministratorEmailRule`): every form at 151, 254, 300 and 320
+(RegisterForm beyond 254 is refused by Django's own `max_length` first); `/register/` at 151 and 254 answers 200 with the
+form error and no account; an invitation stored before the bound (department and clinic, 151 and 254) answers 200 with
+the form error, creates no account or organization, and its row is unchanged field for field; issuance through `/team/`
+and `/console/clinic-invitations/` at 151 and 300 answers 200 with the form error and stores no invitation; the first
+administrator's long address is the command's own `first_admin_email` refusal, not a `DataError`. Controls: exactly 150
+characters is issued by both doors, accepted into an account whose username is 150 characters, registered, and
+bootstrapped. Mutants: no bound (M1), the bound taken from the email column, 254 (M2), off by one (M3, killed by the
+controls).
+
+### RR2-M1 — the mapping handler decides under the job row lock
+
+`core.mapping_jobs.run_one`'s handler read `Usage.exists()` without the job's lock and wrote the job afterwards. When the
+adoption's COMMIT answer is lost after it committed, the adoption transaction still holds the job row (its UPDATE) until
+it ends; the unlocked read saw the committed usage, decided "known, not declined", and its later UPDATE waited for the
+row and then overwrote `succeeded` with `failed`/`platform_failure`, and `absorb_failed_job` reversed the charge of a
+mapping version the template now carries.
+
+Reproduced with the same deterministic harness as RS-1 (`test_settlement_outcome_unknown.CommitAnswerLost`: the COMMIT
+goes out, its answer never arrives, the transaction stays open on its server connection holding its locks until another
+backend waits for one of them, then is committed or rolled back), in live mapping mode with a mocked provider client:
+`test_mapping_outcome_unknown.py`.
+
+The repair is `core.jobs.end_failed_job`'s guard, as the finding asked, in `mapping_jobs.end_failed_job`: the handler
+first takes the job's row lock (which waits for an in-flight transaction), returns with `job.error_after_commit` audited
+when a committed transaction already ended the job, and otherwise decides from the committed usage and writes the state,
+the release or absorption and the `mapping.<state>` audit in one transaction. The connection that carries settlement's
+COMMIT is kept, and an in-doubt settlement (`jobs.commit_in_doubt`) asserts nothing: `reconciliation` with "The
+settlement outcome of this request is unknown; …", its request key kept, nothing released or absorbed. As in
+`core.jobs.run_one`, the handler first repairs a connection broken outside a transaction, and a `DatabaseError` from the
+handler's own reads or writes holds the job ("The outcome of this request could not be recorded; …") instead of leaving
+it `running`. Error strings, the absorption-failure hold (RS-3) and the audit actions are unchanged.
+
+| Test | RED on `d5367521` | GREEN |
+|---|---|---|
+| adoption committed, answer lost | `('failed', 'platform_failure: Mapping output could not be adopted.')`, charge reversed | `succeeded`, deliverable, 2 mapping versions, usage debits standing, no absorption or platform cost, `mapping.review_ready` kept, `job.error_after_commit` (`state=succeeded`, `OperationalError`) |
+| adoption did not commit, answer lost (control) | pass | `failed`/`platform_failure:`, key freed, 1 version, wallets as before the request, platform cost = usage cost |
+| settlement committed, answer lost | **RED at its first assertion, on the message**: already `reconciliation` with its key, reading "Provider outcome or settlement is uncertain; reconcile before retrying."; its later assertions were not reached on `d5367521` | `reconciliation`, "The settlement outcome of this request is unknown; …", key kept, holds settled, nothing absorbed, never retried, the same request not bought twice |
+| settlement did not commit, answer lost | **RED at its first assertion, on the message**, as above | the same, holds still held, no usage |
+| the handler's first statement loses the connection | `OperationalError` out of `run_one`, job `running` | `reconciliation`, "The outcome of this request could not be recorded; …", key kept, charge left for the administrator |
+| unusable output, nothing lost (control) | pass | `failed`/`platform_failure:`, absorbed, `mapping.failed` |
+
+The settlement rows are recorded as what they are: on `d5367521` the unlocked read preceded the in-flight commit, so the
+mapping handler already held an in-doubt settlement (by luck of its wording, not by rule). They pin the RS-1 rule on the
+mapping path: a handler that merely took the lock would read a landed settlement as known and absorb it (mutants M9 and
+M10 do exactly that and are killed). Mutants: no state check under the lock (M7), no lock (M8), in-doubt branch removed
+(M9), doubt never computed (M10), doubt never cleared after settlement, so a lost adoption answer is read as a settlement
+(M11), handler failure re-raised (M12).
+
+### RR2-ACC-2 — a quoted local part
+
+Django's `EmailValidator` accepts a quoted local part (`"sam"@…`, with `\`-escapes inside the quotes). It names the
+mailbox `sam@…` (RFC 5321) and is a different string to the unique index, the `iexact` lookup and every view comparison.
+`account_email` now refuses it: a `"` can occur only in a quoted local part (the validator admits it nowhere else). It is
+refused, not unquoted, for the rule's existing reason: nothing is rewritten into a different address, because the stored
+address is where the account's mail goes. Tests (`QuotedLocalPart`, the first-administrator test): `/register/` beside an
+existing `sam@…` (three spellings), both acceptances of an invitation stored with a quoted address (no account, the row
+unchanged), both forms, both issuance views, and `bootstrap_first_admin`. Mutant M4 (the check removed) killed.
+
+### RR2-ACC-3 — one invitation accepted twice at once
+
+Two submissions of the same invitation (two tabs, or a double submit that `data-submit-once` did not stop) both pass the
+unlocked lookup and the form (no account yet) and wait for the invitation's row lock; the first accepts it and creates
+the account, and the second found `accepted_at` set and raised `Http404`. Reproduced deterministically:
+`test_invitation_account_race.OneInvitationAcceptedTwiceAtOnce` holds both requests at a barrier right before the row
+lock. Now, under the lock, an accepted invitation answers with a redirect to the sign-in page and the message; the
+request wrote nothing. Expired or revoked (clinic) still answer 404. Asserted: both requests end on `/login/`, exactly one
+carries the message, one account (one welcome entry and one `credit.welcome`), one membership (clinic: one organization),
+one acceptance audit. Mutants M5 and M6 (each view back to `Http404`) killed.
+
+### RR2-L1 — a charged mapping job's stored output
+
+`job_result` filtered on `encounter__department`, which a mapping job (no encounter) never matches. Decision: the same
+access rule as a generation's output, not a new one: an active member of the job's department (for a mapping job, its
+template's department), charged outcomes only (`jobs.deliverable`: a success or a `not_adopted` decline), integrity
+checked, `job.result_download` audited with the job's department. The mapping assistance page links it for a deliverable
+operation ("Download provider result"). The mapping page itself stays limited to owners, clinicians and managers; the
+download follows the generation rule because the output concerns a blank form (no patient data) and the template, its
+original and every mapping version are already readable by every member of the department. Tests: the requester
+downloads (sha256 equal to the stored result), the audit row, the page link, a department colleague (employee) 200, a
+member of a sibling department 404, a deactivated membership 404; control: an absorbed (uncharged) mapping failure's
+stored output is 404 and not linked. Mutants: the old query (M13), any department (M14), uncharged output delivered
+(M15), no link (M16).
+
+### Test runs (RR2)
+
+| Run | Result |
+|---|---|
+| RED (`rr2-red.txt`): the new tests on `d5367521` with no application change | 21 new tests: 16 fail as described (27 failures and 3 errors counting subtests), the 5 controls pass; the RR2-L1 test re-run after moving its download assertion first: `404 != 200` |
+| GREEN (`rr2-green.txt`): `test_money_closeout`, `test_account_email_rule`, `test_invitation_account_race`, `test_mapping_outcome_unknown`, `test_mapping_assistance` | 96 of 96 |
+| Mutation (`rr2_mutate.py`, `rr2-mutation.json`, `rr2-mutation-run.txt`) | unmutated baseline of every label set first (23, 2, 6, 2 tests, all OK); 16 of 16 mutants killed; every anchor asserted to occur once, every application read back, every restore verified by sha256 (and the six changed files re-hashed against a record taken before the batch: all OK) |
+| 27 affected modules (`rr2-modules.txt`: every module that drives registration, invitations, the console invitation, the first administrator, `job_result`, the mapping worker or settlement) | 422 of 422 |
+| **`core.tests`, the whole core suite, once** (`rr2-core-suite.txt`, 30 min 50 s) | 2,426 run, 31 skipped, **0 failures** (2,405 before this change, plus the 21 new tests) |
+| `manage.py check` | no issues |
+
+One pre-existing test-isolation dependency was found and is not changed here: run without `test_money_closeout` loaded
+first, `test_mapping_assistance.MappingAssistance.test_no_provider_credential_is_not_processed_and_releases_the_hold`
+fails (`rr2-green-first.txt`), identically with `d5367521`'s `mapping_jobs.py` restored (sha256 verified before and after).
+`test_money_closeout.REAL_ANTHROPIC` is captured when that module is first imported; imported lazily inside the test,
+after `MappingAssistance.setUp` has patched `anthropic.Anthropic` to refuse, it captures the refusing mock, and the
+positive control's SDK construction fails before submission. The full suite loads `test_money_closeout` first and passes.
+
+### Remaining limits (RR2)
+
+- **Rows stored before the rule.** An account created earlier with a quoted local part (if any exists) is not matched to
+  its unquoted twin by the existing-account lookup; an invitation issued earlier to a quoted or over-long address cannot
+  be accepted (a clear form error) and stays pending until it expires or is revoked. Whether such rows exist in
+  production was not measured (this session may not read it); an operator can count them with
+  `SELECT count(*) FROM core_user WHERE email LIKE '%"%' OR length(email) > 150` and the same over `core_invitation` and
+  `core_clinicinvitation`.
+- **RR2-ACC-3 is the simultaneous case only.** A used invitation link opened or submitted afterwards still answers 404
+  from the unlocked lookup, as before; only a request that passed that lookup while the invitation was unused gets the
+  new answer.
+- **RR2-M1** leaves the mapping worker's wording and billing classification as they were; only where and when it decides
+  changed. An unreachable database still leaves the job to the stale sweep, as for generation.
+- **RR2-L1**: the download rule is deliberately the generation rule; if mapping output should follow the mapping page's
+  stricter roles instead, that is a product decision, recorded here rather than made silently.
+- The pre-flight health check in `AGENTS.md` was not run by this session: it needs `docker`, which this task's rules
+  forbid; the tests ran one at a time against the QA PostgreSQL only.
+
+Evidence: `residuals-evidence-20260929/rr2-*` and `rr2_mutate.py`. Tests: `rebuild/core/tests/test_account_email_rule.py`
+(`AccountEmailBounds`, `QuotedLocalPart`, two first-administrator tests), `rebuild/core/tests/test_invitation_account_race.py`
+(`OneInvitationAcceptedTwiceAtOnce`), `rebuild/core/tests/test_mapping_outcome_unknown.py`, and two tests in
+`rebuild/core/tests/test_mapping_assistance.py`.

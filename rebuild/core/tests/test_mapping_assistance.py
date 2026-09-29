@@ -183,6 +183,47 @@ class MappingAssistance(TestCase):
         self.assertEqual(response.status_code,400)
         self.assertEqual(private_path(self.template.original_path).read_bytes(),self.original)
 
+    def test_a_charged_mapping_result_is_downloadable_under_the_generation_rule(self):
+        # RR2-L1 (docs/rebuild/v1/residuals-assessment-20260929.md). A generation's stored provider output is downloadable
+        # by an active member of the job's department while the job is charged (jobs.deliverable). A mapping job has no
+        # encounter, and job_result scoped by encounter__department, so its charged output answered 404 even to its
+        # requester. RED on d5367521: 404. The rule is now the same: the department is the template's.
+        job=self.enqueue();jobs.run_one();job.refresh_from_db()
+        self.assertEqual(job.state,'succeeded',job.error);self.assertTrue(jobs.deliverable(job))
+        response=self.client.get(f'/jobs/{job.pk}/result/')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(hashlib.sha256(b''.join(response.streaming_content)).hexdigest(),job.result_sha256)
+        page=self.client.get(f'/templates/{self.template.pk}/assistance/')
+        self.assertContains(page,f'/jobs/{job.pk}/result/')
+        event=AuditEvent.objects.get(action='job.result_download',target=str(job.pk))
+        self.assertEqual((event.actor,event.department),(self.user,self.department))
+        # Any active member of the template's department, as for a generation; nobody outside it.
+        colleague=User.objects.create_user(username='mapping-colleague',email='mapping-colleague@synthetic.invalid',verified_at=timezone.now())
+        Membership.objects.create(user=colleague,department=self.department,role='employee')
+        other=Department.objects.create(organization=self.org,name='Synthetic sibling department')
+        outsider=User.objects.create_user(username='mapping-outsider',email='mapping-outsider@synthetic.invalid',verified_at=timezone.now())
+        Membership.objects.create(user=outsider,department=other,role='owner')
+        for person,status in ((colleague,200),(outsider,404)):
+            with self.subTest(person=person.email):
+                self.client.force_login(person)
+                self.assertEqual(self.client.get(f'/jobs/{job.pk}/result/').status_code,status)
+        Membership.objects.filter(user=colleague).update(active=False)
+        self.client.force_login(colleague)
+        self.assertEqual(self.client.get(f'/jobs/{job.pk}/result/').status_code,404)
+
+    def test_an_uncharged_mapping_result_is_never_delivered(self):
+        # Control for RR2-L1: an absorbed platform failure's stored output stays undelivered, as a generation's does.
+        with override_settings(AI_MODE='live',QUILLMD_MAPPING_ASSISTANCE_LIVE=True):
+            self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+            job=self.enqueue()
+            with patch('anthropic.Anthropic') as client:
+                client.return_value.messages.create.return_value=self.response(stop='max_tokens')
+                jobs.run_one()
+        job.refresh_from_db();self.assertEqual(job.state,'failed',job.error)
+        self.assertTrue(job.result_path);self.assertFalse(jobs.deliverable(job))
+        self.assertEqual(self.client.get(f'/jobs/{job.pk}/result/').status_code,404)
+        self.assertNotContains(self.client.get(f'/templates/{self.template.pk}/assistance/'),f'/jobs/{job.pk}/result/')
+
     def test_scope_and_source_config_are_immutable_in_database(self):
         job=self.enqueue()
         for change in ({'mapping_version':None},{'kind':'generation'},{'config':{}},{'user_id':None}):

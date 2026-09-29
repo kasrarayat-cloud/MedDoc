@@ -183,6 +183,72 @@ class TwoInvitationsForOneNewAddress(InvitationRaceFixture):
         self.assertEqual(User.objects.filter(email__iexact=ADDRESS).count(), 1)
 
 
+def paused_before_invitation_lock(barrier):
+    """An execute wrapper: hold this connection right before it locks the invitation row until every racer is there too."""
+    def wrapper(execute, sql, params, many, context):
+        if sql.startswith('SELECT') and 'FOR UPDATE' in sql and ('FROM "core_invitation"' in sql or 'FROM "core_clinicinvitation"' in sql):
+            barrier.wait(30)
+        return execute(sql, params, many, context)
+    return wrapper
+
+
+#: RR2-ACC-3: what the second of two simultaneous acceptances of ONE invitation reads.
+ALREADY_ACCEPTED = 'This invitation has already been accepted'
+
+
+class OneInvitationAcceptedTwiceAtOnce(InvitationRaceFixture):
+    """RR2-ACC-3. The same invitation submitted twice at the same moment (two tabs, or a double submit the page's
+    data-submit-once did not stop). Both requests pass validation (no account yet) and wait for the invitation's row lock;
+    the first accepts and creates the account, the second then finds the invitation used. RED on d5367521: the second
+    answered a bare 404 (Http404 raised under the lock), saying nothing about the account its own address now has.
+    Decision: the second is told the invitation was already accepted and to sign in, on the sign-in page; it wrote
+    nothing. Deterministic: both requests are held at a barrier right before the row lock."""
+
+    def race_one(self, link):
+        barrier = threading.Barrier(2)
+
+        def submit():
+            with connection.execute_wrapper(paused_before_invitation_lock(barrier)):
+                client = Client(raise_request_exception=False)
+                return client.post(link, {'email': ADDRESS, 'first_name': 'Synthetic', 'last_name': 'Clinician',
+                                          'password1': PASSWORD, 'password2': PASSWORD, 'synthetic_only': 'on'}, follow=True)
+        started = [in_thread(submit) for _ in range(2)]
+        for thread, _ in started:
+            thread.join(60)
+            self.assertFalse(thread.is_alive(), 'a synthetic request never finished')
+        outcomes = [outcome for _, outcome in started]
+        for outcome in outcomes:
+            self.assertNotIn('error', outcome, outcome.get('error'))
+        responses = [outcome['value'] for outcome in outcomes]
+        self.assertEqual([response.status_code for response in responses], [200, 200],
+                         [getattr(response, 'exc_info', None) for response in responses])
+        for response in responses:
+            self.assertEqual(response.redirect_chain, [('/login/', 302)])
+        told = [response for response in responses if ALREADY_ACCEPTED in response.content.decode()]
+        self.assertEqual(len(told), 1)
+        self.assertContains(told[0], 'the account for this email address exists')
+        return responses
+
+    def test_one_department_invitation_accepted_twice_at_the_same_moment(self):
+        invitation, link = self.department_invitation(self.front_desk)
+        self.race_one(link)
+        account = self.assert_one_account()
+        self.assertEqual(Membership.objects.filter(user=account).count(), 1)
+        invitation.refresh_from_db()
+        self.assertIsNotNone(invitation.accepted_at)
+        self.assertEqual(AuditEvent.objects.filter(action='department.invitation_accepted', target=str(invitation.pk)).count(), 1)
+
+    def test_one_clinic_invitation_accepted_twice_at_the_same_moment(self):
+        invitation, link = self.clinic_invitation('Synthetic single clinic')
+        self.race_one(link)
+        account = self.assert_one_account()
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.accepted_by, account)
+        self.assertEqual(Organization.objects.filter(name='Synthetic single clinic').count(), 1)
+        self.assertEqual(Membership.objects.filter(user=account).count(), 1)
+        self.assertEqual(AuditEvent.objects.filter(action='clinic.invitation_accepted', target=str(invitation.pk)).count(), 1)
+
+
 class OtherIntegrityErrorsStayDefects(InvitationRaceFixture):
     """The handler is for the account race only. An IntegrityError while no account exists afterwards is a defect and is
     reported as one (500), its transaction rolled back as before."""

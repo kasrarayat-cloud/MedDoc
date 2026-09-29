@@ -1,0 +1,198 @@
+manage.py test core.tests --noinput --keepdb --parallel 1 (throwaway database quillmd_qa_resid3_t1, one run at a time), tree = d5367521 + the RR2 change (uncommitted)
+2026-09-29T03:17:36Z
+ M docs/rebuild/cost-definition.md
+ M rebuild/core/clinic_invitations.py
+ M rebuild/core/forms.py
+ M rebuild/core/mapping_jobs.py
+ M rebuild/core/mapping_views.py
+ M rebuild/core/tests/test_account_email_rule.py
+ M rebuild/core/tests/test_invitation_account_race.py
+ M rebuild/core/tests/test_mapping_assistance.py
+ M rebuild/core/views.py
+ M rebuild/templates/mapping_assistance.html
+?? rebuild/core/tests/test_mapping_outcome_unknown.py
+ 10 files changed, 394 insertions(+), 41 deletions(-)
+/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_tab_form_policy.py:69: SyntaxWarning: invalid escape sequence '\('
+  """⚠️ THE DECLARED BOUND WAS REACHABLE BY ANOTHER SPELLING.
+Using existing test database for alias 'default'...
+/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................................................Forbidden (CSRF cookie not set.): /console/accounts/5666fd85-d0ce-440c-9764-98dd8fc3daf4/sessions/
+Forbidden (CSRF cookie not set.): /console/memberships/893f9be6-39e0-42a1-823f-ca70c1dd9722/
+Forbidden (CSRF cookie not set.): /console/departments/ada87649-8838-495f-bc59-6ffc6195db54/payer/
+.........................................................../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+.................../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+......./opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+....................../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+..................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................Forbidden (CSRF cookie not set.): /console/disposition-execution/
+................Forbidden (CSRF token missing.): /console/disposition/
+........................................................................................................................................................./opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(PydanticSerializationUnexpectedValue: Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections]
+PydanticSerializationUnexpectedValue: Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ParsedResponseFunctionToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFileSearchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionWebSearch` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `AdditionalTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseReasoningItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `Program` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ProgramOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalRequest` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalResponse` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ImageGenerationCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallAction` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpListTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCodeInterpreterToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCompactionItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  PydanticSerializationUnexpectedValue(Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  return self.__pydantic_serializer__.to_python(
+.../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+............../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+............................Forbidden (private preview CSRF validation failed).
+Forbidden (private preview CSRF validation failed).
+.Forbidden (private preview CSRF validation failed).
+Forbidden (private preview CSRF validation failed).
+......................................................................................Forbidden (CSRF cookie not set.): /recovery/
+Forbidden (CSRF cookie not set.): /verification/resend/
+...........................................Forbidden (CSRF token missing.): /console/retention/
+..........................................................................................Forbidden (CSRF cookie not set.): /encounters/d2346724-8a98-426f-aa6f-27ba65e27978/generate/
+..............................................................................................................................................................................................................................................................sssssssssssssssssssssssssssssss........................................................................................................................................../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+........................................................................................................................................................................................................../opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+----------------------------------------------------------------------
+Ran 2426 tests in 1849.757s
+OK (skipped=31)
+Preserving test database for alias 'default'...
+Found 2426 test(s).
+System check identified no issues (0 silenced).
+Published backup status: healthy (healthy).
+Published backup status: offsite_stale (failure).
+{
+  "checked_at": "2026-09-29T03:18:23.522067+00:00",
+  "scope": "Read-only fresh application records; no external requests; no clinical text or credentials exported.",
+  "charge_policy": "User charge is exactly 1.5 \u00d7 the attributable metered provider cost after applicable discounts and allocated provider credits; configured-rate rows are estimates until reconciled to authentic provider evidence.",
+  "platform_costs": {
+    "totals_by_kind": {
+      "fixed_overhead": "0",
+      "absorbed_failure": "0",
+      "absorbed_over_limit": "0"
+    },
+    "rows": 0,
+    "policy": "Fixed overhead and absorbed platform-failure cost are tracked separately and never charged to users."
+  },
+  "reconciliation_summary": {
+    "evidence_kinds": {
+      "unclassified": 0,
+      "provider_report": 0,
+      "invoice": 0
+    },
+    "reconciled_rows": 0,
+    "unreconciled_rows": 0,
+    "pending_funds": 0,
+    "absorbed_rows": 0
+  },
+  "cost_basis": "Original usage is provider-metered units priced at configured USD rates; reservations are estimates. Classified reconciliation evidence and adjustments are reported separately.",
+  "fingerprint_limit": "A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.",
+  "rate_reference_reviewed_on": "2026-09-17",
+  "rate_references": [
+    "https://platform.claude.com/docs/en/about-claude/pricing",
+    "https://deepgram.com/pricing"
+  ],
+  "rows": [],
+  "wallets": [
+    {
+      "wallet_id": "0663ac20-29bc-447f-935f-24a104e53815",
+      "kind": "paid",
+      "balance_usd": "0E-12",
+      "ledger_sum_usd": "0",
+      "reserved_usd": "0E-12",
+      "held_reservations_usd": "0",
+      "checks": {
+        "balance_equals_ledger": true,
+        "reserved_equals_holds": true
+      }
+    },
+    {
+      "wallet_id": "10dc75a1-73b8-44a3-9709-c79ec81d01fb",
+      "kind": "promo",
+      "balance_usd": "10.000000000000",
+      "ledger_sum_usd": "10.000000000000",
+      "reserved_usd": "0.010000000000",
+      "held_reservations_usd": "0.010000000000",
+      "checks": {
+        "balance_equals_ledger": true,
+        "reserved_equals_holds": true
+      }
+    }
+  ],
+  "unsettled_provider_receipts": [],
+  "unresolved_jobs": [],
+  "ledger_policy": {
+    "orphan_policy_entries": 0,
+    "checks": {
+      "policy_ledger_entries_bound_to_jobs": true,
+      "over_limit_absorptions_bound_to_settled_usage": true
+    }
+  },
+  "cancellation_policy": {
+    "cancelled_jobs": 0,
+    "checks": {
+      "cancelled_jobs_have_no_usage": true,
+      "cancelled_jobs_have_no_provider_receipt": true,
+      "cancelled_jobs_have_no_ledger_entries": true,
+      "cancelled_jobs_hold_no_funds": true
+    }
+  },
+  "hold_policy": {
+    "ended_jobs_holding_funds": [
+      "d09c3817-02bd-4c43-96e0-2cc06b416e0d"
+    ],
+    "checks": {
+      "ended_jobs_hold_no_funds": false
+    }
+  },
+  "generation_batches": [],
+  "all_checks_pass": false,
+  "durable_receipt_gaps": 0,
+  "invoice_reconciliation": {
+    "invoice_rows": 0,
+    "provider_report_rows": 0,
+    "unclassified_rows": 0,
+    "scope": "Administrator-recorded per-usage classification; no account-wide or whole-invoice reconciliation is implied.",
+    "provenance": "Source authenticity and attribution require administrator review; this audit verifies ledger arithmetic, not provider authenticity."
+  }
+}
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).
+Publication deferred: an activation holds exclusion. Nothing written; the existing row keeps its own freshness.
+Published backup status: synthetic test condition (failure).
+elapsed_seconds 1856
+exit 0
+2026-09-29T03:48:32Z
+done

@@ -2,7 +2,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.auth.forms import UserCreationForm
 from django.utils import timezone
-from .models import User, Department, Patient, TemplateVersion, Membership, latest_service_date
+from .models import User, Department, Patient, TemplateVersion, Membership, Invitation, ClinicInvitation, latest_service_date
 from .security import departments
 
 
@@ -36,13 +36,26 @@ class LoginForm(forms.Form):
 #: stored address is where the account's mail goes); an internationalized domain is entered in its ASCII ("xn--") form.
 #: Applied where an account's address is chosen: registration, both invitation acceptances (RegisterForm), both invitation
 #: issuances, and the first administrator (bootstrap_first_admin).
+#: ⚠️ AND IT IS UNQUOTED AND FITS EVERY COLUMN IT IS WRITTEN TO (RR2-ACC-2, RR2-ACC-1, the second refutation of the same
+#: report). EmailValidator accepts a quoted local part: '"sam"@…' and '"s\am"@…' are the mailbox 'sam@…' (RFC 5321) and a
+#: different string to every comparison above, so a second account was created beside sam@…. A quoted address is refused,
+#: not unquoted, for the reason nothing is folded: the stored address is where the account's mail goes. And the address
+#: is the account's username (the views set username = email), a 150-character column where the email and invitation
+#: columns hold 254: 151 characters or more passed every form and every door answered 500 (a DataError on the insert).
 ACCOUNT_EMAIL_NOT_ASCII=('Enter the email address in ASCII characters. An internationalized domain can be entered in its '
                          'ASCII ("xn--") form.')
+ACCOUNT_EMAIL_QUOTED='Enter the email address without quotation marks.'
+ACCOUNT_EMAIL_MAX_LENGTH=min(User._meta.get_field('username').max_length,User._meta.get_field('email').max_length,
+                             Invitation._meta.get_field('email').max_length,ClinicInvitation._meta.get_field('email').max_length)
+ACCOUNT_EMAIL_TOO_LONG=f'Enter an email address of at most {ACCOUNT_EMAIL_MAX_LENGTH} characters.'
 def account_email(value):
     """The address an account is created with or invited at, under the one rule above; ValidationError otherwise.
-    ASCII is checked on the address as typed, before lowercasing: str.lower() itself folds the Kelvin sign onto 'k'."""
+    ASCII is checked on the address as typed, before lowercasing: str.lower() itself folds the Kelvin sign onto 'k'.
+    A double quote can only be part of a quoted local part: EmailValidator admits it nowhere else."""
     email=(value or '').strip()
     if not email.isascii(): raise forms.ValidationError(ACCOUNT_EMAIL_NOT_ASCII)
+    if '"' in email: raise forms.ValidationError(ACCOUNT_EMAIL_QUOTED)
+    if len(email)>ACCOUNT_EMAIL_MAX_LENGTH: raise forms.ValidationError(ACCOUNT_EMAIL_TOO_LONG)
     return email.lower()
 
 class RegisterForm(SyntheticAttestation,UserCreationForm):
@@ -66,6 +79,10 @@ class RegisterForm(SyntheticAttestation,UserCreationForm):
 ACCOUNT_CREATED_MEANWHILE='An account for this email address was created a moment ago. This invitation has not been used: sign in, then open it again to accept it.'
 ACCOUNT_EXISTS='An account with this email address already exists.'
 def account_created_meanwhile(email): return User.objects.filter(email__iexact=email).exists()
+#: ⚠️ ONE INVITATION SUBMITTED TWICE AT ONCE (RR2-ACC-3). Both requests pass validation before either commits and wait for
+#: the invitation's row lock; the first accepts it (creating the account), the second then finds it used. It wrote nothing.
+#: It used to answer a bare 404; it is told what happened and where to go, on the sign-in page.
+INVITATION_ALREADY_ACCEPTED='This invitation has already been accepted: the account for this email address exists. Sign in to continue.'
 class OTPForm(forms.Form):
     code=forms.CharField(label='Six-digit authenticator code',min_length=6,max_length=6)
 class ScopedForm(forms.Form):

@@ -1704,7 +1704,9 @@ def invite_accept(request,raw):
                 try:
                     with transaction.atomic():
                         invite=Invitation.objects.select_for_update().get(pk=invite.pk)
-                        if invite.accepted_at or invite.expires_at<=timezone.now():raise Http404
+                        # Accepted by a simultaneous submission of this same invitation (RR2-ACC-3): this one wrote nothing.
+                        if invite.accepted_at:messages.info(request,INVITATION_ALREADY_ACCEPTED);return redirect('login')
+                        if invite.expires_at<=timezone.now():raise Http404
                         # An outstanding invitation cannot outlive its issuer's authority.
                         membership(invite.invited_by,invite.department,roles=['owner','manager'])
                         if existing:user=existing
@@ -2180,14 +2182,17 @@ def review_transcript(job):
 
 
 def job_result(request,pk):
-    job=get_object_or_404(Job.objects.filter(encounter__department__in=departments(request.user)),pk=pk)
+    # One rule for every job's stored output: an active member of the job's department. A mapping job has no encounter; its
+    # department is its template's, which scoping by encounter alone never matched (RR2-L1: its requester got 404).
+    visible=departments(request.user)
+    job=get_object_or_404(Job.objects.filter(models.Q(encounter__department__in=visible)|models.Q(mapping_version__template__department__in=visible)),pk=pk)
     receipt=get_object_or_404(ProviderReceipt,job=job)
     if not job.result_path:raise Http404('Provider output was not stored; financial receipt is retained.')
     # Output of a request that is not charged (absorbed platform failure, pending reconciliation) is not delivered.
     if not deliverable(job):raise Http404('Provider output is delivered only for charged requests and usable transcripts.')
     path=private_path(job.result_path)
     if hashlib.sha256(path.read_bytes()).hexdigest()!=job.result_sha256:raise ValidationError('Provider output integrity check failed.')
-    audit(request.user,'job.result_download',job.pk,department=job.encounter.department)
+    audit(request.user,'job.result_download',job.pk,department=job.department)
     return FileResponse(path.open('rb'),as_attachment=True,filename=f'quillmd-provider-result-{str(job.pk)[:8]}.json',content_type='application/json')
 
 

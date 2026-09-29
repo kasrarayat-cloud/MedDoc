@@ -24,7 +24,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .billing import welcome_credit, welcome_credit_label
-from .forms import ACCOUNT_CREATED_MEANWHILE, RegisterForm, account_created_meanwhile
+from .forms import ACCOUNT_CREATED_MEANWHILE, INVITATION_ALREADY_ACCEPTED, RegisterForm, account_created_meanwhile
 from .models import ClinicInvitation, Department, Membership, Organization, User
 from .security import audit, digest, token
 
@@ -67,7 +67,11 @@ def accept(request, raw):
                 try:
                     with transaction.atomic():
                         invitation = ClinicInvitation.objects.select_for_update().get(pk=invitation.pk)
-                        if invitation.accepted_at or invitation.revoked_at or invitation.expires_at <= timezone.now():
+                        # Accepted by a simultaneous submission of this same invitation (RR2-ACC-3): this one wrote nothing.
+                        if invitation.accepted_at:
+                            messages.info(request, INVITATION_ALREADY_ACCEPTED)
+                            return redirect('login')
+                        if invitation.revoked_at or invitation.expires_at <= timezone.now():
                             raise Http404
                         if not issuer_still_authorised(invitation):
                             return HttpResponse('This invitation is no longer valid. Ask QuillMD for a new one.',
