@@ -984,8 +984,12 @@ BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114
 # (fix/v1-relations-contract; was 97d38fed…): CONTRACT/SALT v2, the per-request keyed schema (response_schema, sent
 # through the same anthropic_request and refused unless it reaches the wire unchanged), the keyed response_bound, the
 # strict parse, and one refusal of a unit-less source; the priced wire is still the one compile_request builds and
-# maximum_cost measures, byte for byte.
-ORDINARY_PRICED_SHA256 = 'ad7b29dd0812d7f75e437e117cddbd16a3d7cbb0c9248b319db290663b273dfc'
+# maximum_cost measures, byte for byte. The disagreement-holds addendum (fix/v1-relations-contract; was ad7b29dd…):
+# records() no longer refuses the WHOLE response when one field's selection disagrees with its relations (live attempt
+# 020); it records that field as returned, and read() refuses it through the new `disagrees` predicate (the same
+# refusal as before, proved equivalent over every selection and relation of up to four units). Only disagrees, records
+# and read changed; compile_request, maximum_cost, generate, parse, response_schema and response_bound are AST-identical.
+ORDINARY_PRICED_SHA256 = 'ccfe1a5147f81eb8b7496a596ccc14a222a1e12b742d9cea87d19c51d93d9f29'
 
 
 def ordinary_module_proof(where):

@@ -708,6 +708,48 @@ class RawSelectionTests(unittest.TestCase):
                          {first: {'unit_ids': [ids[0]], 'conflict': False}})
 
 
+class RetainedAttempt020Tests(unittest.TestCase):
+    """Live attempt 020 (N13 on the relations path) graded as the stage runner grades a send, under THIS engine: the
+    engine's adoption of the retained response (v3_field_relations.validated), the runner's own judge (raw_selection,
+    the frozen replay subprocess, notes_field_outcome) against N13's frozen expectations, then classify_case. The
+    engine used to fail the job (validator_failure: a contract stop of the stage); the review save and export are not
+    replayed here (they need the app path; core's workflow test walks them)."""
+
+    def test_the_retained_outcome_is_two_correct_holds_and_does_not_stop_the_stage(self):
+        import functools
+        import tempfile
+        from django.test.utils import override_settings
+        from core import v3_field_relations as rel
+        from core.tests.test_v3_ordinary_notes import LIVE
+        from core.tests.test_v3_field_relations_contract import ATTEMPT_020_TEXT, raw_result
+        inputs = st.frozen_inputs()
+        case = next(c for c in inputs['cases']['cases'] if c['id'] == 'N13')
+        fields = inputs['cases']['forms'][case['form']]['fields']
+        with override_settings(**dict(LIVE, **st.steps.PATH_FLAGS['field_relations'])):
+            answers = rel.validated(raw_result(case['notes'], fields, ATTEMPT_020_TEXT))
+            runner = SimpleNamespace(inputs=inputs)
+            runner.replay = functools.partial(st.Run.replay, runner)
+            judge = st.Run.judge_notes(runner, case)
+            with tempfile.TemporaryDirectory() as folder:
+                graded, findings, details = judge(
+                    SimpleNamespace(path='field_relations'), SimpleNamespace(fields=fields),
+                    st.steps.field_outcomes(answers), None, None, evidence=Path(folder), reviewed=None,
+                    raw={'content': [{'type': 'text', 'text': ATTEMPT_020_TEXT}]})
+        self.assertEqual(graded, {'v3_1': 'held_correct', 'v3_2': 'held_correct'})
+        self.assertEqual(findings, [])
+        for key in ('v3_1', 'v3_2'):
+            detail = details['fields'][key]
+            # (the frozen replay: this selection — both statements, conflict true — is listed nowhere, so the replay
+            # itself would leave it to adjudication; N13 desires a hold on both fields, which is what was adopted)
+            self.assertEqual((detail['matched'], detail['replay_verdict'], detail['desired']),
+                             ('unlisted', 'adjudicate_by_hand', 'held'))
+            self.assertEqual(detail['never_violated'], [])
+            self.assertNotIn('served_path_diverged_from_replay', detail)
+        verdict = pc.classify_case(graded, [])
+        self.assertEqual((verdict['verdict'], verdict['stops_stage'], verdict['unsafe'], verdict['contract']),
+                         ('usefulness', False, [], []))
+
+
 class PendingSendsTests(unittest.TestCase):
     """REMAINDER: once a stage has failed (and until it passes) it sends ONLY what its latest failure recorded as not
     sent; a send with an attempt is never sent again; a failure that cannot say what it did not send refuses."""

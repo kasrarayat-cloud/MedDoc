@@ -914,12 +914,20 @@ class OrdinaryFieldRelations(SimpleTestCase):
                      lambda b: b['fields'][0].update(unit_ids=[999]),
                      lambda b: b['fields'][0].update(option_ids=['other:1']),
                      lambda b: b['fields'][0].update(option_ids=['smoking:1', 'smoking:1']),
-                     lambda b: b['fields'][0].update(context=['independent']),
                      lambda b: b['fields'][0].update(conflict='false')]
         for mutate in mutations:
             body = copy.deepcopy(original); mutate(body)
             with self.subTest(body=body), self.assertRaises((ValueError, ValidationError)):
                 r.records(notes, fields, [], units, r.FieldSelections.model_validate(body), g.SONNET_5)
+        # A context that covers the source exactly but disagrees with the selection (the selected unit called
+        # independent) is not malformed: it was in the list above until live attempt 020 failed a whole job on it.
+        # It is recorded as the model returned it, and THIS field is held.
+        body = copy.deepcopy(original); body['fields'][0].update(context=['independent'])
+        held = r.records(notes, fields, [], units, r.FieldSelections.model_validate(body), g.SONNET_5)
+        self.assertEqual(list(held), ['smoking'])
+        answer = offered(notes, fields, {'smoking': [notes]}, choices={'smoking': ['smoking:1']},
+                         overrides={('smoking', notes): 'independent'})['smoking']
+        self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
 
     def test_stored_record_binds_source_mapping_destination_output_and_enablement(self):
         notes = 'The patient reports that the headache usually feels like intermittent buzzing.'

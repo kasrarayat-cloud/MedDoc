@@ -214,13 +214,18 @@ class StrictParser(SimpleTestCase):
             with self.subTest(name=name), self.assertRaises(ValidationError):
                 adopted(notes, fields, body)
 
-    def test_answers_that_parse_but_disagree_with_their_selection_are_refused_by_records(self):
-        for name, edit in (('an answer relation on an unselected unit',
-                            lambda b: b['fields']['v3_3']['context'].update({'1': 'answer'})),
-                           ('a selected unit marked independent',
-                            lambda b: b['fields']['v3_1']['context'].update({'1': 'independent'}))):
-            with self.subTest(name=name), self.assertRaisesMessage(ValidationError, 'disagree'):
-                adopted(N02_NOTES, self.fields, self.edited(edit))
+    def test_answers_that_parse_but_disagree_with_their_selection_hold_that_field_only(self):
+        # (was: refused by records() for the WHOLE response, which failed the job — live attempt 020. A disagreement
+        # is the model's own statement about ONE field, not malformed output: that field is held, nothing else moves.)
+        good = adopted(N02_NOTES, self.fields, self.text)
+        for name, key, edit in (('an answer relation on an unselected unit', 'v3_3',
+                                 lambda b: b['fields']['v3_3']['context'].update({'1': 'answer'})),
+                                ('a selected unit marked independent', 'v3_1',
+                                 lambda b: b['fields']['v3_1']['context'].update({'1': 'independent'}))):
+            with self.subTest(name=name):
+                got = adopted(N02_NOTES, self.fields, self.edited(edit))
+                self.assertEqual(got[key], ('conflict', ''))
+                self.assertEqual({k: v for k, v in got.items() if k != key}, {k: v for k, v in good.items() if k != key})
 
     def test_a_veto_on_another_unit_holds_the_answer(self):
         for relation in ('contrary', 'unresolved'):
@@ -241,6 +246,169 @@ class StrictParser(SimpleTestCase):
             r.parse(json.dumps(internal), asked, units)
         self.assertEqual(json.loads(json.dumps(keyed(internal, asked, units)))['fields']['v3_3']['context'],
                          {'1': 'independent', '2': 'independent'})
+
+
+#: The text block of live attempt 020's retained provider response (case N13 on the field-relations path), verbatim:
+#: .runtime/v1-sonnet5-campaign/evidence/020/provider-response.body, sha256 4bedab2b5487cb67…c451b6 in that attempt's
+#: evidence manifest. Each field has conflict true and its SELECTED units marked 'contrary': the model reporting that
+#: the statements it selected contradict each other. records() refused the whole response, so the job failed.
+ATTEMPT_020_TEXT = ('{"fields":{"v3_1":{"unit_ids":[1,2],"conflict":true,"context":{"1":"contrary","2":"contrary",'
+                    '"3":"independent","4":"independent"}},"v3_2":{"unit_ids":[3,4],"conflict":true,"context":{"1":'
+                    '"independent","2":"independent","3":"contrary","4":"contrary"}}}}')
+
+
+def frozen_case(case_id):
+    """(notes, form fields) of one frozen ordinary-notes case, read from the frozen diagnostics (never changed here)."""
+    from pathlib import Path
+    notes = Path(__file__).resolve().parents[3] / 'docs' / 'rebuild' / 'v1' / 'sonnet5-campaign' / 'diagnostics' / 'notes'
+    cases = json.loads((notes / 'cases.json').read_text())
+    case = next(c for c in cases['cases'] if c['id'] == case_id)
+    return case['notes'], cases['forms'][case['form']]['fields']
+
+
+#: Three fields each adopted from its own paragraph when the answer agrees with its selection (the clean control).
+CLEAN_NOTES = 'The patient is not allergic to penicillin.\n\nThe patient walks every day.\n\nThe patient does not smoke.'
+
+
+def clean_fields():
+    return [field('allergies', 'Allergies'), field('activity', 'Activity'),
+            field('smoking', 'Smoker', 'choice', ['Yes', 'No'])]
+
+
+CLEAN_PICKS = {'allergies': ['The patient is not allergic to penicillin.'], 'activity': ['The patient walks every day.'],
+               'smoking': ['The patient does not smoke.']}
+
+
+@override_settings(**RELATIONS)
+class DisagreementHolds(SimpleTestCase):
+    """A field whose selection disagrees with its own relations (a selected unit that is not answer/qualifier, or an
+    answer unit that is not selected) is HELD as that field's conflict and never adopted, while every other field is
+    read exactly as before and structural output still refuses the whole response. Generation adoption, the page, save
+    and finalization agree because every one of them reads the stored record with v3_field_relations.read()."""
+
+    def clean(self):
+        fields = clean_fields()
+        wire = relation_wire(CLEAN_NOTES, fields, CLEAN_PICKS, choices={'smoking': ['smoking:1']})
+        return fields, wire
+
+    def units(self, notes, fields):
+        asked, context, _ = g.v3_generation_fields(fields)
+        return g.source_units(notes, asked, context_labels=context)[0]
+
+    def test_the_retained_live_attempt_020_holds_both_fields_and_the_job_succeeds(self):
+        notes, fields = frozen_case('N13')
+        answers = r.validated(raw_result(notes, fields, ATTEMPT_020_TEXT))        # (before: ValidationError 'disagree')
+        self.assertEqual({k: (v['status'], v['text']) for k, v in answers.items()},
+                         {'v3_1': ('conflict', ''), 'v3_2': ('conflict', '')})
+        units = self.units(notes, fields)
+        wire = json.loads(ATTEMPT_020_TEXT)['fields']
+        for key, answer in answers.items():
+            with self.subTest(key=key):
+                # the record keeps the model's own selection, verbatim; nothing about it was rewritten
+                stored = signing.loads(answer['ordinary_relation'], salt=r.SALT)['selection']
+                self.assertEqual(stored, {'key': key, 'unit_ids': wire[key]['unit_ids'], 'conflict': True,
+                                          'option_ids': [],
+                                          'context': [wire[key]['context'][str(u['id'])] for u in units]})
+                # a forged `supported` copy that keeps this record is held on the page, save and finalize reader
+                chosen = [u for u in units if u['id'] in wire[key]['unit_ids']]
+                forged = {**answer, 'status': 'supported', 'text': '\n'.join(u['quote'] for u in chosen),
+                          'evidence': [{k: u[k] for k in ('quote', 'start', 'end')} for u in chosen]}
+                forged.pop('held_candidate', None)
+                label = next(f['label'] for f in fields if f['key'] == key)
+                self.assertIn(label, g.governed_decisions(notes, fields, {**answers, key: forged}))
+
+    def disagreements(self, key, unit, other):
+        """(name, edit of the keyed wire) — every way ONE field's selection can disagree with its relations. `unit` is
+        the field's selected unit ID, `other` a unit it did not select."""
+        u, o = str(unit), str(other)
+
+        def put(**changes):
+            def edit(body):
+                entry = body['fields'][key]
+                for name, value in changes.items():
+                    if name == 'context':
+                        entry['context'].update(value)
+                    else:
+                        entry[name] = value
+            return edit
+        return [('the selected unit marked contrary, conflict true (attempt 020)', put(context={u: 'contrary'}, conflict=True)),
+                ('the selected unit marked contrary, conflict false', put(context={u: 'contrary'})),
+                ('the selected unit marked unresolved', put(context={u: 'unresolved'})),
+                ('the selected unit marked independent', put(context={u: 'independent'})),
+                ('an answer relation on a unit it did not select', put(context={o: 'answer'})),
+                ('an answer relation and nothing selected', put(unit_ids=[], context={u: 'answer'},
+                                                                **({'option_ids': []} if key == 'smoking' else {})))]
+
+    def test_one_disagreeing_field_is_held_and_every_other_field_reads_as_before(self):
+        fields, wire = self.clean()
+        good = adopted(CLEAN_NOTES, fields, wire)
+        self.assertEqual(good, {'allergies': ('supported', 'The patient is not allergic to penicillin.'),
+                                'activity': ('supported', 'The patient walks every day.'),
+                                'smoking': ('supported', 'No')})
+        units = {u['quote']: u['id'] for u in self.units(CLEAN_NOTES, fields)}
+        for key in ('allergies', 'activity', 'smoking'):
+            unit = units[CLEAN_PICKS[key][0]]
+            other = next(i for i in units.values() if i != unit)
+            for name, edit in self.disagreements(key, unit, other):
+                with self.subTest(field=key, disagreement=name):
+                    body = copy.deepcopy(wire); edit(body)
+                    got = adopted(CLEAN_NOTES, fields, body)
+                    self.assertEqual(got[key], ('conflict', ''))
+                    self.assertEqual({k: v for k, v in got.items() if k != key},
+                                     {k: v for k, v in good.items() if k != key})
+
+    def test_the_held_record_is_the_models_selection_and_no_reader_adopts_it(self):
+        fields, wire = self.clean()
+        units = self.units(CLEAN_NOTES, fields)
+        chosen = units[0]
+        body = copy.deepcopy(wire)
+        body['fields']['allergies']['context']['1'] = 'independent'       # (a selected unit the model calls independent)
+        answers = r.validated(raw_result(CLEAN_NOTES, fields, json.dumps(body)))
+        held = answers['allergies']
+        self.assertEqual((held['status'], held['text']), ('conflict', ''))
+        record = signing.loads(held['ordinary_relation'], salt=r.SALT)
+        self.assertEqual(record['selection'], {'key': 'allergies', 'unit_ids': [1], 'conflict': False, 'option_ids': [],
+                                               'context': ['independent', 'independent', 'independent']})
+        evidence = [{k: chosen[k] for k in ('quote', 'start', 'end')}]
+        reading = g.governance_for(CLEAN_NOTES, fields)[11]['preceding']
+        read = r.read(reading, 'Allergies', evidence, held['ordinary_relation'], text=chosen['quote'], field_key='allergies')
+        self.assertFalse(read['valid'])
+        self.assertTrue(read['warnings'])
+        # the same stored answer, forged `supported` with that record, is governed (page, save and finalization); the
+        # agreeing record of the same selection is not (the control that the refusal is the disagreement)
+        forged = {**held, 'status': 'supported', 'text': chosen['quote'], 'evidence': evidence}
+        forged.pop('held_candidate', None)
+        self.assertEqual(g.governed_decisions(CLEAN_NOTES, fields, {**answers, 'allergies': forged}), ['Allergies'])
+        clean = r.validated(raw_result(CLEAN_NOTES, fields, json.dumps(wire)))
+        self.assertEqual(clean['allergies']['status'], 'supported')
+        self.assertEqual(g.governed_decisions(CLEAN_NOTES, fields, clean), [])
+        self.assertEqual(g.governed_decisions(CLEAN_NOTES, fields, {**answers, 'allergies': clean['allergies']}), [])
+
+    def test_structural_output_still_refuses_the_whole_response(self):
+        fields, wire = self.clean()
+        asked, context, _ = g.v3_generation_fields(fields)
+        units = self.units(CLEAN_NOTES, fields)
+        internal = r.parse(json.dumps(wire), asked, units).model_dump()
+        for name, edit in (('a missing field', lambda b: b['fields'].pop()),
+                           ('a duplicate field', lambda b: b['fields'].append(copy.deepcopy(b['fields'][0]))),
+                           ('an unknown field', lambda b: b['fields'][0].update(key='elsewhere')),
+                           ('a short context', lambda b: b['fields'][0]['context'].pop()),
+                           ('a long context', lambda b: b['fields'][0]['context'].append('independent')),
+                           ('an unknown unit', lambda b: b['fields'][0].update(unit_ids=[9])),
+                           ('a repeated unit', lambda b: b['fields'][0].update(unit_ids=[1, 1])),
+                           ('another field\'s option', lambda b: b['fields'][0].update(option_ids=['smoking:1'])),
+                           ('a repeated option', lambda b: b['fields'][2].update(option_ids=['smoking:1'] * 2))):
+            body = copy.deepcopy(internal); edit(body)
+            with self.subTest(name=name), self.assertRaises((ValueError, ValidationError)):
+                r.records(CLEAN_NOTES, fields, context, units, r.FieldSelections.model_validate(body), g.SONNET_5)
+        # and the keyed parser's controls (StrictParser.malformed) still refuse before any record: a disagreement in
+        # one field never excuses a malformed other field
+        body = copy.deepcopy(wire)
+        body['fields']['allergies']['context']['1'] = 'contrary'
+        body['fields']['activity']['unit_ids'] = [9]
+        with self.assertRaises(ValidationError) as caught:
+            r.validated(raw_result(CLEAN_NOTES, fields, json.dumps(body)))
+        self.assertIn(r.MALFORMED, caught.exception.messages[0])
 
 
 @override_settings(**RELATIONS)
