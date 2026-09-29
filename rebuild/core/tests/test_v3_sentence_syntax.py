@@ -194,6 +194,26 @@ class SentenceWorkflow(V3Fixture, TestCase):
                 'export_sha256': encounter.export_sha256, 'simulated': True}, indent=2))
         return encounter, source, exported
 
+    def test_a_stored_answer_about_another_person_names_that_reason_on_the_page(self):
+        """F3-set2 (repair 2026-09-29): a complete sentence held because its subject is another person shows that reason,
+        not 'the line shown with it may change what it means' beside its own line."""
+        doc = Document(); doc.add_paragraph('What medications does the patient take?'); box(doc)
+        template, version = self.uploaded(data=data(doc), name='SYNTHETIC other person reason')
+        self.confirm(template, version)
+        target = version.fields[0]
+        notes = 'Her husband takes warfarin.'
+        self.new_encounter(version, notes=notes)
+        e = Encounter.objects.latest('created_at')
+        e.answers = {target['key']: {'text': notes, 'status': 'supported', 'reviewed': True,
+            'reviewed_by': str(self.user.pk), 'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}}
+        e.save()
+        page = self.client.get(f'/encounters/{e.pk}/')
+        self.assertContains(page, 'data-held-candidate')
+        self.assertContains(page, 'May be about someone other than the patient:')
+        self.assertContains(page, 'this line may be about someone other than the patient')
+        self.client.post(f'/encounters/{e.pk}/finalize/', {'revision': e.revision, 'reviewed': 'on'})
+        e.refresh_from_db(); self.assertNotEqual(e.status, 'finalized')
+
     def test_forced_old_supported_fragment_or_foreign_subject_stays_held_on_page_save_finalize(self):
         doc = Document(); doc.add_paragraph('What activities does the patient attend?'); box(doc)
         template, version = self.uploaded(data=data(doc), name='SYNTHETIC stored syntax guards')

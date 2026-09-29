@@ -1282,14 +1282,12 @@ class RecoveredNoteContext(SimpleTestCase):
             # A provider's order cannot reverse the source's clinical sequence.
             reversed_out = run(notes, {'History of present illness': quotes[::-1]}, fields=fields)['History of present illness']
             self.assertEqual(reversed_out, out)
-            # ⚠️ DELIBERATE CHANGE 2026-09-29 (notes usefulness, G-B): a PART of the paragraph is judged by the ONE
-            # neighbour rule (`v3_neighbour_causes`), no longer by position. Nothing later is linked to the first
-            # sentence and 'He' resolves uniquely to the patient, so each part alone is supported with exactly its own
-            # text (both were held). A part that a later sentence links to stays held (test_v3_notes_usefulness).
+            # A PART of the paragraph stays held by position (restored 2026-09-29 after the refutation round: a link
+            # reading released each part alone, and a later sentence can change an earlier one by meaning alone).
             for partial in ([quotes[0]], [quotes[1]]):
-                alone = run(notes, {'History of present illness': partial}, fields=fields)['History of present illness']
-                self.assertEqual((alone['status'], alone['text']), ('supported', partial[0]))
-                self.assertNotIn('suggestion', alone)
+                held = run(notes, {'History of present illness': partial}, fields=fields)['History of present illness']
+                self.assertEqual(held['status'], 'conflict')
+                self.assertNotIn('suggestion', held)
 
     def test_complete_paragraph_does_not_release_correction_or_option_guards(self):
         notes = 'The patient takes penicillin. Sorry, I mean amoxicillin.'

@@ -1,9 +1,14 @@
-"""Ordinary notes made useful without weakening the context that governs evidence (2026-09-29).
+"""Ordinary notes made useful without weakening the context that governs evidence (2026-09-29, repaired the same day).
 
 Synthetic notes only; the provider's choice is simulated by unit selections (the `run()` shape). Each group pins one
 change to the ONE neighbour rule (`generation.v3_neighbour_causes`) or its readers, with the adverse shapes that must
 stay held beside the supported ones. The recorded campaign shapes are named N01..N12; the controls A..H, P, S keep
 the names of the over-hold analysis (phase-a/overholds.txt).
+
+⚠️ REPAIRED after the refutation round (test_v3_notes_repair.py pins every confirmed finding): the link reading of a
+later unit, the actor release of the unit before, the actor-ledger subsets (G-B1) and the encounter release after a run
+(G-J) are withdrawn; the positional rules hold again. What stays: G-A, G-D, G-E, G-F, G-H (each narrowed where it was
+refuted), the hold-only actor reading ((b''), X1) and X3.
 """
 import copy
 
@@ -95,17 +100,23 @@ class NotesUsefulness(SimpleTestCase):
                              ("The patient takes her husband's warfarin.", 'Medications'),
                              ('Warfarin was prescribed for her husband.', 'Medications'),
                              ('The patient and her father have diabetes.', 'Past medical history'),
-                             ('The patient reports her husband takes warfarin.', 'Medications')):
+                             ('The patient reports her husband takes warfarin.', 'Medications'),
+                             ('Somebody at home takes warfarin.', 'Medications'),                   # R1-7
+                             ('Her stepbrother takes warfarin.', 'Medications')):                   # R1-8
             with self.subTest(notes=notes):
-                self.assertHeld(notes, label, [notes])
+                held = self.assertHeld(notes, label, [notes])
+                self.assertEqual(held['held_candidate']['reason'], g.V3_OTHER_PERSON_REASON)
                 # Finalization refuses the same statement stored as supported (one reader).
                 fields = form()
                 key = key_of(fields, label)
                 stored = {'text': notes, 'status': 'supported', 'reviewed': True,
                           'evidence': [{'quote': notes, 'start': 0, 'end': len(notes)}]}
                 self.assertEqual(g.governed_decisions(notes, fields, {key: stored}), [label])
-        self.assertSupported("The patient's neighbour takes warfarin. The patient takes aspirin.", 'Medications',
+        # In its own paragraph the patient's sentence is its own; in the same paragraph the positional rule holds it.
+        self.assertSupported("The patient's neighbour takes warfarin.\n\nThe patient takes aspirin.", 'Medications',
                              ['The patient takes aspirin.'], 'The patient takes aspirin.')
+        self.assertHeld("The patient's neighbour takes warfarin. The patient takes aspirin.", 'Medications',
+                        ['The patient takes aspirin.'])
 
     def test_labelled_person_attribute_after_an_other_person_run_is_held(self):
         for notes, label, quote in (
@@ -118,15 +129,18 @@ class NotesUsefulness(SimpleTestCase):
                  'Allergies', 'Allergies: none known.'),
                 ('His father had a heart attack at 55. He smoked heavily. Smoker: Yes.', 'Smoker', 'Smoker: Yes.'),  # C5
                 ('The patient lives with her husband. He is allergic to penicillin. Allergies: penicillin.',
-                 'Allergies', 'Allergies: penicillin.')):
+                 'Allergies', 'Allergies: penicillin.'),
+                # R3-2: a labelled value naming another person opens that person's run.
+                ('The patient presents with cough.\nAllergies: her sister is allergic to penicillin.\nSmoker: Yes.',
+                 'Smoker', 'Smoker: Yes.')):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, label, [quote])
         # With the patient re-established first, the labelled line names its question as before.
         self.assertSupported('His father had a heart attack at 55. The patient takes aspirin. Allergies: penicillin.',
                              'Allergies', ['Allergies: penicillin.'], 'penicillin.')
 
-    # ── G-J: encounter topics after a CLOSED run belong to the encounter ────────────────────────────────────────────
-    def test_encounter_topics_after_a_closed_run_and_not_after_an_open_one(self):
+    # ── G-J, revised: an encounter topic after another person's run is not the encounter's ─────────────────────────
+    def test_encounter_topics_after_another_persons_run_are_held(self):
         fields = form()
         out = adopt(N05, {'v3_1': ['Patient presents with chest tightness on exertion for one month.'],
                           'v3_5': ['Allergies: none known.'], 'v3_6': ['Smoker: Yes.'],
@@ -134,58 +148,53 @@ class NotesUsefulness(SimpleTestCase):
                           'v3_9': ['Plan is an exercise stress test and aspirin 81 mg daily.'],
                           'v3_4': ['He takes rosuvastatin.'],
                           'v3_3': ['His father had a heart attack at 55.', 'He has high cholesterol.']}, fields)
-        for key, text in (('v3_1', 'Patient presents with chest tightness on exertion for one month.'),
-                          ('v3_7', 'normal.'), ('v3_8', 'possible stable angina.'),
-                          ('v3_9', 'an exercise stress test and aspirin 81 mg daily.')):
-            self.assertEqual((out[key]['status'], out[key]['text']), ('supported', text), key)
-        for key in ('v3_3', 'v3_4', 'v3_5', 'v3_6'):
+        for key in ('v3_1', 'v3_3', 'v3_4', 'v3_5', 'v3_6', 'v3_7', 'v3_8', 'v3_9'):
             self.assertNotEqual(out[key]['status'], 'supported', key)
+        # The line shown is the one that holds it: the father's line, not only the line next to it (X3).
+        shown = [entry['quote'] for entry in out['v3_8']['held_candidate']['context']]
+        self.assertIn('His father had a heart attack at 55.', shown)
         for notes, label, quote in (
                 ('Her sister was seen in oncology last month. Assessment is breast cancer.', 'Assessment',   # C4
                  'Assessment is breast cancer.'),
                 ('His father had a heart attack at 55. Examination at that time was normal.', 'Examination',  # C8
                  'Examination at that time was normal.'),
-                ('His father had a heart attack at 55. Examination is normal.', 'Examination', 'Examination is normal.'),
-                # the patient's encounter was established first, but the run is still OPEN
                 ('Patient presents with chest pain. His father had a heart attack at 55. Examination is normal.',
                  'Examination', 'Examination is normal.'),
-                # a paragraph that OPENS with another person has no encounter of the patient to return to
-                ('Her sister was seen in oncology last month.\nAllergies: penicillin.\nPlan is chemotherapy.', 'Plan',
-                 'Plan is chemotherapy.'),
-                ('Her sister was seen in oncology last month. Smoker: No. Assessment is breast cancer.', 'Assessment',
-                 'Assessment is breast cancer.'),
-                ('Her sister was seen in oncology last month.\nAllergies: penicillin.\nAssessment: breast cancer.',
-                 'Assessment', 'Assessment: breast cancer.')):
+                # R1-6: a labelled line between them is held as possibly that person's; it does not close the run.
+                ('Patient presents with chest pain. Her sister was seen in oncology last month.\nAllergies: none.\n'
+                 'Plan is chemotherapy.', 'Plan', 'Plan is chemotherapy.'),
+                ('Patient presents with chest pain. Her sister was seen in oncology last month.\nAssessment: breast '
+                 'cancer.', 'Assessment', 'Assessment: breast cancer.')):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, label, [quote])
 
-    # ── (b'): the actor comes from the nearest preceding person, and must be uniquely the patient ─────────────────
-    def test_pronoun_resolved_to_the_patient_and_competing_actors(self):
-        self.assertSupported('The patient is subject to a Community Treatment Order (CTO). She attends the clinic every '
-                             'week.', 'Past medical history', ['She attends the clinic every week.'],
-                             'She attends the clinic every week.')
+    # ── the actor of a pronoun: never released on it; held when it is not uniquely the patient ────────────────────
+    def test_a_pronoun_that_is_not_uniquely_the_patients_is_held(self):
         for notes, quote in (('His father had a heart attack at 55. He takes rosuvastatin.', 'He takes rosuvastatin.'),  # B6
                              ('Her mother has migraines. She takes sumatriptan.', 'She takes sumatriptan.'),
                              ('The patient lives with her husband. He takes warfarin.', 'He takes warfarin.'),
                              ('45-year-old man presents with cough. She takes warfarin.', 'She takes warfarin.'),
-                             ('The patient lives with their partner. He takes warfarin.', 'He takes warfarin.')):
+                             ('The patient lives with their partner. He takes warfarin.', 'He takes warfarin.'),
+                             ('45-year-old man presents with cough.\n\nShe takes warfarin.', 'She takes warfarin.'),
+                             # The positional rule, restored: the sentence before may set its frame.
+                             ('The patient is subject to a Community Treatment Order (CTO). She attends the clinic '
+                              'every week.', 'She attends the clinic every week.')):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, 'Medications', [quote])
+        reading = g.governance_for('45-year-old man presents with cough.\n\nShe takes warfarin.', form())[11]['preceding']
+        second = reading['units'][1]['id']
+        self.assertEqual(reading['resolved'][second]['actor'], 'ambiguous')
+        self.assertEqual(reading['resolved'][second]['hold_cause']['quote'], '45-year-old man presents with cough.')
 
-    # ── (a'): a later unit holds only when linked ──────────────────────────────────────────────────────────────────
-    def test_a_later_unit_holds_only_when_linked(self):
+    # ── the positional rule, restored: anything later in the paragraph but a plain labelled value may change it ────
+    def test_a_later_unit_holds_by_position(self):
         cc = '45-year-old man presents with right knee pain for three weeks after a fall.'
-        self.assertSupported(N04, 'Chief complaint', [cc], cc)
-        self.assertSupported(N04, 'History of present illness', [cc], cc)
-        self.assertSupported('The patient takes aspirin.\nShe sleeps well.', 'Medications', ['The patient takes aspirin.'])
-        # A possessed thing as a later subject refers back ('Her mood is low.'): linked, so held (conservative).
-        self.assertHeld('The patient takes aspirin.\nHer mood is low.', 'Medications', ['The patient takes aspirin.'])
         for notes, label, quote in (
+                (N04, 'Chief complaint', cc), (N04, 'History of present illness', cc),
+                ('The patient takes aspirin.\nShe sleeps well.', 'Medications', 'The patient takes aspirin.'),
                 ('The patient was seen for removal of a skin lesion on the left forearm. It was postponed.',      # B1
                  'Chief complaint', 'The patient was seen for removal of a skin lesion on the left forearm.'),
                 ('The patient presents with chest pain. The pain resolved yesterday.', 'Chief complaint',          # B2
-                 'The patient presents with chest pain.'),
-                ('The patient presents with chest pain. The pain has resolved.', 'Chief complaint',
                  'The patient presents with chest pain.'),
                 ('The patient is on methadone. The patient is not on diazepam or methadone.', 'Medications',       # B7
                  'The patient is on methadone.'),
@@ -193,42 +202,18 @@ class NotesUsefulness(SimpleTestCase):
                 ('The patient presents with chest pain. His father had angina. The pain resolved yesterday.',       # B11
                  'Chief complaint', 'The patient presents with chest pain.'),
                 ('Examination is normal. However, this was before the fall.', 'Examination', 'Examination is normal.'),  # C3
-                ('The patient takes warfarin. Dr Smith stopped anticoagulation.', 'Medications', 'The patient takes warfarin.'),
-                ('The patient takes aspirin. She stopped it last week.', 'Medications', 'The patient takes aspirin.'),
-                ('The patient takes warfarin. Warfarin was stopped last month.', 'Medications', 'The patient takes warfarin.'),
-                ('Assessment is migraine. Diagnosis unclear.', 'Assessment', 'Assessment is migraine.'),
-                ('Plan is physiotherapy. No physiotherapy until the fracture heals.', 'Plan', 'Plan is physiotherapy.'),
-                ('The patient presents with a rash. Her husband has the same rash.', 'Chief complaint',
-                 'The patient presents with a rash.')):
+                ('The patient takes warfarin. Anticoagulation was discontinued.', 'Medications',                   # F1
+                 'The patient takes warfarin.'),
+                ('The patient presents with chest pain. She came in for palpitations.', 'Chief complaint',          # F8
+                 'The patient presents with chest pain.'),
+                ('Previously. The patient took warfarin.', 'Medications', 'The patient took warfarin.')):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, label, [quote])
-
-    def test_each_link_condition_alone_holds(self):
-        cc = 'The patient presents with chest pain.'
-        for later in ('Worse at night.',                                  # (1) no nominal subject
-                      'It radiates to the jaw.',                          # (2) neuter pronoun
-                      'Chest pain radiates to the jaw.',                  # (3) it repeats a core word of ours
-                      'Also, she reports nausea.',                        # (4) a connective attached to its root
-                      'She asks whether surgery is needed?',              # (5) a shape reader (it asks)
-                      'She declined admission.'):                         # (6) a status word at clause level
-            with self.subTest(later=later):
-                self.assertHeld(cc + ' ' + later, 'Chief complaint', [cc])
-        self.assertHeld('The patient takes warfarin 5 mg daily. The dose was reduced to 3 mg.', 'Medications',
-                        ['The patient takes warfarin 5 mg daily.'])       # (2) a definite thing subject refers back
-        self.assertHeld('The patient reports a rash after amoxicillin. Allergy testing was arranged.', 'Allergies',
-                        ['The patient reports a rash after amoxicillin.'])  # (3) it names the question's label
-        self.assertSupported(cc + ' She sleeps well.', 'Chief complaint', [cc], cc)
-        presentation = '45-year-old man presents with right knee pain.'
-        self.assertHeld(presentation + ' He reports the opposite side.', 'Chief complaint', [presentation])  # (7) a side
-        # Another question's PLAIN value that repeats this unit's own word links to it.
-        self.assertHeld('The patient takes ibuprofen as needed. Assessment is ibuprofen overuse.', 'Medications',
-                        ['The patient takes ibuprofen as needed.'])
-        # A LABELLED answer keeps R3-1 exactly: another question's plain labelled value never holds it, shared word or
-        # not (the laterality round trip: 'Injected joint: (R) knee' above 'Aspirated joint: L knee').
+        # Another asked question's PLAIN labelled value never holds it (R3-1, unchanged).
         self.assertSupported('Allergies: penicillin.\nMedications: penicillin desensitisation.', 'Allergies',
                              ['Allergies: penicillin.'], 'penicillin.')
-        # A subject-less fragment written just before a unit may scope it ('Previously.').
-        self.assertHeld('Previously. The patient took warfarin.', 'Medications', ['The patient took warfarin.'])
+        self.assertSupported('The patient takes aspirin.\nSmoker: No.', 'Medications', ['The patient takes aspirin.'],
+                             'The patient takes aspirin.')
 
     def test_labelled_and_negative_answers_keep_the_positional_rule(self):
         for notes, label, quote in (
@@ -241,8 +226,8 @@ class NotesUsefulness(SimpleTestCase):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, label, [quote])
 
-    # ── G-A + G-B1: the title is not a qualifier; actor-ledger units are selected alone ────────────────────────────
-    def test_actor_ledger_units_selected_alone_under_the_form_title(self):
+    # ── G-A: the title is not a qualifier ──────────────────────────────────────────────────────────────────────────
+    def test_the_form_title_is_not_a_qualifier(self):
         fields = form()
         picks = {'v3_1': ['This is a 30-year-old female seen for headaches.'],
                  'v3_2': ['The headaches started two months ago and are worse in the morning.',
@@ -252,18 +237,15 @@ class NotesUsefulness(SimpleTestCase):
                  'v3_8': ['Assessment is tension-type headache.'],
                  'v3_9': ['Plan is to start amitriptyline 10 mg at night.', 'She will follow up in six weeks.']}
         out = adopt(N01, picks, fields)
-        expected = {'v3_1': 'This is a 30-year-old female seen for headaches.',
-                    'v3_2': 'The headaches started two months ago and are worse in the morning.\n'
-                            'She denies visual changes, nausea, or weakness.',
-                    'v3_4': 'She takes ibuprofen as needed.', 'v3_7': 'Neurological examination is normal.',
-                    'v3_8': 'tension-type headache.',
+        expected = {'v3_7': 'Neurological examination is normal.', 'v3_8': 'tension-type headache.',
                     'v3_9': 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'}
         for key, text in expected.items():
             self.assertEqual((out[key]['status'], out[key]['text']), ('supported', text), key)
             self.assertEqual(g.governed_decisions(N01, fields, {key: {**out[key], 'reviewed': True}}), [], key)
-        # G-I (allergy contextual consistency) and G-G (an option from prose) stay held.
-        self.assertNotEqual(out['v3_5']['status'], 'supported')
-        self.assertNotEqual(out['v3_6']['status'], 'supported')
+        # Held by position (a later sentence can change them by meaning), G-I (allergy consistency) and G-G (an option
+        # from prose): the actor-ledger subsets (G-B1) are withdrawn.
+        for key in ('v3_1', 'v3_2', 'v3_4', 'v3_5', 'v3_6'):
+            self.assertNotEqual(out[key]['status'], 'supported', key)
 
     def test_a_qualifier_that_remains_after_the_title_still_holds(self):
         for label, context, notes in (('Allergies', 'Family history', 'No known drug allergies.'),               # A1
@@ -276,21 +258,20 @@ class NotesUsefulness(SimpleTestCase):
         self.assertEqual(g.v3_field_qualifier({'label': 'Smoker', 'context': TITLE + ' > Smoker'}, [TITLE]), '')
         self.assertEqual(g.v3_field_qualifier({'label': 'Smoker', 'context': 'Mother > Smoker'}, []), 'Mother')
 
-    # ── G-D: a present-tense patient sentence naming its own field ─────────────────────────────────────────────────
+    # ── G-D: a present-tense patient sentence naming its own field, with nothing else in the note ─────────────────
     def test_a_patient_sentence_naming_its_own_side_field(self):
         right, left = field('v3_1', 'Right knee'), field('v3_2', 'Left knee')
         right['context'], left['context'] = 'Knee review > Right knee', 'Knee review > Left knee'
         fields = [right, left]
         self.assertSupported('The patient has right knee pain.', 'Right knee', ['The patient has right knee pain.'],
                              'The patient has right knee pain.', fields=fields)
+        # F9: another paragraph can reframe it, and only the coupling reader reads the note that far.
+        self.assertHeld('The patient has right knee pain.\n\nWrong side: it is the left knee.', 'Right knee',
+                        ['The patient has right knee pain.'], fields=fields)
         findings = field('v3_3', 'Clinical findings', 'long_text')
         findings['context'] = 'Knee review > Clinical findings'
         self.assertHeld('The patient has right knee pain and normal clinical findings.', 'Right knee',
                         ['The patient has right knee pain and normal clinical findings.'], fields=[right, findings])
-        self.assertHeld('The patient sleeps poorly because she worries.', 'History of present illness',
-                        ['The patient sleeps poorly because she worries.'])  # a pronoun subject: no admissible adverbial
-        self.assertSupported('The patient sleeps poorly because the knee hurts.', 'History of present illness',
-                             ['The patient sleeps poorly because the knee hurts.'])  # a thing subject: admissible
         for notes in ("The patient's mother has right knee pain.",                          # D1
                       'The patient has right knee pain and the left knee is swollen.',     # D2
                       'The patient has left knee pain.',                                    # D4
@@ -301,8 +282,17 @@ class NotesUsefulness(SimpleTestCase):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, 'Right knee', [notes], fields=fields)
 
-    # ── G-H: a bare speech repair governs only what precedes it ────────────────────────────────────────────────────
-    def test_a_bare_repair_governs_only_what_precedes_it(self):
+    # ── G-E: one admissible adverbial clause, both clauses present tense ───────────────────────────────────────────
+    def test_an_admissible_adverbial_clause(self):
+        self.assertHeld('The patient sleeps poorly because she worries.', 'History of present illness',
+                        ['The patient sleeps poorly because she worries.'])  # a pronoun subject: no admissible adverbial
+        self.assertSupported('The patient sleeps poorly because the knee hurts.', 'History of present illness',
+                             ['The patient sleeps poorly because the knee hurts.'])  # a thing subject: admissible
+        self.assertHeld('The patient slept poorly until the knee healed.', 'History of present illness',
+                        ['The patient slept poorly until the knee healed.'])   # R1-9: an ended state
+
+    # ── G-H: a bare repair of a labelled answer does not reach a later unrelated plain labelled value ──────────────
+    def test_a_bare_repairs_reach(self):
         fields = [field('v3_1', 'Chief complaint'), field('v3_2', 'Allergies'), field('v3_3', 'Smoker', 'choice', ['Yes', 'No'])]
         for f in fields:
             f['context'] = 'Skin clinic record' + (' > Smoker' if f['label'] == 'Smoker' else '')
@@ -318,7 +308,11 @@ class NotesUsefulness(SimpleTestCase):
                              ('Disregard the following.\nSmoker: Yes.', 'Smoker: Yes.'),                            # H4
                              ('Sorry, the next one is wrong.\nSmoker: Yes.', 'Smoker: Yes.'),                       # H5
                              ('Sorry, next line is wrong.\nSmoker: Yes.', 'Smoker: Yes.'),
-                             ('Allergies: none.\nActually, she smokes daily.\nSmoker: No.', 'Smoker: No.')):
+                             ('Allergies: none.\nActually, she smokes daily.\nSmoker: No.', 'Smoker: No.'),
+                             # F4: the repaired statement is unlabelled, so its question is unknown: note-wide.
+                             ('Patient presents with a rash, sorry, I mean a wound.\nSmoker: No.', 'Smoker: No.'),
+                             # A later line of the SAME question stays in the repair's reach.
+                             ('Smoker: No.\nSorry, I mean yes.\nSmoker: Yes.', 'Smoker: Yes.')):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, 'Smoker', [quote], fields=fields)
         self.assertHeld(cc + '\n\nAllergies: none. Sorry, I meant both legs.', 'Chief complaint', [cc], fields=fields)  # H6
@@ -338,12 +332,16 @@ class NotesUsefulness(SimpleTestCase):
             fields.append(f)
         pain = 'The patient describes the pain as a tight band around her head.'
         aura = 'The patient sees zigzag lines before the headache begins.'
-        notes = pain + ' ' + aura
+        notes = pain + '\n\n' + aura
         out = adopt(notes, {'v3_1': [pain], 'v3_2': [aura]}, fields)
         self.assertEqual((out['v3_1']['status'], out['v3_1']['text']), ('supported', pain))
         self.assertEqual((out['v3_2']['status'], out['v3_2']['text']), ('supported', aura))
         for key in ('v3_1', 'v3_2'):
             self.assertEqual(g.governed_decisions(notes, fields, {key: {**out[key], 'reviewed': True}}), [])
+        # In ONE paragraph each is held by position, as any sentence beside another.
+        joined = adopt(pain + ' ' + aura, {'v3_1': [pain], 'v3_2': [aura]}, fields)
+        for key in ('v3_1', 'v3_2'):
+            self.assertNotEqual(joined[key]['status'], 'supported', key)
         for picks in ({'v3_1': [aura]},                                   # F3: the model misassigns it
                       {'v3_1': [pain], 'v3_2': [pain]},                   # F2: one sentence into two of them
                       {'v3_1': [aura], 'v3_2': [pain]}):
@@ -362,9 +360,10 @@ class NotesUsefulness(SimpleTestCase):
 
     def test_one_statement_for_two_specific_questions_is_held(self):
         sentence = 'He has hypertension and takes lisinopril 10 mg daily.'
-        out = adopt(N04, {'v3_3': [sentence], 'v3_4': [sentence]}, form())
-        self.assertNotEqual(out['v3_3']['status'], 'supported')
-        self.assertNotEqual(out['v3_4']['status'], 'supported')
+        for notes in (N04, sentence):
+            out = adopt(notes, {'v3_3': [sentence], 'v3_4': [sentence]}, form())
+            self.assertNotEqual(out['v3_3']['status'], 'supported', notes)
+            self.assertNotEqual(out['v3_4']['status'], 'supported', notes)
 
     # ── X3: the line shown with a hold is the one that causes it ───────────────────────────────────────────────────
     def test_the_line_shown_with_a_hold_is_its_cause(self):
@@ -373,3 +372,10 @@ class NotesUsefulness(SimpleTestCase):
         shown = [entry['quote'] for entry in held['held_candidate']['context']]
         self.assertIn('His father had a heart attack at 55.', shown)
         self.assertNotIn('He is allergic to penicillin.', shown)
+        # A positional hold whose exemption another block denied shows that block (N06: the consent block).
+        n06 = ('The patient was seen for removal of a skin lesion on the left forearm. The risks and benefits were '
+               'discussed. Consent obtained: yes. The lesion was excised under local anesthesia and closed with '
+               'sutures. She tolerated the procedure well. Plan is suture removal in ten days.')
+        held = self.assertHeld(n06, 'Plan', ['Plan is suture removal in ten days.'])
+        shown = [entry['quote'] for entry in held['held_candidate']['context']]
+        self.assertIn('Consent obtained: yes.', shown)

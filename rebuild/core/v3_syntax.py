@@ -72,18 +72,30 @@ def _parser():
         return None
 
 
+def _present(head):
+    """A clause head in the present tense by the pinned parser's morphology: it, or an auxiliary under it, carries
+    Tense=Pres ('sees', 'is starting', 'has stopped'), and no modal is among them."""
+    tokens = [head] + [child for child in head.children if child.dep_ in ('aux', 'auxpass')]
+    return any('Pres' in token.morph.get('Tense') for token in tokens) and not any(token.tag_ == 'MD' for token in tokens)
+
+
 def _admissible_adverbials(doc, root):
     """Token indices inside adverbial clauses the caller may accept (G-E, 2026-09-29): an `advcl` attached to the root
     whose own subject, when it has one, is a THING (a noun or proper noun that names no person; never a personal or
     demonstrative pronoun), with no modal anywhere inside it. The caller has already refused every unit carrying a
-    scope reframer or pointer (`INHERITED_SCOPE`), so 'if'/'would'/'could'/'might' clauses never reach this."""
+    scope reframer or pointer (`INHERITED_SCOPE`), so 'if'/'would'/'could'/'might' clauses never reach this.
+    ⚠️ R1-9 (repair, 2026-09-29): BOTH clauses must be in the present tense by the parser's morphology. A past clause
+    bounded by another ('The patient attended the clinic every week until the order expired.', '... before the order
+    lapsed.') describes a state that ENDED, and a present clause bounded by a past one is not proven current either."""
     from .v3_actors import names_person
     allowed = set()
+    if not _present(root):
+        return allowed
     for head in root.children:
         if head.dep_ != 'advcl':
             continue
         inner = list(head.subtree)
-        if any(token.tag_ == 'MD' for token in inner):
+        if any(token.tag_ == 'MD' for token in inner) or not _present(head):
             continue
         subjects = [token for token in inner if token.dep_ in ('nsubj', 'nsubjpass')]
         if any(token.pos_ not in ('NOUN', 'PROPN') or names_person(token) for token in subjects):
@@ -95,7 +107,10 @@ def _admissible_adverbials(doc, root):
 @lru_cache(maxsize=1)
 def _reader():
     """The same verified bytes as `_parser`, with the model's own rule lemmatizer kept (its lookups file is in the
-    manifest). Used only by the actor reader (`v3_actors`); `_parser` and every existing caller are unchanged."""
+    manifest). Used only by the actor reader (`v3_actors`) and the readers built on its reading; `_parser` and every
+    existing caller are unchanged. The entity recognizer stays excluded: measured on this model it tags drugs PERSON
+    ('Lisinopril 10 mg daily.', 'Apixaban was discontinued ...', 'Morphine was given.', a label's 'Urine') and misses
+    names ('Ahmed', 'Priya', 'Wei'), so it cannot say who a sentence is about (repair, 2026-09-29)."""
     if _parser() is None:
         return None
     try:
