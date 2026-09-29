@@ -485,12 +485,29 @@ def template_detail(request,pk):
                 lost=[f['label'] for f in latest.fields
                       if signature_label(f['label']) and not signature_label(labels[f['key']])]
                 if lost:raise ValidationError('A signature question keeps a signature label, because the identity check reads it: '+', '.join(sorted(lost))+'. Rename the other questions and leave this one as the form words it.')
+                # ⚠️ AND THE OTHER DIRECTION: another person's signature place renamed into the clinician's own
+                # ("Participant's signature" -> 'Consultant signature') would make the identity check write the
+                # finalizing clinician's name into that person's signature place.
+                gained=[f['label'] for f in latest.fields if identity_gained(f['label'],labels[f['key']])]
+                if gained:raise ValidationError(IDENTITY_GAINED+', '.join(sorted(gained))+'.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
                 version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,created_by=request.user)
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
     return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
+
+IDENTITY_GAINED=('Another person\'s signature question keeps its own label: renamed into the clinician\'s signature, the '
+                 'identity check would write the finalizing clinician\'s name into that person\'s signature place. Nothing '
+                 'was saved: ')
+
+def identity_gained(before,after):
+    """A rename makes a signing question that is NOT the clinician's own identity row ("Participant's signature",
+    'Signature (mother)') into one ('Consultant signature'): the identity check reads the editable label, so it must
+    not be moved onto another person's signature place."""
+    from .mapping_assistance import signing_label
+    from .tab_review import signature_label
+    return not signature_label(before) and signature_label(after) and signing_label(before)
 
 #: At most this many unmapped places are listed at once; the search narrows the rest.
 V3_PLACES_SHOWN=300
@@ -593,6 +610,8 @@ def v3_save_corrections(request,t):
                 # ⚠️ The same protection as every other mapping: the identity check reads this label.
                 if signature_label(f['label']) and not signature_label(label):
                     raise ValidationError('A signature question keeps a signature label, because the identity check reads it: '+f['label']+'. Rename the other questions and leave this one as the form words it.')
+                if identity_gained(f['label'],label):
+                    raise ValidationError(IDENTITY_GAINED+f['label']+'.')
                 renamed.append({'key':key,'from':f['label'],'to':label})
             fields.append({**f,'label':label,'kind':kind})
         if not (removed or renamed or kind_changed):

@@ -28,9 +28,16 @@ _ROLE = r"(?:physician|provider|surgeon|clinician|consultant|attending|resident|
 _NOT_A_SIGNER = r"(?:date|dated|time|day|of|by|for|and|or|at|in|on|to)\b"
 _QUALIFIER = rf"(?!{_NOT_A_SIGNER})[a-z][a-z'.-]*"
 _SIGNER = rf"(?:{_QUALIFIER} ){{0,2}}{_ROLE}"
+#: What a bracketed qualifier after 'Signature' / 'Signed by' may say and still leave the row the clinician's own: the
+#: clinician's role ('Signed by (MD)') or how to write the name ('Signature (print name)'). ⚠️ NEVER ANY PARENTHETICAL:
+#: 'Signature (participant)', 'Signature (mother)', 'Signed by (research participant)' and 'Signature (person giving
+#: consent)' name ANOTHER signer, and reading them as identity rows told the clinician to type their own name into that
+#: person's signature place (and the legacy fill wrote it there).
+_WRITING = r"(?:(?:and |please )?print(?:ed)?(?: name)?|block capitals|capitals)"
+_IDENTITY_QUALIFIER = rf"(?: ?\((?:the )?(?:{_SIGNER}|{_WRITING})\))?"
 #: A signature answer area names a PERSON.
 SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
-    r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",
+    rf"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?{_IDENTITY_QUALIFIER}",
     rf"{_SIGNER}'?s? sign(?:ature|ed)(?: by)?",
     rf"sign(?:ature|ed)(?: by| of)? (?:the )?{_SIGNER}",
     r"signature ?/ ?date",

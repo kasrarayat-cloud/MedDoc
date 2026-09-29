@@ -82,29 +82,65 @@ def _sense(doc, token, word):
         adjective = (token.dep_ in ("amod", "compound") and head.i > token.i and head.pos_ in ("NOUN", "PROPN")
                      and not any(t.pos_ == "DET" for t in doc[token.i + 1:head.i]))
         return not adjective
-    # 'sign': the signing act unless the clause uses it as a clinical NOUN, read from its role and never from its
-    # part-of-speech tag alone (the pinned model tags 'Sign present' a verb and 'Sign & date' a proper noun):
-    #   the complement of 'of' ('Sign of infection'), a possessor ("Murphy's sign"), the subject of a predicate
-    #   ('Sign elicited'), an adjective predicated of it ('Sign present', 'Sign positive'), or the modifier of a
-    #   following noun ('Sign language interpreter', 'Sign and symptom review') - unless it is coordinated there with
-    #   another act the lexicon knows as a verb ('Sign & print name').
-    # Everything else - the whole caption ('Sign:'), an instruction ('Sign below', 'Please sign', 'Patient to sign',
-    # 'Sign on the line'), a role's caption ('Nurse sign', 'Doctor sign/date') or a list of acts ('Sign & date',
-    # 'Sign, date and time') - is the signing act.
+    # 'sign': the signing act only where the clause reads it as that ACT - never a clinical NOUN. ⚠️ A noun 'sign' with
+    # a modifier ('Babinski sign', 'Romberg sign', 'Warning sign', 'Meningeal sign') has the same parse as a role's
+    # caption, and holding it made every eponymous sign on an examination form a signature place that nothing could
+    # answer (and the legacy fill refuse the whole export). So:
+    #   a clinical noun, whatever else the clause holds: the complement of 'of' ('Sign of infection'), a possessor
+    #   ("Murphy's sign"), the subject of a predicate ('Sign elicited'), an adjective predicated of it ('Sign present',
+    #   'Sign positive', 'Positive Romberg sign'), or the modifier of a following noun ('Sign language interpreter',
+    #   'Sign and symptom review') unless listed there with another act ('Sign & print name');
+    #   the act: the parser's VERB ('Sign', 'Sign below', 'Please sign', 'Patient to sign', 'Parent sign'), a list of
+    #   acts ('Sign & date', 'Sign, date and time', 'Doctor sign/date', 'Sign/date'), the bare word ('Sign:'), or the
+    #   noun captioned by a person who signs ('Nurse sign', 'Patient sign', 'Witness sign' - SIGNER);
+    #   anything else - a noun with its own modifiers - is the clinical sign.
     children = list(token.children)
     if any(c.dep_ == "prep" and c.lower_ == "of" for c in children) or any(c.dep_ == "poss" for c in children):
         return False
     if token.dep_ in ("nsubj", "nsubjpass"):
         return False
+    listed = _listed_act(doc, token)
+    if token.dep_ in ("compound", "nmod", "amod") and token.head.i > token.i and token.head.pos_ in ("NOUN", "PROPN") \
+            and not listed:
+        return False
+    if any(c.dep_ in ("compound", "amod", "nmod", "nsubj") and c.i < token.i and SIGNER.fullmatch(c.lower_)
+           for c in children):
+        return True
+    if any(c.dep_ in ("aux", "auxpass") for c in children):
+        return True                           # a modal or 'to' makes it a verb: 'Patient must sign', 'Nurse to sign'
+    # The pinned model also reads '<noun> sign' as a subject and its verb ('Chvostek sign', 'Homans sign', 'Kehr sign'):
+    # a subject that is not a pronoun or a person who signs is the sign's own modifier.
+    if any(c.dep_ in ("nsubj", "nsubjpass") and c.i < token.i and c.pos_ != "PRON" for c in children):
+        return False
     following = doc[token.i + 1] if token.i + 1 < len(doc) else None
     if (following is not None and following.pos_ == "ADJ") or any(
             c.pos_ == "ADJ" and c.dep_ in ("advmod", "acomp", "amod", "oprd") for c in children):
         return False
-    if token.dep_ in ("compound", "nmod", "amod") and token.head.i > token.i and token.head.pos_ in ("NOUN", "PROPN"):
-        partners = [c for c in children if c.dep_ == "conj"]
-        if not any(_verb_form(p.text) for p in partners):
-            return False
-    return True
+    words = [t for t in doc if not (t.is_punct or t.is_space)]
+    return token.pos_ in ("VERB", "AUX") or listed or words == [token]
+
+
+#: The persons a form names as the one who signs, read only as the modifier of a noun 'sign' ('Nurse sign', 'Patient
+#: sign'): the signer roles the application already names (core.tab_review's clinical roles and NOT_THE_CLINICIAN,
+#: documents.source_policy's printed roles) and the staff who sign an administration record. An eponym or a
+#: description ('Babinski sign', 'Warning sign') is never one of them, so it stays the clinical sign.
+SIGNER = re.compile(r"(?:patient|witness|guardian|parent|interpreter|relative|carer|caregiver|family|representative|"
+                    r"nurse|midwife|doctor|physician|clinician|consultant|surgeon|anaesthetist|anesthetist|registrar|"
+                    r"resident|practitioner|pharmacist|prescriber|checker|staff|supervisor|manager|employer|assessor|"
+                    r"examiner|student|therapist|dentist|radiographer|sonographer|operator|gp|hca|rn|md|np|pa)")
+
+
+def _listed_act(doc, token) -> bool:
+    """`token` is printed in a LIST of acts with another word the pinned lexicon knows as a verb: coordinated with it
+    ('Sign & date', 'Sign, date and time', 'Sign & print name'), set beside it ('Doctor sign/date'), or joined to the
+    noun it modifies by list punctuation alone ('Sign/date'). 'Sign and symptom review' lists no act."""
+    if any(c.dep_ in ("conj", "appos") and _verb_form(c.text) for c in token.children):
+        return True
+    head = token.head
+    if head is not token and head.i > token.i and _verb_form(head.text) and token.dep_ in ("nmod", "compound", "conj", "appos"):
+        between = doc[token.i + 1:head.i]
+        return bool(len(between)) and all(t.is_punct or t.lower_ in ("and", "or", "&", "+", "/") for t in between)
+    return False
 
 
 def _clause(nlp, clause):
@@ -137,47 +173,121 @@ ASIDE = re.compile(r"\([^()]*\)|\[[^\[\]]*\]")
 
 def _dangling(doc) -> bool:
     words = [t for t in doc if not t.is_punct and not t.is_space]
-    if words and words[-1].pos_ in OPEN_ENDING:
+    # A preposition closing a reduced relative clause ('the operation described above', 'the risks listed below')
+    # points at the form itself; it waits for nothing.
+    pointing = [t for t in doc if t.dep_ == "prep" and t.pos_ == "ADP" and t.head.dep_ == "acl" and t.head.tag_ == "VBN"
+                and not list(t.children)]
+    if words and words[-1].pos_ in OPEN_ENDING and words[-1] not in pointing:
         return True
-    return any(t.dep_ == "prep" and not any(c.dep_ in ("pobj", "pcomp") for c in t.children) for t in doc)
+    return any(t.dep_ == "prep" and t not in pointing and not any(c.dep_ in ("pobj", "pcomp") for c in t.children)
+               for t in doc)
 
 
 def _declaration(doc, nlp=None):
-    """(declaration, attesting, governing) of one parsed sentence: a first-person pronoun is the subject of the statement it
-    makes, and that statement either attests (a clausal complement - 'I confirm that ...', 'I agree to proceed' - the
-    consent act, or a predicate over the declarant's own words - 'The information I have provided is accurate') or is
-    complete before its answer place (it is answered, not completed: 'I understand the risks: ☐').
+    """(declaration, attesting, governing) of one parsed sentence: a first-person pronoun is the subject of a finite verb
+    of the statement it makes, and that statement either attests (a clausal complement - 'I confirm that ...', 'I agree
+    to proceed', 'I am happy to go ahead' - an agreement to what it names - 'I agree to the operation described above' -
+    the consent act, or a predicate over the declarant's own words - 'The information I have provided is accurate'), is
+    COMPLETED BY ITS BLANK at its verb's own complement ('I hereby certify that ____', 'I declare that:', 'I agree to
+    ____', 'I have been informed that ____': the blank is what is attested, never a note's answer), or is complete
+    before its answer place (it is answered, not completed: 'I understand the risks: ☐').
 
-    A sentence opening with a prepositional or participial frame ('To the best of my knowledge I confirm the above is
-    correct', 'Having read the leaflet I agree ...') is also read from its first-person subject on, when the frame ends
-    in a noun or a comma before it (the pinned model attaches such a main clause to the frame's noun): that reading
-    counts only when it ATTESTS, so a relative clause after a prepositional phrase ('For patients we see in clinic') is
-    not made a declaration by it."""
+    A sentence whose first-person subject does not open its clause is also read from that subject on: after a
+    prepositional or participial frame ('To the best of my knowledge I confirm the above is correct', 'Having read the
+    leaflet I agree ...'), when the frame ends in a noun or a comma before it (the pinned model attaches such a main
+    clause to the frame's noun), and after a noun a capital 'I' may number ('Today I confirm ...', but 'Grade I reflux'):
+    that reading counts only when it ATTESTS, so a relative clause after a prepositional phrase ('For patients we see in
+    clinic') is not made a declaration by it, and a numeral never is ('Grade I tear', 'Type I fracture': 'I tear'
+    attests nothing)."""
     found = _governing_declaration(doc)
     if found[0] or nlp is None or not len(doc):
         return found
     opening = doc[0]
-    if opening.pos_ == "ADP" or opening.tag_ in ("VBG", "VBN"):
-        for token in doc:
-            if token.i > 1 and token.pos_ == "PRON" and token.morph.get("Person") == ["1"] and \
-                    token.lower_ in ("i", "we") and (doc[token.i - 1].pos_ in ("NOUN", "PROPN") or doc[token.i - 1].text == ","):
-                declared, attesting, governs = _governing_declaration(nlp(doc[token.i:].text))
-                if declared and attesting:
-                    return True, True, True
+    framed = opening.pos_ == "ADP" or opening.tag_ in ("VBG", "VBN")
+    for token in doc:
+        if not (token.i > 0 and token.pos_ == "PRON" and token.morph.get("Person") == ["1"] and token.lower_ in ("i", "we")):
+            continue
+        before = doc[token.i - 1]
+        if (framed and token.i > 1 and (before.pos_ in ("NOUN", "PROPN") or before.text == ",")) or _numbered(doc, token):
+            declared, attesting, governs = _governing_declaration(nlp(doc[token.i:].text))
+            if declared and attesting:
+                return True, True, True
     return found
 
 
+def _numbered(doc, token) -> bool:
+    """A capital 'I' printed straight after a word it may number ('Grade I reflux', 'Stage I disease', 'Type I fracture',
+    'Mallampati class I airway', 'Dose I given'): it does not open its clause, so it is not read as the declarant."""
+    if token.text != "I" or token.i == 0:
+        return False
+    before = doc[token.i - 1]
+    return not (before.is_punct or before.is_space) and before.pos_ in ("NOUN", "PROPN", "NUM", "ADJ", "X", "SYM")
+
+
+def _finite(head) -> bool:
+    """The first-person subject's head is a finite verb: an auxiliary, a verb with its own auxiliary, a past form, or a
+    present form the pinned lexicon knows as a verb - never a noun the tagger read as a present-tense verb after a
+    numeral ('Stage I disease', 'Class I obesity', 'Grade I tumour'). Without the lexicon it is read as a verb (holding)."""
+    if head.pos_ == "AUX" or any(c.dep_ in ("aux", "auxpass") for c in head.children):
+        return True
+    if head.tag_ in ("VBP", "VB"):
+        return not _verbs() or _verb_form(head.text)
+    return True
+
+
+def _between_ok(doc, start, end) -> bool:
+    """Only adverbs, particles, punctuation and a predicate adjective stand between two tokens ('I hereby certify that',
+    'I am aware that')."""
+    return all(t.pos_ in ("ADV", "PART", "PUNCT") or (t.pos_ == "ADJ" and t.dep_ == "acomp") for t in doc[start + 1:end])
+
+
+def _completed_by_blank(doc, path) -> bool:
+    """The statement ends on its verb's OWN complement marker, so the blank after it is the attested complement: a
+    complementizer ('I hereby certify that', 'I declare that:', 'I understand that', 'I have been informed that', 'I am
+    aware that') or 'to' straight after the verb ('I agree to', 'I consent to'). A preposition after the verb's object or
+    adjunct ('I reviewed this patient in clinic on', 'We recommend review in:') waits for an ordinary answer."""
+    words = [t for t in doc if not (t.is_punct or t.is_space)]
+    if not words:
+        return False
+    last = words[-1]
+    complementizer = last.pos_ == "SCONJ" and last.lower_ in ("that", "whether", "if")
+    to = last.lower_ == "to" and last.pos_ in ("ADP", "PART")
+    if not (complementizer or to):
+        return False
+    anchor = last.head
+    # 'to' only straight after the verb itself ('I am allergic to' waits for an ordinary answer); a complementizer also
+    # after the predicate adjective ('I am aware that').
+    if anchor not in path and not (complementizer and anchor.dep_ == "acomp" and anchor.head in path):
+        return False
+    return anchor.i < last.i and _between_ok(doc, anchor.i, last.i)
+
+
+def _agrees(doc, path) -> bool:
+    """The statement agrees to what it names: a verb of the statement takes 'to' and its printed object straight after
+    it ('I agree to the operation described above'), or a predicate adjective takes a clausal complement ('I am happy
+    to go ahead with the operation', 'I am willing to proceed')."""
+    for verb in path:
+        for c in verb.children:
+            if c.dep_ == "prep" and c.lower_ == "to" and c.i > verb.i and _between_ok(doc, verb.i, c.i) and \
+                    any(g.dep_ in ("pobj", "pcomp") for g in c.children):
+                return True
+            if c.dep_ == "acomp" and any(g.dep_ in ("xcomp", "ccomp") for g in c.children):
+                return True
+    return False
+
+
 def _governing_declaration(doc):
-    """(declared, attesting, governing): `governing` is a first-person subject of the statement the sentence makes, whether
-    or not that statement is complete; `declared` adds that it attests or is complete before its answer place."""
+    """(declared, attesting, governing): `governing` is a first-person subject of a finite verb of the statement the
+    sentence makes, whether or not that statement is complete; `declared` adds that it attests, is completed by its
+    blank, or is complete before its answer place."""
     governs = False
     for token in doc:
         if not (token.pos_ == "PRON" and token.morph.get("Person") == ["1"] and token.dep_ in ("nsubj", "nsubjpass")):
             continue
         head = token.head
         # A first-person subject agrees with its verb: 'Type I diabetes' (tagged a pronoun before a 3rd-person '-s'
-        # form) is a numeral.
-        if head.pos_ not in ("VERB", "AUX") or head.tag_ == "VBZ":
+        # form) is a numeral, and so is an 'I' after the word it numbers or before a noun read as a verb.
+        if head.pos_ not in ("VERB", "AUX") or head.tag_ == "VBZ" or _numbered(doc, token) or not _finite(head):
             continue
         path, node, governing = [head], head, True
         while node.dep_ != "ROOT":
@@ -193,8 +303,12 @@ def _governing_declaration(doc):
         attesting = (any(c.dep_ in ("ccomp", "xcomp") for verb in path for c in verb.children if verb.pos_ in ("VERB", "AUX"))
                      or bool(CONSENT.search(head.text))
                      or (head is not root and any(c.dep_ in ("acomp", "attr") for c in root.children)))
+        # An agreement to what the statement names makes a complete statement attest; it never completes one that
+        # still waits for its blank ('I was admitted to hospital on: ____' stays an ordinary answer).
         if attesting or not _dangling(doc):
-            return True, attesting, True
+            return True, attesting or _agrees(doc, path), True
+        if _completed_by_blank(doc, path):
+            return True, True, True
     return False, False, governs
 
 

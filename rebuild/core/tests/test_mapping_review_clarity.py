@@ -166,3 +166,20 @@ class ASignatureQuestionKeepsItsSignatureLabel(BoundaryFixture, TestCase):
         response, before, after = self.rename('Signed by (MD)')
         self.assertNotContains(response, 'signature question keeps a signature label')
         self.assertEqual(after, before + 1)
+
+    def test_RR5_another_persons_signature_is_never_renamed_into_the_clinicians(self):
+        """RR5: the identity check reads the editable label, so "Participant's signature" renamed 'Consultant
+        signature' would have the finalizing clinician's own name written into the participant's signature place."""
+        from core.models import TemplateVersion
+        fields = [dict(field) for field in self.version.fields]
+        fields[0]['label'] = "Participant's signature"
+        self.version = TemplateVersion.objects.create(
+            template=self.version.template, number=self.version.number + 1, fields=fields,
+            review_requirements=self.version.review_requirements,
+            document_backend=self.version.document_backend, created_by=self.user)
+        response, before, after = self.rename('Consultant signature')
+        self.assertContains(response, 'keeps its own label')
+        self.assertEqual(before, after)
+        response, before, after = self.rename("Participant's signature (witnessed)")   # control: any other label
+        self.assertNotContains(response, 'keeps its own label')
+        self.assertEqual(after, before + 1)

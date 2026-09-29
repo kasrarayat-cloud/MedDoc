@@ -79,6 +79,15 @@ def resolve(request,template,version):
         if decision not in ('mapped','not_answer'):raise ValidationError('Review every unresolved area before saving.')
         if decision=='not_answer' and row.get('key'):removed.add(row['key'])
         decisions.append({'slot':row['slot'],'key':row.get('key',''),'decision':decision})
+    # ⚠️ 'NOT AN ANSWER' ON AN AREA A MODEL-PROPOSED FIELD WRITES AT REMOVES THAT FIELD (RR2-3): a record without a key
+    # ('Unresolved source area ...') used to be saved while the adopted field stayed, was confirmed and was asked at
+    # generation - the clinician's recorded decision and the saved mapping said opposite things. The engine's own
+    # fields are never removed by an area decision (only by their own record or on the mapping page).
+    for row,made in zip(unresolved,decisions):
+        if made['decision']=='not_answer' and not row.get('key') and row.get('slot'):
+            for f in version.fields:
+                if f.get('origin')=='model_assisted' and v3_mapping.is_mapped(row['slot'],v3_mapping.mapped_slots([f])):
+                    removed.add(f['key'])
     fields=[f for f in version.fields if f['key'] not in removed]
     # 'Mapped' is judged against the mapping these decisions SAVE: a field another decision removes no longer maps
     # its place (checked against the fields before the removal, a record could be resolved 'mapped' onto nothing).
@@ -87,6 +96,7 @@ def resolve(request,template,version):
         if made['decision']=='mapped' and not v3_mapping.is_mapped(row['slot'],mapped):
             raise ValidationError('Add this missed area on the mapping page before marking it mapped. An area stays unmapped '
                                   'when you mark the field that mapped it not an answer.')
+
     new=TemplateVersion.objects.create(template=template,number=version.number+1,fields=fields,contract='v3',
         created_by=request.user,review_requirements=version.review_requirements,
         assistance={**version.assistance,'unresolved':[],'assisted':True,'resolutions':decisions},

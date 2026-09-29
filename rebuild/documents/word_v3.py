@@ -6955,17 +6955,76 @@ def option_line(text) -> bool:
         bool(BOX in text or CHECKED in text or LABEL_BREAK.search(text))
 
 
+#: A printed parenthetical or bracketed qualifier: never counted as a caption's words ('Signature of witness (if the
+#: patient is unable to sign)').
+QUALIFIER_TEXT = re.compile(r"\([^()]*\)|\[[^\[\]]*\]")
+#: Where a caption's HEAD (its own noun phrase) ends: the first preposition, subordinator or clause punctuation
+#: ('Signature | of the patient or person with parental responsibility', 'Name and signature | of the person ...').
+CAPTION_HEAD_END = re.compile(r"\s(?:of|by|for|from|with|to|in|on|at|if|where|when|who|whose|which|that|because|unless|"
+                              r"as|after|before|once|until|while)\b|[,;:(\[\u2013\u2014]|\s-\s", re.I)
+#: The most words a caption's head has ('Name and signature', 'Patient or guardian signature').
+CAPTION_HEAD_WORDS = 4
+
+
+def caption_label(label, piece=None) -> bool:
+    """One printed label is a signing CAPTION: the kind rule reads it as signature or initials and it is printed as a
+    caption - at most CAPTION_WORDS words once its qualifiers are left out, ending in a colon, or whatever its length
+    with a HEAD that reads as a signature ('Signature of the patient or person with parental responsibility', 'Name and
+    signature of the person obtaining consent on behalf of the team'). A sentence of guidance that merely mentions
+    signing ('Describe the procedure; the signed consent form is filed with the notes.') captions nothing."""
+    label = clean_label(label or "")
+    if not label or kind_for_label(label) not in SIGNING_KINDS:
+        return False
+    if piece is not None and re.search(r":\s*$", plain(piece).replace(BOX, "").strip(" _\t")):
+        return True
+    bare = re.sub(r"\s+", " ", QUALIFIER_TEXT.sub(" ", label)).strip()
+    if len(label.split()) <= CAPTION_WORDS or (bare and len(bare.split()) <= CAPTION_WORDS):
+        return True
+    head = CAPTION_HEAD_END.split(" " + bare, maxsplit=1)[0].strip()
+    return bool(head) and len(head.split()) <= CAPTION_HEAD_WORDS and kind_for_label(head) in SIGNING_KINDS
+
+
 def signing_caption(text) -> bool:
-    """The text is a signing CAPTION: a separately printed label the kind rule reads as signature or initials, of at most
-    CAPTION_WORDS words ('Signature of consultant', 'Initials') or printed as a caption, ending in a colon ('Signature of
-    the doctor who obtained consent from the patient:'). A sentence of guidance that merely mentions signing
-    ('Describe the procedure; the signed consent form is filed with the notes.') captions nothing."""
-    for piece in LABEL_BREAK.split(text or ""):
-        label = clean_label(piece)
-        if label and kind_for_label(label) in SIGNING_KINDS and (
-                len(label.split()) <= CAPTION_WORDS or re.search(r":\s*$", plain(piece).replace(BOX, "").strip(" _\t"))):
-            return True
-    return False
+    """The text prints a signing CAPTION (caption_label) among its separately printed labels."""
+    return any(caption_label(piece, piece) for piece in LABEL_BREAK.split(text or ""))
+
+
+#: Markup that prints nothing and never stands between a caption and its answer place: range markers (bookmarks,
+#: editing permissions, comments, moves, custom XML ranges) and proofing marks.
+TRANSPARENT = frozenset(q("w:" + name) for name in (
+    "bookmarkStart", "bookmarkEnd", "permStart", "permEnd", "commentRangeStart", "commentRangeEnd", "proofErr",
+    "moveFromRangeStart", "moveFromRangeEnd", "moveToRangeStart", "moveToRangeEnd", "customXmlInsRangeStart",
+    "customXmlInsRangeEnd", "customXmlDelRangeStart", "customXmlDelRangeEnd", "customXmlMoveFromRangeStart",
+    "customXmlMoveFromRangeEnd", "customXmlMoveToRangeStart", "customXmlMoveToRangeEnd"))
+
+
+def answer_control(el) -> bool:
+    """A BLOCK-level content control that is itself an answer place: editable (its content not locked) and showing its
+    placeholder ('Click or tap here to enter text.') or printing no word at all. Any other block control (one that
+    prints a caption, or whose content is locked) is read through: its blocks are the form's printed blocks."""
+    if el is None or el.tag != SDT or el.getparent() is None or el.getparent().tag in (q("w:p"), q("w:tr")):
+        return False
+    info = sdt_info(el)
+    if info.get("locked"):
+        return False
+    content = el.find(q("w:sdtContent"))
+    return bool(info.get("placeholder")) or not printed_words(text_of(content, own=False) if content is not None else "")
+
+
+def reading_blocks(container) -> list:
+    """The blocks of one container (body, cell, text box, header or footer) in reading order: paragraphs, tables and
+    block answer controls; range markers left out, and any other block control or custom XML wrapper read through."""
+    out = []
+    for child in container:
+        if not isinstance(child.tag, str) or child.tag in TRANSPARENT:
+            continue
+        if (child.tag == SDT and not answer_control(child)) or child.tag == q("w:customXml"):
+            inner = child.find(q("w:sdtContent")) if child.tag == SDT else child
+            if inner is not None:
+                out += reading_blocks(inner)
+            continue
+        out.append(child)
+    return out
 
 
 def option_list(printed) -> bool:
@@ -7036,8 +7095,14 @@ def held_places(package, source=None, protected=None) -> dict:
             if lock is None or lock.get(q("w:val")) not in ("contentLocked", "sdtContentLocked"):
                 content = sdt.find(q("w:sdtContent"))
                 if content is not None:
+                    # An inline control's runs are its answer place, whatever placeholder they show; a BLOCK control is
+                    # one when it is an answer control (answer_control: its placeholder, or no printed word) - one
+                    # printing a caption stays printed text, as the caption walk reads it.
+                    block = any(child.tag in (q("w:p"), q("w:tbl")) for child in content)
+                    if block and not answer_control(sdt):
+                        continue
                     for child in list(content):
-                        if child.tag == R or child.tag == q("w:r"):
+                        if block or child.tag == R:
                             content.remove(child)
         return re.sub(r"\s+", " ", text_of(copy, own=False)).strip()
 
@@ -7064,15 +7129,44 @@ def held_places(package, source=None, protected=None) -> dict:
         return next((c for c in table.children if c.kind == "tc" and c.info["row"] == row
                      and c.info["col"] <= col < c.info["col"] + c.info["span"]), None)
 
+    containers = {}
+
+    def blocks_of(el):
+        """(container's reading blocks, {id: position}) for the container holding `el` (reading_blocks), read once."""
+        container = el.getparent()
+        while container is not None and container.tag in (q("w:sdtContent"), SDT, q("w:customXml")):
+            container = container.getparent()
+        if container is None:
+            return [], {}
+        cached = containers.get(id(container))
+        if cached is None or cached[0] is not container:
+            blocks = reading_blocks(container)
+            cached = containers[id(container)] = (container, blocks, {id(b): i for i, b in enumerate(blocks)})
+        return cached[1], cached[2]
+
+    def blocks_before(el):
+        """The blocks printed before `el` in its container, nearest first (range markers skipped, block controls read
+        through)."""
+        blocks, where = blocks_of(el)
+        at = where.get(id(el))
+        return [] if at is None else blocks[at - 1::-1] if at else []
+
+    def block_after(el):
+        blocks, where = blocks_of(el)
+        at = where.get(id(el))
+        return blocks[at + 1] if at is not None and at + 1 < len(blocks) else None
+
     def continued_from(table):
         """The table `table` continues: the nearest table before it in the same container with the same number of grid
         columns, with only printed lines that are not headings between them (a table split across pages)."""
-        node = table.el.getprevious()
-        while node is not None and node.tag == q("w:p"):
+        node = None
+        for node in blocks_before(table.el):
+            if node.tag != q("w:p"):
+                break
             # A heading, or a printed caption or question ('Medicines given:', 'Any allergies?'), starts another table.
             if source.is_heading(node) or LABEL_END.search(source.text(node).strip()):
                 return None
-            node = node.getprevious()
+            node = None
         if node is None or node.tag != q("w:tbl"):
             return None
         previous = index.by_el.get(id(node))
@@ -7156,8 +7250,7 @@ def held_places(package, source=None, protected=None) -> dict:
                 segments = label_segments(source.ptext(p.el)[0])
                 # A box captioned by its own signing wording ('Signature of clinician', 'Initial here') is a signing box
                 # whatever else it holds; a sentence of guidance that merely mentions signing is not a caption.
-                if segments and all(kind_for_label(x) in SIGNING_KINDS and len(x.split()) <= CAPTION_WORDS
-                                    for _, _, x in segments):
+                if segments and all(caption_label(x) for _, _, x in segments):
                     hold(slot.id, "signing", 'printed in the box "%s"' % _shown(segments[0][2]))
                     break
             if any(x.find("{%s}txbx" % WPS) is None for x in slot.el.iter("{%s}wsp" % WPS)):
@@ -7231,21 +7324,37 @@ def held_places(package, source=None, protected=None) -> dict:
     # empty or answer lines between), else (after a table, at the start of the body) its section's heading - and a
     # line printed just above a caption printed below it ('______ / Signature'). A signing caption's line keeps a box
     # selection; a declaration's does not.
-    for slot in index.slots:
-        if slot.kind != "p" or not answer_line(slot):
-            continue
-        printed = source.ptext(slot.el)[0]
-        node, caption = slot.el.getprevious(), None
-        while node is not None and node.tag == q("w:p"):
+    def answer_unit(unit):
+        """A printed line of answer places or options, or a block answer control (answer_control)."""
+        return answer_control(unit.el) if unit.kind == "sdt" else unit.kind == "p" and answer_line(unit)
+
+    def caption_before(el):
+        """The nearest printed paragraph before `el` in reading order (range markers skipped, block controls read
+        through), over any number of empty lines, answer lines and answer controls; None at a table or the start."""
+        for node in blocks_before(el):
             previous = index.by_el.get(id(node))
-            if previous is None:
-                break
-            if not answer_line(previous):
-                caption = previous
-                break
-            node = node.getprevious()
-        if caption is None and slot.parent is None:
-            caption = heading_of.get(slot.id)
+            if node.tag not in (q("w:p"), SDT) or previous is None:
+                return None
+            if not answer_unit(previous):
+                return previous
+        return None
+
+    def body_root(unit):
+        while unit.parent is not None and unit.parent.kind == "sdt":
+            unit = unit.parent
+        return unit
+
+    # ⚠️ RANGE MARKERS AND BLOCK CONTENT CONTROLS ARE TRANSPARENT TO THIS WALK (a bookmark, an editing permission or a
+    # comment range between 'Signature of consultant:' and its line; the caption or the line inside a block control):
+    # stopping at them left the signature line answerable.
+    for slot in index.slots:
+        if not ((slot.kind == "p" and answer_line(slot)) or (slot.kind == "sdt" and answer_control(slot.el))):
+            continue
+        printed = source.ptext(slot.el)[0] if slot.kind == "p" else ""
+        caption = caption_before(slot.el)
+        root = body_root(slot)
+        if caption is None and root.parent is None:
+            caption = heading_of.get(root.id)
         if caption is not None:
             rows = governing_rows(caption.id, whole_only=False)
             # Only a signing CAPTION governs the lines after it, never guidance that mentions signing.
@@ -7265,7 +7374,7 @@ def held_places(package, source=None, protected=None) -> dict:
                     hold(caption.id, "declaration", 'printed "%s"' % _shown(caption_text))
                     hold(slot.id, "declaration", 'answer line of printed "%s"' % _shown(caption_text))
         if not printed_words(printed):
-            node = slot.el.getnext()
+            node = block_after(slot.el)
             below = index.by_el.get(id(node)) if node is not None and node.tag == q("w:p") else None
             if below is not None and printed_words(source.ptext(below.el)[0]) and not line_groups(below) \
                     and not shows_boxes(source.ptext(below.el)[0]):
@@ -7275,22 +7384,15 @@ def held_places(package, source=None, protected=None) -> dict:
     # A question box: the printed question (the nearest printed paragraph before it, any number of empty or answer lines
     # between) and its own section (the innermost heading), each read by the same readers as a printed line, whatever
     # the box holds. An outer title naming consent does not hold every box under it.
-    for table in index.roots:
-        if table.kind != "tbl" or table.part != "word/document.xml":
+    for table in index.slots:
+        if table.kind != "tbl" or table.part != "word/document.xml" or body_root(table).parent is not None:
             continue
         cells = [c for c in table.children if c.kind == "tc"]
         if len(table_rows_of(table.el)) != 1 or len(cells) != 1:
             continue
-        cell, question, raw = cells[0], None, ""
-        node = table.el.getprevious()
-        while node is not None and node.tag == q("w:p"):
-            previous = index.by_el.get(id(node))
-            if previous is None:
-                break
-            if not answer_line(previous):
-                question, raw = previous, re.sub(r"\s+", " ", source.text(node)).strip()
-                break
-            node = node.getprevious()
+        cell, question, raw = cells[0], caption_before(table.el), ""
+        if question is not None:
+            raw = re.sub(r"\s+", " ", source.text(question.el)).strip()
         context = source.question_box_context(question)[0] if question is not None else source.heading_before(cell)
         section = context.split(" > ")[-1] if context else ""
         if question is not None and signing_wording(source.ptext(question.el)[0]):
@@ -7298,12 +7400,51 @@ def held_places(package, source=None, protected=None) -> dict:
         elif section and signing_label_kind(section):
             hold(cell.id, "consent", 'section "%s"' % _shown(section))
         if question is not None:
-            for code in sorted(statement_codes(raw), key=HELD_CODES.index):
+            # A statement answered by ticking the box's options stays a declaration ('I agree to:' / '☐ photographs
+            # ☐ teaching'), as on a line.
+            for code in sorted(statement_codes(raw, selection=shows_boxes(source.cell_objects(cell))), key=HELD_CODES.index):
                 hold(cell.id, code, 'question "%s"' % _shown(raw))
         if question is not None:
             for row in governing_rows(question.id):
                 if row[0] != "signing":
                     hold(cell.id, row[0], "answer box of %s" % row[1])
+    # ⚠️ OPTIONS PRINTED IN A TABLE ANSWER THE CAPTION BEFORE IT, exactly like the same options printed on a line: a
+    # table of two or more cells printing only answer places and option labels ('☐ Yes | ☐ No', '☐ Yes' over '☐ No', a
+    # 'Yes | ☐' grid) takes the governing codes of the nearest printed paragraph before it, and a first-person statement
+    # its boxes answer is a declaration. Only one-cell boxes were read before, so a consent's Yes was ticked in a grid.
+    def option_cell(cell):
+        if answer_only(cell):
+            return True
+        printed = printed_cell_text(cell)
+        words = [option_text(x) for x in re.split("[%s%s]|%s" % (BOX, CHECKED, LABEL_BREAK.pattern), printed)
+                 if x and option_text(x)]
+        return bool(words) and all(is_option_word(word) or response_word(word) for word in words)
+
+    for table in index.slots:
+        if table.kind != "tbl":
+            continue
+        cells = [c for c in table.children if c.kind == "tc"]
+        if len(cells) < 2 or not all(option_cell(c) for c in cells) or not any(answer_only(c) for c in cells):
+            continue
+        caption = caption_before(table.el)
+        if caption is None:
+            continue
+        boxes = any(shows_boxes(source.cell_objects(c)) for c in cells)
+        rows = governing_rows(caption.id, whole_only=False)
+        caption_text = source.ptext(caption.el)[0]
+        signing_rows = [row for row in rows if row[0] == "signing"] if signing_caption(caption_text) else []
+        declared = boxes and not any(row[0] == "declaration" for row in rows) and \
+            any(governing for _, _, governing in statement_reading(caption_text))
+        if declared:
+            hold(caption.id, "declaration", 'printed "%s"' % _shown(caption_text))
+        for cell in cells:
+            if signing_rows:
+                hold(cell.id, "signing", "answer cell of %s" % signing_rows[0][1], selection=boxes)
+            for row in rows:
+                if row[0] != "signing" and row[2] is None:
+                    hold(cell.id, row[0], "answer cell of %s" % row[1])
+            if declared:
+                hold(cell.id, "declaration", 'answer cell of printed "%s"' % _shown(caption_text))
     for slot_id in protected_slots:
         hold(slot_id, "protected", "protected on the form; fill never writes here")
     for slot_id, reason in legacy.items():

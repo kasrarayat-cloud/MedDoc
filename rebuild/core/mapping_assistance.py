@@ -178,12 +178,29 @@ def overlaps(first,second):
     left=v3_mapping.mapped_slots([first]);right=v3_mapping.mapped_slots([second])
     return any(v3_mapping.is_mapped(slot,right) for slot in left)
 
-def host_of(field):
-    """The printed line or cell a selection field's options sit on: its anchor, without a box, form field or content
-    control part ('b/p[1]/glyphs' and 'b/p[1]/ff[0]' are both on 'b/p[1]')."""
+def host_of(field,rows=None):
+    """The printed question a selection field's options answer: the CELL its options are printed in (on one line or on
+    several lines of that cell), else its line ('b/p[1]/glyphs' and 'b/p[1]/ff[0]' are both on 'b/p[1]') - and for a
+    line printing only options ('☐ Yes' / '☐ No' under 'Smoker'), the nearest line above it that prints more than
+    options (`rows`: the request's slots, slot -> {'text': ...}), so the options of one question on consecutive lines
+    share one host."""
     import re
+    from documents.word_v3 import option_line,option_list
     locator=field.get('locator') or {}
-    return re.sub(r'/(?:glyphs|ff\[\d+\]|sdt\[\d+\])$','',f"{locator.get('part','')}#{locator.get('slot','')}")
+    anchor=re.sub(r'/(?:glyphs|ff\[\d+\]|sdt\[\d+\])$','',f"{locator.get('part','')}#{locator.get('slot','')}")
+    cell=anchor.rfind('/tc[')
+    if cell>=0:
+        return anchor[:anchor.index(']',cell)+1]
+    line=re.fullmatch(r'(.*/p\[)(\d+)\]',anchor)
+    if line is None or rows is None:
+        return anchor
+    number=int(line[2])
+    def options_only(n):
+        text=(rows.get(f'{line[1]}{n}]') or {}).get('text')
+        return isinstance(text,str) and (option_line(text) or option_list(text))
+    while number>=0 and options_only(number):
+        number-=1
+    return f'{line[1]}{number}]' if number!=int(line[2]) else anchor
 
 def question_of(field):
     """The question a field asks, as generation keys it (generation.question_key of its label). Deliberately the label
@@ -380,6 +397,7 @@ def validate_proposal(version,compiled,response):
     def places_of(entry):
         if entry['field'] is not None:return v3_mapping.mapped_slots([entry['field']])
         return {entry['slot']} if entry['slot'] else set()
+    for entry in changes:entry['if_kept']={}
     for n,entry in enumerate(changes):
         # D3 (and the kept-field overlap): the change against every existing field but its own prior
         if entry['field'] is not None:
@@ -396,14 +414,22 @@ def validate_proposal(version,compiled,response):
         # D6 against a kept field: the same question asked again ('Describe any abnormality' beside the field that already
         # asks it), or a second selection among the options printed on one line or in one cell ('Smoker ☐ Yes ☐ No'
         # already selected by 'Yes') - the clinician decides, exactly as for two such changes.
+        # ⚠️ A field another change only PROPOSES to replace is still kept unless that replacement is ADOPTED: the
+        # dependence is recorded now and applied once adoption is known (a rejected or held replacement never lets a
+        # change beside the field it would have replaced through - RR2-1).
         if entry['field'] is not None:
             for key,original in originals.items():
-                if key==entry['key'] or key in replacing:continue
+                if key==entry['key']:continue
+                why=None
                 if question_of(original)==question_of(entry['field']):
-                    entry['depends_on'].add(key);entry['why'].add(QUESTION_REASON.format(label=v3_mapping.label_of(original)))
+                    why=QUESTION_REASON.format(label=v3_mapping.label_of(original))
                 elif entry['field'].get('kind') in SELECTION_KINDS and original.get('kind') in SELECTION_KINDS \
-                        and host_of(original)==host_of(entry['field']):
-                    entry['depends_on'].add(key);entry['why'].add(OPTIONS_REASON.format(label=v3_mapping.label_of(original)))
+                        and host_of(original,rows)==host_of(entry['field'],rows):
+                    why=OPTIONS_REASON.format(label=v3_mapping.label_of(original))
+                if why and key in replacing:
+                    entry['if_kept'][key]=why
+                elif why:
+                    entry['depends_on'].add(key);entry['why'].add(why)
         # D5: the change alters a field whose place another field's printed relation reads, or writes where one reads
         touched=places_of(entry)|(v3_mapping.mapped_slots([originals[entry['key']]]) if entry['type']=='replacement' and entry['key'] in originals else set())
         for key,original in originals.items():
@@ -421,7 +447,7 @@ def validate_proposal(version,compiled,response):
                 if question_of(first['field'])==question_of(second['field']) or first['field']['key']==second['field']['key']:
                     join(a,b,'question')
                 if first['field'].get('kind') in SELECTION_KINDS and second['field'].get('kind') in SELECTION_KINDS \
-                        and host_of(first['field'])==host_of(second['field']):
+                        and host_of(first['field'],rows)==host_of(second['field'],rows):
                     join(a,b,'options')
             elif places_of(first) and places_of(second) and any(v3_mapping.is_mapped(slot,places_of(second)) for slot in places_of(first)):
                 join(a,b,'destination')
@@ -469,6 +495,18 @@ def validate_proposal(version,compiled,response):
         for n in list(adopted):
             found=second['violations'].get(changes[n]['field']['key'])
             if found:hold(n,HELD_REASONS.get(found['code'],SIGNING_REASON))
+    # D6 against a field that stays KEPT because no replacement of it was adopted: exactly as when the change is
+    # proposed alone (repeated until no adopted replacement is withdrawn by it).
+    while True:
+        replaced_now={changes[m]['key'] for m in adopted if changes[m]['type']=='replacement'}
+        pending=[m for m in adopted if any(key not in replaced_now for key in changes[m]['if_kept'])]
+        if not pending:break
+        for m in pending:adopted.remove(m)
+    # Every change's record names the kept field it depends on, whether it was held for that or for another reason.
+    for entry in changes:
+        for key,why in entry['if_kept'].items():
+            if key not in replaced_now:
+                entry['depends_on'].add(key);entry['why'].add(why)
     fields,added=result_fields(adopted)
     # V3: every original that was not replaced is exactly the stored field; a replacement keeps its protection.
     replaced={changes[n]['key'] for n in adopted if changes[n]['type']=='replacement'}

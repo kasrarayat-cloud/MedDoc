@@ -620,6 +620,82 @@ class RefutedModelPath(ModelPath, SimpleTestCase):
         self.assertEqual([f['label'] for f in self.adopted(coherent)], ['History'])
 
 
+@override_settings(**SETTINGS)
+class RoundThreeModelPath(ModelPath, SimpleTestCase):
+    """Round 3 on the model path: a kept field another change only PROPOSES to replace is still kept (RR2-1), and the
+    options of one printed question on several lines of a cell or on consecutive lines are one question's (RR2-2)."""
+
+    def pulse(self):
+        version = self.version('rr21', lines('Pulse findings: ______', 'Pulse findings', 'Plan: ______'))
+        compiled, payload = self.compile(version)
+        pulse = next(n for n, f in enumerate(payload['fields']) if f['label'] == 'Pulse findings')
+        key = payload['fields'][pulse]['key'] if 'key' in payload['fields'][pulse] else \
+            next(f['key'] for f in version.fields if f['label'] == 'Pulse findings')
+        sid = self.sid(payload, 'b/p[0]')
+        addition = self.addition(payload, 'b/p[1]', 'long_text', 'Pulse findings', (0,))
+        same = [pulse, sid, wire.KINDS.index('text'), *self.quote(payload, sid, 'Pulse findings', (0,)), -1]
+        relabel = [pulse, sid, wire.KINDS.index('text'), *self.quote(payload, sid, 'Pulse', (0,)), -1]
+        failing = [pulse, sid, wire.KINDS.index('checkbox'), *self.quote(payload, sid, 'Pulse findings', (0,)), -1]
+        return version, compiled, payload, pulse, key, addition, same, relabel, failing
+
+    def test_RR2_1_a_kept_field_is_passed_over_only_when_its_replacement_is_adopted(self):
+        version, compiled, payload, pulse, key, addition, same, relabel, failing = self.pulse()
+        alone = mapping.validate_proposal(version, compiled, self.respond(payload, [addition]))
+        self.assertEqual(self.assertNothingAdopted(version, alone, addition)['depends_on'], [key])
+        # A replacement of that field that is NOT adopted - it fails alone, or it is held with a rival - leaves the
+        # field kept, so the addition asking its question again is held exactly as alone (every order).
+        for changes in ([addition, failing], [addition, same, relabel]):
+            with self.subTest(changes=len(changes)):
+                result = self.assertOrderIndependent(version, compiled, self.respond(payload, changes, replace=[pulse]))
+                self.assertEqual(result['fields'], version.fields)
+                row = next(r for r in result['review']['rejected_changes'] if r['wire'] == addition)
+                self.assertEqual(row['depends_on'], [key])
+                self.assertIn('D6 it asks the question', row['reason'])
+                self.assertTrue(any(r['slot'].endswith('#b/p[1]') for r in result['review']['unresolved']))
+        # Controls: each replacement alone is adopted; with the relabel ADOPTED no kept field asks the question.
+        for change in (same, relabel):
+            one = mapping.validate_proposal(version, compiled, self.respond(payload, [change], replace=[pulse]))
+            self.assertEqual(len(self.adopted(one)), 1, one['review']['rejected_changes'])
+        both = mapping.validate_proposal(version, compiled, self.respond(payload, [addition, relabel], replace=[pulse]))
+        self.assertEqual(sorted(f['label'] for f in self.adopted(both)), ['Pulse', 'Pulse findings'])
+
+    def box(self, payload, slot, text):
+        sid = self.sid(payload, slot)
+        return [-1, sid, wire.KINDS.index('checkbox'), *self.quote(payload, sid, text, (0,)), 0]
+
+    def test_RR2_2_options_of_one_question_on_two_lines_of_a_cell_or_on_consecutive_lines_are_held_together(self):
+        doc = Document(); doc.add_paragraph('Smoking history')
+        table = doc.add_table(rows=1, cols=2); table.cell(0, 0).text = 'Current smoker'
+        table.cell(0, 1).paragraphs[0].text = '\u2610 Yes'; table.cell(0, 1).add_paragraph('\u2610 No')
+        doc.add_paragraph('Plan: ______')
+        data = saved(doc)
+        cell = self.version('rr22-cell', data, fields=[f for f in inspect_template_bytes(self, 'rr22-cell', data)
+                                                        if '/tc[1]' not in f['locator']['slot']])
+        data = lines('Smoker', '\u2610 Yes', '\u2610 No', 'Plan: ______')
+        stacked = self.version('rr22-lines', data, fields=[f for f in inspect_template_bytes(self, 'rr22-lines', data)
+                                                            if f['label'] == 'Plan'])
+        for version, yes_slot, no_slot in ((cell, 'b/tbl[0]/tr[0]/tc[1]/p[0]/glyphs', 'b/tbl[0]/tr[0]/tc[1]/p[1]/glyphs'),
+                                           (stacked, 'b/p[1]/glyphs', 'b/p[2]/glyphs')):
+            with self.subTest(slot=yes_slot):
+                compiled, payload = self.compile(version)
+                yes, no = self.box(payload, yes_slot, 'Yes'), self.box(payload, no_slot, 'No')
+                result = self.assertOrderIndependent(version, compiled, self.respond(payload, [yes, no]))
+                self.assertEqual(result['fields'], version.fields)
+                rows = {tuple(r['wire']): r for r in result['review']['rejected_changes']}
+                self.assertEqual(set(rows), {tuple(yes), tuple(no)})
+                self.assertIn('D6 they select among the options', rows[tuple(yes)]['reason'])
+                for change in (yes, no):          # control: each alone is adopted
+                    one = mapping.validate_proposal(version, compiled, self.respond(payload, [change]))
+                    self.assertEqual(len(self.adopted(one)), 1, one['review']['rejected_changes'])
+                # A second selection beside a KEPT one of the same question is held for the clinician.
+                first = self.adopted(mapping.validate_proposal(version, compiled, self.respond(payload, [yes])))[0]
+                kept = SimpleNamespace(**{**vars(version), 'fields': version.fields + [first]})
+                compiled, payload = self.compile(kept)
+                result = mapping.validate_proposal(kept, compiled, self.respond(payload, [self.box(payload, no_slot, 'No')]))
+                self.assertEqual(result['fields'], kept.fields)
+                self.assertEqual(result['review']['rejected_changes'][0]['depends_on'], [first['key']])
+
+
 def inspect_template_bytes(case, name, data):
     path = private_path(f'originals/{name}.docx'); path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
     return inspect_template(path, engine='v3')['fields']
@@ -852,6 +928,67 @@ class ResolveAfterRemoval(V3Fixture, TestCase):
         self.assertEqual(self.latest(template).number, 3)
 
 
+@override_settings(**SETTINGS)
+class ResolveNotAnAnswer(V3Fixture, TestCase):
+    """RR2-3: 'not an answer' is judged against the mapping the decisions save, symmetric with 'mapped' (R2-F3)."""
+
+    def setUp(self):
+        super().setUp()
+        deny = patch('anthropic.Anthropic', side_effect=AssertionError('Unmocked provider construction is forbidden.'))
+        deny.start(); self.addCleanup(deny.stop)
+        getattr(v3_mapping, '_HELD_CACHE', {}).clear()
+
+    def test_RR2_3_an_area_an_adopted_field_still_maps_is_never_recorded_not_an_answer(self):
+        template, version = self.uploaded(data=lines('Plan: ______', 'History'), name='Synthetic not-an-answer')
+        compiled = mapping.compile_request(version, generation.configuration())
+        payload = json.loads(compiled['request']['messages'][0]['content'])
+        sid = next(n for n, row in enumerate(payload['slots']) if row['slot'].endswith('#b/p[1]'))
+        mapped = {slot for f in payload['fields'] for slot in f['slots']}
+        others = [n for n in range(len(payload['slots'])) if n != sid]
+        response = {'f': {'k': list(range(len(payload['fields']))), 'r': [], 'n': [], 'u': []},
+                    's': {'c': [n for n in others if v3_mapping.is_mapped(payload['slots'][n]['slot'], mapped)],
+                          'n': [n for n in others if not v3_mapping.is_mapped(payload['slots'][n]['slot'], mapped)],
+                          'u': [sid]},
+                    'x': [[-1, sid, wire.KINDS.index('long_text'), payload['text_refs'].index([sid, 0, 0]), 0, 7, -1]],
+                    'e': False}
+        result = mapping.validate_proposal(version, compiled, response)
+        self.assertEqual([f['label'] for f in result['fields'] if f.get('origin') == 'model_assisted'], ['History'])
+        proposed = TemplateVersion.objects.create(template=template, number=2, fields=result['fields'], contract='v3',
+                                                  created_by=self.user,
+                                                  assistance={**result['review'], 'job_id': 'synthetic', 'base_version': str(version.pk)})
+        records = proposed.assistance['unresolved']
+        self.assertEqual([(bool(r.get('key')), r['slot'].endswith('#b/p[1]')) for r in records], [(False, True)])
+        adopted = next(f['key'] for f in result['fields'] if f.get('origin') == 'model_assisted')
+        body = {'action': 'resolve', 'mapping_version': str(proposed.pk), 'resolution_0': 'not_answer'}
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/assistance/', body).status_code, 302)
+        saved_version = self.latest(template)
+        self.assertEqual(saved_version.number, 3)
+        self.assertNotIn(adopted, [f['key'] for f in saved_version.fields])
+        self.assertEqual([f['key'] for f in saved_version.corrections['removed']], [adopted])
+        self.assertEqual([f['key'] for f in saved_version.fields], [f['key'] for f in version.fields])
+
+    def test_RR2_3_control_mapped_keeps_the_adopted_field(self):
+        template, version = self.uploaded(data=lines('Plan: ______', 'History'), name='Synthetic mapped control')
+        compiled = mapping.compile_request(version, generation.configuration())
+        payload = json.loads(compiled['request']['messages'][0]['content'])
+        sid = next(n for n, row in enumerate(payload['slots']) if row['slot'].endswith('#b/p[1]'))
+        mapped = {slot for f in payload['fields'] for slot in f['slots']}
+        others = [n for n in range(len(payload['slots'])) if n != sid]
+        response = {'f': {'k': list(range(len(payload['fields']))), 'r': [], 'n': [], 'u': []},
+                    's': {'c': [n for n in others if v3_mapping.is_mapped(payload['slots'][n]['slot'], mapped)],
+                          'n': [n for n in others if not v3_mapping.is_mapped(payload['slots'][n]['slot'], mapped)],
+                          'u': [sid]},
+                    'x': [[-1, sid, wire.KINDS.index('long_text'), payload['text_refs'].index([sid, 0, 0]), 0, 7, -1]],
+                    'e': False}
+        result = mapping.validate_proposal(version, compiled, response)
+        proposed = TemplateVersion.objects.create(template=template, number=2, fields=result['fields'], contract='v3',
+                                                  created_by=self.user,
+                                                  assistance={**result['review'], 'job_id': 'synthetic', 'base_version': str(version.pk)})
+        body = {'action': 'resolve', 'mapping_version': str(proposed.pk), 'resolution_0': 'mapped'}
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/assistance/', body).status_code, 302)
+        self.assertEqual(self.latest(template).fields, result['fields'])
+
+
 @override_settings(**{**V3, 'QUILLMD_WORD_ENGINE': 'legacy'})
 class LegacyFill(V3Fixture, TestCase):
     """The legacy (non-v3) Word fill consults the same authority where it writes into the customer's file."""
@@ -892,6 +1029,29 @@ class LegacyFill(V3Fixture, TestCase):
                         fill_template(path, fields, {row['key']: 'Synthetic Alpha Clinician'}, Path(directory) / 'out.docx',
                                       identity_keys=keys)
                         continue
+                    self.assertEqual(keys, [])
+                    with self.assertRaises(DocumentError) as refused:
+                        fill_template(path, fields, {row['key']: 'Synthetic Alpha Clinician'}, Path(directory) / 'out.docx',
+                                      identity_keys=keys)
+                    self.assertEqual(refused.exception.code, 'held_place')
+
+    def test_RR5_a_parenthetical_naming_another_signer_is_never_the_clinicians_identity(self):
+        for label in ('Signature (participant)', 'Signature (mother)', 'Signature (donor)', 'Signed by (research participant)',
+                      'Signature (person giving consent)', 'Signature (next-of-kin)', 'Signed by (MD)'):
+            with self.subTest(label=label):
+                doc = Document(); doc.add_paragraph('Research consent record')
+                table = doc.add_table(rows=2, cols=2); table.cell(0, 0).text = 'Participant name'; table.cell(1, 0).text = label
+                with tempfile.TemporaryDirectory(prefix='legacy-identity-') as directory:
+                    path = Path(directory) / 'legacy.docx'; path.write_bytes(saved(doc))
+                    fields = inspect_template(path, engine='legacy')['fields']
+                    row = next(f for f in fields if f['label'] == label)
+                    keys = [f['key'] for f in fields if clinician_identity(f)]
+                    if label == 'Signed by (MD)':                  # control: the clinician's own row
+                        self.assertEqual(keys, [row['key']])
+                        fill_template(path, fields, {row['key']: 'Synthetic Alpha Clinician'}, Path(directory) / 'out.docx',
+                                      identity_keys=keys)
+                        continue
+                    self.assertFalse(signature_label(label))
                     self.assertEqual(keys, [])
                     with self.assertRaises(DocumentError) as refused:
                         fill_template(path, fields, {row['key']: 'Synthetic Alpha Clinician'}, Path(directory) / 'out.docx',
