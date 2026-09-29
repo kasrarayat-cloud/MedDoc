@@ -73,6 +73,7 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
                 raise DocumentError("Mapping and answers exceed the 2 MiB processing limit.", "answer_limit")
             (workspace / "request.json").write_bytes(raw_request)
         write_request()
+        readings, asked = {}, set()
         from .sdk_service import WM_IOV_SHA256, run as run_sdk, SdkUnavailable
         if suffix == ".docx" and digest == WM_IOV_SHA256:
             sdk_request = {"operation": operation}
@@ -116,25 +117,40 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
                 except (ValueError, UnicodeError) as exc:
                     raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed") from exc
             response = isolated()
-            if isinstance(response, dict) and "readings_needed" in response:
-                # The isolated parser cannot load the pinned syntax model: it names the clauses it must classify, this
-                # trusted parent reads them (documents/syntax_readings.py) and the SAME request runs again with them. A
-                # clause left unread is read inside the sandbox in the holding direction.
+            from .word_v3 import MAX_READING_ROUNDS, MAX_READINGS_BYTES, reading_digest
+            rounds = 0
+            while isinstance(response, dict) and "readings_needed" in response:
+                # The isolated parser cannot load the pinned syntax model: it names the keys it must classify, this
+                # trusted parent reads them (documents/syntax_readings.py) and the SAME request runs again with them -
+                # again for any key a reader met later without a reading, so the sandboxed classification is the
+                # in-process one. The readings travel keyed by digest in their own file (readings.json), never inside
+                # the 2 MiB mapping and answer limit. Only a key the parent could not read, or one met after the last
+                # round, is read in the holding direction.
                 needed = response["readings_needed"]
                 if not isinstance(needed, list) or not all(isinstance(x, str) for x in needed):
                     raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed")
-                from .syntax_readings import read_clauses
-                request["readings"] = read_clauses(needed)
-                write_request()
-                response = isolated()
-                if not isinstance(response, dict) or "readings_needed" in response:
+                fresh = sorted({key for key in needed if reading_digest(key) not in asked})
+                if not fresh or rounds >= MAX_READING_ROUNDS:
                     raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed")
+                rounds += 1
+                from .syntax_readings import read_clauses
+                read = read_clauses(fresh)
+                readings.update({reading_digest(key): value for key, value in read.items()})
+                asked.update(reading_digest(key) for key in fresh)
+                raw = json.dumps({"readings": readings, "asked": sorted(asked), "final": rounds >= MAX_READING_ROUNDS},
+                                 ensure_ascii=False, sort_keys=True).encode()
+                if len(raw) > MAX_READINGS_BYTES:
+                    raise DocumentError("The form's printed text is too large to classify.", "answer_limit")
+                (workspace / "readings.json").write_bytes(raw)
+                response = isolated()
+            if not isinstance(response, dict):
+                raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed")
         needs_layout = response.get("code") == "layout_verification_required"
         if (operation == "inspect" and response.get("layout_pending")) or needs_layout:
             from .layout_transport import verify_document
             try:
                 verified, actual = verify_document(payload, mapping if needs_layout else None,
-                                                   answers if needs_layout else None, request.get("readings"))
+                                                   answers if needs_layout else None, readings if asked else None)
             except DocumentError as exc:
                 if needs_layout:
                     raise

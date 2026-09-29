@@ -177,8 +177,11 @@ class AssistancePlaces(unittest.TestCase):
         self.assertFalse(word.signing_wording('Name of Participant\t\tDate'))
         self.assertEqual(held.get('word/document.xml#b/p[2]'), 'signing')
         # The band line prints no wording: it is held because fill protects it (the ONE authority reads what fill
-        # protects; it no longer asks whether the engine made a signing area there).
-        self.assertEqual(held.get('word/document.xml#b/p[1]'), 'protected')
+        # protects; it no longer asks whether the engine made a signing area there) and, first named, because it is the
+        # line printed over a signing caption (its 'Signature' band).
+        self.assertEqual(held.get('word/document.xml#b/p[1]'), 'signing')
+        package = word.open_package(signing_form(table=False))
+        self.assertEqual(word.held_places(package)['word/document.xml#b/p[1]'].codes, {'signing', 'protected'})
         self.assertNotIn('word/document.xml#b/p[0]', held)            # 'Participant ID: ____' is an ordinary answer
         self.assertEqual(anchored, set())
 
@@ -192,7 +195,7 @@ class AssistancePlaces(unittest.TestCase):
             out = io.BytesIO(); doc.save(out); return out.getvalue()
         box = 'word/document.xml#b/tbl[0]/tr[0]/tc[0]'
         held, _ = self.places(box_form('I confirm the risks were explained and the patient gave consent:'))
-        self.assertEqual(held.get(box), 'consent')
+        self.assertEqual(held.get(box), 'declaration')          # a first-person consent statement, read as a line is
         held, _ = self.places(box_form('This section is for the patient to add any comments or concerns about their care'))
         self.assertEqual(held.get(box), 'protected')
         held, _ = self.places(box_form('Please describe the wound?'))

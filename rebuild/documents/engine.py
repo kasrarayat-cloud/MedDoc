@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import PurePosixPath
+import json
 import re
 import stat
 from urllib.parse import unquote
@@ -684,16 +685,42 @@ V3_OPERATIONS = ("inspect", "outline", "locate", "assistance_outline", "assistan
                  "effective_options", "effective_values", "layout_prepare")
 
 
+#: The parent's readings for this request: readings.json beside request.json (never inside it, so the 2 MiB mapping and
+#: answer limit counts only mapping and answers), {"readings": {digest: reading}, "asked": [digests], "final": bool},
+#: at most word_v3.MAX_READINGS_BYTES.
+
+
 def readings_needed(workspace, request):
-    """None when the request carries its syntax readings (or needs none); else the clauses the parent must read first.
-    The layout preparer runs without the two-phase exchange: its missing readings are read as holding."""
-    readings = request.get("readings")
+    """None when the request carries its syntax readings (or needs none); else the keys the parent must read first.
+    A request whose readings arrive inline (the layout preparer, from the parent's own exchange) reads any key it was
+    not given as holding and never asks again; otherwise a key a reader meets without a reading is asked for after the
+    operation (process: word_v3.MISSING)."""
+    readings, asked, final = request.get("readings"), (), request.get("readings") is not None
+    exchange = workspace / "readings.json"
+    if readings is None and exchange.is_file():
+        raw = exchange.read_bytes()
+        if len(raw) > word_v3.MAX_READINGS_BYTES:
+            fail("The syntax readings exceed their limit.", "invalid_mapping")
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            fail("The syntax readings are invalid.", "invalid_mapping")
+        if not isinstance(payload, dict) or not isinstance(payload.get("readings"), dict) or \
+                not isinstance(payload.get("asked"), list) or not all(isinstance(x, str) for x in payload["asked"]):
+            fail("The syntax readings are invalid.", "invalid_mapping")
+        readings, asked, final = payload["readings"], payload["asked"], payload.get("final") is True
     if readings is None and request.get("operation") != "layout_prepare":
         needed = word_v3.reading_clauses(word_v3.open_package((workspace / "input.docx").read_bytes()))
         if needed:
             return needed
-    word_v3.use_readings(readings if readings is not None else {})
+    word_v3.use_readings(readings if readings is not None else {}, asked,
+                         final=final or request.get("operation") == "layout_prepare")
     return None
+
+
+def missing_readings():
+    """The keys a reader met without a reading during this request (word_v3.MISSING), for the parent to read."""
+    return sorted(word_v3.MISSING)[:word_v3.MAX_READING_CLAUSES]
 
 
 def legacy_held_check(path, paragraphs, cells, fields, answers, identity_keys=None):
@@ -794,6 +821,20 @@ def process(workspace, request):
             needed = None                      # the legacy fill's own check refuses below
         if needed:
             return {"readings_needed": needed}
+    # ⚠️ A KEY A READER MET WITHOUT A READING IS ASKED FOR, NEVER SILENTLY READ AS HOLDING: whatever the operation
+    # returned or refused on it, the parent reads the missing keys and the same request runs again.
+    try:
+        result = process_request(workspace, request, fmt, path, warnings, v3)
+    except Exception:
+        if word_v3.MISSING:
+            return {"readings_needed": missing_readings()}
+        raise
+    if word_v3.MISSING:
+        return {"readings_needed": missing_readings()}
+    return result
+
+
+def process_request(workspace, request, fmt, path, warnings, v3):
     if v3:
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):

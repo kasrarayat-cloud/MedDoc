@@ -13,15 +13,21 @@ from django.core.exceptions import ValidationError
 #: diverged on `,` and `;`, and the agreement test only checked one direction.
 TRAILING = ':：.,;· \t'
 
-#: The signer named by the label: one to three words, by STRUCTURE rather than a list of roles ('Consultant signature',
-#: 'Signature of examining clinician', 'Signed by the reviewing nurse'). A word that asks a date or time question (the
-#: DATE_QUESTION words below) is never part of it - `Signature date` and `Date of signature` are DATE questions, and
-#: refusing to finalize them unless they equal the clinician's name would be a false rejection, which this file has
-#: already shipped once - and nor is a preposition or conjunction, which would make the phrase something else than one
-#: noun phrase ('Place of signature', 'Signature and date'). Somebody else's signature is refused by NOT_THE_CLINICIAN.
+#: The clinician the label names as the signer: one of the clinical roles below, with up to two words qualifying it
+#: ('Signature of examining clinician', 'Consultant signature', 'Signed by the reviewing doctor').
+#: ⚠️ WHO SIGNS IS NOT STRUCTURE: "Participant's signature", 'Signature of person giving consent', "Mother's signature"
+#: and 'Consultant signature' have the same shape, and an identity row is where the finalizing clinician's OWN name is
+#: typed (validate_identity) and written (the legacy fill's clinician-identity exception). Reading ANY one-to-three-word
+#: signer as the clinician (be5fba45) told the clinician to type their name into a participant's, a donor's or a
+#: mother's signature line and refused any other name there. A label that names no clinician role is NOT an identity
+#: row: it stays a held signature place, completed by hand - the safe direction. The qualifying words are never a date
+#: or time question, a preposition or a conjunction (the phrase would be something else than one signer:
+#: 'Signature date', 'Date of signature', 'Signature and date'), and somebody else's signature is still refused by
+#: NOT_THE_CLINICIAN.
+_ROLE = r"(?:physician|provider|surgeon|clinician|consultant|attending|resident|doctor|md|do|np|pa|author)"
 _NOT_A_SIGNER = r"(?:date|dated|time|day|of|by|for|and|or|at|in|on|to)\b"
-_WORD = rf"(?!{_NOT_A_SIGNER})[a-z][a-z'.-]*"
-_SIGNER = rf"{_WORD}(?: {_WORD}){{0,2}}"
+_QUALIFIER = rf"(?!{_NOT_A_SIGNER})[a-z][a-z'.-]*"
+_SIGNER = rf"(?:{_QUALIFIER} ){{0,2}}{_ROLE}"
 #: A signature answer area names a PERSON.
 SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
     r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",

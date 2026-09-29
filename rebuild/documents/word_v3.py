@@ -24,7 +24,7 @@ import hashlib
 import io
 import re
 import zipfile
-from dataclasses import dataclass, field as dfield
+from dataclasses import dataclass, field as dfield, replace
 
 from lxml import etree
 
@@ -1275,41 +1275,116 @@ def many_evidence(texts, options):
                     scale = False
     return positive, unrepresented, bounded, scale
 
-# ─── syntax readings: the pinned parser's reading of a word whose signing sense depends on its grammatical role ──────
+# ─── syntax readings: the pinned parser's reading of a word or statement whose signing sense depends on its role ──
 #: A word is read through its CLAUSE (the printed text between label breaks and sentence punctuation), never alone:
 #: 'initial' is an initials instruction as the head of its clause ('Initial here', 'Initials', 'Nurse to initial') and an
-#: ordinary adjective as a noun's modifier ('Initial assessment'); 'sign' is a signing caption or instruction as a verb or
-#: as the whole caption ('Sign below', 'Sign:') and a clinical noun otherwise ('Sign of infection'); 'I'/'we' are a
-#: first-person subject as a pronoun ('I declare ...') and not as a numeral ('Type I'); a consent statement is an
-#: attestation when its clause embeds the consent under a governing verb ('Record that the patient consents ...').
+#: ordinary adjective as a noun's modifier ('Initial assessment'); 'sign' is the signing act unless its clause uses it as
+#: a clinical noun ('Sign of infection', 'Sign present', 'Sign language interpreter'). A printed STATEMENT holding a
+#: first-person pronoun or the consent act is read sentence by sentence (statement_key: the printed words with the answer
+#: places left out): a first-person declaration is a sentence whose statement has a first-person subject and either
+#: attests or is complete before its answer place ('I confirm ...', 'I ____ (full name) consent ...', 'The information I
+#: have provided is accurate'), never a numeral ('Type I', 'NYHA class: I, II') or a pronoun in an aside or a condition
+#: ('Allergies (so we can keep you safe)', 'If we need to contact you, telephone') or in a statement the blank completes
+#: ('We recommend review in: ____'); a consent embedded under a governing verb is an attestation ('Record that the
+#: patient consents to proceed'), a reported fact is not ('Consent obtained - state who explained the risks').
 #: The parser (core.v3_syntax's pinned model) cannot run inside the isolated parser, so the trusted parent reads the
-#: clauses this module asks for and passes the readings in (documents/syntax_readings.py, service._run). A clause
-#: without a reading is read in the HOLDING direction: the word is a signing/first-person word and the consent is embedded.
-#: 'I'/'we' are candidates only before a word, a contraction or a comma ('I confirm', 'I'm', 'I, the undersigned'), never
-#: inside an abbreviation ('I/O', 'I.V.', 'I:E').
-_PRONOUN_NEXT = r"(?=\s+[A-Za-z]|['’](?:m|ve|d|ll|re)\b|\s*,)"
-CANDIDATE = re.compile(r"(?i:\binitial\b|\b(?:counter-?|co-?|under|re-)?sign\b)|\bI" + _PRONOUN_NEXT + r"|(?i:\bwe\b)" + _PRONOUN_NEXT)
+#: keys this module asks for and passes the readings in (documents/syntax_readings.py, service._run), keyed by digest.
+#: ⚠️ A KEY THE ISOLATED PARSER CONSULTS WITHOUT A READING IS ASKED FOR, NEVER SILENTLY DEFAULTED: the request runs again
+#: with it (MISSING), so the sandboxed authority equals the in-process one. Only a key the parent was already asked for
+#: and could not read (or one past the last round) is read in the HOLDING direction.
+CANDIDATE = re.compile(r"(?i:\binitial\b|\b(?:counter-?|co-?|under|re-)?sign\b(?!\(s\)))")
+#: A first-person pronoun ('I' capitalised, never inside an abbreviation such as 'I/O', 'I.V.', 'I:E'; 'we').
+FIRST_PERSON = re.compile(r"\bI\b(?![/.:]\w)|(?i:\bwe\b)")
 CONSENT = re.compile(r"\bconsent(?:s|ed|ing)?\b", re.I)
 CLAUSE_BREAK = re.compile("|".join((r"\t+", r"\x00+", SEGMENTED.pattern, DIGIT_RUN.pattern, UNDERSCORES.pattern,
                                     DOTS.pattern, r"[.;:?!]+(?=\s|$)", r"[()\[\]{}<>|\n\r\u2028\u2029\u2022\u2610\u2612\u2611]+")))
+#: The printed answer places a statement is read without: blanks, form fields and content controls, and boxes.
+ANSWER_MARK = re.compile("|".join((r"\x00+", SEGMENTED.pattern, DIGIT_RUN.pattern, UNDERSCORES.pattern, DOTS.pattern,
+                                   "[%s%s]" % (BOX, CHECKED))))
 MAX_READING_CLAUSES = 4000
 MAX_CLAUSE_CHARS = 400
-#: {clause: {"s": [ordinals of CANDIDATE words with the signing/first-person sense], "c": consent embedded (bool)}}.
-#: None: no reading was supplied (an in-process caller): the local pinned parser is used when importable.
+MAX_STATEMENT_CHARS = 2000
+#: The readings exchange (service._run <-> engine.readings_needed): at most this many rounds, and a readings file of at
+#: most this many bytes.
+MAX_READING_ROUNDS = 4
+MAX_READINGS_BYTES = 16 * 1024 * 1024
+#: {digest(key): reading} - see reading_key. None: no reading was supplied (an in-process caller): the local pinned
+#: parser is used when importable.
 READINGS = None
+ASKED = frozenset()
+FINAL = False
+MISSING = set()
 _LOCAL = {}
 
 
-def use_readings(readings):
-    """Install the parent's readings for this request (the isolated worker); {} reads every clause as holding."""
-    global READINGS
+class _FormatCharacters(dict):
+    """str.translate table deleting every Unicode Cf character, each code point classified once (cached)."""
+
+    def __missing__(self, code):
+        import unicodedata
+        value = None if unicodedata.category(chr(code)) == "Cf" else code
+        self[code] = value
+        return value
+
+
+_FORMAT = _FormatCharacters()
+
+
+def plain(text: str) -> str:
+    """The printed text without invisible format characters (soft hyphen, zero-width space and joiners, bidi marks,
+    byte-order mark: Unicode Cf), which a PDF-converted form carries inside words ('Sig\u00adnature')."""
+    text = text or ""
+    return text if text.isascii() else text.translate(_FORMAT)
+
+
+def use_readings(readings, asked=(), final=False):
+    """Install the parent's readings for this request (the isolated worker): `readings` maps a key's digest to its
+    reading, `asked` lists the digests the parent was already asked for, `final` forbids asking again. {} with nothing
+    asked reads every key as missing (it is asked for)."""
+    global READINGS, ASKED, FINAL
     if readings is not None and not isinstance(readings, dict):
         fail("The syntax readings are invalid.", "invalid_mapping")
     READINGS = readings
+    ASKED = frozenset(asked or ())
+    FINAL = bool(final)
+    MISSING.clear()
+
+
+def reading_digest(key: str) -> str:
+    return hashlib.sha256(key.encode("utf-8", "surrogatepass")).hexdigest()[:32]
 
 
 def clause_key(text: str) -> str:
-    return re.sub(r"\s+", " ", text or "").strip(" :–—-_*\u2022").strip()
+    return re.sub(r"\s+", " ", plain(text)).strip(" :–—-_*\u2022").strip()
+
+
+def statement_key(text: str):
+    """(key, offsets): the printed statement with its answer places read as spaces, invisible format characters left
+    out and whitespace collapsed; offsets[i] is the position in `text` of the key's character i. A caption printed
+    before its boxes keeps only the caption: the option labels after the first box ('I agree to: ☐ photographs ☐
+    teaching', 'Telephone: ☐ mobile ☐ landline') are answers, not the statement. A line that opens with its box ('☐ I
+    declare ...') is read after the box."""
+    text = text or ""
+    marks = [m.span() for m in ANSWER_MARK.finditer(text)]
+    first_box = next((i for i, ch in enumerate(text) if ch in (BOX, CHECKED)), None)
+    if first_box is not None and re.search(r"[^\W_]", ANSWER_MARK.sub(" ", text[:first_box])):
+        marks = [span for span in marks if span[1] <= first_box] + [(first_box, len(text))]
+    masked = list(text)
+    for start, end in marks:
+        masked[start:end] = " " * (end - start)
+    chars, offsets = [], []
+    for i, ch in enumerate(masked):
+        if ch.isspace():
+            if chars and chars[-1] != " ":
+                chars.append(" ")
+                offsets.append(i)
+        elif ch.isascii() or _FORMAT[ord(ch)] is not None:
+            chars.append(ch)
+            offsets.append(i)
+    if chars and chars[-1] == " ":
+        chars.pop()
+        offsets.pop()
+    return "".join(chars), offsets
 
 
 def clauses_of(text: str):
@@ -1326,87 +1401,136 @@ def clauses_of(text: str):
     return out
 
 
-def reading_of(key: str):
-    """The reading of one clause, or None (read as holding)."""
+def reading_of(key: str, limit: int):
+    """The reading of one key ('s:<clause>' or 't:<statement>'), or None (read as holding)."""
     if READINGS is not None:
-        reading = READINGS.get(key)
+        digest = reading_digest(key)
+        reading = READINGS.get(digest)
+        if reading is None and not FINAL and digest not in ASKED and len(key) - 2 <= limit:
+            MISSING.add(key)
     else:
         if key not in _LOCAL:
             if len(_LOCAL) > 20000:
-                _LOCAL.clear()               # a bounded in-process cache; a cleared clause is simply read again
+                _LOCAL.clear()               # a bounded in-process cache; a cleared key is simply read again
             _LOCAL[key] = None
-            if __package__ and len(key) <= MAX_CLAUSE_CHARS:
+            if __package__ and len(key) - 2 <= limit:
                 try:
                     from .syntax_readings import read_clauses
                     _LOCAL[key] = read_clauses([key]).get(key)
                 except Exception:          # the parser is unavailable here: read as holding
                     _LOCAL[key] = None
         reading = _LOCAL[key]
-    if not isinstance(reading, dict) or not isinstance(reading.get("s"), list):
-        return None
-    return reading
+    return reading if isinstance(reading, dict) else None
 
 
 def word_sense(text: str, offset: int) -> bool:
-    """Whether the CANDIDATE word at `offset` of `text` carries its signing / first-person sense."""
+    """Whether the CANDIDATE word at `offset` of `text` carries its signing sense."""
     for start, end, key in clauses_of(text):
         if start <= offset < end:
-            reading = reading_of(key)
-            if reading is None:
+            reading = reading_of("s:" + key, MAX_CLAUSE_CHARS)
+            if reading is None or not isinstance(reading.get("s"), list):
                 return True
-            ordinal = sum(1 for m in CANDIDATE.finditer(text[start:end]) if start + m.start() < offset)
+            ordinal = sum(1 for m in CANDIDATE.finditer(plain(text[start:end])) if start + m.start() < offset)
             return ordinal in reading["s"]
     return True
 
 
-def embedded_consent(text: str) -> bool:
-    """A clause of `text` names the consent act (any inflection) under a governing verb (a clausal complement)."""
-    for _, _, key in clauses_of(text):
-        if CONSENT.search(key):
-            reading = reading_of(key)
-            if reading is None or reading.get("c") is True:
-                return True
-    return False
+def statement_reading(text: str):
+    """[(codes, (start, end), governing)] for EVERY sentence of the printed statement `text` (positions in `text`, each
+    sentence reaching to where the next begins, the first from the start): codes hold 'declaration' for a first-person
+    declaration (with 'attestation' when it attests) and 'attestation' for an embedded consent, empty for an ordinary
+    sentence; `governing` marks a sentence whose statement has a first-person subject at all (held where the place is
+    answered by a selection: statement_codes). [] when `text` names no first person and no consent. An unread statement
+    is read as one declaration that attests, over the whole text."""
+    if not text or not (FIRST_PERSON.search(plain(text)) or CONSENT.search(plain(text))):
+        return []
+    key, offsets = statement_key(text)
+    if not key:
+        return []
+    whole = [(frozenset(("declaration", "attestation")), (0, len(text)), True)]
+    reading = reading_of("t:" + key, MAX_STATEMENT_CHARS)
+    if reading is None or not all(isinstance(reading.get(x), list) for x in ("x", "d", "a", "c", "g")):
+        return whole
+    for name in ("x", "d", "a", "c", "g"):
+        for span in reading[name]:
+            if not (isinstance(span, list) and len(span) == 2 and all(isinstance(v, int) for v in span)
+                    and 0 <= span[0] < span[1] <= len(key)):
+                return whole
+    sentences = sorted({tuple(span) for span in reading["x"]})
+    if not sentences:
+        return whole
+    rows = []
+    for n, (a, b) in enumerate(sentences):
+        codes = set()
+        if [a, b] in reading["d"]:
+            codes.add("declaration")
+        if [a, b] in reading["a"] or [a, b] in reading["c"]:
+            codes.add("attestation")
+        start = 0 if n == 0 else offsets[a]
+        end = offsets[sentences[n + 1][0]] if n + 1 < len(sentences) else len(text)
+        rows.append((frozenset(codes), (start, end), [a, b] in reading["g"]))
+    return rows
 
 
-def first_person(text: str) -> bool:
-    """A clause of `text` has a first-person pronoun ('I', 'we') the parser reads as a pronoun."""
-    return any(m.group(0).lower() in ("i", "we") and word_sense(text, m.start()) for m in CANDIDATE.finditer(text or ""))
+def statement_codes(text, selection=False) -> frozenset:
+    """Every code a sentence of the printed statement `text` is held for (statement_reading). With `selection` - the place
+    is answered by ticking a box or choosing a printed option - a sentence with a first-person subject of its statement
+    is a declaration even when the statement is completed by the answer ('I agree to: ☐ photographs ☐ teaching')."""
+    if not text or not text.strip():
+        return frozenset()
+    found = set()
+    for codes, _, governing in statement_reading(text):
+        found |= codes
+        if selection and governing:
+            found.add("declaration")
+    return frozenset(found)
+
+
+def reading_key_texts(text):
+    """The reading keys a printed text needs: its CANDIDATE clauses and its statement."""
+    keys = set()
+    for variant in (text, clean_label(text, limit=None), re.sub(r"\s+", " ", text or "").strip()):
+        for _, _, key in clauses_of(variant):
+            if len(key) <= MAX_CLAUSE_CHARS and CANDIDATE.search(key):
+                keys.add("s:" + key)
+        if FIRST_PERSON.search(plain(variant)) or CONSENT.search(plain(variant)):
+            key = statement_key(variant)[0]
+            if key and len(key) <= MAX_STATEMENT_CHARS:
+                keys.add("t:" + key)
+    return keys
 
 
 def reading_clauses(package) -> list:
-    """Every clause of this package's printed text that a reading can decide (CANDIDATE words, the consent act): what
-    the isolated parser asks the trusted parent to read before it classifies anything. Each printed text is offered
-    as printed and as the engine's labels read it (clean_label), so a reader meets the clause it was given a reading for."""
+    """The keys of this package's printed text that a reading can decide (CANDIDATE clauses, first-person and consent
+    statements): what the isolated parser asks the trusted parent to read before it classifies anything. A key a
+    reader meets later without a reading is asked for then (MISSING)."""
     index = SlotIndex(package)
     texts = []
     for slot in index.slots:
         if slot.kind in ("p", "glyphs"):
             texts += [paragraph_text(slot.el)[0], text_of(slot.el), text_of(slot.el, own=False)]
         elif slot.kind in ("tc", "txbx"):
-            texts.append(text_of(slot.el, own=False))
+            texts += [text_of(slot.el, own=False), re.sub(r"\s+", " ", text_of(slot.el, own=False)).strip()]
         elif slot.kind == "sdt":
             texts += [slot.info.get("alias") or "", slot.info.get("tag") or ""]
         elif slot.kind == "ff":
             texts += [slot.info.get("name") or ""] + list(slot.info.get("options") or [])
     found = set()
     for text in texts:
-        for variant in (text, clean_label(text, limit=None), re.sub(r"\s+", " ", text or "").strip()):
-            for _, _, key in clauses_of(variant):
-                if len(key) <= MAX_CLAUSE_CHARS and (CANDIDATE.search(key) or CONSENT.search(key)):
-                    found.add(key)
+        found |= reading_key_texts(text)
     return sorted(found)[:MAX_READING_CLAUSES]
 
 
 class _SigningWords:
     """A signing-wording reader with `search` (every caller keeps its `.search(text)`): the printed forms that are always
-    signing words (`fixed`, inflections included) or the ambiguous `word` in its signing sense (word_sense)."""
+    signing words (`fixed`, inflections included) or the ambiguous `word` in its signing sense (word_sense). Invisible
+    format characters inside a word are read through (plain)."""
 
     def __init__(self, fixed, word):
         self.fixed, self.word = fixed, word
 
     def search(self, text):
-        text = text or ""
+        text = plain(text)
         found = self.fixed.search(text)
         if found:
             return found
@@ -1416,14 +1540,21 @@ class _SigningWords:
         return None
 
 
-#: 'signed' inside 'countersigned'/'co-signed'/'undersigned', 'signature' inside 'countersignature', 'signatory'.
-SIGNATURE = _SigningWords(re.compile(r"\b(?:counter-?|co-?|under|re-)?sign(?:atures?|ed|ing|atory|atories)\b|"
+#: 'signed' inside 'countersigned'/'co-signed'/'undersigned', 'signature' inside 'countersignature' and 'eSignature',
+#: 'signatory'.
+SIGNATURE = _SigningWords(re.compile(r"\b(?:counter-?|co-?|under|re-|e-?)?sign(?:atures?|ed|ing|atory|atories)\b|"
                                      r"\bsign-?offs?\b|\bsign(?:ed)? here\b", re.I), "sign")
 #: 'Initials', 'initialled'/'initialed'/'initialling', 'initial (the) box'; the singular 'initial' by its reading.
 INITIALS = _SigningWords(re.compile(r"\binitials\b|\binitial(?:l?ed|l?ing)\b|\binitial (?:the )?box", re.I), "initial")
-#: One blank captioned for BOTH acts ('signature and date', 'sign & date', 'initial and date'): the signer's attestation.
-SIGN_AND_DATE = re.compile(r"\b(?:(?:counter-?|co-?)?sign\w*|initial\w*)\s*(?:and|&|\+|/)\s*dat\w*|"
-                           r"\bdat\w*\s*(?:and|&|\+|/)\s*(?:(?:counter-?|co-?)?sign\w*|initial\w*)", re.I)
+#: ONE blank captioned for the signing act AND its date: the two printed in one list of acts - joined by 'and', '&',
+#: '+', '/', ',' or brackets, with other listed acts between them ('Signature and date', 'Sign & date', 'Signature,
+#: name and date', 'Signature/stamp/date', 'Signature (and date)', 'Sign, date and time', 'Doctor sign/date'). A date
+#: ASKED about the signing act ('Signature date', 'Date signed', 'Date of signature') is no list: it stays a date.
+_ACT = r"(?:(?:counter-?|co-?|e-?)?sign\w*|initial\w*)"
+_LISTED = r"\s*(?:(?:[,/&+;()]|\b(?:and|or)\b)\s*)+"
+_ITEM = r"[^\W\d_]+(?:[ '-][^\W\d_]+)?"
+SIGN_AND_DATE = re.compile(r"\b%s(?:%s%s)*?%sdat\w*|\bdat\w*(?:%s%s)*?%s%s" % (
+    _ACT, _LISTED, _ITEM, _LISTED, _LISTED, _ITEM, _LISTED, _ACT), re.I)
 DATE_LABEL = re.compile(r"\b(?:date|dob|d\.o\.b|born)\b|mm/dd|dd/mm|yyyy|\bD[DT]\s*\((?:dictated|transcribed)\)", re.I)
 TIME_LABEL = re.compile(r"\btime\b|hh:mm|\(24.?h", re.I)
 LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|notes?|summary|history|findings|plan|narrative|reason)\b", re.I)
@@ -1432,7 +1563,7 @@ LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|n
 def kind_for_label(label: str) -> str:
     """The kind the engine gives ONE printed label (Detector.kind_for). A caption row holding several labels is read
     through `label_parts`, never as one joined label: there a date part would excuse its signature part."""
-    label = label or ""
+    label = plain(label)
     # A date question about a signature ('Signature date', 'Date signed') stays a date; ONE blank captioned for both
     # acts ('Consultant signature and date') is the signer's attestation, never a generated date.
     dated = DATE_LABEL.search(label) and not SIGN_AND_DATE.search(label)
@@ -6734,13 +6865,18 @@ def floating_place(slot) -> bool:
 #: ORIGINAL's structure only - never whether a cell is empty, and never whether the engine happened to make an area:
 #:   signing      a paragraph's own printed part, a cell's column header or row label, a box's own printed guidance, a
 #:                content control's alias or tag, or a drawn box's header/label/instruction/section, read by the engine's
-#:                kind rule (kind_for_label) as a signature or initials label;
-#:   consent      a question box whose printed question or section is a signing/consent context (question_box_signing),
-#:                read before and whatever the box holds;
-#:   declaration  a first-person statement ('I declare ...', 'We confirm ...') in a paragraph, a row label or a question
-#:                box's question, and the heading of a block holding one;
-#:   attestation  a printed statement embedding the consent act under a governing verb ('Record that the patient
-#:                consents to proceed'): attestation-like, its author unresolved;
+#:                kind rule (kind_for_label) as a signature or initials label - and every ANSWER PLACE such a caption
+#:                governs: the answer lines, empty lines and boxes printed after it (any number of empty lines between),
+#:                a line printed just above a caption printed below it ('____ / Signature'), and in a table an answer
+#:                cell whose nearest printed cell above (through a table continued after a printed line), to the left, or
+#:                directly below is that caption;
+#:   consent      a question box whose printed question (the nearest printed paragraph before it) or own section (its
+#:                innermost heading) is a signing caption, read before and whatever the box holds;
+#:   declaration  a first-person declaration (statement_reading: 'I declare ...', 'I ____ (full name) consent ...', 'The
+#:                information I have provided is accurate') in a paragraph, a row label, a row's statement cell or a
+#:                question box's question, the answer places it governs, and the heading of a block holding one;
+#:   attestation  a declaration that attests, or a printed statement embedding the consent act under a governing verb
+#:                ('Record that the patient consents to proceed'): attestation-like, its author unresolved;
 #:   protected    everything fill already protects (protected_places) and a locked content control;
 #:   authorship   a printed patient-role section and an attestation answer cell (source_policy).
 #: A place is `held`; a field VIOLATES a held place when it is answerable there (held_violation). The codes are ordered by
@@ -6758,8 +6894,15 @@ HELD_REASONS = {
 #: The most printed words a box's own signing caption has ('Signature of the examining clinician'): a longer sentence is
 #: guidance that mentions signing, never the caption of a signing box.
 CAPTION_WORDS = 8
-#: Codes a field carrying the place's printed answer policy may still answer (source_policy governs those answers).
-POLICY_CODES = frozenset(("declaration", "attestation", "authorship"))
+#: Codes a field carrying the place's printed answer policy may still answer (source_policy governs those answers): the
+#: printed patient-role section's own questions, including a first-person statement the patient REPORTS ('I have read
+#: the leaflet'). ⚠️ Never a declaration that ATTESTS or an embedded consent ('I consent to the procedure described
+#: above' under 'Completed by the patient:'): a patient-sourced answer cannot give a consent. Only the printed
+#: document-review attestation policy itself answers its own attestation cell.
+POLICY_CODES = frozenset(("authorship", "declaration"))
+ATTESTATION_POLICY_CODES = POLICY_CODES | {"attestation"}
+#: The codes an answer place inherits from the caption that governs it.
+GOVERNING_CODES = ("signing", "declaration", "attestation")
 
 
 @dataclass(frozen=True)
@@ -6776,7 +6919,7 @@ class Held:
 
 def _shown(text, limit=120):
     text = re.sub(r"\s+", " ", (text or "").replace("\x00", "[field]")).strip()
-    return text if len(text) <= limit else text[:limit - 1] + "\u2026"
+    return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 def label_segments(text):
@@ -6799,15 +6942,46 @@ def signing_label_kind(label) -> bool:
     return kind_for_label(clean_label(label or "")) in SIGNING_KINDS or signing_wording(label or "")
 
 
+def printed_words(text) -> bool:
+    """The text prints a word (a letter or a digit) outside its answer places (blanks, fields, controls, boxes)."""
+    return bool(re.search(r"[^\W_]", ANSWER_MARK.sub(" ", plain(text or ""))))
+
+
+def option_line(text) -> bool:
+    """A line that prints only answer options: option words and boxes or label breaks ('☐ Yes ☐ No')."""
+    text = text or ""
+    words = [option_text(x) for x in re.split("[%s%s]|%s" % (BOX, CHECKED, LABEL_BREAK.pattern), text) if x and option_text(x)]
+    return bool(words) and all(is_option_word(word) or response_word(word) for word in words) and \
+        bool(BOX in text or CHECKED in text or LABEL_BREAK.search(text))
+
+
+def signing_caption(text) -> bool:
+    """The text is a signing CAPTION: a separately printed label the kind rule reads as signature or initials, of at most
+    CAPTION_WORDS words ('Signature of consultant', 'Initials') or printed as a caption, ending in a colon ('Signature of
+    the doctor who obtained consent from the patient:'). A sentence of guidance that merely mentions signing
+    ('Describe the procedure; the signed consent form is filed with the notes.') captions nothing."""
+    for piece in LABEL_BREAK.split(text or ""):
+        label = clean_label(piece)
+        if label and kind_for_label(label) in SIGNING_KINDS and (
+                len(label.split()) <= CAPTION_WORDS or re.search(r":\s*$", plain(piece).replace(BOX, "").strip(" _\t"))):
+            return True
+    return False
+
+
+def option_list(printed) -> bool:
+    """A line of printed boxes each with its own short option label, opening with a box ('☐ photographs ☐ teaching'):
+    answer options, never a caption."""
+    stripped = plain(printed or "").strip(" \t\n")
+    if not stripped or stripped[0] not in (BOX, CHECKED):
+        return False
+    labels = [clean_label(x) for x in re.split("[%s%s]" % (BOX, CHECKED), stripped)[1:]]
+    return all(label and len(label.split()) <= 4 for label in labels)
+
+
 def statement_code(text):
-    """'declaration' for a first-person statement, 'attestation' for an embedded consent, else None."""
-    if not text or not text.strip():
-        return None
-    if first_person(text):
-        return "declaration"
-    if embedded_consent(text):
-        return "attestation"
-    return None
+    """The first code (in HELD_CODES order) a sentence of the printed statement `text` is held for, else None."""
+    codes = statement_codes(text)
+    return next((code for code in HELD_CODES if code in codes), None)
 
 
 def held_places(package, source=None, protected=None) -> dict:
@@ -6828,6 +7002,18 @@ def held_places(package, source=None, protected=None) -> dict:
     def shows_boxes(text):
         return BOX in text or CHECKED in text
 
+    def statement_holds(slot_id, text, where, selection=False):
+        """Every sentence of the printed statement `text` that is a declaration or an attestation holds the place - the
+        whole place when every sentence does, else each held sentence up to where the next begins. With `selection`, a
+        sentence with a first-person subject of its statement is a declaration too (statement_codes)."""
+        sentences = [(codes | ({"declaration"} if selection and governing else set()), span)
+                     for codes, span, governing in statement_reading(text)]
+        chosen = [(codes, span) for codes, span in sentences if codes]
+        whole = len(chosen) == len(sentences)
+        for codes, span in chosen:
+            for code in sorted(codes, key=HELD_CODES.index):
+                hold(slot_id, code, '%s "%s"' % (where, _shown(text[span[0]:span[1]])), None if whole else [span])
+
     def signing_text(slot_id, text, where):
         segments = label_segments(text)
         signing = [(a, b, label) for a, b, label in segments if kind_for_label(label) in SIGNING_KINDS]
@@ -6835,9 +7021,95 @@ def held_places(package, source=None, protected=None) -> dict:
             whole = len(signing) == len(segments)
             hold(slot_id, "signing", '%s "%s"' % (where, _shown(signing[0][2])),
                  None if whole else [(a, b) for a, b, _ in signing], selection=shows_boxes(text))
-        code = statement_code(text)
-        if code:
-            hold(slot_id, code, '%s "%s"' % (where, _shown(text)))
+        statement_holds(slot_id, text, where, selection=shows_boxes(text))
+
+    def cell_words(cell):
+        """A cell's printed words (its whole text, content controls included) outside its answer places."""
+        return source.cell_text(cell)
+
+    def printed_cell_text(cell):
+        """The cell's printed text: a content control whose content is locked is printed text; an editable control is an
+        answer place, whatever placeholder it shows ('Click here to enter text.')."""
+        copy = etree.fromstring(etree.tostring(cell.el))
+        for sdt in list(copy.iter(SDT)):
+            lock = sdt.find("./" + q("w:sdtPr") + "/" + q("w:lock"))
+            if lock is None or lock.get(q("w:val")) not in ("contentLocked", "sdtContentLocked"):
+                content = sdt.find(q("w:sdtContent"))
+                if content is not None:
+                    for child in list(content):
+                        if child.tag == R or child.tag == q("w:r"):
+                            content.remove(child)
+        return re.sub(r"\s+", " ", text_of(copy, own=False)).strip()
+
+    answer_cells = {}
+
+    def answer_only(cell):
+        """The cell prints no caption of its own: nothing, answer places (blanks, boxes, form fields, an editable content
+        control), or answer options only (a table printed inside it counts with its own words). Read once per cell."""
+        if cell.id not in answer_cells:
+            printed = printed_cell_text(cell)
+            answer_cells[cell.id] = not printed_words(printed) or option_line(printed) or option_list(printed)
+        return answer_cells[cell.id]
+
+    def self_captioned(cell):
+        """The cell prints its own caption WITH its own answer place ('Date of visit: ____'): that caption governs it."""
+        for p in own_paragraph_slots(cell):
+            printed = source.ptext(p.el)[0]
+            if printed_words(printed) and not option_line(printed) and not option_list(printed) and (ANSWER_MARK.search(printed) or any(
+                    kind in ("utab", "segmented", "blank") for _, _, kind in source.blank_spans(printed, source.ptext(p.el)[1]))):
+                return True
+        return False
+
+    def cell_at(table, row, col):
+        return next((c for c in table.children if c.kind == "tc" and c.info["row"] == row
+                     and c.info["col"] <= col < c.info["col"] + c.info["span"]), None)
+
+    def continued_from(table):
+        """The table `table` continues: the nearest table before it in the same container with the same number of grid
+        columns, with only printed lines that are not headings between them (a table split across pages)."""
+        node = table.el.getprevious()
+        while node is not None and node.tag == q("w:p"):
+            # A heading, or a printed caption or question ('Medicines given:', 'Any allergies?'), starts another table.
+            if source.is_heading(node) or LABEL_END.search(source.text(node).strip()):
+                return None
+            node = node.getprevious()
+        if node is None or node.tag != q("w:tbl"):
+            return None
+        previous = index.by_el.get(id(node))
+        if previous is None or previous.kind != "tbl" or source.grid_cols(previous) < 2 or \
+                source.grid_cols(previous) != source.grid_cols(table):
+            return None
+        return previous
+
+    def caption_above(cell):
+        """The nearest printed cell above `cell` in its grid column - through wordless answer cells, and into the table
+        this one continues - or None."""
+        table, col, row, seen = cell.parent, cell.info["col"], cell.info["row"], 0
+        while table is not None and seen < 8:
+            for r in sorted((r for r in source.grid(table) if r < row), reverse=True):
+                above = cell_at(table, r, col)
+                if above is None or above.info["vmerge"] == "continue" or answer_only(above):
+                    continue
+                return above
+            table, row, seen = continued_from(table), 1 << 30, seen + 1
+        return None
+
+    def caption_left(cell):
+        for c in sorted((c for c in source.grid(cell.parent).get(cell.info["row"], []) if c.info["col"] < cell.info["col"]),
+                        key=lambda c: -c.info["col"]):
+            if c.info["vmerge"] == "continue" or answer_only(c):
+                continue
+            return c
+        return None
+
+    def caption_below(cell):
+        """The cell directly below `cell`, when it prints a caption and nothing else (no answer place of its own)."""
+        rows = sorted(r for r in source.grid(cell.parent) if r > cell.info["row"])
+        below = cell_at(cell.parent, rows[0], cell.info["col"]) if rows else None
+        if below is None or answer_only(below) or self_captioned(below) or shows_boxes(source.cell_objects(below)) \
+                or "\x00" in source.cell_objects(below):
+            return None
+        return below
 
     WPS = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
     for slot in index.slots:
@@ -6846,23 +7118,40 @@ def held_places(package, source=None, protected=None) -> dict:
         elif slot.kind == "tc":
             table, row, col = slot.parent, slot.info["row"], slot.info["col"]
             boxes = shows_boxes(source.cell_objects(slot))
+            own_caption = self_captioned(slot)
             for header in dict.fromkeys([source.column_header(table, col, row)] + source.column_headers_all(table, col, row)):
                 if header and signing_label_kind(header):
                     hold(slot.id, "signing", 'column header "%s"' % _shown(header), selection=boxes)
                     break
             label = source.row_label(table, row, col)
-            if label and signing_label_kind(label):
-                hold(slot.id, "signing", 'row label "%s"' % _shown(label), selection=boxes)
-            code = statement_code(label)
-            if code:
-                hold(slot.id, code, 'row label "%s"' % _shown(label))
-            # A first-person or attestation statement printed in a cell governs every answer area of its row, on either
-            # side of it ('☐ | I declare ...' as well as 'I declare ... | ☐').
+            # A cell printing its own caption with its own answer place ('Date of visit: ____') is governed by it, never
+            # by the row's label.
+            if label and not own_caption:
+                if signing_label_kind(label):
+                    hold(slot.id, "signing", 'row label "%s"' % _shown(label), selection=boxes)
+                for code in sorted(statement_codes(label, selection=boxes), key=HELD_CODES.index):
+                    hold(slot.id, code, 'row label "%s"' % _shown(label))
+            if answer_only(slot):
+                # An answer cell's caption, read from structure whatever the engine made of the table: the nearest printed
+                # cell above (a corner or mid-table header, a table continued after a printed line), to the left, or -
+                # for a cell no printed cell stands above - a caption printed directly below it.
+                above = caption_above(slot)
+                for where, caption in (("column caption", above), ("row caption", caption_left(slot)),
+                                       ("caption below", caption_below(slot) if above is None else None)):
+                    if caption is not None and signing_caption(cell_words(caption)):
+                        hold(slot.id, "signing", '%s "%s"' % (where, _shown(cell_words(caption))), selection=boxes)
+            # A first-person or attestation statement printed in a cell governs its own cell and every ANSWER cell of its
+            # row, on either side of it ('☐ | I declare ...' as well as 'I declare ... | ☐'); a cell printing its own
+            # caption keeps it.
             own = source.cell_text(slot)
-            code = statement_code(own)
-            if code:
-                for cell in [c for c in table.children if c.kind == "tc" and c.info["row"] == row]:
-                    hold(cell.id, code, 'row statement "%s"' % _shown(own))
+            row_cells = [c for c in table.children if c.kind == "tc" and c.info["row"] == row]
+            codes = statement_codes(own, selection=any(answer_only(c) and shows_boxes(source.cell_objects(c))
+                                                        for c in row_cells if c is not slot))
+            if codes and not answer_only(slot):
+                for cell in row_cells:
+                    if cell is slot or answer_only(cell):
+                        for code in sorted(codes, key=HELD_CODES.index):
+                            hold(cell.id, code, 'row statement "%s"' % _shown(own))
             for p in own_paragraph_slots(slot):
                 segments = label_segments(source.ptext(p.el)[0])
                 # A box captioned by its own signing wording ('Signature of clinician', 'Initial here') is a signing box
@@ -6888,31 +7177,104 @@ def held_places(package, source=None, protected=None) -> dict:
             for name in (slot.info.get("name"), slot.info.get("help"), slot.info.get("status")):
                 if isinstance(name, str) and name and signing_label_kind(name):
                     hold(slot.id, "signing", 'legacy field "%s"' % _shown(name))
-    # A declaration's own answer line: the paragraphs right after a held first-person or attestation paragraph that
-    # print only answer marks (blanks, boxes, printed option words) answer that declaration.
+    # The heading of a block holding a first-person declaration belongs to that declaration.
+    heading, block = None, []
+    heading_of = {}
+
+    def close():
+        if heading is not None and any(row[0] == "declaration" for s in block for key, rows in found.items()
+                                       if key == s.id or key.startswith(s.id + "/") for row in rows):
+            hold(heading.id, "declaration", 'heading of a declaration "%s"' % _shown(source.text(heading.el)))
+    for root in [s for s in index.roots if s.part == "word/document.xml"]:
+        if root.kind == "p" and source.is_heading(root.el):
+            close()
+            heading, block = root, []
+        else:
+            block.append(root)
+            heading_of[root.id] = heading
+    close()
+
+    def governing_rows(slot_id, whole_only=True):
+        return [row for row in found.get(slot_id, []) if row[0] in GOVERNING_CODES and (row[2] is None or not whole_only)]
+
+    def line_groups(p):
+        printed, pieces = source.ptext(p.el)
+        spans = sorted({(a, b) for a, b, kind in source.blank_spans(printed, pieces) if kind in ("utab", "segmented", "blank")}
+                       | {m.span() for m in re.finditer(r"\x00+", printed)})
+        merged = []
+        for a, b in spans:
+            if merged and a <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(b, merged[-1][1]))
+            else:
+                merged.append((a, b))
+        return merged
+
+    def paired(line, caption_text):
+        """The line's answer groups printed under (or over) the signing parts of a caption line, when the caption's
+        labels and the line's groups pair one to one; None pairs nothing (the whole line)."""
+        segments = label_segments(caption_text)
+        signing = [kind_for_label(label) in SIGNING_KINDS for _, _, label in segments]
+        groups = line_groups(line)
+        if segments and not all(signing) and len(groups) == len(segments):
+            return [groups[n] for n, s in enumerate(signing) if s]
+        return None
+
+    def answer_line(p):
+        """The paragraph prints only answer places or answer options, and holds no text box that prints words."""
+        printed = source.ptext(p.el)[0]
+        if any(printed_words(text_of(box, own=False)) for box in p.el.iter(TXBX)):
+            return False
+        return not printed_words(printed) or option_line(printed) or option_list(printed)
+
+    # ⚠️ AN ANSWER PLACE IS GOVERNED BY ITS CAPTION, WHEREVER THE ENGINE PUT ITS AREA: every line that prints only answer
+    # places or options is held with the caption it answers - the nearest printed paragraph before it (any number of
+    # empty or answer lines between), else (after a table, at the start of the body) its section's heading - and a
+    # line printed just above a caption printed below it ('______ / Signature'). A signing caption's line keeps a box
+    # selection; a declaration's does not.
     for slot in index.slots:
-        if slot.kind != "p":
+        if slot.kind != "p" or not answer_line(slot):
             continue
-        rows = [row for row in found.get(slot.id, []) if row[0] in ("declaration", "attestation") and row[2] is None]
-        if not rows:
-            continue
-        node, skipped = slot.el.getnext(), 0
-        while node is not None and node.tag == q("w:p") and skipped < 2:
-            following = index.by_el.get(id(node))
-            if following is None:
+        printed = source.ptext(slot.el)[0]
+        node, caption = slot.el.getprevious(), None
+        while node is not None and node.tag == q("w:p"):
+            previous = index.by_el.get(id(node))
+            if previous is None:
                 break
-            text = source.ptext(node)[0]
-            if not text.strip(" \t"):
-                skipped += 1
-                node = node.getnext()
-                continue
-            words = [option_text(x) for x in re.split("[%s%s]|%s" % (BOX, CHECKED, LABEL_BREAK.pattern), text)
-                     if x and option_text(x)]
-            if all(is_option_word(word) or response_word(word) for word in words) and \
-                    (BOX in text or CHECKED in text or LABEL_BREAK.search(text)):
-                hold(following.id, rows[0][0], "answer line of %s" % rows[0][1])
-            break
-    # A question box: the printed question and its section, each read alone, whatever the box holds.
+            if not answer_line(previous):
+                caption = previous
+                break
+            node = node.getprevious()
+        if caption is None and slot.parent is None:
+            caption = heading_of.get(slot.id)
+        if caption is not None:
+            rows = governing_rows(caption.id, whole_only=False)
+            # Only a signing CAPTION governs the lines after it, never guidance that mentions signing.
+            signing_rows = [row for row in rows if row[0] == "signing"] if signing_caption(source.ptext(caption.el)[0]) else []
+            if signing_rows:
+                hold(slot.id, "signing", "answer line of %s" % signing_rows[0][1],
+                     None if any(row[2] is None for row in signing_rows) else paired(slot, source.ptext(caption.el)[0]),
+                     selection=shows_boxes(printed))
+            for row in rows:
+                if row[0] != "signing" and row[2] is None:
+                    hold(slot.id, row[0], "answer line of %s" % row[1])
+            if shows_boxes(printed) and not any(row[0] == "declaration" for row in rows):
+                # A first-person statement answered by the boxes printed under it ('I agree to:' / '☐ photographs
+                # ☐ teaching') is a declaration, like the same statement with its boxes on its own line.
+                caption_text = source.ptext(caption.el)[0]
+                if any(governing for _, _, governing in statement_reading(caption_text)):
+                    hold(caption.id, "declaration", 'printed "%s"' % _shown(caption_text))
+                    hold(slot.id, "declaration", 'answer line of printed "%s"' % _shown(caption_text))
+        if not printed_words(printed):
+            node = slot.el.getnext()
+            below = index.by_el.get(id(node)) if node is not None and node.tag == q("w:p") else None
+            if below is not None and printed_words(source.ptext(below.el)[0]) and not line_groups(below) \
+                    and not shows_boxes(source.ptext(below.el)[0]):
+                caption_text = source.ptext(below.el)[0]
+                if signing_caption(caption_text):
+                    hold(slot.id, "signing", 'line over the caption "%s"' % _shown(caption_text), paired(slot, caption_text))
+    # A question box: the printed question (the nearest printed paragraph before it, any number of empty or answer lines
+    # between) and its own section (the innermost heading), each read by the same readers as a printed line, whatever
+    # the box holds. An outer title naming consent does not hold every box under it.
     for table in index.roots:
         if table.kind != "tbl" or table.part != "word/document.xml":
             continue
@@ -6920,22 +7282,28 @@ def held_places(package, source=None, protected=None) -> dict:
         if len(table_rows_of(table.el)) != 1 or len(cells) != 1:
             continue
         cell, question, raw = cells[0], None, ""
-        node, skipped = table.el.getprevious(), 0
+        node = table.el.getprevious()
         while node is not None and node.tag == q("w:p"):
-            raw = re.sub(r"\s+", " ", source.text(node)).strip()
-            if raw:
-                question = index.by_el.get(id(node))
+            previous = index.by_el.get(id(node))
+            if previous is None:
                 break
-            skipped += 1
-            if skipped > 2:
+            if not answer_line(previous):
+                question, raw = previous, re.sub(r"\s+", " ", source.text(node)).strip()
                 break
             node = node.getprevious()
         context = source.question_box_context(question)[0] if question is not None else source.heading_before(cell)
-        if (question is not None and source.question_box_signing(raw)) or source.question_box_signing(context):
-            hold(cell.id, "consent", 'question "%s"%s' % (_shown(raw), ' in "%s"' % _shown(context) if context else ""))
-        code = statement_code(raw) if question is not None else None
-        if code:
-            hold(cell.id, code, 'question "%s"' % _shown(raw))
+        section = context.split(" > ")[-1] if context else ""
+        if question is not None and signing_wording(source.ptext(question.el)[0]):
+            hold(cell.id, "consent", 'question "%s"%s' % (_shown(raw), ' in "%s"' % _shown(section) if section else ""))
+        elif section and signing_label_kind(section):
+            hold(cell.id, "consent", 'section "%s"' % _shown(section))
+        if question is not None:
+            for code in sorted(statement_codes(raw), key=HELD_CODES.index):
+                hold(cell.id, code, 'question "%s"' % _shown(raw))
+        if question is not None:
+            for row in governing_rows(question.id):
+                if row[0] != "signing":
+                    hold(cell.id, row[0], "answer box of %s" % row[1])
     for slot_id in protected_slots:
         hold(slot_id, "protected", "protected on the form; fill never writes here")
     for slot_id, reason in legacy.items():
@@ -6948,26 +7316,20 @@ def held_places(package, source=None, protected=None) -> dict:
             attested = source_policy.attestation_statement(source, slot)
             if attested:
                 hold(slot.id, "authorship", 'attestation "%s"' % _shown(attested[1]))
-    # The heading of a block holding a first-person declaration belongs to that declaration.
-    heading, block = None, []
-
-    def close():
-        if heading is not None and any(row[0] == "declaration" for s in block for key, rows in found.items()
-                                       if key == s.id or key.startswith(s.id + "/") for row in rows):
-            hold(heading.id, "declaration", 'heading of a declaration "%s"' % _shown(source.text(heading.el)))
-    for root in [s for s in index.roots if s.part == "word/document.xml"]:
-        if root.kind == "p" and source.is_heading(root.el):
-            close()
-            heading, block = root, []
-        else:
-            block.append(root)
-    close()
     held = {}
     for slot_id, rows in found.items():
         rows.sort(key=lambda row: (HELD_CODES.index(row[0]), row[1]))
         code, evidence = rows[0][0], rows[0][1]
         whole = any(row[2] is None for row in rows)
-        ranges = None if whole else tuple(sorted({r for row in rows for r in row[2]}))
+        ranges = None
+        if not whole:
+            merged = []
+            for start, end in sorted({r for row in rows for r in row[2]}):
+                if merged and start <= merged[-1][1]:
+                    merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+                else:
+                    merged.append((start, end))
+            ranges = tuple(merged)
         held[slot_id] = Held(code, evidence, ranges, frozenset(row[0] for row in rows), all(row[3] for row in rows))
     return held
 
@@ -7028,10 +7390,12 @@ def answerable_field(field) -> bool:
 def held_violation(index, held, field):
     """(slot id, Held) of the first held place where `field` would be an answer, or None. A signature/initials kind or
     a write-protected field is never an answer; a field carrying its printed answer policy answers a place held only
-    for its printed authorship, attestation or declaration under that policy (source_policy)."""
+    for its printed authorship and a first-person statement the patient reports there (POLICY_CODES) - an attesting
+    declaration or an embedded consent only under the printed document-review attestation policy itself."""
     if not answerable_field(field):
         return None
-    policy = isinstance(field.get("answer_policy"), dict)
+    policy = field.get("answer_policy") if isinstance(field.get("answer_policy"), dict) else None
+    allowed = (ATTESTATION_POLICY_CODES if policy and "attestation" in policy else POLICY_CODES) if policy else frozenset()
     locator = field.get("locator") or {}
     target = locator.get("target") or {}
     selecting = field.get("kind") in ("checkbox", "choice", "multi_choice") and \
@@ -7043,10 +7407,13 @@ def held_violation(index, held, field):
     for where, entry in held_touches(index, held, field):
         if inside and where.startswith(inside):
             continue
-        if policy and "authorship" in entry.codes and entry.codes <= POLICY_CODES:
+        if policy and "authorship" in entry.codes and entry.codes <= allowed:
             continue
         if selecting and entry.selection:
             continue
+        if policy and "authorship" in entry.codes:
+            # Named by what the printed policy does NOT cover ('I consent ...' under 'Completed by the patient:').
+            entry = replace(entry, code=next(code for code in HELD_CODES if code in entry.codes - allowed))
         return where, entry
     return None
 

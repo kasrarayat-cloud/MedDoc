@@ -140,11 +140,18 @@ DEPENDENCE={'same_field':'D1 both name the same existing field',
             'displacement':"D3 it lands on a field another proposed change replaces",
             'wording':'D4 they claim the same printed wording',
             'relation':"D5 it changes a field another field's printed relation reads",
-            'question':'D6 they ask the same question'}
+            'question':'D6 they ask the same question',
+            'options':'D6 they select among the options printed on one line or in one cell'}
 REMOVAL_REASON=('D3 it lands on "{label}", which the proposal marks {verdict}; only the clinician can remove a field. '
                 'It was not adopted.')
 RELATION_REASON=('D5 "{label}" reads its printed question or instructions from this place; the change was not adopted.')
 DEPENDENT_REASON='It depends on other proposed changes ({members}): {why}. None of them was adopted.'
+QUESTION_REASON='D6 it asks the question "{label}" already asks; the clinician decides.'
+OPTIONS_REASON=('D6 it selects among the options printed where "{label}" already selects; a second selection there can '
+                'contradict it, so the clinician decides.')
+#: A change the proposal itself contradicts: it writes where the same proposal calls the area not an answer.
+DISMISSED_REASON='The same proposal marks its destination ({slot}) not an answer; it was not adopted.'
+SELECTION_KINDS=('checkbox','choice','multi_choice')
 #: What an adopted field may carry: the keys the engine's locator emits (word_v3.area_to_field, annotate_printed,
 #: source_policy.annotate) and 'origin'. The stored field dict is a frozen contract (V4).
 FIELD_KEYS=frozenset(('key','label','kind','context','locator','options','max_chars','write_protected','review_reason',
@@ -170,6 +177,19 @@ def overlaps(first,second):
             return bool({box_key(x) for x in at.get('boxes',[])} & {box_key(x) for x in bt.get('boxes',[])})
     left=v3_mapping.mapped_slots([first]);right=v3_mapping.mapped_slots([second])
     return any(v3_mapping.is_mapped(slot,right) for slot in left)
+
+def host_of(field):
+    """The printed line or cell a selection field's options sit on: its anchor, without a box, form field or content
+    control part ('b/p[1]/glyphs' and 'b/p[1]/ff[0]' are both on 'b/p[1]')."""
+    import re
+    locator=field.get('locator') or {}
+    return re.sub(r'/(?:glyphs|ff\[\d+\]|sdt\[\d+\])$','',f"{locator.get('part','')}#{locator.get('slot','')}")
+
+def question_of(field):
+    """The question a field asks, as generation keys it (generation.question_key of its label). Deliberately the label
+    alone: the engine's own fields and a located model field read their context differently, so a context-qualified key
+    would call the same printed question two questions beside an existing field and one question beside another change."""
+    return generation.question_key(field.get('label') or '')
 
 def change_id(change):
     """A change named by its CONTENT (the wire array), never by its position in the response."""
@@ -201,10 +221,13 @@ def validate_proposal(version,compiled,response):
        write protection, review reason and answer policy.
     3. Changes that depend on each other - D1 the same field, D2 overlapping destinations, D3 a destination on a field
        another change replaces or the proposal would drop, D4 the same printed wording claimed twice, D5 a field
-       another field's printed relation reads, D6 the same question asked twice - form components. Only a
-       single-change component is adopted; every member of any other component (and every change depending on a
-       field only the clinician can remove) is held as an unresolved record naming the others and why. Never
-       first-come: the outcome is the same for every order of the changes.
+       another field's printed relation reads, D6 the same question asked twice, or two selections among the options
+       printed on one line or in one cell - form components. Only a single-change
+       component is adopted; every member of any other component (and every change depending on a field only the
+       clinician can remove, asking a kept field's question again, or selecting beside a kept selection on the same
+       line) is held as an unresolved record
+       naming the others and why. A change writing at the very slot the same proposal calls not an answer contradicts
+       itself and is held. Never first-come: the outcome is the same for every order of the changes.
     4. The RESULTING mapping (originals - replaced + adopted) is validated: V1 no overlap across all pairs, V2 no
        answerable field on a held place, V3 originals deep-equal and replacements inheriting their protection, V4 no
        new field-dict key and unique keys, V5 boxes addressable and the answerable limit (a global failure refuses the
@@ -335,6 +358,14 @@ def validate_proposal(version,compiled,response):
             entry['error']=refused(exc);entry['check']='source'
     # ─── 3. dependence (D1-D6), never first-come ────────────────────────────────────────────────────────────────────
     removals={v.key:v.verdict for v in proposal.fields if v.verdict in ('not_answer','uncertain')}
+    # A change writing at the slot the SAME proposal calls not an answer contradicts itself: it is held, never adopted
+    # beside a verdict that tells the clinician the area needs nothing (whatever the order of the two). The verdict must
+    # name the very slot the change names: a question's printed line called not an answer while its own boxes are
+    # covered ('Smoker ☐ Yes ☐ No': the line and its glyphs are two slots) is no contradiction.
+    dismissed={v.slot for v in proposal.slots if v.verdict=='not_answer'}
+    for entry in changes:
+        if entry['error'] is None and entry['slot'] in dismissed:
+            entry['error']=DISMISSED_REASON.format(slot=entry['slot']);entry['check']='source'
     replacing={}
     for n,entry in enumerate(changes):
         if entry['type']=='replacement' and entry['key']:replacing.setdefault(entry['key'],[]).append(n)
@@ -362,6 +393,17 @@ def validate_proposal(version,compiled,response):
                     entry['why'].add(REMOVAL_REASON.format(label=v3_mapping.label_of(original),verdict=removals[key]))
                 elif entry['error'] is None:
                     entry['error']=OVERLAP_REASON;entry['check']='source'
+        # D6 against a kept field: the same question asked again ('Describe any abnormality' beside the field that already
+        # asks it), or a second selection among the options printed on one line or in one cell ('Smoker ☐ Yes ☐ No'
+        # already selected by 'Yes') - the clinician decides, exactly as for two such changes.
+        if entry['field'] is not None:
+            for key,original in originals.items():
+                if key==entry['key'] or key in replacing:continue
+                if question_of(original)==question_of(entry['field']):
+                    entry['depends_on'].add(key);entry['why'].add(QUESTION_REASON.format(label=v3_mapping.label_of(original)))
+                elif entry['field'].get('kind') in SELECTION_KINDS and original.get('kind') in SELECTION_KINDS \
+                        and host_of(original)==host_of(entry['field']):
+                    entry['depends_on'].add(key);entry['why'].add(OPTIONS_REASON.format(label=v3_mapping.label_of(original)))
         # D5: the change alters a field whose place another field's printed relation reads, or writes where one reads
         touched=places_of(entry)|(v3_mapping.mapped_slots([originals[entry['key']]]) if entry['type']=='replacement' and entry['key'] in originals else set())
         for key,original in originals.items():
@@ -375,9 +417,12 @@ def validate_proposal(version,compiled,response):
             if first['type']=='replacement' and first['key'] and first['key']==second['key']:join(a,b,'same_field')
             if first['field'] is not None and second['field'] is not None:
                 if overlaps(first['field'],second['field']):join(a,b,'destination')
-                if generation.question_key(first['field']['label'])==generation.question_key(second['field']['label']) \
-                        or first['field']['key']==second['field']['key']:
+                # The same question (question_of), or one field key.
+                if question_of(first['field'])==question_of(second['field']) or first['field']['key']==second['field']['key']:
                     join(a,b,'question')
+                if first['field'].get('kind') in SELECTION_KINDS and second['field'].get('kind') in SELECTION_KINDS \
+                        and host_of(first['field'])==host_of(second['field']):
+                    join(a,b,'options')
             elif places_of(first) and places_of(second) and any(v3_mapping.is_mapped(slot,places_of(second)) for slot in places_of(first)):
                 join(a,b,'destination')
             if any(x[0]==y[0] and x[3]==y[3] and x[1]<y[2] and y[1]<x[2] for x in first['refs'] for y in second['refs']):

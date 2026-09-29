@@ -73,15 +73,20 @@ def resolve(request,template,version):
         raise ValidationError('The mapping changed. Review the latest version.')
     unresolved=version.assistance.get('unresolved',[])
     if not unresolved:raise ValidationError('No unresolved assistance areas remain.')
-    mapped=v3_mapping.mapped_slots(version.fields);decisions=[];removed=set()
+    decisions=[];removed=set()
     for number,row in enumerate(unresolved):
         decision=request.POST.get('resolution_'+str(number))
         if decision not in ('mapped','not_answer'):raise ValidationError('Review every unresolved area before saving.')
-        if decision=='mapped' and not v3_mapping.is_mapped(row['slot'],mapped):
-            raise ValidationError('Add this missed area on the mapping page before marking it mapped.')
         if decision=='not_answer' and row.get('key'):removed.add(row['key'])
         decisions.append({'slot':row['slot'],'key':row.get('key',''),'decision':decision})
     fields=[f for f in version.fields if f['key'] not in removed]
+    # 'Mapped' is judged against the mapping these decisions SAVE: a field another decision removes no longer maps
+    # its place (checked against the fields before the removal, a record could be resolved 'mapped' onto nothing).
+    mapped=v3_mapping.mapped_slots(fields)
+    for row,made in zip(unresolved,decisions):
+        if made['decision']=='mapped' and not v3_mapping.is_mapped(row['slot'],mapped):
+            raise ValidationError('Add this missed area on the mapping page before marking it mapped. An area stays unmapped '
+                                  'when you mark the field that mapped it not an answer.')
     new=TemplateVersion.objects.create(template=template,number=version.number+1,fields=fields,contract='v3',
         created_by=request.user,review_requirements=version.review_requirements,
         assistance={**version.assistance,'unresolved':[],'assisted':True,'resolutions':decisions},

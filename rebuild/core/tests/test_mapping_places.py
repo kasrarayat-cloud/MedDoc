@@ -183,10 +183,14 @@ class PlaceRule(SimpleTestCase):
         return next(n for n, f in enumerate(payload['fields']) if f['key'] == key)
 
     def respond(self, payload, changes, replace=()):
+        # A coherent response: the slot a change writes at is covered (a proposal that also calls it not an answer
+        # contradicts itself and is held - see test_mapping_authority's self-contradiction case).
         mapped = {slot for f in payload['fields'] for slot in f['slots']}
+        targets = {c[1] for c in changes}
+        covered = lambda n, row: n in targets or v3_mapping.is_mapped(row['slot'], mapped)
         body = {'f': {'k': [n for n in range(len(payload['fields'])) if n not in replace], 'r': list(replace), 'n': [], 'u': []},
-                's': {'c': [n for n, row in enumerate(payload['slots']) if v3_mapping.is_mapped(row['slot'], mapped)],
-                      'n': [n for n, row in enumerate(payload['slots']) if not v3_mapping.is_mapped(row['slot'], mapped)], 'u': []},
+                's': {'c': [n for n, row in enumerate(payload['slots']) if covered(n, row)],
+                      'n': [n for n, row in enumerate(payload['slots']) if not covered(n, row)], 'u': []},
                 'x': [list(c) for c in changes], 'e': False}
         return body
 
@@ -229,17 +233,20 @@ class PlaceRule(SimpleTestCase):
 
     # ─── (a) the engine's held places ──────────────────────────────────────────────────────────────────────────
     def test_F1_an_addition_at_a_signing_or_consent_question_box_is_held(self):
-        cases = [('Consultant review', 'Signed by the consultant:', 'Consultant review'),
-                 ('Consent', 'I confirm the risks were explained and the patient consents to proceed:', 'Consent'),
-                 ('Patient initials', 'Please initial below to confirm you have read the leaflet:', 'Patient')]
-        for number, (heading, question, label) in enumerate(cases):
+        # The first-person consent question is held as the declaration it is (the same reader as a printed line).
+        cases = [('Consultant review', 'Signed by the consultant:', 'Consultant review', mapping.HELD_REASONS['consent']),
+                 ('Consent', 'I confirm the risks were explained and the patient consents to proceed:', 'Consent',
+                  mapping.HELD_REASONS['declaration']),
+                 ('Patient initials', 'Please initial below to confirm you have read the leaflet:', 'Patient',
+                  mapping.HELD_REASONS['consent'])]
+        for number, (heading, question, label, reason) in enumerate(cases):
             version = self.version(f'box{number}', box_form(heading, question))
             compiled, payload = self.compile(version)
             for slot in ('b/tbl[0]/tr[0]/tc[0]', 'b/tbl[0]/tr[0]/tc[0]/p[0]'):
                 with self.subTest(heading=heading, slot=slot):
                     change = self.addition(payload, slot, 'long_text', label, roles=(1,))
                     result = mapping.validate_proposal(version, compiled, self.respond(payload, [change]))
-                    self.assertHeld(version, result, change, 'Signing or consent areas cannot become generated answers.')
+                    self.assertHeld(version, result, change, reason)
 
     def test_F1_control_an_ordinary_question_box_still_takes_a_model_addition(self):
         # Not vacuous: the same shape with an ordinary question is adopted when the engine's own field is missing.

@@ -261,8 +261,11 @@ class MappingAssistance(TestCase):
         self.version=TemplateVersion.objects.create(template=self.template,number=2,fields=fields,contract='v3',created_by=self.user)
         self.compiled=mapping.compile_request(self.version,self.config)
         body=self.body()
-        body['s']={'c':[],'n':list(range(len(json.loads(self.compiled['request']['messages'][0]['content'])['slots']))),'u':[]}
         body['x']=[self.target(next(iter(mapping.v3_mapping.mapped_slots([missing]))),'Plan',missing['kind'])]
+        # A coherent response: the slot the addition writes at is covered, every other slot not an answer (a proposal
+        # that also called the addition's own slot not an answer would contradict itself and be held).
+        slots=range(len(json.loads(self.compiled['request']['messages'][0]['content'])['slots']))
+        body['s']={'c':[body['x'][0][1]],'n':[n for n in slots if n!=body['x'][0][1]],'u':[]}
         job=self.enqueue()
         with patch('core.mapping_jobs.send',return_value=(body,Decimal(0),{},{},'synthetic-mapping-fixture','','',True)):
             jobs.run_one()

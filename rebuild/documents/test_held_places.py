@@ -108,7 +108,7 @@ class QuestionBoxesWhateverTheyHold(unittest.TestCase):
 
     def test_signing_and_consent_question_boxes_are_held_empty_drawing_or_guidance(self):
         for question in ("Signed by the consultant:", "I confirm the patient gave consent to proceed:",
-                         "Record that the patient consents to proceed:", "Patient consented: yes",
+                         "Record that the patient consents to proceed:",
                          "Has the report been countersigned?", "Countersignature:"):
             for variant in ("empty", "pict", "ink"):
                 with self.subTest(question=question, variant=variant):
@@ -277,10 +277,12 @@ class InflectionsAndCaptions(unittest.TestCase):
         with NoReadings():
             self.assertEqual(w.kind_for_label("Initial assessment"), "initials")
             self.assertEqual(w.kind_for_label("Sign of infection"), "signature")
-            self.assertTrue(w.first_person("Type I diabetes"))
-            self.assertTrue(w.embedded_consent("Consent obtained"))
+            self.assertEqual(w.statement_codes("Type I diabetes"), {"declaration", "attestation"})
+            self.assertEqual(w.statement_codes("Consent obtained"), {"declaration", "attestation"})
             self.assertEqual(w.kind_for_label("Vital signs"), "text")        # a plural is never a candidate
         self.assertEqual(w.kind_for_label("Initial assessment"), "text")
+        self.assertEqual(w.statement_codes("Type I diabetes"), frozenset())
+        self.assertEqual(w.statement_codes("Consent obtained"), frozenset())
 
 
 def clean(line):
@@ -427,6 +429,416 @@ class IsolatedParserExchange(unittest.TestCase):
             self.assertEqual(refused.exception.code, "held_place")
             self.assertFalse((Path(directory) / "out.docx").exists())
 
+
+
+# ─── Refutation round against be5fba45: every CONFIRMED finding, red there, green here ───────────────────────────────
+
+def table_form(rows, title="Administration record", heading=False, between=None, more=None):
+    """A table of printed rows (None/'' = an empty cell), optionally a printed line and a second table after it."""
+    doc = Document()
+    doc.add_paragraph(title, style="Heading 2" if heading else None)
+    for n, block in enumerate([rows] + ([more] if more else [])):
+        if n:
+            doc.add_paragraph(between)
+        table = doc.add_table(rows=len(block), cols=len(block[0]))
+        for r, row in enumerate(block):
+            for c, value in enumerate(row):
+                if value:
+                    table.cell(r, c).text = value
+    return saved(doc)
+
+
+def text_box_form(*lines):
+    from lxml import etree
+    doc = Document()
+    doc.add_paragraph("Sign-off")
+    paragraph = doc.add_paragraph()
+    pict = OxmlElement("w:pict")
+    shape = etree.SubElement(pict, "{urn:schemas-microsoft-com:vml}shape")
+    box = etree.SubElement(shape, "{urn:schemas-microsoft-com:vml}textbox")
+    content = OxmlElement("w:txbxContent")
+    box.append(content)
+    for line in lines:
+        inner = OxmlElement("w:p"); run = OxmlElement("w:r"); text = OxmlElement("w:t")
+        text.text = line; run.append(text); inner.append(run); content.append(inner)
+    paragraph.add_run()._r.append(pict)
+    return saved(doc)
+
+
+def stored_text(data, slot, target=None, kind="text"):
+    """A field as a mapping stored before the rule would carry it (fingerprinted, answerable)."""
+    field = text_field(slot, target, kind=kind)
+    field["locator"]["fingerprint"] = w.fingerprint(w.SlotIndex(w.open_package(data)).by_id[BODY + slot].el)
+    return field
+
+
+class RefutedAnswerPlaces(unittest.TestCase):
+    """F1, F6, F9, R2-F2: an answer place is governed by its caption, wherever the engine put its area."""
+
+    def assertFillRefused(self, data, slot, target=None):
+        field = stored_text(data, slot, target)
+        with self.assertRaises(w.V3Failure) as refused:
+            w.fill(data, [field], {"probe": "SYNTHETIC-ANSWER"})
+        self.assertEqual(refused.exception.code, "held_place")
+
+    def test_F1_a_signing_caption_holds_the_lines_printed_after_it(self):
+        for caption, line in (("Signature of consultant:", "_" * 30), ("Signature of consultant:", ""),
+                              ("Initials of checking nurse:", "_" * 10)):
+            with self.subTest(caption=caption, line=line):
+                data = lines_form("Authorisation", caption, line)
+                self.assertEqual(held(data)["b/p[2]"].code, "signing")
+                self.assertFillRefused(data, "b/p[2]", {"type": "paragraph"})
+        # Control: an ordinary caption's line stays answerable; guidance that mentions signing captions nothing.
+        self.assertNotIn("b/p[2]", held(lines_form("Authorisation", "Plan:", "_" * 30)))
+        self.assertNotIn("b/p[2]", held(lines_form("Authorisation", "Describe the wound; the signed consent form is filed "
+                                                                    "with the notes and must be kept.", "_" * 30)))
+
+    def test_F9_any_number_of_empty_lines_between_a_signing_caption_and_its_box(self):
+        for gaps in (0, 3, 6):
+            with self.subTest(gaps=gaps):
+                doc = Document()
+                doc.add_paragraph("Participant ID: __________")
+                doc.add_paragraph("Consultant review", style="Heading 2")
+                doc.add_paragraph("Signed by the consultant:")
+                for _ in range(gaps):
+                    doc.add_paragraph("")
+                bordered_box(doc)
+                places = held(saved(doc))
+                self.assertEqual(places["b/tbl[0]/tr[0]/tc[0]"].code, "consent")
+                for n in range(gaps):
+                    self.assertEqual(places["b/p[%d]" % (3 + n)].code, "signing")
+
+    def test_F1_d_a_text_box_caption_holds_its_writing_line(self):
+        places = held(text_box_form("Signature of clinician", "______"))
+        self.assertEqual(places["b/p[1]/txbx[0]/p[1]"].code, "signing")
+        self.assertNotIn("b/p[1]/txbx[0]/p[1]", held(text_box_form("Plan", "______")))
+
+    def test_F1_e_a_line_over_a_signing_caption_printed_below_it(self):
+        data = lines_form("Discharge summary", "____\t\t____", "Signature\t\tDate")
+        self.assertEqual(held(data)["b/p[1]"].code, "signing")
+        engine = next(f for f in w.inspect(data)["fields"] if f["locator"]["slot"] == "b/p[1]")
+        self.assertTrue(engine.get("write_protected"))
+        # Two separately printed blanks pair with two captions: only the signature's is held.
+        data = lines_form("Discharge summary", "________ / ________", "Signature\t\t\tDate")
+        self.assertEqual(held(data)["b/p[1]"].ranges, ((0, 8),))
+        data = lines_form("Discharge summary", "________ / ________", "Date\t\t\tSignature")
+        self.assertEqual(held(data)["b/p[1]"].ranges, ((11, 19),))
+        # Control: a line over an ordinary caption stays answerable.
+        self.assertNotIn("b/p[1]", held(lines_form("Discharge summary", "____\t\t____", "Plan\t\tDate")))
+
+    def test_F1_f_a_table_cell_over_a_signing_caption_printed_below_it(self):
+        places = held(table_form([["", ""], ["Signature of clinician", "Date"]], title="Review"))
+        self.assertEqual(places["b/tbl[0]/tr[0]/tc[0]"].code, "signing")
+        self.assertNotIn("b/tbl[0]/tr[0]/tc[1]", places)
+        places = held(table_form([[""], ["Signature of clinician"]], title="Review"))
+        self.assertEqual(places["b/tbl[0]/tr[0]/tc[0]"].code, "signing")
+
+    def test_F6_a_heading_caption_holds_its_drawn_line(self):
+        for heading in ("Patient signature", "Sign & date", "Signature"):
+            with self.subTest(heading=heading):
+                doc = Document()
+                doc.add_paragraph("Consent form")
+                doc.add_paragraph(heading, style="Heading 2")
+                paragraph = doc.add_paragraph()
+                paragraph.add_run("\t\t\t").underline = True
+                self.assertEqual(held(saved(doc))["b/p[2]"].code, "signing")
+
+    def test_R2_F2_an_empty_line_in_a_declaration_block_after_its_table_is_held(self):
+        doc = Document()
+        doc.add_paragraph("Declaration", style="Heading 2")
+        doc.add_paragraph("I declare the person examined agreed to this examination.")
+        doc.add_paragraph("Signature of examining clinician: ______________")
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = "Clinician initials"
+        doc.add_paragraph("")
+        doc.add_paragraph("Findings", style="Heading 2")
+        doc.add_paragraph("")
+        places = held(saved(doc))
+        self.assertEqual(places["b/p[3]"].code, "declaration")
+        self.assertNotIn("b/p[5]", places)          # control: another section's empty line
+
+
+class RefutedTableCaptions(unittest.TestCase):
+    """F2, F7: a table's signing column read from structure, whatever the engine made of its header."""
+
+    def signing_cells(self, data):
+        return {slot for slot, entry in held(data).items() if slot.count("/") == 3 and entry.code == "signing"}
+
+    def test_F2_corner_mid_table_trailing_empty_and_boxed_headers_and_a_continued_table(self):
+        places = held(table_form([["", "Name", "Signature", "Date"], ["Nurse", "", "", ""], ["Doctor", "", "", ""]]))
+        self.assertTrue({"b/tbl[0]/tr[1]/tc[2]", "b/tbl[0]/tr[2]/tc[2]"} <= set(places))
+        self.assertFalse({"b/tbl[0]/tr[1]/tc[1]", "b/tbl[0]/tr[1]/tc[3]"} & set(places))
+        places = held(table_form([["Check", "Result", "Notes"], ["Consent", "", ""], ["Site marked", "", ""],
+                                  ["Check", "Result", "Signature"], ["Swab count", "", ""], ["Instrument count", "", ""]]))
+        self.assertTrue({"b/tbl[0]/tr[4]/tc[2]", "b/tbl[0]/tr[5]/tc[2]"} <= set(places))
+        self.assertFalse({"b/tbl[0]/tr[1]/tc[2]", "b/tbl[0]/tr[2]/tc[2]", "b/tbl[0]/tr[5]/tc[1]"} & set(places))
+        for header in (["Drug", "Dose", "Time", "Signature", ""], ["Drug", "Dose", "Given \u2610", "Signature"]):
+            with self.subTest(header=header):
+                rows = [header] + [["Paracetamol"] + [""] * (len(header) - 1), ["Ibuprofen"] + [""] * (len(header) - 1)]
+                places = held(table_form(rows))
+                self.assertTrue({"b/tbl[0]/tr[1]/tc[3]", "b/tbl[0]/tr[2]/tc[3]"} <= set(places))
+                self.assertFalse({"b/tbl[0]/tr[1]/tc[1]", "b/tbl[0]/tr[1]/tc[2]"} & set(places))
+        data = table_form([["Drug", "Dose", "Time", "Signature"], ["Ibuprofen", "", "", ""]], between="Continued from previous page",
+                          more=[["Paracetamol", "", "", ""], ["Codeine", "", "", ""]])
+        places = held(data)
+        self.assertTrue({"b/tbl[1]/tr[0]/tc[3]", "b/tbl[1]/tr[1]/tc[3]"} <= set(places))
+        self.assertFalse({"b/tbl[1]/tr[0]/tc[1]", "b/tbl[1]/tr[0]/tc[2]"} & set(places))
+        # A column of option lists ('☐ checked ☐ deferred') is a column of answers: the header above them captions the
+        # cell below.
+        places = held(table_form([["", "Name", "Signed"], ["Nurse", "", "\u2610 checked \u2610 deferred"], ["Doctor", "", ""]]))
+        self.assertEqual(places["b/tbl[0]/tr[2]/tc[2]"].code, "signing")
+        self.assertNotIn("b/tbl[0]/tr[2]/tc[1]", places)
+        # Control: a printed caption between the tables starts another table; nothing is inherited.
+        data = table_form([["Drug", "Dose", "Time", "Signature"], ["Ibuprofen", "", "", ""]], between="Observations:",
+                          more=[["Pulse", "", "", ""]])
+        self.assertNotIn("b/tbl[1]/tr[0]/tc[3]", held(data))
+
+    def test_F7_a_header_or_row_label_inside_a_locked_content_control(self):
+        def control(cell, text):
+            sdt = OxmlElement("w:sdt"); properties = OxmlElement("w:sdtPr"); lock = OxmlElement("w:lock")
+            lock.set(qn("w:val"), "sdtContentLocked"); properties.append(lock); properties.append(OxmlElement("w:text"))
+            content = OxmlElement("w:sdtContent"); run = OxmlElement("w:r"); t = OxmlElement("w:t"); t.text = text
+            run.append(t); content.append(run); sdt.append(properties); sdt.append(content)
+            cell.paragraphs[0]._p.append(sdt)
+        doc = Document(); doc.add_paragraph("Clinic record")
+        table = doc.add_table(rows=2, cols=2); control(table.cell(0, 0), "Name"); control(table.cell(0, 1), "Signature")
+        places = held(saved(doc))
+        self.assertEqual(places["b/tbl[0]/tr[1]/tc[1]"].code, "signing")
+        self.assertNotIn("b/tbl[0]/tr[1]/tc[0]", places)
+        doc = Document(); doc.add_paragraph("Clinic record")
+        table = doc.add_table(rows=2, cols=2); table.cell(0, 0).text = "Plan"; control(table.cell(1, 0), "Consultant signature")
+        self.assertEqual(held(saved(doc))["b/tbl[0]/tr[1]/tc[1]"].code, "signing")
+
+    def test_R3_H2_a_declaration_row_holds_its_answer_cells_not_a_cell_with_its_own_caption(self):
+        doc = Document(); doc.add_paragraph("Clinic letter")
+        table = doc.add_table(rows=1, cols=3)
+        table.cell(0, 0).text = "I confirm the findings above are accurate"
+        table.cell(0, 1).text = "\u2610"
+        table.cell(0, 2).text = "Date of visit: ____"
+        places = held(saved(doc))
+        self.assertEqual(places["b/tbl[0]/tr[0]/tc[1]"].code, "declaration")
+        self.assertNotIn("b/tbl[0]/tr[0]/tc[2]", places)
+        date = next(f for f in w.inspect(saved(doc))["fields"] if f["kind"] == "date")
+        self.assertFalse(date.get("write_protected"))
+
+
+class RefutedReadings(unittest.TestCase):
+    """F3, F4, F8, F10, R3-H1, R3-H2, R3-H3, R3-M2, R3-M3, R3-L2: the readers, by structure."""
+
+    def test_F3_first_person_declarations_in_every_shape_are_held(self):
+        for line in ("I ____________________ (full name) consent to the procedure described above.",
+                     "To the best of my knowledge I confirm that the information above is correct: ____________",
+                     "Having read the leaflet I agree to proceed: ____________",
+                     "The information I have provided is accurate: ____________",
+                     "To the best of my knowledge I confirm the above is correct: ____________",
+                     "I CONFIRM THAT THE INFORMATION ABOVE IS CORRECT: ____________",
+                     "I confirm that the information above is correct: ____________"):
+            with self.subTest(line=line):
+                data = lines_form("Patient declaration", line)
+                self.assertEqual(held(data)["b/p[1]"].code, "declaration")
+                self.assertTrue(all(f.get("write_protected") for f in w.inspect(data)["fields"]
+                                    if f["locator"]["slot"].startswith("b/p[1]") and f["kind"] not in w.SIGNING_KINDS))
+        doc = Document(); doc.add_paragraph("Patient declaration")
+        paragraph = doc.add_paragraph("I ")
+        sdt = OxmlElement("w:sdt"); properties = OxmlElement("w:sdtPr"); alias = OxmlElement("w:alias")
+        alias.set(qn("w:val"), "Full name"); properties.append(alias); properties.append(OxmlElement("w:text"))
+        content = OxmlElement("w:sdtContent"); run = OxmlElement("w:r"); t = OxmlElement("w:t"); t.text = "Click here to enter text."
+        run.append(t); content.append(run); sdt.append(properties); sdt.append(content); paragraph._p.append(sdt)
+        paragraph.add_run(" confirm that the information I have given is correct.")
+        self.assertEqual(held(saved(doc))["b/p[1]"].code, "declaration")
+
+    def test_a_first_person_statement_answered_by_a_selection_stays_held(self):
+        # Released only where the answer completes the statement with text (R3-H2); a statement the declarant answers by
+        # ticking stays a declaration, on its own line or with the boxes on the next line (no weakening of be5fba45).
+        for lines in (("I agree to: \u2610 photographs \u2610 teaching",), ("I agree to:", "\u2610 photographs \u2610 teaching"),
+                      ("Consent (I agree to the operation): \u2610",)):
+            with self.subTest(lines=lines):
+                places = held(lines_form("Plan: ______", *lines))
+                for n in range(len(lines)):
+                    self.assertEqual(places["b/p[%d]" % (n + 1)].code, "declaration")
+        for answer in ("\u2610", "\u2610 photographs \u2610 teaching"):
+            with self.subTest(row=answer):
+                doc = Document(); doc.add_paragraph("Consent to teaching")
+                table = doc.add_table(rows=1, cols=2)
+                table.cell(0, 0).text = "I agree to"
+                table.cell(0, 1).text = answer
+                self.assertEqual(held(saved(doc))["b/tbl[0]/tr[0]/tc[1]"].code, "declaration")
+        # Control: the same row answered in words stays an ordinary answer ('We recommend review in | ____').
+        doc = Document(); doc.add_paragraph("Plan")
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = "We recommend review in"
+        self.assertNotIn("b/tbl[0]/tr[0]/tc[1]", held(saved(doc)))
+
+    def test_R3_H1_H2_numerals_asides_conditions_and_completed_statements_stay_ordinary(self):
+        for line in ("NYHA class: I, II, III, IV __________", "Tear grade (I, II, III): __________",
+                     "ST elevation in leads: I, II, III __________", "Heart block type: I or II __________",
+                     "Mobitz (I or II): __________", "I and D of abscess: __________", "Diabetes: Type I diabetes __________",
+                     "Diabetes:\tType I\tType II\t__________", "Grade:\tI\tII\tIII\t__________",
+                     "Allergies (so we can keep you safe): __________", "We recommend review in: __________",
+                     "If we need to contact you, telephone: __________", "I reviewed this patient in clinic on __________.",
+                     "If we need to contact you, telephone: \u2610 mobile \u2610 landline",
+                     "Allergies (so we can keep you safe): \u2610 None known"):
+            with self.subTest(line=line):
+                data = lines_form("Presenting complaint: __________", line)
+                self.assertNotIn("b/p[1]", held(data))
+                self.assertFalse(any(f.get("write_protected") for f in w.inspect(data)["fields"]))
+
+    def test_F4_R3_H3_the_signing_act_and_the_clinical_sign(self):
+        for caption in ("Sign & date", "Signature, date", "Signature, name and date", "Signature/stamp/date",
+                        "Signature (and date)", "Sign, date and time", "Doctor sign/date", "Nurse sign", "Sign & print name",
+                        "eSignature", "Sig\u00adnature", "Signa\u200bture"):
+            with self.subTest(caption=caption):
+                data = lines_form("Plan: ______", caption + ": ____________")
+                self.assertEqual(held(data)["b/p[1]"].code, "signing")
+                self.assertEqual(w.kind_for_label(caption), "signature")
+        for caption, kind in (("Sign(s) of infection", "text"), ("Sign present", "text"), ("SIGN PRESENT", "text"),
+                              ("Signature da\u00adte", "date"), ("Da\u00adte signed", "date"),
+                              ("Murphy's sign", "text"), ("Sign elicited", "text"),
+                              ("Sign language interpreter required", "text"), ("Sign and symptom review", "text"),
+                              ("Sign of infection", "text"), ("Vital signs", "text"), ("Signs and symptoms", "text"),
+                              ("Signature date", "date"), ("Date signed", "date"), ("Date of signature", "date")):
+            with self.subTest(caption=caption):
+                self.assertEqual(w.kind_for_label(caption), kind)
+                self.assertNotIn("b/p[1]", held(lines_form("Plan: ______", caption + ": ____________")))
+        for header in ("Sign & date", "Nurse sign"):
+            with self.subTest(header=header):
+                doc = Document(); doc.add_paragraph("Administration record")
+                table = doc.add_table(rows=3, cols=4)
+                for column, text in enumerate(("Drug", "Dose", "Time", header)):
+                    table.cell(0, column).text = text
+                data = saved(doc)
+                field = next(f for f in w.inspect(data)["fields"] if f["kind"] == "table_rows")
+                with self.assertRaises(w.V3Failure) as refused:
+                    w.fill(data, [field], {field["key"]: [["Paracetamol", "1 g", "08:00", "SYNTHETIC-SIG"]]})
+                self.assertEqual(refused.exception.code, "held_place")
+                w.fill(data, [field], {field["key"]: [["Paracetamol", "1 g", "08:00", ""]]})
+
+    def test_F8_a_consent_declaration_in_a_patient_section_is_never_answered_under_its_policy(self):
+        data = lines_form("Pre-operative questionnaire", "Completed by the patient:",
+                          "I consent to the procedure described above: ____________", "I have read the leaflet: ____________")
+        fields = {f["label"]: f for f in w.inspect(data)["fields"]}
+        consent = fields["I consent to the procedure described above"]
+        self.assertTrue(consent.get("write_protected"))
+        self.assertEqual(consent["review_reason"], w.HELD_REASONS["attestation"])
+        package = w.open_package(data)
+        source = w.Detector(package, layout_proposal=True); source.detect()
+        authority = w.held_places(package, source)
+        stored = {**consent, "write_protected": False}
+        found = w.held_violation(source.index, authority, stored)
+        self.assertEqual(found[1].code, "attestation")         # what the patient-source policy does not cover
+        # A statement the patient REPORTS stays answerable under the printed patient-source policy.
+        reported = fields["I have read the leaflet"]
+        self.assertIsNone(w.held_violation(source.index, authority, {**reported, "write_protected": False}))
+
+    def test_R3_M2_M3_L2_consent_is_read_by_the_same_readers_in_a_box_and_on_a_line(self):
+        for title in ("Minor surgery consent and procedure record", "Procedure, consent and signature record"):
+            with self.subTest(title=title):
+                # The box's own section is its innermost heading; an outer title (even one naming signing) is not.
+                doc = Document()
+                doc.add_paragraph(title, style="Heading 1")
+                doc.add_paragraph("Wound review", style="Heading 2")
+                doc.add_paragraph("Please describe the wound?")
+                bordered_box(doc)
+                self.assertNotIn("b/tbl[0]/tr[0]/tc[0]", held(saved(doc)))
+        for caption in ("Consent obtained by (name and grade):", "Consent obtained - state who explained the risks:",
+                        "Consent obtained - state that the risks were explained:",
+                        "Patient consented and said that the pain had settled:"):
+            with self.subTest(caption=caption):
+                doc = Document(); doc.add_paragraph("Procedure record"); doc.add_paragraph(caption); bordered_box(doc)
+                self.assertNotIn("b/tbl[0]/tr[0]/tc[0]", held(saved(doc)))
+                self.assertNotIn("b/p[1]", held(lines_form("Procedure record", caption + " __________")))
+        self.assertEqual(held(lines_form("Procedure record", "Record that the patient consents to proceed: ______"))["b/p[1]"].code,
+                         "attestation")
+
+
+class RefutedExchange(unittest.TestCase):
+    """R3-M1, R2-F4: the isolated parser asks for every key a reader meets, and the readings never count against the
+    mapping and answer limit."""
+
+    def test_R3_M1_the_sandboxed_authority_equals_the_in_process_one_on_tab_and_break_lines(self):
+        import tempfile
+        from pathlib import Path
+        from .service import held_places
+        doc = Document()
+        doc.add_paragraph("Presenting complaint: __________")
+        doc.add_paragraph("Diabetes:\tType I\tType II\t__________")
+        doc.add_paragraph("Grade:\tI\tII\tIII\t__________")
+        paragraph = doc.add_paragraph("Stage I")
+        paragraph.add_run().add_break()
+        paragraph.add_run("Stage II: __________")
+        doc.add_paragraph("I confirm the plan:\t__________")
+        data = saved(doc)
+        with tempfile.TemporaryDirectory(prefix="held-exchange-") as directory:
+            path = Path(directory) / "form.docx"
+            path.write_bytes(data)
+            report = held_places(path)
+        self.assertEqual({row["slot"]: row["code"] for row in report["held"]}, {BODY + k: v.code for k, v in held(data).items()})
+        self.assertEqual(set(held(data)), {"b/p[4]"})
+
+    def test_a_key_met_without_a_reading_is_asked_for_and_only_the_last_round_reads_it_as_holding(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from . import engine
+        data = lines_form("Plan: ______", "Sign present: ______")
+        saved_readings = w.READINGS
+        try:
+            with tempfile.TemporaryDirectory(prefix="held-rounds-") as directory:
+                workspace = Path(directory)
+                (workspace / "input.docx").write_bytes(data)
+                request = {"operation": "held_places", "format": "docx", "engine": "v3", "mapping": None}
+                first = engine.process(workspace, request)
+                self.assertIn("s:Sign present", first["readings_needed"])
+                # Readings for nothing, nothing asked yet: the consulted keys are asked for, never defaulted.
+                (workspace / "readings.json").write_text(json.dumps({"readings": {}, "asked": []}))
+                again = engine.process(workspace, request)
+                self.assertIn("s:Sign present", again["readings_needed"])
+                # The last round reads an unread key as holding.
+                (workspace / "readings.json").write_text(json.dumps({"readings": {}, "asked": [], "final": True}))
+                last = engine.process(workspace, request)
+                self.assertIn(BODY + "b/p[1]", [row["slot"] for row in last["held"]])
+                # With the parent's reading the clinical sign is ordinary.
+                from .syntax_readings import read_clauses
+                readings, asked, response = {}, [], first
+                for _ in range(w.MAX_READING_ROUNDS):
+                    if "readings_needed" not in response:
+                        break
+                    readings.update({w.reading_digest(k): v for k, v in read_clauses(response["readings_needed"]).items()})
+                    asked += [w.reading_digest(k) for k in response["readings_needed"]]
+                    (workspace / "readings.json").write_text(json.dumps({"readings": readings, "asked": asked}))
+                    response = engine.process(workspace, request)
+                self.assertNotIn(BODY + "b/p[1]", [row["slot"] for row in response["held"]])
+        finally:
+            w.use_readings(saved_readings)
+
+    def test_R2_F4_readings_travel_beside_the_request_keyed_by_digest(self):
+        import json
+        import subprocess
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from . import service
+        seen = []
+        real = subprocess.run
+
+        def spy(command, *args, **kwargs):
+            workspace = Path(command[-1])
+            exchange = workspace / "readings.json"
+            seen.append(((workspace / "request.json").read_bytes(), exchange.read_bytes() if exchange.exists() else None))
+            return real(command, *args, **kwargs)
+        data = lines_form("Plan: ______", "Sign present: ______", "I confirm the plan: ______")
+        with tempfile.TemporaryDirectory(prefix="held-digest-") as directory:
+            path = Path(directory) / "form.docx"
+            path.write_bytes(data)
+            with patch.object(service.subprocess, "run", side_effect=spy):
+                service.held_places(path)
+        self.assertGreaterEqual(len(seen), 2)
+        self.assertEqual({request for request, _ in seen}, {seen[0][0]})       # the request never grows
+        self.assertNotIn("readings", json.loads(seen[0][0]))
+        exchange = json.loads(seen[-1][1])
+        self.assertTrue(exchange["readings"])
+        self.assertTrue(all(len(key) == 32 and all(c in "0123456789abcdef" for c in key) for key in exchange["readings"]))
+        self.assertNotIn("Sign present", seen[-1][1].decode())
 
 if __name__ == "__main__":
     unittest.main()

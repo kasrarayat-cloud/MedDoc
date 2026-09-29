@@ -22,6 +22,7 @@ from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 from docx import Document
 from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 from core import generation, mapping_assistance as mapping, mapping_wire as wire, v3_mapping
 from core.models import Encounter, Template, TemplateVersion
@@ -131,16 +132,20 @@ class ModelPath:
                     return [position, source.index(text), source.index(text) + len(text)]
         raise AssertionError(f'{text!r} is not printed at slot {sid}')
 
-    def respond(self, payload, changes, replace=(), verdicts=None):
+    def respond(self, payload, changes, replace=(), verdicts=None, dismiss=()):
+        # A coherent response: the slot a change writes at is covered, unless the case names it in `dismiss` (a proposal
+        # that also calls it not an answer contradicts itself - R2-F6).
         mapped = {slot for f in payload['fields'] for slot in f['slots']}
+        targets = {c[1] for c in changes} - set(dismiss)
+        covered = lambda n, row: n in targets or (n not in dismiss and v3_mapping.is_mapped(row['slot'], mapped))
         verdicts = verdicts or {}
         groups = {'k': [], 'r': list(replace), 'n': [], 'u': []}
         for n in range(len(payload['fields'])):
             if n not in replace:
                 groups[verdicts.get(n, 'k')].append(n)
         return {'f': groups,
-                's': {'c': [n for n, row in enumerate(payload['slots']) if v3_mapping.is_mapped(row['slot'], mapped)],
-                      'n': [n for n, row in enumerate(payload['slots']) if not v3_mapping.is_mapped(row['slot'], mapped)],
+                's': {'c': [n for n, row in enumerate(payload['slots']) if covered(n, row)],
+                      'n': [n for n, row in enumerate(payload['slots']) if not covered(n, row)],
                       'u': []},
                 'x': [list(c) for c in changes], 'e': False}
 
@@ -160,6 +165,19 @@ class ModelPath:
         self.assertEqual(len(rows), 1, result['review']['rejected_changes'])
         self.assertTrue(result['review']['unresolved'])
         return rows[0]
+
+    def outcome(self, version, compiled, response):
+        result = mapping.validate_proposal(version, compiled, copy.deepcopy(response))
+        review = {k: v for k, v in result['review'].items() if k != 'wire_response'}
+        return mapping.canonical({'fields': result['fields'], 'review': review})
+
+    def assertOrderIndependent(self, version, compiled, response):
+        outcomes = set()
+        for order in itertools.permutations(range(len(response['x']))):
+            permuted = {**response, 'x': [response['x'][n] for n in order]}
+            outcomes.add(self.outcome(version, compiled, permuted))
+        self.assertEqual(len(outcomes), 1)
+        return json.loads(outcomes.pop())
 
     def fills_into(self, version, field, answer='SYNTHETIC-ANSWER'):
         """What the engine's fill writes for a stored mapping holding `field` (refuses with DocumentError)."""
@@ -259,19 +277,6 @@ class R1R2AndLines(ModelPath, SimpleTestCase):
 class Independence(ModelPath, SimpleTestCase):
     """INDEPENDENCE-DESIGN: dependent changes are held together (never first-come), independent ones are adopted, and
     every permutation of the changes gives the same mapping and records."""
-
-    def outcome(self, version, compiled, response):
-        result = mapping.validate_proposal(version, compiled, copy.deepcopy(response))
-        review = {k: v for k, v in result['review'].items() if k != 'wire_response'}
-        return mapping.canonical({'fields': result['fields'], 'review': review})
-
-    def assertOrderIndependent(self, version, compiled, response):
-        outcomes = set()
-        for order in itertools.permutations(range(len(response['x']))):
-            permuted = {**response, 'x': [response['x'][n] for n in order]}
-            outcomes.add(self.outcome(version, compiled, permuted))
-        self.assertEqual(len(outcomes), 1)
-        return json.loads(outcomes.pop())
 
     def test_ORDER_DEPENDENT_two_additions_at_one_place_are_both_held_in_either_order(self):
         version = self.version('dep', dependent_form())
@@ -505,12 +510,130 @@ class RetainedEvidence(ModelPath, SimpleTestCase):
             mapping.validate_proposal(self.version_, self.compiled, broken)
 
 
+@override_settings(**SETTINGS)
+class RefutedModelPath(ModelPath, SimpleTestCase):
+    """The refutation round against be5fba45, on the model path: an answer place a caption governs (F1), a signing
+    column the engine misread (F2), a declaration in every shape (F3) and a declaration block's empty line (R2-F2) are
+    held; two selections on one option line (R2-F1) are dependent; one question in two contexts is two questions
+    (R2-F5); a change the same proposal dismisses is held (R2-F6)."""
+
+    def assertHeldChange(self, version, compiled, payload, change, **respond):
+        result = mapping.validate_proposal(version, compiled, self.respond(payload, [change], **respond))
+        row = self.assertNothingAdopted(version, result, change)
+        return result, row
+
+    def test_F1_F2_F3_additions_on_governed_answer_places_are_held(self):
+        doc = Document(); doc.add_paragraph('Authorisation', style='Heading 2'); doc.add_paragraph('Signature of consultant:')
+        doc.add_paragraph('_' * 30)
+        version = self.version('f1m2', saved(doc), drop=('signature', 'Answer'))
+        compiled, payload = self.compile(version)
+        _, row = self.assertHeldChange(version, compiled, payload, self.addition(payload, 'b/p[2]', 'text', 'Authorisation', (1,)))
+        self.assertIn(mapping.SIGNING_REASON, row['reason'])
+        doc = Document(); doc.add_paragraph('Sign-off')
+        table = doc.add_table(rows=3, cols=4)
+        for r, row_ in enumerate((('', 'Name', 'Signature', 'Date'), ('Nurse', '', '', ''), ('Doctor', '', '', ''))):
+            for c, value in enumerate(row_):
+                if value:
+                    table.cell(r, c).text = value
+        data = saved(doc)
+        engine = inspect_template_bytes(self, 'f2m1', data)
+        version = self.version('f2m1', data, fields=[f for f in engine if f['locator']['slot'] != 'b/tbl[0]/tr[1]/tc[2]'])
+        compiled, payload = self.compile(version)
+        self.assertHeldChange(version, compiled, payload, self.addition(payload, 'b/tbl[0]/tr[1]/tc[2]', 'text', 'Nurse', (2,)))
+        for line, label in (('I ____________________ (full name) consent to the procedure described above.', 'full name'),
+                            ('To the best of my knowledge I confirm that the information above is correct: ____________',
+                             'To the best of my knowledge')):
+            with self.subTest(line=line):
+                data = lines('Patient declaration', line)
+                version = self.version('f3m', data, fields=[])
+                compiled, payload = self.compile(version)
+                self.assertHeldChange(version, compiled, payload, self.addition(payload, 'b/p[1]', 'text', label, (0,)))
+
+    def test_R2_F2_an_addition_in_the_f5_declaration_block_after_its_table_is_held(self):
+        version = self.version('f5r2', frozen('f5_negative_controls'))
+        compiled, payload = self.compile(version)
+        _, row = self.assertHeldChange(version, compiled, payload,
+                                       self.addition(payload, 'b/p[6]', 'long_text', 'Declaration', (1,)))
+        self.assertIn(mapping.HELD_REASONS['declaration'], row['reason'])
+
+    def smoker_line(self):
+        doc = Document(); doc.add_paragraph('Smoker'); doc.add_paragraph('Smoker \u2610 Yes \u2610 No')
+        doc.add_paragraph('Plan: ______')
+        data = saved(doc)
+        fields = [f for f in inspect_template_bytes(self, 'smoker-line', data) if not f['locator']['slot'].startswith('b/p[1]')]
+        return self.version('smoker-line', data, fields=fields)
+
+    def box_at(self, payload, glyph, text):
+        sid = self.sid(payload, 'b/p[1]/glyphs')
+        return [-1, sid, wire.KINDS.index('checkbox'), *self.quote(payload, sid, text, (0,)), glyph]
+
+    def test_R2_F1_two_selections_on_one_option_line_are_held_together_and_a_second_beside_a_kept_one(self):
+        version = self.smoker_line(); compiled, payload = self.compile(version)
+        yes, no = self.box_at(payload, 0, 'Yes'), self.box_at(payload, 1, 'No')
+        result = self.assertOrderIndependent(version, compiled, self.respond(payload, [yes, no]))
+        self.assertEqual(result['fields'], version.fields)
+        rows = {tuple(r['wire']): r for r in result['review']['rejected_changes']}
+        self.assertEqual(set(rows), {tuple(yes), tuple(no)})
+        self.assertIn('D6 they select among the options printed on one line', rows[tuple(yes)]['reason'])
+        for change in (yes, no):                   # control: each alone is adopted
+            alone = mapping.validate_proposal(version, compiled, self.respond(payload, [change]))
+            self.assertEqual(len(self.adopted(alone)), 1, alone['review']['rejected_changes'])
+        # A second selection beside a KEPT one on the same line is held for the clinician.
+        first = self.adopted(mapping.validate_proposal(version, compiled, self.respond(payload, [yes])))[0]
+        kept = SimpleNamespace(**{**vars(version), 'fields': version.fields + [first]})
+        compiled, payload = self.compile(kept)
+        result = mapping.validate_proposal(kept, compiled, self.respond(payload, [self.box_at(payload, 1, 'No')]))
+        self.assertEqual(result['fields'], kept.fields)
+        row = result['review']['rejected_changes'][0]
+        self.assertEqual(row['depends_on'], [first['key']])
+        self.assertIn('already selects', row['reason'])
+
+    def test_R2_F5_one_question_asked_again_is_held_alone_as_in_a_pair(self):
+        # The f4 grid prints 'Describe any abnormality' in two rows: the engine's two fields already ask it. A model
+        # change asking it again is held for the clinician whether it arrives alone or beside another (be5fba45 held
+        # the pair and adopted each one alone).
+        version = self.version('f4r2f5', frozen('f4_exam_grid'))
+        compiled, payload = self.compile(version)
+        asking = sorted(f['key'] for f in version.fields if f['label'] == 'Describe any abnormality')
+        self.assertEqual(len(asking), 2)
+        first = self.addition(payload, 'b/tbl[1]/tr[1]/tc[0]/p[1]', 'long_text', 'Describe any abnormality')
+        second = self.addition(payload, 'b/tbl[1]/tr[5]/tc[0]/p[1]', 'long_text', 'Describe any abnormality')
+        result = self.assertOrderIndependent(version, compiled, self.respond(payload, [first, second]))
+        self.assertEqual(result['fields'], version.fields)
+        for change in (first, second):
+            alone = mapping.validate_proposal(version, compiled, self.respond(payload, [change]))
+            row = self.assertNothingAdopted(version, alone, change)
+            self.assertEqual(row['depends_on'], asking)
+            self.assertIn('D6 it asks the question', row['reason'])
+        # Control: a question the form does not already ask in that context is adopted.
+        other = self.addition(payload, 'b/tbl[1]/tr[1]/tc[0]/p[0]', 'long_text', 'Pulse findings')
+        self.assertEqual(len(self.adopted(mapping.validate_proposal(version, compiled, self.respond(payload, [other])))), 1)
+
+    def test_R2_F6_a_change_the_same_proposal_dismisses_is_held(self):
+        version = self.version('r2f6', lines('Plan: ______', 'History'))
+        compiled, payload = self.compile(version)
+        change = self.addition(payload, 'b/p[1]', 'long_text', 'History')
+        result, row = self.assertHeldChange(version, compiled, payload, change, dismiss=(self.sid(payload, 'b/p[1]'),))
+        self.assertIn('marks its destination', row['reason'])
+        self.assertTrue(any(r['slot'].endswith('#b/p[1]') for r in result['review']['unresolved']))
+        coherent = mapping.validate_proposal(version, compiled, self.respond(payload, [change]))
+        self.assertEqual([f['label'] for f in self.adopted(coherent)], ['History'])
+
+
+def inspect_template_bytes(case, name, data):
+    path = private_path(f'originals/{name}.docx'); path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(data)
+    return inspect_template(path, engine='v3')['fields']
+
+
 class IdentityRule(SimpleTestCase):
-    """ENGINE-DETERMINISTIC-GAPS (f): the identity rule recognises the signer by structure, not a list of roles."""
+    """ENGINE-DETERMINISTIC-GAPS (f), F5, R3-L1: the identity rule recognises the CLINICIAN as the signer - a clinical
+    role with up to two qualifying words ('Signature of examining clinician', 'Consultant signature') - and never another
+    person named in the same shape: that stays a held signature place, completed by hand."""
 
     def test_signer_phrases_are_identity_and_date_questions_are_not(self):
-        for label in ('Signature of examining clinician', 'Consultant signature', 'Nurse signature', 'Signed by',
-                      'Electronically signed by', 'Signature of the physician', "Doctor's signature"):
+        for label in ('Signature of examining clinician', 'Consultant signature', 'Signed by', 'Electronically signed by',
+                      'Signature of the physician', "Doctor's signature", "Supervising consultant's signature",
+                      'Signed by the reviewing doctor'):
             with self.subTest(label=label):
                 self.assertTrue(signature_label(label))
                 self.assertTrue(clinician_identity({'label': label}))
@@ -518,6 +641,20 @@ class IdentityRule(SimpleTestCase):
                       'Patient signature', 'Signature of patient', 'Witness signature', 'Signed by (witness)', 'Date signed'):
             with self.subTest(label=label):
                 self.assertFalse(signature_label(label))
+
+    def test_F5_R3_L1_another_persons_signature_is_never_the_clinicians_identity(self):
+        actor = SimpleNamespace(pk=7, email='alpha@example.invalid', get_full_name=lambda: 'Synthetic Alpha Clinician')
+        from core.tab_review import validate_identity
+        for label in ("Participant's signature", 'Signature of participant', 'Signature of person giving consent',
+                      "Mother's signature", 'Translator signature', 'Donor signature', 'Research subject signature',
+                      'Chaperone signature', 'Second checker signature', 'Supervisor signature', 'Trainee signature',
+                      'Signature of assessor', 'Signed by the student', 'Nurse signature'):
+            with self.subTest(label=label):
+                self.assertFalse(signature_label(label))
+                self.assertFalse(clinician_identity({'label': label}))
+                # validate_identity does not demand the finalizer's own name there (no false refusal).
+                validate_identity([{'key': 'k', 'label': label}],
+                                  {'k': {'text': 'Synthetic Mother', 'reviewed': True, 'reviewed_by': '7'}}, actor)
 
 
 @override_settings(**V3, QUILLMD_MAPPING_ASSISTANCE=False)
@@ -674,6 +811,47 @@ class EveryWriterAndReader(V3Fixture, TestCase):
         self.assertEqual(ordinary.status_code, 302)
 
 
+@override_settings(**SETTINGS)
+class ResolveAfterRemoval(V3Fixture, TestCase):
+    """R2-F3: the clinician's area decisions are judged against the mapping they save."""
+
+    def setUp(self):
+        super().setUp()
+        deny = patch('anthropic.Anthropic', side_effect=AssertionError('Unmocked provider construction is forbidden.'))
+        deny.start(); self.addCleanup(deny.stop)
+        getattr(v3_mapping, '_HELD_CACHE', {}).clear()
+
+    def test_R2_F3_a_record_is_never_resolved_mapped_onto_a_field_another_decision_removes(self):
+        template, version = self.uploaded(data=lines('Plan: ______', 'History: ______'), name='Synthetic resolve')
+        compiled = mapping.compile_request(version, generation.configuration())
+        payload = json.loads(compiled['request']['messages'][0]['content'])
+        plan = next(n for n, f in enumerate(payload['fields']) if f['label'] == 'Plan')
+        sid = next(n for n, row in enumerate(payload['slots']) if row['slot'].endswith('#b/p[0]'))
+        mapped = {slot for f in payload['fields'] for slot in f['slots']}
+        response = {'f': {'k': [n for n in range(len(payload['fields'])) if n != plan], 'r': [], 'n': [plan], 'u': []},
+                    's': {'c': [n for n, r in enumerate(payload['slots']) if v3_mapping.is_mapped(r['slot'], mapped)],
+                          'n': [n for n, r in enumerate(payload['slots']) if not v3_mapping.is_mapped(r['slot'], mapped)], 'u': []},
+                    'x': [[-1, sid, wire.KINDS.index('long_text'), payload['text_refs'].index([sid, 0, 0]), 0, 4, -1]], 'e': False}
+        result = mapping.validate_proposal(version, compiled, response)
+        proposed = TemplateVersion.objects.create(template=template, number=2, fields=result['fields'], contract='v3',
+                                                  created_by=self.user,
+                                                  assistance={**result['review'], 'job_id': 'synthetic', 'base_version': str(version.pk)})
+        records = proposed.assistance['unresolved']
+        self.assertEqual(sorted(bool(r.get('key')) for r in records), [False, True])
+        # The addition's record 'mapped' while the field that maps its place is removed: refused, nothing saved.
+        body = {'action': 'resolve', 'mapping_version': str(proposed.pk)}
+        for n, row in enumerate(records):
+            body['resolution_%d' % n] = 'not_answer' if row.get('key') else 'mapped'
+        refused = self.client.post(f'/templates/{template.pk}/assistance/', body)
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(self.latest(template).pk, proposed.pk)
+        # Control: keeping the field, the same 'mapped' decision is accepted.
+        for n, row in enumerate(records):
+            body['resolution_%d' % n] = 'mapped'
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/assistance/', body).status_code, 302)
+        self.assertEqual(self.latest(template).number, 3)
+
+
 @override_settings(**{**V3, 'QUILLMD_WORD_ENGINE': 'legacy'})
 class LegacyFill(V3Fixture, TestCase):
     """The legacy (non-v3) Word fill consults the same authority where it writes into the customer's file."""
@@ -698,3 +876,41 @@ class LegacyFill(V3Fixture, TestCase):
                               identity_keys=[by['Electronically signed by']['key']])
             self.assertEqual(refused.exception.code, 'held_place')
             self.assertFalse((Path(directory) / 'held.docx').exists())
+
+    def test_F5_legacy_fill_never_writes_the_clinicians_name_into_another_persons_signature_row(self):
+        for label in ("Participant's signature", 'Signature of person giving consent', 'Consultant signature'):
+            with self.subTest(label=label):
+                doc = Document(); doc.add_paragraph('Research consent record')
+                table = doc.add_table(rows=2, cols=2); table.cell(0, 0).text = 'Participant name'; table.cell(1, 0).text = label
+                with tempfile.TemporaryDirectory(prefix='legacy-identity-') as directory:
+                    path = Path(directory) / 'legacy.docx'; path.write_bytes(saved(doc))
+                    fields = inspect_template(path, engine='legacy')['fields']
+                    row = next(f for f in fields if f['label'] == label)
+                    keys = [f['key'] for f in fields if clinician_identity(f)]
+                    if label == 'Consultant signature':
+                        self.assertEqual(keys, [row['key']])
+                        fill_template(path, fields, {row['key']: 'Synthetic Alpha Clinician'}, Path(directory) / 'out.docx',
+                                      identity_keys=keys)
+                        continue
+                    self.assertEqual(keys, [])
+                    with self.assertRaises(DocumentError) as refused:
+                        fill_template(path, fields, {row['key']: 'Synthetic Alpha Clinician'}, Path(directory) / 'out.docx',
+                                      identity_keys=keys)
+                    self.assertEqual(refused.exception.code, 'held_place')
+
+    def test_F6_legacy_tab_line_under_a_signing_heading_is_held(self):
+        for heading in ('Patient signature', 'Sign & date'):
+            with self.subTest(heading=heading):
+                doc = Document(); doc.add_paragraph('Consent form'); doc.add_paragraph(heading, style='Heading 2')
+                line = OxmlElement('w:p'); run = OxmlElement('w:r'); properties = OxmlElement('w:rPr')
+                underline = OxmlElement('w:u'); underline.set(qn('w:val'), 'single'); properties.append(underline)
+                run.append(properties); run.append(OxmlElement('w:tab')); line.append(run)
+                doc.element.body.insert(len(doc.element.body) - 1, line)
+                with tempfile.TemporaryDirectory(prefix='legacy-heading-') as directory:
+                    path = Path(directory) / 'legacy.docx'; path.write_bytes(saved(doc))
+                    fields = inspect_template(path, engine='legacy')['fields']
+                    self.assertTrue(fields)
+                    with self.assertRaises(DocumentError) as refused:
+                        fill_template(path, fields, {fields[0]['key']: 'SYNTHETIC-ANSWER'}, Path(directory) / 'out.docx',
+                                      identity_keys=[f['key'] for f in fields if clinician_identity(f)])
+                    self.assertEqual(refused.exception.code, 'held_place')
