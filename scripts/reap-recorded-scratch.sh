@@ -2,7 +2,7 @@
 # ============================================================================
 # REAP RECORDED SCRATCH — shred ONLY what your ledger recorded, unchanged.
 #
-#   bash scripts/reap-recorded-scratch.sh [--retained <manifest>]... [--dry-run] <ledger> [<recorded path>...]
+#   bash scripts/reap-recorded-scratch.sh [--retained <manifest>]... [--dry-run] <dir>/<name>.ledger [<recorded path>...]
 #
 #   0 = every selected entry shredded (or already absent, or kept by retain)
 #   1 = one or more REFUSED or FAILED       2 = refused to start
@@ -14,21 +14,37 @@
 #
 # With no path arguments it reaps every entry of the ledger; with paths, only
 # those, each of which must be IN the ledger. It NEVER walks a directory: a
-# directory argument, or any path the ledger does not hold, is REFUSED. For each
-# entry it refuses unless ALL hold at the moment of shredding (details and honest
-# limits in scripts/lib/scratch_ledger.py):
+# directory argument, or any path the ledger does not hold, is REFUSED.
+#
+# It REFUSES TO START (exit 2) when any ledger line is not bound to the recorder
+# (its HMAC under <ledger>.key does not verify, or it is out of sequence), when
+# any --retained manifest line is not exactly one of the recognised forms, and
+# when any other *.ledger in the same directory cannot be read (retain is global
+# across that directory, so an unreadable sibling is CANNOT TELL).
+#
+# For each entry it refuses unless ALL hold at the moment of shredding (details
+# and honest limits in scripts/lib/scratch_ledger.py):
 #   * same realpath under /tmp/claude-<your uid>/, no symlink component anywhere,
 #     the leaf not a link (every directory opened O_NOFOLLOW from / down);
 #   * same device + inode + size + sha256 as recorded — never a sibling, never a
 #     replacement;
 #   * owned by you, link count 1 (never a shared hard link);
-#   * not recorded --retain; not listed, aliased or contained by any --retained
-#     manifest (one absolute path per line; sha256sum and `ls`-style lines work);
-#   * not tracked by git (the reap-session-scratch.sh refusal, kept);
-#   * not open, mapped, or holding a live process's working directory
-#     (/proc/*/fd, /proc/*/maps, /proc/*/cwd readable to you).
-# It overwrites through the VERIFIED file descriptor, checks shred's exit status
-# and that the content reads as zeros, BEFORE unlinking — never after.
+#   * not recorded --retain in ANY *.ledger of the directory, by path or by
+#     (device, inode, sha256); not listed, aliased or contained by any --retained
+#     manifest. A manifest line is EXACTLY a bare absolute path in normal form, or
+#     a sha256sum line ("<64 hex>  /path" or "<64 hex> */path"); "#" comment lines
+#     and empty lines are skipped; a trailing blank, a trailing comment, a size
+#     column, `ls -l` output, or a path that reaches nothing refuses the run;
+#   * not inside a .git directory or a bare repository, not tracked by git, and
+#     not where git cannot answer (any exit but 0/1 is CANNOT TELL);
+#   * not open or mapped by a live process, and no live process except this
+#     reaper's own caller chain works in its directory (/proc/*/fd, maps, cwd);
+#   * after those scans, still one link, same size/mtime/ctime, and the path
+#     walked again from / still reaches it; its directory is writable.
+# It overwrites through the VERIFIED inode (a read-only file of yours is made
+# owner-writable through that descriptor first, and put back if the shred
+# fails), checks shred's exit status and that the content reads as zeros, BEFORE
+# unlinking — never after.
 #
 # Every decision is appended to <ledger>.reap-log, beside the ledger OUTSIDE the
 # sandbox. The reaper never deletes, truncates or rewrites the ledger or the log.

@@ -1153,15 +1153,19 @@ exactly where it was.
 shredded 30 files other agents had written, and a second sweep shredded 6,537
 more, its own logs included. Every path was inside the sandbox, but the sandbox
 belongs to one uid shared by every agent, so "inside" does not mean "mine".
-**Record each disposable file when you create it** with
-`bash scripts/scratch-ledger.sh record --agent <session id> <ledger> <file>...`
-(`--retain` for evidence). Keep the ledger in a private directory OUTSIDE
-`/tmp/claude-<uid>/`. **Close out with
+**Record each disposable file in the step that makes it, once its last write is
+done** — `bash scripts/scratch-ledger.sh record --agent <session id> <dir>/<agent>.ledger <file>...`
+(`--retain` for evidence) — and **record it again after any later write**: the
+reaper refuses a file whose content changed since its latest record. Keep one
+private ledger directory per session OUTSIDE `/tmp/claude-<uid>/`, one `*.ledger`
+per agent; retain in any of them protects the file for all. **Close out with
 `bash scripts/reap-recorded-scratch.sh <ledger>`.** It shreds only recorded,
-unchanged, unshared, unopened and unretained files, and logs every decision.
+unchanged, unshared, unopened and unretained files, refuses a ledger any line of
+which the recorder did not write, and logs every decision.
 **Subagents use only that door.** `reap-session-scratch.sh` refuses more than 16
-paths, or a `find`/`xargs` driver, unless `REAP_SESSION_BULK_DECLARATION` says why.
-Full account: canon 123's 2026-09-29 amendment.
+paths per 5 minutes across calls, or a `find`/`xargs` driver, unless
+`REAP_SESSION_BULK_DECLARATION` says why. Full account: canon 123's 2026-09-29
+amendments.
 
 **Shred, then CHECK EXIT CODES, then escalate the failures — and only then
 remove the directory.** Unlinking before the failures are resolved converts a

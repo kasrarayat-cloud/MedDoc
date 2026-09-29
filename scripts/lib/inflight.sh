@@ -89,8 +89,15 @@ inflight_repo() {
 
 # Refuse a declaration that is a bypass token rather than a reason.
 #   0 = acceptable (or empty, i.e. no declaration offered), 1 = refuse
+#
+# ⚠️ COUNTED IN VISIBLE CHARACTERS, NOT IN LENGTH (2026-09-29). The length test
+# accepted twelve spaces — a declaration that says nothing and passes as prose,
+# echoed to the log as a blank. So the count is of PRINTABLE ASCII non-space
+# characters (0x21-0x7E), taken by `tr` in the C locale so no locale can widen it:
+# spaces, tabs, newlines, no-break and zero-width spaces all count ZERO. Other
+# characters may appear, but they never make up the twelve.
 inflight_declaration_ok() {
-  local decl="${1:-}"
+  local decl="${1:-}" visible
   [ -z "$decl" ] && return 0
   case "${decl,,}" in
     1|true|yes|y|on|force|skip)
@@ -98,8 +105,16 @@ inflight_declaration_ok() {
       echo "          An audit trail's why is somebody's words or nothing." >&2
       return 1 ;;
   esac
-  if [ "${#decl}" -lt 12 ]; then
-    echo "REFUSED — the declaration is ${#decl} chars; a declaration is prose." >&2
+  visible="$(printf '%s' "$decl" | LC_ALL=C tr -cd '\041-\176' | LC_ALL=C wc -c)" || visible=""
+  visible="${visible//[[:space:]]/}"
+  case "$visible" in
+    ''|*[!0-9]*)
+      echo "REFUSED — CANNOT TELL how many visible characters the declaration has." >&2
+      return 1 ;;
+  esac
+  if [ "$visible" -lt 12 ]; then
+    echo "REFUSED — the declaration has $visible visible characters (printable ASCII, not" >&2
+    echo "          counting spaces or blanks of any kind); a declaration is prose of at least 12." >&2
     return 1
   fi
   return 0

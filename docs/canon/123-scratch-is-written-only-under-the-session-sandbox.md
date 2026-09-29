@@ -83,3 +83,30 @@ is held by a live process. It never walks a directory. `reap-session-scratch.sh`
 now refuses more than 16 paths in one call, or a `find`/`xargs` driver, unless
 `REAP_SESSION_BULK_DECLARATION` says why. **Subagents close out with the
 recorded reaper, never with a sweep.**
+
+## ⚠️ CORRECTED 2026-09-29 (later the same day) — THE FIRST REAPER WAS REFUTED ON THIRTEEN COUNTS
+
+The amendment above is kept as written. A refutation pass over it confirmed
+thirteen defects, and four of its sentences were wrong in a way that matters:
+
+- **"More than 16 paths in one call, or a find/xargs driver" was a rule about
+  process NAMES.** `busybox xargs`, xargs run under another name, and
+  `xargs … setsid -f` each fed it 16 paths at a time with no declaration. The
+  bound is now counted **across calls** — per ledger for the recorder, per uid
+  for `reap-session-scratch.sh` — so at most 16 undeclared paths pass in any 5
+  minutes whatever drives them. A declaration now needs 12 **visible**
+  characters; twelve spaces had passed.
+- **"Record it when you create it" refused every file written afterwards.**
+  Record a file once its last write is done, and again after any later write.
+- **The reaper trusted any well-formed line.** Every line now carries an HMAC
+  under a key the recorder creates beside the ledger; one unbound line refuses
+  the whole ledger. Retain is global across the ledger directory, keyed on path
+  and on (device, inode, sha256).
+- **"Refuses … is tracked by git" failed open.** Git exiting 128, or a file
+  inside `.git` or a bare repository, was read as untracked. The old door also
+  shredded a file whose inode a local clone shares with its source; it now takes
+  only a regular file with one link.
+
+What this entry teaches is unchanged: the answer to *may I destroy this?* is
+fixed when the file is made. The correction is that each check written to
+enforce it was a claim until something tried to break it.
