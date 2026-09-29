@@ -238,7 +238,7 @@ def mapping_findings(graded, deterministic, relational=()):
         problems = row.get('problems') or []
         if any(problem.startswith(DESTINATION_PROBLEMS) for problem in problems):
             found('wrong_destination', row['id'], 'a wrong destination is left un-held: ' + '; '.join(problems))
-        elif before.get(row['id']) != 'wrong' and not all(p.startswith(SAFE_DIRECTION_PROBLEMS) for p in problems):
+        elif before.get(row['id']) != 'wrong' and not any(p.startswith(SAFE_DIRECTION_PROBLEMS) for p in problems):
             found('harmful_change_unreviewed', row['id'],
                   'the proposal made this area wrong (deterministically ' + str(before.get(row['id'])) + ') and no '
                   'review record reaches the field: ' + '; '.join(problems))

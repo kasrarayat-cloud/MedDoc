@@ -116,6 +116,13 @@ class MappingFindingTests(unittest.TestCase):
         # (made non-answerable is the safe direction: a usefulness loss, never a stop)
         safe = graded([{'id': 'A1', 'outcome': 'wrong', 'problems': ['not answerable (write_protected=True, kind=text)']}])
         self.assertEqual(self.codes(safe), [])
+        # (the grader reports a field made non-answerable WITH the consequences it implies, such as the kind it no
+        # longer has; a field nobody can answer cannot carry a wrong answer, so those companions do not make it a stop —
+        # refutation F2, which found f6b's all-missing form stopping the stage this way)
+        companions = graded([{'id': 'A1', 'outcome': 'wrong', 'problems': [
+            'kind none, expected long_text (accepted [\'long_text\', \'text\'])',
+            'not answerable (write_protected=True, kind=none, reason=\'not an answer\')']}])
+        self.assertEqual(self.codes(companions), [])
 
     def test_a_wrong_destination_left_unheld_stops_even_when_the_deterministic_mapping_had_it(self):
         for problem in ('anchored at b/p[1], expected the answer paragraph b/p[2]', 'anchored on preserved text at b/p[1]',
