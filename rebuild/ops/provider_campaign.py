@@ -1749,14 +1749,16 @@ CONTRACT_FINDINGS = frozenset(('wrong_served_model', 'stop_reason_not_end_turn',
 #: recorded per item. Held, missing, over-held and refused answers are the product declining to guess — measured, never
 #: a stop ('held_unadjudicated': a hold of an UNLISTED model selection on a field that may be supported — the frozen
 #: README's scoring never auto-scores an unlisted response, so it is neither a correct hold nor an over-hold until it
-#: is adjudicated by hand). The outcomes in IMPLIED_FINDINGS ARE unsafe output: each carries its unsafe finding, so a case cannot record
+#: is adjudicated by hand; 'model_relation_disagreement': a field desired supported that the application held because
+#: the MODEL's own selection disagrees with its own relations — the model's contradiction caught, never an application
+#: over-hold). The outcomes in IMPLIED_FINDINGS ARE unsafe output: each carries its unsafe finding, so a case cannot record
 #: one without stopping. 'wrong' (a kept deterministic mapping defect) carries none: the runner adds a finding when it is
 #: a wrong destination or a change the proposal made.
 FIELD_OUTCOMES = frozenset((
     'adopted', 'held', 'missing', 'refused',
     'right', 'held_safe', 'wrong', 'missed', 'false_field', 'false_field_held',
     'supported_correct', 'held_correct', 'over_held', 'usefulness_loss', 'recorded_not_asserted', 'supported_incomplete',
-    'clinician_correction', 'held_unadjudicated',
+    'clinician_correction', 'held_unadjudicated', 'model_relation_disagreement',
     'unsupported_accepted', 'wrong_side_adopted', 'wrong_denial_adopted', 'contradiction_adopted'))
 IMPLIED_FINDINGS = {'unsupported_accepted': 'adopted_without_source_support', 'wrong_side_adopted': 'wrong_side',
                     'wrong_denial_adopted': 'wrong_denial', 'contradiction_adopted': 'contradiction_adopted',

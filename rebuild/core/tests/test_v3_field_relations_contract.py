@@ -412,6 +412,119 @@ class DisagreementHolds(SimpleTestCase):
 
 
 @override_settings(**RELATIONS)
+class ClaimedUnitsCompete(SimpleTestCase):
+    """A field's CLAIM on a statement is every unit it selected plus every unit its relations call its answer or a
+    qualifier (v3_field_relations.claimed). What competes between two repeated questions, or two numbered slots, is the
+    claim: a field that calls a statement its answer without selecting it (a disagreement, held since dfde4fc8) claims
+    it exactly as if it had selected it, so the field that DID select it is held as it is when both select it.
+    (Refutation of dfde4fc8, F1 and F2: the competitor exclusion and the numbered-slot hold read unit_ids only, so the
+    selecting field was adopted beside the claim; 691e27d0 had refused the whole response.)"""
+    NOTES = 'The patient reports flashing zigzag lines.'
+
+    @staticmethod
+    def entry(unit_ids, relation, conflict=False):
+        return {'unit_ids': unit_ids, 'conflict': conflict, 'context': {'1': relation}}
+
+    def respond(self, fields, notes, entries):
+        answers = r.validated(raw_result(notes, fields, json.dumps({'fields': entries})))
+        return answers, {k: (v['status'], v['text']) for k, v in answers.items()}
+
+    def forged_is_governed(self, notes, fields, answers, key):
+        """A forged `supported` copy of `key` that keeps its stored record: governed on the page, save and finalize."""
+        asked, context, _ = g.v3_generation_fields(fields)
+        units = g.source_units(notes, asked, context_labels=context)[0]
+        selection = signing.loads(answers[key]['ordinary_relation'], salt=r.SALT)['selection']
+        chosen = [u for u in units if u['id'] in selection['unit_ids']]
+        forged = {**answers[key], 'status': 'supported', 'text': '\n'.join(u['quote'] for u in chosen),
+                  'evidence': [{k: u[k] for k in ('quote', 'start', 'end')} for u in chosen]}
+        forged.pop('held_candidate', None)
+        label = next(f['label'] for f in fields if f['key'] == key)
+        return label in g.governed_decisions(notes, fields, {**answers, key: forged})
+
+    def test_claimed_is_the_selection_plus_every_answer_and_qualifier_relation(self):
+        units = [{'id': i} for i in (1, 2, 3, 4, 5)]
+        item = r.FieldSelection(key='f', unit_ids=[4, 2], conflict=False, option_ids=[],
+                                context=['answer', 'contrary', 'qualifier', 'independent', 'unresolved'])
+        self.assertEqual(r.claimed(item, units), [1, 2, 3, 4])      # (source order; a veto is not a claim)
+        clean = r.FieldSelection(key='f', unit_ids=[2], conflict=False, option_ids=[],
+                                 context=['independent', 'answer', 'independent', 'independent', 'contrary'])
+        self.assertEqual(r.claimed(clean, units), [2])              # (an agreeing answer: the claim IS the selection)
+
+    def test_a_repeated_question_that_claims_what_another_selected_holds_both(self):
+        # refute-1:F1 input, verbatim: sensation selects unit 1; prodrome calls unit 1 its answer and selects nothing.
+        from .test_v3_field_relations import repeated
+        fields = repeated()
+        for name, entries in (
+                ('the sibling claims it as an answer (refute-1:F1)',
+                 {'sensation': self.entry([1], 'answer'), 'prodrome': self.entry([], 'answer')}),
+                ('the other direction', {'sensation': self.entry([], 'answer'), 'prodrome': self.entry([1], 'answer')}),
+                ('the sibling claims it as a qualifier',
+                 {'sensation': self.entry([1], 'answer'), 'prodrome': self.entry([], 'qualifier')}),
+                ('the sibling claims it with conflict true',
+                 {'sensation': self.entry([1], 'answer'), 'prodrome': self.entry([], 'answer', conflict=True)}),
+                ('the consistent double selection (the rule the claim now follows)',
+                 {'sensation': self.entry([1], 'answer'), 'prodrome': self.entry([1], 'answer')})):
+            with self.subTest(name=name):
+                answers, got = self.respond(fields, self.NOTES, entries)
+                self.assertEqual(got, {'sensation': ('conflict', ''), 'prodrome': ('conflict', '')})
+                # every record carries every competitor's CLAIM, and a forged supported copy of the question that
+                # selected the statement (keeping its record) is governed on the page, save and finalize reader
+                for key in ('sensation', 'prodrome'):
+                    stored = signing.loads(answers[key]['ordinary_relation'], salt=r.SALT)
+                    self.assertEqual(stored['competing_output'], {'sensation': [1], 'prodrome': [1]})
+                    if entries[key]['unit_ids']:
+                        self.assertTrue(self.forged_is_governed(self.NOTES, fields, answers, key))
+        # controls: a sibling that does NOT claim the statement leaves the selecting question adopted (no false hold)
+        for relation in ('independent', 'contrary', 'unresolved'):
+            with self.subTest(sibling=relation):
+                answers, got = self.respond(fields, self.NOTES, {'sensation': self.entry([1], 'answer'),
+                                                                 'prodrome': self.entry([], relation)})
+                self.assertEqual(got['sensation'], ('supported', self.NOTES))
+                self.assertEqual(g.governed_decisions(self.NOTES, fields, answers), [])
+
+    def test_two_comments_questions_one_claiming_what_the_other_selected_hold_both(self):
+        # refute-2:F2 input, verbatim: two 'Comments:' questions under Diet and Exercise.
+        first, second = field('v3_1', 'Comments:'), field('v3_2', 'Comments:')
+        first['context'] = 'Diet > What does the patient eat?'
+        second['context'] = 'Exercise > What exercise does the patient do?'
+        fields = [first, second]
+        notes = 'The patient eats vegetables every day.\n\nThe patient swims twice a week.'
+        claim = {'unit_ids': [], 'conflict': False, 'context': {'1': 'independent', '2': 'answer'}}
+        chosen = {'unit_ids': [2], 'conflict': False, 'context': {'1': 'independent', '2': 'answer'}}
+        answers, got = self.respond(fields, notes, {'v3_1': chosen, 'v3_2': claim})
+        self.assertEqual(got, {'v3_1': ('conflict', ''), 'v3_2': ('conflict', '')})  # (was: v3_1 supported, swims)
+        self.assertTrue(self.forged_is_governed(notes, fields, answers, 'v3_1'))
+        # control: the sibling calls the statement independent -> the selecting question is adopted
+        answers, got = self.respond(fields, notes, {'v3_1': chosen, 'v3_2': {**claim, 'context': {'1': 'independent',
+                                                                                             '2': 'independent'}}})
+        self.assertEqual(got['v3_1'], ('supported', 'The patient swims twice a week.'))
+
+    def test_a_numbered_slot_that_claims_what_another_slot_selected_holds_the_selecting_slot(self):
+        # refute-1:F2 input, verbatim: 'Diagnosis - 1' calls the statement its answer and selects nothing,
+        # 'Diagnosis - 2' selects it. The numbered-slot rule now reads the claim, as it reads a selection.
+        fields = [field('d1', 'Diagnosis - 1'), field('d2', 'Diagnosis - 2')]
+        notes = 'The patient has type 2 diabetes.'
+        for name, entries, expected in (
+                ('slot 1 claims, slot 2 selects (refute-1:F2)',
+                 {'d1': self.entry([], 'answer'), 'd2': self.entry([1], 'answer')},
+                 {'d1': ('conflict', ''), 'd2': ('conflict', '')}),
+                ('slot 1 claims it as a qualifier, slot 2 selects',
+                 {'d1': self.entry([], 'qualifier'), 'd2': self.entry([1], 'answer')},
+                 {'d1': ('conflict', ''), 'd2': ('conflict', '')}),
+                # parity with the consistent double selection, which the numbered rule resolves in form order: the
+                # earlier slot's selection stands and the later slot is held, whether the later slot selects or claims
+                ('both select (the unchanged rule)', {'d1': self.entry([1], 'answer'), 'd2': self.entry([1], 'answer')},
+                 {'d1': ('supported', notes), 'd2': ('conflict', '')}),
+                ('slot 1 selects, slot 2 claims', {'d1': self.entry([1], 'answer'), 'd2': self.entry([], 'answer')},
+                 {'d1': ('supported', notes), 'd2': ('conflict', '')}),
+                ('control: slot 1 calls it independent', {'d1': self.entry([], 'independent'),
+                                                          'd2': self.entry([1], 'answer')},
+                 {'d1': ('missing', ''), 'd2': ('supported', notes)})):
+            with self.subTest(name=name):
+                self.assertEqual(self.respond(fields, notes, entries)[1], expected)
+
+
+@override_settings(**RELATIONS)
 class VersionedArtifacts(SimpleTestCase):
     """v1 records, queued jobs, configurations and raw results refuse at their own gates; nothing reads them as v2."""
 

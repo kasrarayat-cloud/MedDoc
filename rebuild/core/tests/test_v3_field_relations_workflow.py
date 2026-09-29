@@ -280,7 +280,15 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
                           'The patient is not on diazepam or methadone.'])
         encounter, job = self.generate_with(version, notes, text)
         self.assertEqual(job.state, 'succeeded', job.error)                    # (before: failed, 'disagree')
-        self.assertNotEqual(Reservation.objects.get(job=job).state, 'held')
+        # SETTLED AND CHARGED, not failed and absorbed (refutation of dfde4fc8, F5: "the reservation is not held" is true
+        # of both — the failed job's usage was settled too, and absorbed). A succeeded job carries exactly one usage
+        # debit equal to its charge, and no absorption.
+        from core.models import LedgerEntry
+        self.assertEqual(Reservation.objects.get(job=job).state, 'settled')
+        usage = Usage.objects.get(job=job)
+        self.assertGreater(usage.charged_cost, 0)
+        self.assertEqual([(e.kind, e.amount) for e in LedgerEntry.objects.filter(job=job)],
+                         [('usage', -usage.charged_cost)])
         self.assertEqual({k: (v['status'], v['text']) for k, v in encounter.answers.items()},
                          {keys[0]: ('conflict', ''), keys[1]: ('conflict', '')})
         self.assertTrue(all(v.get('ordinary_relation') for v in encounter.answers.values()))
@@ -327,19 +335,44 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
         held = encounter.answers[allergies]
         forged = {**{k: v for k, v in held.items() if k != 'held_candidate'}, 'status': 'supported', 'text': first,
                   'reviewed': True, 'evidence': [{'quote': first, 'start': 0, 'end': len(first)}]}
-        encounter.answers = {**encounter.answers, allergies: forged}
+        # Activity is reviewed too, so NOTHING but the Allergies record can refuse finalization (refutation of
+        # dfde4fc8, F4: Activity was left unreviewed, so the first finalization was refused for that unrelated field
+        # and passed with the disagreement check removed).
+        encounter.answers = {**encounter.answers, allergies: forged,
+                             activity: {**encounter.answers[activity], 'reviewed': True}}
         encounter.save()
         self.assertContains(self.client.get(f'/encounters/{encounter.pk}/'), 'data-held-candidate')
+        from django.contrib.messages import get_messages
+        governed = ('These answers were read from lines that a heading or a sentence in the notes may change, and '
+                    'still need your decision: Allergies.')
         for save in (False, True):
-            if save:
-                self.client.post(f'/encounters/{encounter.pk}/save/', {'revision': encounter.revision,
-                    'answer_' + allergies: first, 'reviewed_' + allergies: 'on',
-                    'answer_' + activity: second, 'reviewed_' + activity: 'on'})
+            with self.subTest(stale_save=save):
+                if save:
+                    # A stale page (opened before the field was shown held: no `held_shown_` marker) re-posts the
+                    # pre-filled text. That is not the clinician's decision: the save is accepted as an edit of nothing,
+                    # the answer stays the forged `supported` copy WITH its record, and finalization still refuses it.
+                    revision = encounter.revision
+                    response = self.client.post(f'/encounters/{encounter.pk}/save/', {'revision': revision,
+                        'answer_' + allergies: first, 'reviewed_' + allergies: 'on',
+                        'answer_' + activity: second, 'reviewed_' + activity: 'on'})
+                    self.assertEqual(response.status_code, 302)
+                    self.assertIn('Edits saved. Review every answer before finalizing.',
+                                  [str(m.message) for m in get_messages(response.wsgi_request)])
+                    encounter.refresh_from_db()
+                    self.assertEqual(encounter.revision, revision + 1)
+                    stored = encounter.answers[allergies]
+                    self.assertEqual((stored['status'], stored['text'], stored.get('reviewed')), ('supported', first, True))
+                    self.assertEqual(stored['ordinary_relation'], forged['ordinary_relation'])
+                    self.assertEqual(g.governed_decisions(notes, version.fields, encounter.answers), ['Allergies'])
+                response = self.client.post(f'/encounters/{encounter.pk}/finalize/',
+                                            {'revision': encounter.revision, 'reviewed': 'on'})
+                self.assertEqual(response.status_code, 302)
+                said = [str(m.message) for m in get_messages(response.wsgi_request)]
+                self.assertTrue(any(message.startswith(governed) for message in said), said)
+                self.assertFalse(any('Not yet reviewed' in message for message in said), said)
                 encounter.refresh_from_db()
-            self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'})
-            encounter.refresh_from_db()
-            self.assertNotEqual(encounter.status, 'finalized')
-            self.assertFalse(encounter.export_path)
+                self.assertNotEqual(encounter.status, 'finalized')
+                self.assertFalse(encounter.export_path)
 
     def test_forced_historical_wrong_side_cannot_pass_review_or_stale_save_or_finalize(self):
         source = ordinary_input_form(Path(self.directory.name) / 'wrong-side.docx', ['Right knee'])

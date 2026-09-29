@@ -989,7 +989,12 @@ BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114
 # 020); it records that field as returned, and read() refuses it through the new `disagrees` predicate (the same
 # refusal as before, proved equivalent over every selection and relation of up to four units). Only disagrees, records
 # and read changed; compile_request, maximum_cost, generate, parse, response_schema and response_bound are AST-identical.
-ORDINARY_PRICED_SHA256 = 'ccfe1a5147f81eb8b7496a596ccc14a222a1e12b742d9cea87d19c51d93d9f29'
+# The claimed-units addendum (fix/v1-relations-contract; was ccfe1a51…): a field's CLAIM (`claimed`: its selection plus
+# every unit its relations call answer or qualifier) is what records() stores in competing_output and read() compares
+# between competing repeated questions (refutation of dfde4fc8, F1/F2). Only claimed (added), records and read changed;
+# compile_request, maximum_cost, generate, parse, response_schema, response_bound, disagrees, validated, CONTRACT, SALT
+# and INSTRUCTIONS are AST-identical, so the priced wire is unchanged byte for byte.
+ORDINARY_PRICED_SHA256 = '51120e0a45e25883131964d277c93fa19fe1b61cf65eb4c5d0a9ed393022f1fd'
 
 
 def ordinary_module_proof(where):

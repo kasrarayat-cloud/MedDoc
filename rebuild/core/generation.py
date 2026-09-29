@@ -2920,6 +2920,18 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
            for unit,parsed in zip(units,parsed_units)] if v3 else []
     paragraph=paragraph_neighbours(notes,units,plain) if v3 else {}
     selected={item.key:item for item in selections.fields}
+    # ⚠️ A NUMBERED SLOT'S CLAIM COMPETES, NOT ONLY ITS SELECTION (refutation of dfde4fc8, F2): on the ordinary relations
+    # path a slot whose relations call a statement its answer or a qualifier without selecting it (a disagreement, held
+    # by its own record) claims that statement exactly as a selection does, so the numbered-slot hold below reads it:
+    # 'Diagnosis - 1' claiming what 'Diagnosis - 2' selected held only slot 1 and adopted slot 2. The rule stays the
+    # selection rule it was (form order: the earlier slot's statement stands, a later duplicate is held).
+    unselected_claims={}
+    if v3 and ordinary_records:
+        from .v3_field_relations import claimed
+        for key,other in selected.items():
+            relations=getattr(other,'context',None)
+            if key in ordinary_records and relations is not None and len(relations)==len(units):
+                unselected_claims[key]=[unit_id for unit_id in claimed(other,units) if unit_id not in set(other.unit_ids)]
     complete_paragraphs = {}
     if v3:
         groups, group = [], []
@@ -3003,6 +3015,14 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
             scoped['before'].update(history['ids']); scoped['after'].update(history['ids'])
             scoped['before'].update(ordinary['ids']); scoped['after'].update(ordinary['ids'])
             scoped['ordinary_syntax'] = ordinary.get('syntax_ids', set())
+        numbered_group=re.sub(r'\s+[—–-]\s+\d+$','',label)
+        if numbered_group!=label and unselected_claims.get(item.key):
+            # (the claim registers as a selection would; this slot is already held by its own record's disagreement)
+            used=used_numbered.setdefault(numbered_group,{})
+            for unit_id in unselected_claims[item.key]:
+                claim_quote=by_id[unit_id]['quote']
+                if claim_quote in used and used[claim_quote]!=item.key: guarded=True
+                else: used.setdefault(claim_quote,item.key)
         if v3 and (item.key in complete_paragraphs or scoped['complete'] or history['ids'] or ordinary['ids']):
             choices=sorted(choices, key=lambda unit: unit['start'] if isinstance(unit,dict) else allowed[unit][0]['start'])
         for choice in choices:
