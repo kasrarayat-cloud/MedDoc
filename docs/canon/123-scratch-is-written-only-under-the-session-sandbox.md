@@ -58,3 +58,95 @@ version was available at that instant and never again.**
 
 The sibling entries are about detecting the artifact. This one is about not
 manufacturing it.
+
+## ⚠️ AMENDED 2026-09-29 — INSIDE THE SANDBOX IS NOT "MINE": RECORD IT WHEN YOU MAKE IT
+
+The measurement above — *11,490 files in one sweep, zero failures* — is kept,
+because it is exactly the shape that failed twice on 2026-09-29. A subagent ran
+`find <whole session scratchpad> -type f | xargs bash scripts/reap-session-scratch.sh`
+and shredded **30 files other agents had written**; the lead later swept the
+same scratchpad with `find … | xargs -0 -n 200 …` in three passes and shredded
+**6,537**, the cleanup's own lists and logs included. Zero failures is what a
+sweep reports when every per-path check passes, and none of those checks is
+OWNERSHIP: the sandbox belongs to one uid and is shared by every agent in it.
+
+So the write-time rule has a second half, answered at the same instant:
+**record the file as yours when you create it, and reap only what you recorded.**
+
+    bash scripts/scratch-ledger.sh record --agent <session id> [--retain] <ledger> <file>...
+    bash scripts/reap-recorded-scratch.sh [--retained <manifest>]... <ledger>
+
+The ledger and the reaper's log live OUTSIDE the sandbox in a private
+directory. The reaper takes only recorded entries and refuses any that changed
+path, inode, content, owner or link count, is retained, is tracked by git, or
+is held by a live process. It never walks a directory. `reap-session-scratch.sh`
+now refuses more than 16 paths in one call, or a `find`/`xargs` driver, unless
+`REAP_SESSION_BULK_DECLARATION` says why. **Subagents close out with the
+recorded reaper, never with a sweep.**
+
+## ⚠️ CORRECTED 2026-09-29 (later the same day) — THE FIRST REAPER WAS REFUTED ON THIRTEEN COUNTS
+
+The amendment above is kept as written. A refutation pass over it confirmed
+thirteen defects, and four of its sentences were wrong in a way that matters:
+
+- **"More than 16 paths in one call, or a find/xargs driver" was a rule about
+  process NAMES.** `busybox xargs`, xargs run under another name, and
+  `xargs … setsid -f` each fed it 16 paths at a time with no declaration. The
+  bound is now counted **across calls** — per ledger for the recorder, per uid
+  for `reap-session-scratch.sh` — so at most 16 undeclared paths pass in any 5
+  minutes whatever drives them. A declaration now needs 12 **visible**
+  characters; twelve spaces had passed.
+- **"Record it when you create it" refused every file written afterwards.**
+  Record a file once its last write is done, and again after any later write.
+- **The reaper trusted any well-formed line.** Every line now carries an HMAC
+  under a key the recorder creates beside the ledger; one unbound line refuses
+  the whole ledger. Retain is global across the ledger directory, keyed on path
+  and on (device, inode, sha256).
+- **"Refuses … is tracked by git" failed open.** Git exiting 128, or a file
+  inside `.git` or a bare repository, was read as untracked. The old door also
+  shredded a file whose inode a local clone shares with its source; it now takes
+  only a regular file with one link.
+
+What this entry teaches is unchanged: the answer to *may I destroy this?* is
+fixed when the file is made. The correction is that each check written to
+enforce it was a claim until something tried to break it.
+
+## ⚠️ CORRECTED AGAIN 2026-09-29 — ROUND 2 ON THE REPAIR: FIVE LOWS, AND A CAPABILITY LOSS NOBODY HAD WRITTEN DOWN
+
+The correction above is kept as written. A second refutation pass, over the
+repair itself, confirmed five more defects. All five refused too much or
+counted too early; none let a file be destroyed. Each is repaired, with a test
+that was red on the repair first:
+
+- **"Twelve visible characters" meant twelve ASCII characters.** A declaration
+  in Cyrillic, Persian or Chinese counted zero and every door refused it. A
+  visible character is now a letter, number, punctuation mark or symbol in any
+  script. Spaces of every kind, controls, zero-width and format characters, and
+  bytes that are not UTF-8 still count zero.
+- **The pre-push hook's typecheck skip kept its own length test.** It was a
+  second copy of the rule, so the repair never reached it, and twelve spaces
+  skipped the typecheck with a blank reason. It now uses the shared check,
+  before `gh` is consulted.
+- **`reap … | tail` in the file's directory refused every file.** `tail` is the
+  caller's own process, but it is the shell's child, not an ancestor, so the
+  exemption for the caller's working directory missed it. A pipeline member
+  now counts as the caller's own for that one check. It qualifies by being in
+  the reaper's session and joined to its stdio by a pipe made in that session.
+- **The recorder counted a call toward the sweep bound, then refused the whole
+  call** (a ledger that was not 0600, a missing key, an unbound line). Sixteen
+  paths refused this way locked the ledger for five minutes. The checks that
+  refuse a whole call now run first.
+- **The recorder took files the reaper will never take**: `.git/HEAD`, pack
+  files, tracked files. It now refuses them at record time, with the reaper's
+  reason.
+
+⚠️ **A CAPABILITY LOSS, HELD FOR THE OWNER (class b).** Before the first repair,
+`reap-session-scratch.sh` could shred a scratch clone's `.git` metadata.
+`docs/rebuild/v1/sonnet5-campaign/diagnostics/RECHECK.md` records "22 git
+metadata files plus HEAD" shredded that way, with exit 0. Since the repair,
+**no door does**. Both refuse any path with a `.git` component, because a local
+clone hard-links `.git/objects` to its source, and shredding the clone's copy
+overwrote the source in place. So every close-out now leaves a scratch clone's
+`.git` on disk. Nothing here decides whether that is accepted, or whether a
+door that can prove a clone's objects are its own is wanted. It is written
+here so the next close-out that finds a `.git` left behind finds the reason too.
