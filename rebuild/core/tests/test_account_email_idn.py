@@ -16,7 +16,7 @@ from unittest.mock import patch
 from django import forms as django_forms
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.test import Client, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -342,18 +342,28 @@ class AccountEmailAudit(TestCase):
         User.objects.create(username='after@synthetic.invalid', email='after@synthetic.invalid')
 
     def test_a_write_inside_the_audit_is_refused_by_the_database(self):
-        """The READ ONLY transaction is the mechanism, not a convention: a write attempted inside it fails."""
+        """The READ ONLY transaction is the mechanism, not a convention: a write attempted inside it fails, and fails as
+        PostgreSQL's read_only_sql_transaction (SQLSTATE 25006), not for any other reason. The write is one that succeeds
+        in an ordinary transaction (the positive control, below)."""
         from core.management.commands import account_email_audit as command
+        refusals = []
 
         def writing_counts(model, columns):
             if model is User:
-                User.objects.update(email='rewritten@synthetic.invalid')
+                try:
+                    User.objects.filter(email='leg@bücher.example').update(first_name='Rewritten')
+                except DatabaseError as error:
+                    refusals.append(getattr(error.__cause__, 'sqlstate', None))
+                    raise
             return {'rows': 0, 'non_ascii': 0, 'ascii_not_normalised': 0}
 
-        User.objects.create(username='leg@bücher.example', email='leg@bücher.example')
+        User.objects.create(username='leg@bücher.example', email='leg@bücher.example', first_name='Synthetic')
         output = io.StringIO()
         with patch.object(command, 'table_counts', writing_counts):
             with self.assertRaisesMessage(CommandError, 'account_email_audit_refused; nothing was written'):
                 call_command('account_email_audit', stdout=output)
+        self.assertEqual(refusals, ['25006'])
         self.assertEqual(output.getvalue(), '')
-        self.assertEqual(sorted(User.objects.values_list('email', flat=True)), ['issuer@synthetic.invalid', 'leg@bücher.example'])
+        self.assertEqual(User.objects.get(email='leg@bücher.example').first_name, 'Synthetic')
+        # Positive control: the same write outside the audit succeeds.
+        self.assertEqual(User.objects.filter(email='leg@bücher.example').update(first_name='Rewritten'), 1)
