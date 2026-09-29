@@ -14,6 +14,9 @@ Messages response; `network_guard` refuses every other socket. What each test pr
     one send, and no retained file carries the key;
   · each stop condition (wrong served model, max_tokens, output above 70%, metered `us`, reconciliation, a wrong
     destination) writes stage_failed, never stage_passed, and admits nothing afterwards;
+  · the export evidence (refutation R1): an EMPTY 200 export, an export that is not the finalized record's, and a
+    failed export request each write stage_failed; every declared evidence file must be retained, non-empty and
+    regular when the stage is decided, or it fails;
   · a precondition that does not hold (pricing, database, credential) refuses before any send;
   · no code path opens a `.env` file.
 """
@@ -308,6 +311,91 @@ else:
             self.assertIsNotNone(failed)
             self.assertIsNone(self.campaign.ledger.stage_record('model_check', 'passed'))
             self.assertTrue(any('not a succeeded generation' in reason for reason in failed['reasons']), failed['reasons'])
+
+        # ── the export evidence (refutation R1: an EMPTY export used to pass, with no export retained) ─────────────
+        def test_an_empty_export_fails_the_stage_and_keeps_what_the_export_returned(self):
+            # The product's finalize writes a 0-byte export; the authenticated export answers 200 with an empty body
+            # whose sha256 (e3b0c442…) equals the finalized record's. Every check must still run on it.
+            empty_sha = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+
+            def zero_bytes(original, mapping, answers, output_path, **kwargs):
+                Path(output_path).write_bytes(b'')
+            with patch('documents.fill_template', side_effect=zero_bytes):
+                _, failed = self.stopped('the authenticated export is empty')
+            self.assertTrue(any('not a valid DOCX' in reason for reason in failed['reasons']), failed['reasons'])
+            evidence = self.evidence()
+            export = json.loads((evidence / 'export.json').read_text())
+            self.assertEqual((export['bytes'], export['sha256'], export['finalized_export_sha256']), (0, empty_sha, empty_sha))
+            self.assertIn('the authenticated export is empty: no export evidence was retained', export['problems'])
+            # (what the export returned is retained as it was — zero bytes — and the manifest lists it)
+            self.assertEqual((evidence / 'export.docx').read_bytes(), b'')
+            manifest = json.loads((evidence / 'manifest.json').read_text())
+            self.assertEqual(manifest['evidence']['export.docx'], empty_sha)
+            self.assertEqual(manifest['reasons'], failed['reasons'])
+
+        def serve_export(self, respond):
+            """The authenticated export view answers with `respond(bytes the view would have sent)` — every other file
+            response (the template download, a provider result) is left as it is."""
+            from core import views
+            real = views.FileResponse
+
+            def swapped(handle, *args, **kwargs):
+                name = str(kwargs.get('filename', ''))
+                if not (name.startswith('quillmd-') and name.endswith('.docx')):
+                    return real(handle, *args, **kwargs)
+                with handle:
+                    return respond(handle.read(), real, kwargs)
+            return patch.object(views, 'FileResponse', side_effect=swapped)
+
+        def test_an_export_that_is_not_the_finalized_record_fails_the_stage(self):
+            # A valid DOCX, but not the bytes the record finalized (here: the blank original form).
+            blank = sq.build_form()
+            with self.serve_export(lambda sent, real, kwargs: real(io.BytesIO(blank), **kwargs)):
+                _, failed = self.stopped("the export is not the finalized record's export")
+            export = json.loads((self.evidence() / 'export.json').read_text())
+            self.assertNotEqual(export['sha256'], export['finalized_export_sha256'])
+            self.assertEqual((self.evidence() / 'export.docx').read_bytes(), blank)
+            self.assertTrue(any('answer is not the reviewed answer' in reason for reason in failed['reasons']),
+                            failed['reasons'])
+
+        def test_a_failed_export_request_fails_the_stage(self):
+            from django.http import HttpResponse
+            with self.serve_export(lambda sent, real, kwargs: HttpResponse(b'synthetic export outage', status=503)):
+                self.stopped('the authenticated export failed (503)')
+            export = json.loads((self.evidence() / 'export.json').read_text())
+            self.assertEqual((export['status'], export['bytes']), (503, 0))
+            self.assertFalse((self.evidence() / 'export.docx').exists())
+
+        def test_evidence_lost_before_the_decision_fails_the_stage(self):
+            # Whatever the checks above it concluded, stage_passed claims the evidence was retained: a declared file
+            # that is missing or empty when the stage is decided fails it.
+            from core.management.commands import audit_billing
+            real = audit_billing.audit_report
+
+            def lose_the_export():
+                os.unlink(self.evidence() / 'export.docx')
+                return real()
+            with patch.object(audit_billing, 'audit_report', side_effect=lose_the_export):
+                _, failed = self.stopped('the retained evidence export.docx is missing')
+            self.assertEqual(failed['reasons'], ['the retained evidence export.docx is missing'])
+
+        def test_the_retained_evidence_gate_names_each_missing_empty_or_linked_file(self):
+            evidence = pc.private_directory(self.root / 'gate')
+            self.assertEqual(len(sq.retained_evidence_problems(evidence)), len(sq.RETAINED_EVIDENCE))
+            for name in sq.RETAINED_EVIDENCE:
+                path = evidence / name
+                pc.private_directory(path.parent)
+                pc.write_new(path, b'x', raw=True)
+            self.assertEqual(sq.retained_evidence_problems(evidence), [])
+            os.unlink(evidence / 'request.json')
+            pc.write_new(evidence / 'request.json', b'', raw=True)
+            os.unlink(evidence / 'export.docx')
+            os.symlink(evidence / 'export.json', evidence / 'export.docx')
+            self.assertEqual(sq.retained_evidence_problems(evidence),
+                             ['the retained evidence request.json is empty',
+                              'the retained evidence export.docx is not a regular file'])
+            self.assertIn('export.docx', sq.RETAINED_EVIDENCE)
+            self.assertIn('case/' + sq.FORM_FILENAME, sq.RETAINED_EVIDENCE)
 
         def test_the_validator_decision_is_judged_against_the_fixed_case(self):
             fields = [{'key': f'cell_{i}', 'label': label} for i, label in enumerate(sq.FORM_LABELS)]

@@ -33,6 +33,7 @@ import os
 import re
 import secrets
 import signal
+import stat
 import sys
 import time
 import zipfile
@@ -452,6 +453,30 @@ def engine_hashes():
     return {name: pc.file_sha256(REBUILD / name) for name in ENGINE_FILES}
 
 
+# Every file stage_passed claims was retained (manifest.json is written by the decision itself, after this is checked).
+RETAINED_EVIDENCE = ('case/' + FORM_FILENAME, 'case/notes.txt', 'case/case.json', 'request.json', 'provider-result.json',
+                     'records-after-run.json', 'answers-adopted.json', 'answers-reviewed.json', 'export.docx',
+                     'export.json', 'audit-billing.json')
+
+
+def retained_evidence_problems(evidence):
+    """stage_passed says the evidence was retained, so a declared file that is missing, empty, a link or not a regular
+    file when the stage is decided is a failed stage — whatever the checks that wrote (or skipped) it concluded
+    (refutation R1: a check skipped on an empty value left no export behind and the stage passed)."""
+    problems = []
+    for name in RETAINED_EVIDENCE:
+        try:
+            info = os.lstat(Path(evidence) / name)
+        except FileNotFoundError:
+            problems.append(f'the retained evidence {name} is missing')
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            problems.append(f'the retained evidence {name} is not a regular file')
+        elif info.st_size == 0:
+            problems.append(f'the retained evidence {name} is empty')
+    return problems
+
+
 def write_manifest(evidence, attempt, context):
     listed = {}
     for path in sorted(p for p in evidence.rglob('*') if p.is_file() and not p.is_symlink()):
@@ -670,14 +695,23 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
         # request_finished, whose close_old_connections drops the database connection inside a transaction)
         exported = b''.join(response.streaming_content) if response.status_code == 200 else b''
         export_sha = hashlib.sha256(exported).hexdigest()
-        problems = ['the authenticated export failed'] if response.status_code != 200 else []
-        if exported and export_sha != encounter.export_sha256:
-            problems.append('the export is not the finalized record\'s export')
-        if exported:
+        problems = []
+        if response.status_code != 200:
+            problems.append(f'the authenticated export failed ({response.status_code})')
+        else:
+            # ⚠️ EVERY CHECK RUNS ON WHATEVER THE EXPORT RETURNED — EMPTY INCLUDED. Refutation R1: these used to be
+            # guarded by `if exported:`, so an empty 200 body skipped the hash comparison, the retention and the DOCX
+            # checks alike, and the stage PASSED with no export retained. An empty body's sha256 also EQUALS a record
+            # finalized from an empty file, so emptiness is its own problem, not something the comparison can catch.
             pc.write_new(evidence / 'export.docx', exported, raw=True)
+            if not exported:
+                problems.append('the authenticated export is empty: no export evidence was retained')
+            if export_sha != encounter.export_sha256:
+                problems.append('the export is not the finalized record\'s export')
             problems += export_checks(form, exported, EXPECTED)
         pc.write_new(evidence / 'export.json', {'sha256': export_sha, 'finalized_export_sha256': encounter.export_sha256,
-                                                'bytes': len(exported), 'problems': problems})
+                                                'bytes': len(exported), 'status': response.status_code,
+                                                'problems': problems})
         reasons += problems
     report = audit_report()
     pc.write_new(evidence / 'audit-billing.json', report)
@@ -714,6 +748,10 @@ def _decide(campaign, attempt, evidence, secret, reasons, result, provenance, ch
     import anthropic
     from django.conf import settings
     declaration, ledger, root = campaign.declaration, campaign.ledger, campaign.root
+    if not reasons:
+        # (only a stage about to pass is held to the full evidence list: a stage already failing stopped early, and
+        # naming the files it never reached would bury the reason it stopped)
+        reasons = retained_evidence_problems(evidence)
     identity = pc.git_identity(REBUILD)
     context = {'campaign': declaration.campaign, 'authority_id': declaration.authority_id,
                'runner': {'commit': provenance.get('runner_commit') or identity['commit'], 'clean': identity['clean'],
@@ -736,7 +774,8 @@ def _decide(campaign, attempt, evidence, secret, reasons, result, provenance, ch
         ledger.write_stage(STAGE, 'passed', {'attempt': attempt['number'], 'manifest_sha256': manifest,
                                              'checks': ['served model', 'end_turn', 'output below 70%', 'geography',
                                                         'settled at declared rates', 'validator decision',
-                                                        'review, finalize, export', 'billing audit', 'no leaked credential']})
+                                                        'review, finalize, export', 'billing audit', 'evidence retained',
+                                                        'no leaked credential']})
         verdict = 'PASS'
     late = pc.leaked(root, secret, exclude=(declaration.credential_file,))
     if late:
