@@ -3,8 +3,9 @@
 
 The contract is the committed declaration docs/foundation/mutations/20260928-quillmd-v1-sonnet5-staged-campaign.md:
 its limits, model, request settings, pricing versions, admission and stop rules, credential file, QA-only route,
-synthetic-only inputs and retained evidence. Nothing here widens it. This runner implements ONE stage, model_check;
-mapping and ordinary_notes are refused until they have their own reviewed runner.
+synthetic-only inputs and retained evidence. Nothing here widens it. This file implements model_check and the ONE door
+every stage goes through (outer_run -> the scrubbed request process -> inner); the mapping and ordinary_notes stages
+are ops/sonnet5_stages.py, run through the same door.
 
 One model_check attempt, in the request process (a fresh process with the scrubbed environment, re-executed by `run`):
   the QA world is seeded through the application's own models and views (a synthetic organization, doctor, patient, the
@@ -22,7 +23,12 @@ One model_check attempt, in the request process (a fresh process with the scrubb
 
 Commands (from the candidate checkout's rebuild/):
   plan                     the fixed case, its hashes, the declared price and its maximum cost; no database, no request
-  run --stage model_check  the model check (refused unless the declaration, credential and ledger all allow it)
+  plan --stage mapping|ordinary_notes
+                           the stage's fixed order, each send's maximum and bound, the stage worst case against the
+                           remaining stage and total limits (the ledger read without its lock); no credential, network
+                           or database
+  run --stage model_check|mapping|ordinary_notes
+                           the stage (refused unless the declaration, credential and ledger all allow it)
   status                   the ledger against every declared limit; read-only
   recover                  records any attempt left without an outcome as interrupted_unknown and fails its stage
   reopen --stage <id> --diagnosis <path>
@@ -246,16 +252,20 @@ class World:
         self.template, self.version, self.client = template, version, client
 
 
-def seed_world(root):
-    """The synthetic organization, doctor, patient, welcome credit and uploaded form (idempotent), through the
-    application's own models, its welcome-credit grant and its real upload view. The doctor's access record is written
-    under the campaign runtime directory — never BASE_DIR/.runtime/private-access.json."""
-    from django.core.files.uploadedfile import SimpleUploadedFile
+class Account:
+    def __init__(self, user, department, patient, client):
+        self.user, self.department, self.patient, self.client = user, department, patient, client
+
+
+def seed_account(root):
+    """The synthetic organization, doctor, patient and welcome credit (idempotent), through the application's own models
+    and its welcome-credit grant, and a client logged in as the doctor. The doctor's access record is written under the
+    campaign runtime directory — never BASE_DIR/.runtime/private-access.json. Every stage uses this one account."""
     from django.db import transaction
     from django.test import Client
     from django.utils import timezone
     from core.billing import welcome_credit
-    from core.models import Department, Membership, Organization, Patient, Template, User
+    from core.models import Department, Membership, Organization, Patient, User
     from core.security import audit
     root = Path(root)
     user = User.objects.filter(username=DOCTOR_EMAIL).first()
@@ -280,6 +290,15 @@ def seed_world(root):
     patient = Patient.objects.get(department=department, reference=PATIENT_REFERENCE)
     client = Client()
     client.force_login(user)
+    return Account(user, department, patient, client)
+
+
+def seed_world(root):
+    """The synthetic account (seed_account) and the FIXED legacy-contract form uploaded through the real upload view."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from core.models import Template
+    account = seed_account(root)
+    user, department, patient, client = account.user, account.department, account.patient, account.client
     form = build_form()
     require(sha256(form) == FORM_SHA256, 'The fixed form did not build to its recorded bytes.')
     template = Template.objects.filter(department=department, sha256=FORM_SHA256).order_by('created_at').first()
@@ -1001,20 +1020,42 @@ def ensure_database(password):
             connection.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(DATABASE['name'])))
 
 
-def request_environment(key, declaration, root, password, context):
-    """The complete environment of the request process (and nothing inherited)."""
+def request_environment(key, declaration, root, password, context, flags=None):
+    """The complete environment of the request process (and nothing inherited). `flags`: the stage's settings (the plain
+    profile for model_check; sonnet5_stages.STAGE_FLAGS for the others)."""
     extra = {'DJANGO_SETTINGS_MODULE': 'quillmd.settings', 'QUILLMD_SECRET_KEY': secrets.token_urlsafe(48),
              'QUILLMD_DB_NAME': DATABASE['name'], 'QUILLMD_DB_USER': DATABASE['user'], 'QUILLMD_DB_PASSWORD': password,
              'QUILLMD_DB_HOST': DATABASE['host'], 'QUILLMD_DB_PORT': DATABASE['port'],
              'QUILLMD_STATE_DIR': str(root / 'qa-state'), 'QUILLMD_ENV_MANAGED': '1', 'QUILLMD_ADMIN_SITE': '0',
              'QUILLMD_HTTPS': '0', 'QUILLMD_EMAIL_MODE': 'file', 'HOME': str(root / 'home'), 'TMPDIR': str(root / 'tmp'),
-             **PRICE_SETTINGS, **PLAIN_PROFILE_FLAGS, 'SONNET5_QA_CONTEXT': json.dumps(context)}
+             **PRICE_SETTINGS, **(PLAIN_PROFILE_FLAGS if flags is None else flags),
+             'SONNET5_QA_CONTEXT': json.dumps(context)}
     return pc.scrubbed_environment(key, declaration, extra, config_parent=str(root / 'tmp'))
 
 
+def stages_module():
+    """ops/sonnet5_stages.py, imported as a package member or (when this file runs as a script) from ops/ itself."""
+    try:
+        from . import sonnet5_stages
+    except ImportError:
+        import sonnet5_stages
+    return sonnet5_stages
+
+
+def stage_flags(stage):
+    """The request process's settings for `stage`: the plain generation profile for model_check, the stage runner's
+    own for mapping and ordinary_notes; anything else is refused."""
+    if stage == STAGE:
+        return PLAIN_PROFILE_FLAGS
+    sonnet5_stages = stages_module()
+    require(stage in sonnet5_stages.STAGES, f'No stage runner for {stage!r}.')
+    return sonnet5_stages.STAGE_FLAGS[stage]
+
+
 def outer_run(args):
-    """Validate everything that needs no database, build the scrubbed environment, and become the request process."""
-    require(args.stage == STAGE, 'This runner implements model_check only.')
+    """Validate everything that needs no database, build the scrubbed environment, and become the request process —
+    the one door for every stage (model_check, mapping, ordinary_notes)."""
+    flags = stage_flags(args.stage)
     require(not env_file_present(), 'The candidate checkout has a rebuild/.env; the campaign never runs beside one.')
     identity = pc.git_identity(REBUILD)
     require(identity['clean'], 'The runner checkout must be a clean commit.')
@@ -1025,8 +1066,9 @@ def outer_run(args):
     key = pc.load_credential(declaration.credential_file, declaration)
     password = pc.read_private(DATABASE_PASSWORD_FILE).decode().strip()
     require(password and '\n' not in password, 'The QA database password file is not one line.')
-    context = {'root': str(root), 'declaration': str(DECLARATION), 'stage': STAGE, 'runner_commit': identity['commit']}
-    env = request_environment(key, declaration, root, password, context)
+    context = {'root': str(root), 'declaration': str(DECLARATION), 'stage': args.stage,
+               'runner_commit': identity['commit']}
+    env = request_environment(key, declaration, root, password, context, flags)
     ensure_database(password)
     os.chdir(REBUILD)
     os.execve(sys.executable, [sys.executable, '-B', str(RUNNER), '_inner'], env)
@@ -1048,8 +1090,9 @@ def inner():
     signal.signal(signal.SIGINT, _interrupted)
     context = json.loads(os.environ['SONNET5_QA_CONTEXT'])
     root = Path(context['root'])
+    stage = context['stage']
     declaration = pc.declared(context['declaration'])       # (re-verified by the process that spends)
-    campaign = pc.Campaign(declaration, root)
+    campaign = pc.Campaign(declaration, root, watched_files=WATCHED_FILES)
     campaign.ledger.acquire()
     pc.scrubbed_now()
     sys.path.insert(0, str(REBUILD))
@@ -1058,14 +1101,22 @@ def inner():
     from django.test.utils import override_settings
     override_settings(STORAGES=STATIC_STORAGES).enable()
     settle_open_stages(campaign)
-    preconditions(declaration, STAGE, root, ledger=campaign.ledger)   # (before the database is written at all)
+    if stage == STAGE:
+        preconditions(declaration, STAGE, root, ledger=campaign.ledger)   # (before the database is written at all)
+    else:
+        sonnet5_stages = stages_module()
+        sonnet5_stages.stage_preconditions(declaration, stage, root, ledger=campaign.ledger)
     from django.core.management import call_command
     call_command('migrate', interactive=False, verbosity=0)
     pc.install_request_capture()
     pc.install_transport_guard()
     key = os.environ['ANTHROPIC_API_KEY']
+    provenance = {'runner_commit': context['runner_commit']}
     try:
-        result = run_model_check(campaign, secret=key, provenance={'runner_commit': context['runner_commit']})
+        if stage == STAGE:
+            result = run_model_check(campaign, secret=key, provenance=provenance)
+        else:
+            result = sonnet5_stages.run_stage(campaign, stage, secret=key, provenance=provenance)
     finally:
         os.environ.pop('ANTHROPIC_API_KEY', None)
     text = json.dumps(result, indent=1, default=str)
@@ -1185,14 +1236,16 @@ def main(argv=None):
         parser.add_argument('--diagnosis')
         args = parser.parse_args(argv)
         if args.command == 'plan':
-            return plan()
+            if args.stage in (None, STAGE):
+                return plan()
+            return stages_module().plan(args.stage)
         if args.command == 'status':
             return status()
         if args.command == 'recover':
             return recover()
         if args.command == 'reopen':
             return reopen(args.stage, args.diagnosis)       # (Campaign.reopen refuses a missing stage or diagnosis)
-        require(args.stage == STAGE, 'run needs --stage model_check.')
+        require(args.stage, 'run needs --stage model_check|mapping|ordinary_notes.')
         outer_run(args)
     except Refused as refused:
         print('REFUSED: ' + str(refused), file=sys.stderr)

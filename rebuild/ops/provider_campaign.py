@@ -1499,21 +1499,35 @@ def _leaked(root, key, exclude):
 
 #: Output that would put wrong clinical content in a document, or leak the key: each STOPS the stage.
 UNSAFE_FINDINGS = frozenset(('adopted_without_source_support', 'wrong_destination', 'wrong_side', 'wrong_denial',
-                             'contradiction_adopted', 'protected_area_answered', 'credential_leak'))
+                             'contradiction_adopted', 'protected_area_answered', 'credential_leak',
+                             'harmful_change_unreviewed'))
 #: A broken request contract or money path: each STOPS the stage.
 CONTRACT_FINDINGS = frozenset(('wrong_served_model', 'stop_reason_not_end_turn', 'reconciliation', 'uncertain_outcome',
-                               'output_over_70_percent', 'metered_us_while_unset', 'settlement_mismatch', 'audit_failure'))
-#: What happened to each field of a case: USEFULNESS, recorded per field. Held, missing and refused answers are the
-#: product declining to guess — measured, never a stop.
-FIELD_OUTCOMES = frozenset(('adopted', 'held', 'missing', 'refused'))
+                               'output_over_70_percent', 'metered_us_while_unset', 'settlement_mismatch', 'audit_failure',
+                               'validator_failure', 'more_than_one_request', 'request_not_captured',
+                               'export_verification_failed'))
+#: What happened to each field (or, for mapping, each expected area, control or false field) of a case: USEFULNESS,
+#: recorded per item. Held, missing, over-held and refused answers are the product declining to guess — measured, never
+#: a stop. The outcomes in IMPLIED_FINDINGS ARE unsafe output: each carries its unsafe finding, so a case cannot record
+#: one without stopping. 'wrong' (a kept deterministic mapping defect) carries none: the runner adds a finding when it is
+#: a wrong destination or a change the proposal made.
+FIELD_OUTCOMES = frozenset((
+    'adopted', 'held', 'missing', 'refused',
+    'right', 'held_safe', 'wrong', 'missed', 'false_field', 'false_field_held',
+    'supported_correct', 'held_correct', 'over_held', 'usefulness_loss', 'recorded_not_asserted', 'supported_incomplete',
+    'clinician_correction',
+    'unsupported_accepted', 'wrong_side_adopted', 'wrong_denial_adopted', 'contradiction_adopted'))
+IMPLIED_FINDINGS = {'unsupported_accepted': 'adopted_without_source_support', 'wrong_side_adopted': 'wrong_side',
+                    'wrong_denial_adopted': 'wrong_denial', 'contradiction_adopted': 'contradiction_adopted',
+                    'false_field': 'wrong_destination'}
 
 
 def classify_case(fields, findings):
     """One case's verdict, pure: `fields` {field key: one of FIELD_OUTCOMES}, `findings` a list of codes from
     UNSAFE_FINDINGS or CONTRACT_FINDINGS. Returns {'verdict': 'unsafe' | 'contract' | 'usefulness', 'stops_stage',
-    'unsafe', 'contract' (sorted codes), 'fields' (a copy), 'usefulness' (a count per outcome)}. Unsafe outranks a
-    contract failure; both stop the stage and both are kept. Any value outside the vocabulary is REFUSED — an unknown
-    finding is never read as no finding."""
+    'unsafe', 'contract' (sorted codes; an unsafe field outcome adds its IMPLIED_FINDINGS code), 'fields' (a copy),
+    'usefulness' (a count per outcome)}. Unsafe outranks a contract failure; both stop the stage and both are kept. Any
+    value outside the vocabulary is REFUSED — an unknown finding is never read as no finding."""
     require(isinstance(fields, dict), 'A case\'s fields are a mapping of field key to outcome.')
     require(isinstance(findings, (list, tuple)), 'A case\'s findings are a list of codes.')
     for key, outcome in fields.items():
@@ -1523,12 +1537,14 @@ def classify_case(fields, findings):
     for code in findings:
         require(isinstance(code, str) and code in UNSAFE_FINDINGS | CONTRACT_FINDINGS,
                 f'The finding {code!r} is not a known unsafe or contract finding.')
-    unsafe = sorted({code for code in findings if code in UNSAFE_FINDINGS})
+    unsafe = sorted({code for code in findings if code in UNSAFE_FINDINGS}
+                    | {IMPLIED_FINDINGS[outcome] for outcome in fields.values() if outcome in IMPLIED_FINDINGS})
     contract = sorted({code for code in findings if code in CONTRACT_FINDINGS})
     verdict = 'unsafe' if unsafe else ('contract' if contract else 'usefulness')
     return {'verdict': verdict, 'stops_stage': verdict != 'usefulness', 'unsafe': unsafe, 'contract': contract,
             'fields': dict(fields),
-            'usefulness': {outcome: sum(1 for value in fields.values() if value == outcome) for outcome in sorted(FIELD_OUTCOMES)}}
+            'usefulness': {outcome: sum(1 for value in fields.values() if value == outcome)
+                           for outcome in sorted(set(fields.values()))}}
 
 
 def git_identity(checkout=None):
