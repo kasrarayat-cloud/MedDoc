@@ -9,7 +9,7 @@
   "areas": [
     {
       "id": "f1.A1",
-      "label": "Is the patient currently managed under a statutory public-protection arrangement?",
+      "label": "Does a formal offender supervision scheme currently apply to this person?",
       "kind": "text",
       "options": [],
       "cardinality": "one value (a yes/no confirmation, with level, category and agency confirmation when yes)",
@@ -22,7 +22,8 @@
           "b/tbl[0]/tr[0]/tc[1]/p[0]": "State yes or no. If yes, give the management level and category, and confirm that the lead agency knows this report is being written."
         }
       },
-      "must_name": ["public-protection"],
+      "must_name": ["supervision scheme"],
+      "repair_note": "2026-09-29 repair (CHECK.md) W1: the printed question was reworded with fresh wording (the first wording shared two short phrases with a development label); must_name follows the new printed words. Kind, destination, guidance and cardinality are unchanged.",
       "guidance": "The blue text is author guidance for the person answering: it describes what the answer must contain (yes/no; if yes, level, category and lead-agency confirmation). It is NOT an answer, NOT a prefilled value and must never be deleted or overwritten."
     },
     {
@@ -37,7 +38,9 @@
         "region": "b/tbl[0]/tr[1]/tc[1]",
         "answer_at": "b/tbl[0]/tr[1]/tc[1]/p[0]"
       },
-      "must_name": ["lead agency"]
+      "must_name": ["lead agency"],
+      "must_not_name": ["State yes or no", "management level"],
+      "repair_note": "2026-09-29 repair (CHECK.md) M3: must_not_name carries the OTHER question's guidance words, so a label that absorbed the neighbouring blue guidance (the known defect) grades wrong; 'lead agency' alone also occurs inside that guidance and could not tell the two labels apart."
     }
   ],
   "controls": [

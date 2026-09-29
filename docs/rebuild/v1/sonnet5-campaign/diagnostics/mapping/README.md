@@ -1,5 +1,17 @@
 # Sonnet 5 qualification: MAPPING-stage diagnostic set
 
+> **Repaired and re-frozen 2026-09-29** after the independent check (`../CHECK.md`); what changed and why is in
+> `../REPAIR.md`, and `../FREEZE.json` lists the sha256 of every file. In short: eight forms (the new twin `f2b`
+> tests the leave list without the engine's special owner word), fresh wording where a provider-bound string shared
+> a 25-character normalized window with development text (`wording_check.py`, `wording-check.json`: CLEAN, with a
+> positive control on the checked sets), `must_not_name` on f1.A2, f4.A8 and f4.A15, an f6b note that answers
+> nothing, a real fill and read-back of a 5,835-character answer (`long_answer_readback.py`), and a grader for the
+> OUTPUT OF THE APP PATH (`grade_app_path.py`): it reads `validate_proposal`'s fields AND its review record, grades
+> right / held_safe / wrong / missed / false_field, and marks what the model path cannot express at 8e3dcfd0.
+> `EXPECTED-SHA256SUMS` now freezes the maps, the graders and the notes cases together. Sections below that give
+> counts, sha256 values or file lists describe the checked 2026-09-28 set unless they say otherwise; the current
+> numbers are in `baseline-deterministic.json` and `app-path-selftest.json`.
+
 These are synthetic blank Word forms. Each one reproduces a mapping structure that failed, or nearly failed, on a
 development original, and each comes with an independent expected map. The set is for the app-level Claude
 Sonnet 5 qualification of **model-assisted mapping**: it measures how the model proposes answer areas on
@@ -200,6 +212,16 @@ cd docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping
 TMPDIR=/tmp $PY -B build_forms.py --check     # determinism
 TMPDIR=/tmp $PY -B build_forms.py             # writes the .docx, prints sha256
 TMPDIR=/tmp $PY -B check_expected.py          # engine-free consistency of the expected maps
-sha256sum -c EXPECTED-SHA256SUMS              # the maps are the frozen ones
+sha256sum -c EXPECTED-SHA256SUMS              # maps, graders and notes cases are the frozen ones
 TMPDIR=/tmp $PY -B measure_baseline.py        # deterministic baseline (sockets denied in-process)
+# added 2026-09-29
+TMPDIR=/tmp $PY -B grade_app_path.py --self-test --state-dir <scratch> --out app-path-selftest.json
+TMPDIR=/tmp $PY -B long_answer_readback.py    # fill + effective_values read-back of the 5,835-character answer
+TMPDIR=/tmp $PY -B wording_check.py --out wording-check.json
+# grading a LIVE mapping result (the validate_proposal output, or {"fields": version.fields, "assistance": ...}):
+TMPDIR=/tmp $PY -B grade_app_path.py --grade <output.json> --form <name> \
+    --deterministic <the version-1 fields the request was compiled from> --expressible <the form's expressibility>
 ```
+
+A live result is graded with `grade_app_path.py`, never with `measure_baseline.py`'s field-only grade: only the
+review record distinguishes a correct hold from doing nothing.

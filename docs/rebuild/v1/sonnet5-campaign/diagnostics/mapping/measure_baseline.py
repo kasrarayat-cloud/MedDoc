@@ -30,8 +30,8 @@ HERE = Path(__file__).resolve().parent
 WORKTREE = HERE.parents[5]
 REBUILD = WORKTREE / "rebuild"
 DEFAULT_FORMS = Path("/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/mapping")
-FORMS = ["f1-guidance-confirmation", "f2-leave-checkboxes", "f3-selection-instructions", "f4-exam-grid",
-         "f5-negative-controls", "f6a-long-answer", "f6b-admin-missing"]
+FORMS = ["f1-guidance-confirmation", "f2-leave-checkboxes", "f2b-leave-checkboxes-owner", "f3-selection-instructions",
+         "f4-exam-grid", "f5-negative-controls", "f6a-long-answer", "f6b-admin-missing"]
 
 
 # ─── network denial, before anything else is imported ─────────────────────────────────────────────────────────
@@ -79,7 +79,8 @@ GRADING = {
                    "order and its printed options equal the expected options verbatim (whitespace runs as one space) "
                    "in that order, and no option is a response code the map forbids; for text areas: no options, and "
                    "an anchor at the answer paragraph or at the region cell; every must_name token appears in "
-                   "label+context and no must_not_name token appears in the label; guidance/instruction preserved "
+                   "label+context and no must_not_name token appears in the label (in label AND context when the "
+                   "map says must_not_name_scope=label_and_context; added 2026-09-29, CHECK.md M6); guidance/instruction preserved "
                    "(target type cell_append, cell_replace with all=true, or paragraph/span anchored on the answer "
                    "paragraph; a plain 'cell' or 'cell_replace' target rewrites the first paragraph and so fails "
                    "wherever the map lists preserved text in that cell); max_chars absent or >= min_capacity_chars."),
@@ -270,9 +271,11 @@ def grade_area(area, fields, all_areas, groups, notes):
     for token in area.get("must_name") or []:
         if token.lower() not in label_ctx.lower():
             problems.append("label/context does not name %r" % token)
+    scope = area.get("must_not_name_scope", "label")
+    named = (f["label"] or "") + (" " + (f["context"] or "") if scope == "label_and_context" else "")
     for token in area.get("must_not_name") or []:
-        if re.search(r"\b%s\b" % re.escape(token.lower()), (f["label"] or "").lower()):
-            problems.append("label names %r" % token)
+        if re.search(r"\b%s\b" % re.escape(token.lower()), named.lower()):
+            problems.append(("label/context" if scope == "label_and_context" else "label") + " names %r" % token)
     need = area.get("min_capacity_chars")
     if need and f.get("max_chars") and f["max_chars"] < need:
         problems.append("max_chars %s < %s" % (f["max_chars"], need))
@@ -406,11 +409,17 @@ def main(argv=None) -> int:
 
     manifest, frozen, meta = frozen_manifest()
     current = {p.name: sha256(p) for p in sorted(HERE.glob("*.expected.json"))}
-    if current != frozen:
-        print("expected maps differ from the frozen manifest:", file=sys.stderr)
+    # Since 2026-09-29 the manifest also freezes the graders and the notes cases (paths relative to this directory);
+    # every listed file must still match, and every expected map must be listed.
+    others = {name: (sha256(HERE / name) if (HERE / name).exists() else None) for name in frozen
+              if not name.endswith(".expected.json")}
+    listed_maps = {name: digest for name, digest in frozen.items() if name.endswith(".expected.json")}
+    if current != listed_maps or any(others[name] != frozen[name] for name in others):
+        print("expected maps or frozen graders/cases differ from the frozen manifest:", file=sys.stderr)
         for name in sorted(set(current) | set(frozen)):
-            if current.get(name) != frozen.get(name):
-                print("  %s frozen=%s now=%s" % (name, frozen.get(name), current.get(name)), file=sys.stderr)
+            now = current.get(name, others.get(name))
+            if now != frozen.get(name):
+                print("  %s frozen=%s now=%s" % (name, frozen.get(name), now), file=sys.stderr)
         return 1
 
     sys.path.insert(0, str(REBUILD))
@@ -466,7 +475,8 @@ def main(argv=None) -> int:
         "expectations": {"manifest": manifest.name, "manifest_sha256": sha256(manifest), "frozen_meta": meta,
                          "manifest_mtime_utc": dt.datetime.fromtimestamp(manifest.stat().st_mtime, dt.timezone.utc)
                          .strftime("%Y-%m-%dT%H:%M:%SZ"),
-                         "files": current, "match_frozen": True},
+                         "files": current, "frozen_with_them": {n: frozen[n] for n in sorted(others)},
+                         "match_frozen": True},
         "candidate": {"worktree": str(WORKTREE), "head": git("rev-parse", "HEAD"),
                       "engine_files_clean": git("status", "--porcelain", "--", "rebuild/documents") == "",
                       "engine_sha256": engine, "engine_imported_from": str(engine_file)},

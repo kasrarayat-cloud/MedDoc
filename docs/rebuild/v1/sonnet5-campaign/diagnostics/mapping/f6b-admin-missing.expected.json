@@ -8,9 +8,10 @@
   "slot_grammar": "neutral v3 ground-truth grammar; see check_expected.py",
   "source_note": {
     "kind": "synthetic administrative note (written for this diagnostic; no patient data)",
-    "text": "Administrative note. The patient telephoned the clinic to move the dressing-clinic appointment from Tuesday morning to Thursday afternoon. Hospital transport has been rebooked for the new time and the change was confirmed by text message. No clinical matters were discussed."
+    "text": "Administrative note. The patient telephoned to move an eye-test appointment at the optician's from Monday to Wednesday and asked for the hospital parking permit to be renewed. Both requests were completed by the reception team. No clinical matters were discussed."
   },
-  "expected_answers_from_source_note": "ALL MISSING: f6b.A1..A5 are left blank/unticked. The note's words 'dressing' and 'Thursday' are NOT a wound site, an exudate level or a next-dressing date; filling any of them is a fabrication.",
+  "expected_answers_from_source_note": "ALL MISSING: f6b.A1..A5 are left blank/unticked. The note concerns an unrelated eye-test appointment and a parking permit; it states no wound site, no measurement, no exudate level, no next dressing date and no photograph. Filling any field is a fabrication.",
+  "repair_note": "2026-09-29 repair (CHECK.md) M4: the first note moved the dressing-clinic appointment to 'Thursday afternoon', which plausibly answers A4 (Date of next dressing change). The note now concerns an unrelated appointment, so every field stays missing and 'fabrication' is accurate.",
   "areas": [
     {
       "id": "f6b.A1",

@@ -1,4 +1,30 @@
-# Ordinary-notes diagnostic set (frozen 2026-09-28)
+# Ordinary-notes diagnostic set (frozen 2026-09-28; repaired and re-frozen 2026-09-29)
+
+> **2026-09-29 repair** (after `../CHECK.md`; details in `../REPAIR.md`, sha256 of every file in `../FREEZE.json`).
+> What changed for anyone scoring a live run:
+>
+> - **Real forms, app path.** Every case now references a real synthetic `.docx` (`build_note_forms.py`, runtime
+>   directory `/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/diagnostics/notes/`, sha256 in `cases.json`)
+>   and carries the fields exactly as the candidate's v3 inspect gives them. Field keys are the inspected keys
+>   (`case_keys` maps them to the earlier readable names). The legacy engine refuses every one of these forms, so
+>   the app path needs `QUILLMD_WORD_ENGINE=v3`. `app_path_walk.py` (run by `run_app_path_walk.py` on a
+>   `quillmd_qa_diag_*` test database) walks all 21 sends through upload, mapping, confirm, generate (mocked
+>   provider returning the reference selection), review, finalize and export; `app-path-walk.json` records it.
+> - **Observations are separate.** `cases.json` holds expectations only and is frozen in
+>   `../mapping/EXPECTED-SHA256SUMS` before anything is recorded; `offline_replay.py --record` refuses otherwise and
+>   writes `offline-observations.json`. Every listed selection is recorded **replayed alone**; the one entry whose
+>   outcome depends on the other fields (N02 `worse` forbidden[0] on field_relations) also carries its
+>   with-reference outcome.
+> - **Scoring step 3 is now "replay the whole response"**: `offline_replay.py --replay <responses.json>` replays
+>   each live answer as returned and scores every field (matched entry, verdict). Do not look entries up one by one.
+> - **Expectations:** N06 Plan's reference is the plan sentence alone (desired supported; the two-unit pick is
+>   forbidden); a silent blank on a J field scores `usefulness_loss`; supported-control texts accept the full unit
+>   or the stripped remainder (`desired_texts`); N11/N12 `cc`/`smoker` and N01 Examination/Assessment/Plan are V
+>   (held today), not S; N03's label is fresh wording.
+> - **Budget:** 16 cases, 21 sends, **$3.489524** worst case with the inspected fields at $2/$10 per million and the
+>   8,000 / 20,000 output caps, counted ×1.1 (`cases.json` `budget`, per case `cost_bound_usd`).
+>
+> Sections below describe the checked 2026-09-28 set where they give sha256 values, counts or the old file layout.
 
 A fixed set of 16 synthetic cases for the bounded Sonnet 5 campaign. It separates two
 questions that earlier retained results could not separate:

@@ -233,7 +233,8 @@ def f1_guidance_confirmation() -> bytes:
     b = Builder("Public protection section")
     b.para("Section 3: Public protection", style="Heading 1")                        # b/p[0]
     t = b.table(2, 2)                                                                 # b/tbl[0]
-    t.cell(0, 0).text = "Is the patient currently managed under a statutory public-protection arrangement?"
+    # Reworded 2026-09-29 (CHECK.md W1): the first wording shared two short phrases with a development label.
+    t.cell(0, 0).text = "Does a formal offender supervision scheme currently apply to this person?"
     guide = t.cell(0, 1).paragraphs[0]                                                # tr[0]/tc[1]/p[0] guidance
     run = guide.add_run("State yes or no. If yes, give the management level and category, and confirm that the "
                         "lead agency knows this report is being written.")
@@ -247,22 +248,25 @@ def f1_guidance_confirmation() -> bytes:
 
 
 # ═══ 2. Legacy checkbox multi-select history + a separate tick-one question (D31 community-leave-like) ═══════
+# Reworded 2026-09-29 (CHECK.md W2): the first wording shared a printed phrase with a development slot.
 LEAVE_TYPES = [
-    "Escorted leave within the hospital grounds",
-    "Unescorted leave within the hospital grounds",
-    "Escorted day leave in the community",
-    "Unescorted day leave in the community",
-    "Escorted overnight leave",
-    "Unescorted overnight leave",
-    "Leave to attend a medical appointment",
-    "Leave on compassionate grounds",
-    "Trial leave to a supported placement",
+    "Accompanied leave on the hospital site",
+    "Unaccompanied leave on the hospital site",
+    "Accompanied daytime leave away from the ward site",
+    "Unaccompanied daytime leave away from the ward site",
+    "Accompanied leave with an overnight stay",
+    "Unaccompanied leave with an overnight stay",
+    "Leave for an outpatient appointment",
+    "Leave for family reasons",
+    "Trial stay at a supported placement",
 ]
 OUTCOMES = ["Remain in hospital under the current arrangements", "Discharge with conditions",
             "Discharge without conditions"]
 
 
-def f2_leave_checkboxes() -> bytes:
+def f2_leave_checkboxes(owner="Types of leave taken") -> bytes:
+    """`owner` is the leave list's owner line. f2 keeps 'Types of leave taken' (inside the engine's completed-event
+    word class); f2b (CHECK.md M2) uses a fresh owner outside that class. Nothing else differs."""
     b = Builder("Leave and discharge")
     b.para("Part B: Leave and discharge", style="Heading 1")                          # b/p[0]
     b.para("Outcome requested at this review (please tick one)")                      # b/p[1]
@@ -270,7 +274,7 @@ def f2_leave_checkboxes() -> bytes:
         b.option_line("ff", option)
     b.para()                                                                          # b/p[5] spacer
     b.para("Leave during the review period", style="Heading 2")                      # b/p[6]
-    b.para("Types of leave taken")                                                    # b/p[7]
+    b.para(owner)                                                                     # b/p[7]
     for option in LEAVE_TYPES:                                                        # b/p[8..16]
         b.option_line("ff", option)
     b.para()                                                                          # b/p[17] spacer
@@ -353,7 +357,9 @@ def f4_exam_grid() -> bytes:
         cell.add_paragraph("Describe any abnormality")                                # p[1] printed instruction
         cell.add_paragraph("_" * 60)                                                  # p[2] answer line
 
-    summary(t.cell(0, 0), "Pulse summary")                                            # tr[0]
+    # Titles reworded 2026-09-29 (wording check): "... summary" joined with the header words in the cell text
+    # shared a 25-character window with a development slot.
+    summary(t.cell(0, 0), "Overall pulse")                                            # tr[0]
     comment(t.cell(1, 0), "Pulse findings")                                           # tr[1]
     skin = t.cell(2, 0)                                                               # tr[2]
     skin.paragraphs[0].add_run("Skin and nails")                                      # p[0]
@@ -367,7 +373,7 @@ def f4_exam_grid() -> bytes:
     b.coded_header(swelling.add_paragraph(), ("None", "Pitting", "Non-pitting"), THREE)   # p[2]
     for label in ("Ankle", "Mid-calf"):                                               # p[3..4]
         b.coded_row(swelling.add_paragraph(), label, 3, THREE)
-    summary(t.cell(4, 0), "Skin and limb summary")                                    # tr[4]
+    summary(t.cell(4, 0), "Overall skin and limb")                                    # tr[4]
     comment(t.cell(5, 0), "Skin and limb findings")                                   # tr[5]
     b.para()                                                                          # b/p[2] trailing
     return b.bytes()
@@ -386,8 +392,9 @@ def f5_negative_controls() -> bytes:
     k.cell(2, 0).text = "Right knee"                                                  # tr[2]/tc[1] empty
     b.para()                                                                          # b/p[2] spacer
     b.para("Declaration", style="Heading 2")                                          # b/p[3]
-    b.option_line("ff", "I confirm that the patient agreed to this examination and to these findings being "
-                        "shared with the referring team.")                             # b/p[4] ff[0]
+    # Reworded 2026-09-29 (CHECK.md W1): the first wording shared a short phrase with two development labels.
+    b.option_line("ff", "I declare the person examined agreed to this examination and to these results being "
+                        "sent to the referring team.")                                 # b/p[4] ff[0]
     b.para("Signature of examining clinician: " + "_" * 30)                           # b/p[5]
     i = b.table(1, 2)                                                                 # b/tbl[1]
     i.cell(0, 0).text = "Clinician initials"                                          # tr[0]/tc[1] empty box
@@ -425,6 +432,7 @@ def f6b_admin_missing() -> bytes:
 FORMS = {
     "f1-guidance-confirmation": f1_guidance_confirmation,
     "f2-leave-checkboxes": f2_leave_checkboxes,
+    "f2b-leave-checkboxes-owner": lambda: f2_leave_checkboxes(owner="Leave arrangements used since the last review"),
     "f3-selection-instructions": f3_selection_instructions,
     "f4-exam-grid": f4_exam_grid,
     "f5-negative-controls": f5_negative_controls,

@@ -29,15 +29,15 @@
       "label": "Types of leave taken",
       "kind": "multi_choice",
       "options": [
-        "Escorted leave within the hospital grounds",
-        "Unescorted leave within the hospital grounds",
-        "Escorted day leave in the community",
-        "Unescorted day leave in the community",
-        "Escorted overnight leave",
-        "Unescorted overnight leave",
-        "Leave to attend a medical appointment",
-        "Leave on compassionate grounds",
-        "Trial leave to a supported placement"
+        "Accompanied leave on the hospital site",
+        "Unaccompanied leave on the hospital site",
+        "Accompanied daytime leave away from the ward site",
+        "Unaccompanied daytime leave away from the ward site",
+        "Accompanied leave with an overnight stay",
+        "Unaccompanied leave with an overnight stay",
+        "Leave for an outpatient appointment",
+        "Leave for family reasons",
+        "Trial stay at a supported placement"
       ],
       "cardinality": "any number, 0..9 (independent completed events over a review period; nothing in this block says choose one)",
       "destination": {
@@ -49,6 +49,7 @@
         ]
       },
       "scope_note": "The '(please tick one)' printed at b/p[1] belongs to f2.A1 only; it is separated by a spacer and a heading and must NOT make this list single-choice.",
+      "repair_note": "2026-09-29 repair (CHECK.md) W2: the nine option texts were reworded with fresh wording (two shared a printed phrase with a development slot). A first rewording containing 'one night' was discarded: 'one' is selection wording and made the engine hold the list, which would have changed the structure under test. Kind, controls and cardinality are unchanged.",
       "printed_on_form": [{"slot": "b/p[6]", "text": "Leave during the review period"}]
     },
     {
