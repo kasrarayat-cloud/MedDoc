@@ -4,6 +4,7 @@ from django.contrib.auth.forms import UserCreationForm
 from django.core.validators import validate_email
 from django.utils import timezone
 import idna
+import ipaddress
 from .models import User, Department, Patient, TemplateVersion, Membership, Invitation, ClinicInvitation, latest_service_date
 from .security import departments
 
@@ -46,35 +47,77 @@ class LoginForm(forms.Form):
 #: columns hold 254: 151 characters or more passed every form and every door answered 500 (a DataError on the insert).
 #: ⚠️ AND AN INTERNATIONALIZED DOMAIN IS ACCEPTED IN ITS OWN LETTERS AND STORED AS ITS A-LABEL (v1 close-out, email). The
 #: STORED address stays ASCII, so every comparison above still agrees. The part before "@" must still be typed in ASCII
-#: (checked as typed, before lowercasing). The domain goes through account_domain: an ASCII domain is lowercased exactly as
-#: before, except that a typed "xn--" label must be a valid, canonical A-label; any other domain is converted by idna
-#: (UTS46 mapping, non-transitional -- idna 3.x has no transitional mode --, STD3 rules, IDNA2008 validity: bidi, CONTEXTJ/O,
-#: canonical Punycode) to the lowercase A-label form DNS resolves, so every spelling of one domain (case, fullwidth, NFD,
-#: soft hyphen, typed A-label) is one stored address and two different domains (faß/fass, ıbm/ibm) stay two. The stored
-#: domain must itself pass EmailValidator: that refuses a trailing dot (the fully qualified spelling of the same name, a
-#: second string for one mailbox) and a converted form the email field would refuse when typed back (a@example.１２３).
-#: The bound is measured on the stored form. The doors that LOOK an account up (sign-in, recovery, verification resend)
-#: find it, and key their per-address limits, by account_lookup_email: one account and one bucket for every spelling.
-#: Nothing stored is rewritten. An ASCII input gives exactly the lookup key it gave before, and the stored address it gave
-#: before unless it carries an invalid "xn--" label, which is now refused where an address is chosen.
+#: (checked as typed, before lowercasing). The domain goes through account_domain, label by label: a label that is ASCII
+#: (as typed, or once UTS46 has mapped it) is kept, lowercased, exactly as before -- a typed "xn--" label only when it is a
+#: well-formed A-label (account_a_label) --; any other label is converted by idna (UTS46 mapping, non-transitional -- idna
+#: 3.x has no transitional mode --, STD3 rules, IDNA2008 validity: bidi, CONTEXTJ/O, canonical Punycode) to its lowercase
+#: A-label, so every spelling of one domain (case, fullwidth, NFD, soft hyphen, typed A-label, or a mix of the two forms)
+#: is one stored address and two different domains (faß/fass, ıbm/ibm) stay two. The stored domain must itself pass
+#: EmailValidator: that refuses a trailing dot (the fully qualified spelling of the same name, a second string for one
+#: mailbox) and a converted form the email field would refuse when typed back (a@example.１２３). An IPv6 address literal is
+#: accepted only in its shortest form (account_ip_literal). The bound is measured on the stored form. Nothing stored is
+#: rewritten, and every ASCII input keeps exactly the lookup key it had before (account_lookup_email).
+#: ⚠️ A DOOR THAT LOOKS AN ACCOUNT UP BY ADDRESS REACHES IT THROUGH accounts_at, AND KEYS ITS PER-ADDRESS LIMIT ON WHAT IT
+#: REACHED (account_limit_key). Sign-in, recovery, verification resend and the check that refuses a new account for an
+#: address that already has one all use it. It finds the rows stored under the lookup key (email__iexact, as every door
+#: did) AND the rows stored before this rule in their own letters: main stored a Unicode domain as typed, and a lookup by
+#: the A-label alone locked such an account out of sign-in and recovery and let a second account be created for its
+#: mailbox (F2). The limit follows the account, not the spelling, so no respelling -- of the domain, or one the database's
+#: UPPER() equates ('b@synthetic.ınvalid', 'ſam@…') -- is a fresh bucket of guesses against the same account (R1-F1).
 ACCOUNT_EMAIL_NOT_ASCII=('Enter the email address in ASCII characters before the "@". The domain after it may be entered '
                          'in its own letters or in its ASCII ("xn--") form.')
 ACCOUNT_EMAIL_QUOTED='Enter the email address without quotation marks.'
 ACCOUNT_EMAIL_BAD_DOMAIN='Enter a valid domain after the "@", in its own letters or in its ASCII ("xn--") form.'
+ACCOUNT_EMAIL_IP_LITERAL='Enter an IPv6 address after the "@" in its shortest form, in brackets: for example [2001:db8::1].'
 ACCOUNT_EMAIL_MAX_LENGTH=min(User._meta.get_field('username').max_length,User._meta.get_field('email').max_length,
                              Invitation._meta.get_field('email').max_length,ClinicInvitation._meta.get_field('email').max_length)
 ACCOUNT_EMAIL_TOO_LONG=f'Enter an email address of at most {ACCOUNT_EMAIL_MAX_LENGTH} characters.'
+def account_a_label(label):
+    """Whether a label typed in its ASCII "xn--" form is a well-formed A-label: its Punycode decodes and encodes back to
+    exactly this label, under IDNA2008 (idna.ulabel) OR under IDNA2003 (the stdlib codec). Both refuse invalid Punycode
+    ('xn--zz') and a non-canonical ("fake") A-label ('xn---bbk'). A name registered under IDNA2003 whose symbol IDNA2008
+    disallows (☃.net is xn--n3h.net, i❤.ws is xn--i-7iq.ws) is kept, as it was before this rule (F1): its A-label is the
+    only spelling of it the rule accepts, since the symbol typed in its own letters is refused, so it cannot be a second
+    string for one mailbox."""
+    try:
+        idna.ulabel(label)
+        return True
+    except idna.IDNAError: pass
+    try: label.encode('ascii').decode('idna')
+    except UnicodeError: return False
+    return True
+def account_ip_literal(domain):
+    """An address literal after "@" ([192.0.2.1], [2001:db8::1]), lowercased as before. An IPv6 address has many spellings
+    ([::1], [0:0:0:0:0:0:0:1], [0000::0001]) and each was a second account for one mailbox (R1-F3), so it is accepted only
+    in the one form ipaddress gives it (RFC 5952: shortest, lowercase), with no dotted IPv4 part. Another spelling is
+    refused, not rewritten, for the reason a quoted local part is: an account stored in it before keeps its lookup key.
+    (An IPv4 literal has one spelling already: EmailValidator refuses leading zeros.)"""
+    domain=domain.lower()
+    literal=domain[1:-1] if domain.endswith(']') else ''
+    if ':' in literal:
+        try: shortest=ipaddress.IPv6Address(literal).compressed
+        except ValueError: shortest=None
+        if shortest is not None and ('.' in literal or shortest!=literal):
+            raise forms.ValidationError(ACCOUNT_EMAIL_IP_LITERAL)
+    return domain
 def account_domain(domain):
-    """The stored form of an account address's domain (the part after the last "@"); ValidationError otherwise."""
-    if domain.isascii():
-        domain=domain.lower()
-        try:
-            for label in domain.split('.'):
-                if label.startswith('xn--'): idna.ulabel(label)
-        except idna.IDNAError: raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN) from None
+    """The stored form of an account address's domain (the part after the last "@"); ValidationError otherwise.
+    Label by label, so a domain typed partly in its own letters and partly in ASCII gives the stored form its ASCII
+    spelling gives: 'ab--cd.bücher.example' is 'ab--cd.xn--bcher-kva.example' (R1-F2), where converting the whole name
+    refused the ASCII label 'ab--cd' that an all-ASCII domain keeps."""
+    if domain.startswith('['): domain=account_ip_literal(domain)
     else:
-        try: domain=idna.encode(domain,uts46=True,std3_rules=True).decode('ascii')
-        except idna.IDNAError: raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN) from None
+        if domain.isascii(): labels=domain.lower().split('.')
+        else:
+            try: labels=idna.uts46_remap(domain,std3_rules=True).split('.')
+            except idna.IDNAError: raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN) from None
+        for index,label in enumerate(labels):
+            if not label.isascii():
+                try: labels[index]=idna.alabel(label).decode('ascii')
+                except idna.IDNAError: raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN) from None
+            elif label.startswith('xn--') and not account_a_label(label):
+                raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN)
+        domain='.'.join(labels)
     if domain not in validate_email.domain_allowlist and not validate_email.validate_domain_part(domain):
         raise forms.ValidationError(ACCOUNT_EMAIL_BAD_DOMAIN)
     return domain
@@ -91,11 +134,59 @@ def account_email(value):
     if len(email)>ACCOUNT_EMAIL_MAX_LENGTH: raise forms.ValidationError(ACCOUNT_EMAIL_TOO_LONG)
     return email
 def account_lookup_email(value):
-    """The address a lookup door (sign-in, recovery, verification resend) finds an account by AND keys its per-address
-    rate limit on: the stored form when the rule accepts the input, so every spelling of one domain reaches one account and
-    one bucket; otherwise the input stripped and lowercased, exactly as before (it can match only what it matched before)."""
+    """The lookup key of a typed address: the stored form when the rule accepts the input, so every spelling of one domain
+    gives one key; otherwise the input stripped and lowercased, exactly as before (it can match only what it matched
+    before). accounts_at finds accounts by it."""
     try: return account_email(value)
     except forms.ValidationError: return (value or '').strip().lower()
+#: A stored address holding a character outside ASCII (a PostgreSQL regular expression): every door now stores ASCII, so
+#: only a row stored before this rule. It is the only kind of row whose lookup key the rule changed.
+LEGACY_ADDRESS_PATTERN=r'[^\x01-\x7f]'
+def legacy_domain(domain):
+    """The stored form of a domain stored before this rule in its own letters, when that is the one name its mail can have
+    gone to: when IDNA2003 (the stdlib codec Django's mail path converts a recipient's domain with) gives the same A-label
+    as the rule. Otherwise None. For ß, ς, ZWJ and ZWNJ the two standards name different domains (faß.de is fass.de under
+    IDNA2003 and xn--fa-hia.de under the rule), and which of them the account was verified at is not established: such a
+    row is reached only by its own spelling, as before. A trailing full stop (EmailValidator admitted an ideographic or
+    fullwidth one, and main stored it as typed) is the fully qualified spelling of the same name, so it is set aside."""
+    if domain[-1:] in ('.','\u3002','\uff0e','\uff61'): domain=domain[:-1]
+    try: stored=account_domain(domain)
+    except forms.ValidationError: return None
+    try: mailed=domain.encode('idna').decode('ascii').lower()
+    except UnicodeError: return None
+    return stored if stored==mailed else None
+def legacy_accounts_at(value,accounts):
+    """The rows stored before this rule with a non-ASCII address that a typed address the rule ACCEPTS reaches, and that
+    email__iexact on its lookup key does not: (as typed, same name). The part before "@" is compared as the iexact lookup
+    compares it, by the database's UPPER() (so a legacy 'ſam@…' answers for 'sam@…', RA-LOW-1); the domain is either the
+    one typed, up to case (as the lookup before this rule matched it), or the same name under legacy_domain."""
+    try: key=account_email(value)
+    except forms.ValidationError: return [],[]
+    local,_,domain=key.rpartition('@')
+    typed_domain=(value or '').strip().rpartition('@')[2].lower()
+    as_typed,same_name=[],[]
+    for account in (accounts.filter(email__istartswith=local+'@',email__regex=LEGACY_ADDRESS_PATTERN)
+                    .exclude(email__iexact=key).order_by('pk')):
+        stored_local,_,stored_domain=account.email.strip().rpartition('@')
+        if len(stored_local)!=len(local): continue          # the "@" the prefix matched is not the address's last one
+        if stored_domain.lower()==typed_domain: as_typed.append(account)
+        elif legacy_domain(stored_domain)==domain: same_name.append(account)
+    return as_typed,same_name
+def accounts_at(value,accounts=None):
+    """Every account a door that LOOKS an account up by a typed address reaches, the one it acts on first: a legacy row
+    stored exactly as typed (so each account the lookup before this rule reached is still reached by that spelling), then
+    the rows stored under the lookup key (the one stored exactly as the key first, then by primary key, the order
+    .first() took them in), then a legacy row with the same name. `accounts` narrows the rows (for example to active
+    ones)."""
+    accounts=User.objects.all() if accounts is None else accounts
+    key=account_lookup_email(value)
+    stored=sorted(accounts.filter(email__iexact=key),key=lambda account:(account.email.strip().lower()!=key,account.pk))
+    as_typed,same_name=legacy_accounts_at(value,accounts)
+    return as_typed+stored+same_name
+def account_limit_key(account,key):
+    """What a lookup door keys its per-address limit on: the stored address of the account it reached, so every spelling
+    that reaches one account shares that account's one bucket; the lookup key when it reached none."""
+    return account.email.strip().lower() if account is not None else key
 
 class RegisterForm(SyntheticAttestation,UserCreationForm):
     synthetic_only=forms.BooleanField(label='I will use synthetic test data only.')
@@ -105,8 +196,9 @@ class RegisterForm(SyntheticAttestation,UserCreationForm):
     def clean_email(self):
         email=account_email(self.cleaned_data['email'])
         # Refused when the lookup every door uses already answers with an account: an account stored before the rule (for
-        # example 'ſam@…') answers email__iexact for 'sam@…', although the lower() unique index does not see one address.
-        if account_created_meanwhile(email): raise forms.ValidationError(ACCOUNT_EXISTS)
+        # example 'ſam@…', or 'sam@bücher.example' stored in its own letters) answers the lookup for 'sam@…' (for
+        # 'sam@xn--bcher-kva.example'), although the lower() unique index does not see one address.
+        if accounts_at(self.cleaned_data['email']): raise forms.ValidationError(ACCOUNT_EXISTS)
         return email
 
 #: ⚠️ TWO REQUESTS CAN CREATE ONE NEW ACCOUNT AT THE SAME MOMENT (R-A, docs/rebuild/v1/residuals-assessment-20260929.md).
@@ -117,7 +209,7 @@ class RegisterForm(SyntheticAttestation,UserCreationForm):
 #: with a 500 and never with a second account. Only when the account now exists: any other IntegrityError is still raised.
 ACCOUNT_CREATED_MEANWHILE='An account for this email address was created a moment ago. This invitation has not been used: sign in, then open it again to accept it.'
 ACCOUNT_EXISTS='An account with this email address already exists.'
-def account_created_meanwhile(email): return User.objects.filter(email__iexact=email).exists()
+def account_created_meanwhile(email): return bool(accounts_at(email))
 #: ⚠️ ONE INVITATION SUBMITTED TWICE AT ONCE (RR2-ACC-3). Both requests pass validation before either commits and wait for
 #: the invitation's row lock; the first accepts it (creating the account), the second then finds it used. It wrote nothing.
 #: It used to answer a bare 404; it is told what happened and where to go, on the sign-in page.

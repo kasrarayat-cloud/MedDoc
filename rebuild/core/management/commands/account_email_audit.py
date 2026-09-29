@@ -1,11 +1,14 @@
 """Read-only: how many stored account and invitation addresses fall outside the account email rule. Counts only.
 
-The rule (core.forms.account_email) stores an internationalized domain as its A-label, and the lookup doors (sign-in,
-recovery, verification resend) find an account by that form. A row stored BEFORE the rule with a Unicode domain (main's
-RegisterForm stored the address as typed) is then found by no spelling of that domain, and a second account for the same
-mailbox can be created beside it. So the rule's install precondition is that the installed database holds no non-ASCII
-address. This command answers that on the database it runs against, without printing, returning or logging any address:
-it reads in a READ ONLY transaction that it then rolls back, and it writes counts only.
+The rule (core.forms.account_email) stores an internationalized domain as its A-label. A row stored BEFORE the rule
+with a Unicode domain (main's RegisterForm stored the address as typed) is still found by the lookup doors (sign-in,
+recovery, verification resend) and still refuses a second account for its mailbox (core.forms.accounts_at: by its own
+spelling, and by every spelling of its domain when IDNA2003 and the rule agree on it). What such a row still cannot do is
+stated where it is decided, and it is why these counts are worth knowing before an install: a legacy domain holding
+ß, ς, ZWJ or ZWNJ is reached only by its own spelling (core.forms.legacy_domain), a signed-in legacy account is not the
+invited address of an invitation issued to its A-label, and a pending invitation stored in its own letters is not
+accepted by any spelling. This command reports them on the database it runs against, without printing, returning or
+logging any address: it reads in a READ ONLY transaction that it then rolls back, and it writes counts only.
 
 Per table: `non_ascii` rows (the address, or an account's username, has a non-ASCII character: the precondition's
 hazard) and, disjoint from them, `ascii_not_normalised` rows (ASCII, but the rule refuses the address or stores it

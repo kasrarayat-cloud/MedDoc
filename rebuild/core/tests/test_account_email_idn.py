@@ -46,7 +46,9 @@ CJK = '.'.join(['乙亀仏伝候兜冴刃剣劇勅勧匠卑', '垣堕塀墨壇�
 INVALID_DOMAINS = {
     'invalid Punycode': 'xn--zz.example',
     'non-canonical (fake) A-label': 'xn---bbk.example',
-    'A-label of a disallowed code point': 'xn--ls8h.example',
+    # An A-label IDNA2008 disallows but IDNA2003 decodes ('xn--n3h' is U+2603) is accepted typed as an A-label, as before
+    # the rule (F1, test_account_email_idn_repair.Idna2003Labels); typed in its own letters it is refused:
+    'disallowed code point typed in its own letters': '\u2603.example',
     'ZWNJ between Latin letters (CONTEXTJ)': 'ab\u200ccd.example',
     'bidi rule': 'a\u0627.example',
     'leading combining mark': '\u0301abc.example',
@@ -320,7 +322,7 @@ class AccountEmailAudit(TestCase):
             'core_user': {'rows': 5, 'non_ascii': 2, 'ascii_not_normalised': 2},
             'core_invitation': {'rows': 3, 'non_ascii': 1, 'ascii_not_normalised': 1},
             'core_clinicinvitation': {'rows': 1, 'non_ascii': 1, 'ascii_not_normalised': 0}}})
-        self.assertIn('outside the account email rule', refusal)
+        self.assertIn('outside the account email rule', refusal or '<no refusal: exit status 0>')
         for fragment in ('@', 'xn--', 'bücher', 'ｂüｃｈｅｒ', 'synthetic', 'leg', 'spare', 'mixed', 'ok'):
             with self.subTest(fragment=fragment):
                 self.assertNotIn(fragment, printed.lower())
