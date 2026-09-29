@@ -165,6 +165,24 @@ class FreezeEnforcedTests(unittest.TestCase):
         self.assertIn('engine_sha256', provenance['candidate'])
         self.assertTrue(provenance['frozen_files_match'])
 
+    def test_the_candidate_is_read_from_the_checkout_that_holds_the_diagnostics(self):
+        # (the copy links this checkout's rebuild/: every engine file hashes to the real one; the real tree is a git
+        # checkout of the candidate outside rebuild/ops/)
+        done, out = self.grade()
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        engine = json.loads(out.read_text())['provenance']['candidate']['engine_sha256']
+        self.assertEqual(len(engine), 8)
+        for name, digest in engine.items():
+            self.assertEqual(digest, sha256(REPOSITORY / name), name)
+        real = self.scratch / 'graded-real.json'
+        done = run([DIAGNOSTICS / 'mapping' / 'grade_app_path.py', '--grade', self.graded_input, '--form',
+                    'f6b-admin-missing', '--out', real])
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        candidate = json.loads(real.read_text())['provenance']['candidate']
+        head = subprocess.run(['git', '-C', str(REPOSITORY), 'rev-parse', 'HEAD'], capture_output=True, text=True)
+        self.assertEqual(candidate['head'], head.stdout.strip())
+        self.assertIs(candidate['rebuild_equals_candidate'], True)
+
     def test_grade_refuses_an_altered_map_and_writes_nothing(self):
         # (the recheck's positive control: f5.C2 changed from must_refuse to not_an_answer graded do-nothing RIGHT)
         path = self.copy / 'mapping' / 'f5-negative-controls.expected.json'

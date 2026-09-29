@@ -16,7 +16,7 @@ from pathlib import Path
 
 DIAGNOSTICS = Path(__file__).resolve().parent
 MANIFEST = DIAGNOSTICS / 'mapping' / 'EXPECTED-SHA256SUMS'
-WORKTREE = DIAGNOSTICS.parents[3]
+WORKTREE = DIAGNOSTICS.parents[4]         # (the checkout: docs/rebuild/v1/sonnet5-campaign/diagnostics is 5 deep)
 #: The candidate every frozen expectation and recorded observation is pinned to (FREEZE.json `candidate.sha`).
 CANDIDATE = '8e3dcfd07a5946430e7291b520faf35c8055127b'
 ENGINE_FILES = ('rebuild/core/mapping_assistance.py', 'rebuild/core/mapping_wire.py', 'rebuild/core/mapping_jobs.py',
