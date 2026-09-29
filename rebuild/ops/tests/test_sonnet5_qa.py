@@ -85,7 +85,7 @@ else:
     from django.test import TestCase, override_settings
 
     from ops import sonnet5_qa as sq
-    from .test_provider_campaign import NoEnvOpened, limits_record
+    from .test_provider_campaign import NoEnvOpened, limits_record, terms_record
 
     SONNET_5 = dict(AI_MODE='live', AI_PROVIDER='anthropic', AI_MODEL='claude-sonnet-5', AI_INPUT_RATE='2',
                     AI_OUTPUT_RATE='10', AI_CACHED_RATE='0.20', AI_THINKING='disabled', AI_EFFORT='medium',
@@ -195,6 +195,11 @@ else:
             self.assertEqual(attempt['pricing_version'], self.declaration.pricing_version('model_check'))
             # (item 8: every new attempt records the limits in force — the total, every stage's limit and count)
             self.assertEqual(attempt['limits'], limits_record(self.declaration))
+            # (A1: and the pricing terms in force; A2: and the hashes of every runner and engine file it ran)
+            self.assertEqual(attempt['terms'], terms_record(self.declaration))
+            self.assertEqual(set(attempt['engine_files']), set(sq.WATCHED_FILES))
+            self.assertEqual(attempt['engine_files']['rebuild/core/jobs.py'],
+                             pc.file_sha256(sq.REPOSITORY / 'rebuild' / 'core' / 'jobs.py'))
             cost = (Decimal(1386) * 2 + Decimal(97) * 10) / 1000000
             self.assertEqual((outcome['class'], outcome['served_model'], outcome['stop_reason']),
                              ('completed', 'claude-sonnet-5', 'end_turn'))
@@ -522,6 +527,29 @@ else:
             self.addCleanup(os.chmod, hidden, 0o700)
             self.refused_unsent('evidence/unlistable')
 
+        def test_an_environment_file_in_the_evidence_is_a_stop_and_is_never_opened(self):
+            # (A3: the manifest checks every name before hashing anything, so it never opens an environment file; the
+            # unreadable manifest is a stop, as an unscannable tree is)
+            from core.management.commands import audit_billing
+            real, real_open = audit_billing.audit_report, os.open
+
+            def plant():
+                # (planted with the unguarded os.open: the guard below records only what the runner opens)
+                fd = real_open(self.evidence() / '.env.local', os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+                os.write(fd, b'QUILLMD_SECRET_KEY=synthetic-not-a-secret')
+                os.close(fd)
+                return real()
+            with patch.object(audit_billing, 'audit_report', side_effect=plant), NoEnvOpened() as guard:
+                result = self.run_check()
+            self.assertEqual(guard.attempts, [])
+            self.assertEqual(result['verdict'], 'FAIL')
+            ledger = self.campaign.ledger
+            self.assertIsNone(ledger.stage_record('model_check', 'passed'))
+            failed = ledger.stage_record('model_check', 'failed')
+            self.assertTrue(any('could not be scanned' in r and 'environment file' in r for r in failed['reasons']),
+                            failed['reasons'])
+            self.assertIsNotNone(ledger.campaign_stop())
+
         def test_a_runner_failure_after_the_attempt_is_a_failed_stage_never_a_refusal(self):
             # (before the outcome is written: the attempt is recorded with an unknown outcome at its maximum)
             with patch.object(sq, 'raw_result', side_effect=RuntimeError('synthetic runner fault')):
@@ -582,7 +610,8 @@ else:
             self.campaign.ledger.acquire()
             self.campaign.ledger.write_attempt({'number': 1, 'campaign': self.declaration.campaign,
                                                 'authority_id': self.declaration.authority_id, 'stage': 'model_check',
-                                                'maximum_cost': '0.104896', 'rates': self.declaration.rates.as_dict()})
+                                                'maximum_cost': '0.104896', 'rates': self.declaration.rates.as_dict(),
+                                                'terms': terms_record(self.declaration)})
             with self.assertRaises(pc.Refused) as caught:
                 self.run_check()
             self.assertIn('failed', str(caught.exception))

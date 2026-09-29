@@ -20,9 +20,14 @@ What each piece guarantees, stated so a reader can see how it would fail:
                       as `interrupted_unknown` in a NEW outcome record and it counts at its maximum. Stage decisions are
                       numbered — failed-1, reopened-1, failed-2 … — and a sequence out of order is refused; a pass is
                       the one unnumbered stage-<id>-passed.json (the form the live model_check record already has).
-  exposure()          Known provider usage is priced at the DECLARED rates (the attempt carries them); anything not known
-                      — a completed outcome that does not report input or output tokens included — is counted at the
-                      attempt's maximum x 1.1, never as zero.
+  exposure()          Known provider usage is priced at the rates the ledger PINNED (Campaign.pinned_terms); anything not
+                      known — a completed outcome that does not report input or output tokens included — is counted at
+                      the attempt's maximum x 1.1, never as zero.
+  Campaign.pinned_terms()
+                      The rates, model, thinking, effort, inference geography and pricing versions in force when the
+                      ledger's FIRST attempt was written (the terms it records; a legacy first attempt: those of the
+                      declaration blob it names). Admission and reopening refuse while the current declaration states
+                      any other; an edited declaration never changes what is admitted or how anything is costed.
   Campaign.limits()   The limits IN FORCE: the tightest of the current declaration's and those each ledger attempt
                       recorded (or, for an attempt from before attempts recorded them, those of the declaration it names
                       by sha256). Raising a limit by editing the declaration never admits more.
@@ -30,8 +35,10 @@ What each piece guarantees, stated so a reader can see how it would fail:
                       failed (and not reopened), an attempt without an outcome, the stage or total limit in force, the
                       stage's request count; a reopened stage admits only a runner that contains the repair.
   Campaign.reopen()   The ONLY way a failed stage is admitted again: a committed, unmodified diagnosis naming the failed
-                      attempts and the repair commit, a runner that is not a failed one and contains the repair, and
-                      money and a request left under the stage's OWN limits. Writes stage-<id>-reopened-<n>.json.
+                      attempts and the repair commit, a runner that is not a failed one and contains the repair, a
+                      runner or engine file that differs from every failed attempt's recorded hashes, a repair commit
+                      that touches one, and money and a request left under the stage's OWN limits. Writes
+                      stage-<id>-reopened-<n>.json.
   load_credential()   The declared file only: absolute, no environment-file name (`.env`, `*.env`, `.env.*`,
                       `*.env.*`) anywhere in its path or its resolved path, no symbolic link at ANY component, one name
                       only (no hard link), a regular 0600 file owned by this account, exactly one non-empty line —
@@ -45,17 +52,21 @@ What each piece guarantees, stated so a reader can see how it would fail:
                       written to the current attempt's evidence BEFORE it is sent; a request outside an attempt, a second
                       request inside one, a non-Anthropic URL, a retrying client or a credential-provider client is
                       refused and never sent.
-  leaked()            Every retained file (zip members included) is searched for the key and the sk-ant- shape. It FAILS
-                      CLOSED: a directory it cannot list or enter, a file it cannot read, a link or special file, an
-                      environment-named entry (never opened) raise `Unscannable` — a stop, never 'no leak'.
+  leaked()            Every retained file (zip and gzip members included, nested to depth 4 within a byte bound) is
+                      searched for the key and the sk-ant- shape. It FAILS CLOSED: a directory it cannot list or enter, a
+                      file it cannot read or decode, an archive past its bounds, a link or special file, an
+                      environment-named entry (never opened), a root under an environment-named directory and any
+                      unexpected exception raise `Unscannable` — a stop, never 'no leak'.
   classify_case()     The per-case verdict for the mapping and ordinary_notes stages: unsafe findings and contract/money
                       failures stop the stage; held / missing / refused answers are usefulness, recorded per field.
 """
 import dataclasses
 import errno
 import fcntl
+import gzip
 import hashlib
 import hmac
+import io
 import json
 import os
 import re
@@ -269,6 +280,48 @@ class Limits:
         return Limits(min(self.total, other.total), tuple(stages))
 
 
+PRICING_VERSION = re.compile(r'configured-v1:[0-9a-f]{64}')
+
+
+@dataclasses.dataclass(frozen=True)
+class Terms:
+    """What a request is admitted at and every outcome is costed at: the declared rates (as the declaration spells them),
+    model, thinking, effort, inference geography ('' when unset) and every pricing version. A new attempt records the
+    terms in force (`record()`); the ledger's FIRST attempt pins them for the whole campaign (Campaign.pinned_terms)."""
+    rates: Rates
+    model: str
+    thinking: str
+    effort: str
+    inference_geo: str
+    pricing_versions: tuple         # ((name, 'configured-v1:…'), …), sorted by name
+
+    def record(self):
+        return {'rates': self.rates.as_dict(), 'model': self.model, 'thinking': self.thinking, 'effort': self.effort,
+                'inference_geo': self.inference_geo, 'pricing_versions': dict(self.pricing_versions)}
+
+    @staticmethod
+    def from_record(record, what):
+        """Recorded terms, read strictly: anything malformed is refused, never read as matching."""
+        def valid(condition):
+            require(condition, f'{what} records terms that cannot be read; the terms in force cannot be established.')
+        names = ('rates', 'model', 'thinking', 'effort', 'inference_geo', 'pricing_versions')
+        valid(isinstance(record, dict) and set(record) == set(names))
+        rates, versions = record['rates'], record['pricing_versions']
+        valid(isinstance(rates, dict) and set(rates) == {'input', 'output', 'cached'}
+              and all(type(value) is str for value in rates.values())
+              and all(type(record[name]) is str for name in ('model', 'thinking', 'effort', 'inference_geo'))
+              and isinstance(versions, dict) and all(isinstance(name, str) and STAGE_ID.fullmatch(name)
+                                                     and isinstance(value, str) and PRICING_VERSION.fullmatch(value)
+                                                     for name, value in versions.items()))
+        return Terms(Rates(rates['input'], rates['output'], rates['cached']), record['model'], record['thinking'],
+                     record['effort'], record['inference_geo'], tuple(sorted(versions.items())))
+
+    def differences(self, other):
+        """The names of the terms in which `other` differs from these."""
+        return [name for name in ('rates', 'model', 'thinking', 'effort', 'inference_geo', 'pricing_versions')
+                if getattr(self, name) != getattr(other, name)]
+
+
 @dataclasses.dataclass(frozen=True)
 class Declaration:
     path: str
@@ -305,6 +358,10 @@ class Declaration:
     def limits(self):
         return Limits(self.total_limit, tuple(StageLimit(s.id, s.limit, s.max_requests, (s.requires,) if s.requires else ())
                                               for s in self.stages))
+
+    def terms(self):
+        return Terms(self.rates, self.model, self.thinking, self.effort, self.inference_geo,
+                     tuple(sorted(self.pricing_versions)))
 
 
 #: Every line that READS as an authorization — any word starting authoriz/authoris (authorization, authorised,
@@ -351,6 +408,20 @@ def is_ancestor(root, ancestor, descendant):
     result = _git(root, 'merge-base', '--is-ancestor', ancestor, descendant, check=False)
     require(result.returncode in (0, 1), f'git cannot tell whether {ancestor} is contained in {descendant}.')
     return result.returncode == 0
+
+
+def blob_sha256(root, commit, relative):
+    """The sha256 of `relative` as committed at `commit`, or None when the commit does not hold it."""
+    blob = _git(root, 'cat-file', 'blob', f'{commit}:{relative}', check=False)
+    return hashlib.sha256(blob.stdout).hexdigest() if blob.returncode == 0 else None
+
+
+def files_changed_by(root, commit):
+    """The repository-relative paths `commit` changes against its first parent. Refuses a commit without a parent."""
+    require(FULL_COMMIT.fullmatch(str(commit)) and commit_exists(root, f'{commit}'), f'{commit} is not a commit here.')
+    require(_git(root, 'rev-parse', '--verify', '--quiet', f'{commit}^', check=False).returncode == 0,
+            f'The commit {commit} has no parent; what it changes cannot be shown.')
+    return _git(root, 'diff', '--name-only', '-z', f'{commit}^', commit).stdout.decode().split('\0')[:-1]
 
 
 def committed_file(path, root, document):
@@ -400,10 +471,28 @@ def _limits_from_text(text):
     return total, tuple(parsed_stages)
 
 
-def declared_limits_at(declaration, commit, sha256):
-    """The limits of the declaration an earlier attempt names (`declaration_commit`, `declaration_sha256`), read from
-    the committed blob at that commit and accepted only if its bytes hash to the recorded sha256."""
-    unknown = 'An attempt was admitted under a declaration whose limits cannot be read back; the limits in force cannot be established.'
+def _terms_from_text(text):
+    """(provider, Terms) as the declaration states them — the one parser of the pricing terms, for the current declaration
+    and for the one a legacy first attempt was admitted under."""
+    provider = _one(text, r'^provider:[ \t]*(\S+)[ \t]*$', 'provider:')
+    model = _one(text, r'^model:[ \t]*(\S+)[ \t]*$', 'model:')
+    rates = Rates(*_one(text, r'^rates: input (\S+) output (\S+) cached (\S+) \(USD per million tokens\)[ \t]*$', 'rates:'))
+    for value in (rates.input, rates.output, rates.cached):
+        require(money(value) >= 0, 'A declared rate is negative.')
+    thinking = _one(text, r'^thinking:[ \t]*(\S+)[ \t]*$', 'thinking:')
+    effort = _one(text, r'^effort:[ \t]*(\S+)[ \t]*$', 'effort:')
+    geo = _one(text, r'^inference_geo:[ \t]*(\S+)[ \t]*$', 'inference_geo:')
+    versions = PRICING_LINE.findall(text)
+    require(len(re.findall(r'^pricing_version\b', text, re.M)) == len(versions), 'A `pricing_version` line does not have the required form.')
+    names = [name for name, _ in versions]
+    require(len(set(names)) == len(names), 'The declaration names a pricing version twice.')
+    return provider, Terms(rates, model, thinking, effort, '' if geo == 'unset' else geo, tuple(sorted(versions)))
+
+
+def _declaration_blob(declaration, commit, sha256, what):
+    """The text of the declaration an earlier attempt names (`declaration_commit`, `declaration_sha256`), read from the
+    committed blob at that commit and accepted only if its bytes hash to the recorded sha256 and it is this campaign's."""
+    unknown = f'An attempt was admitted under a declaration whose {what} cannot be read back; the {what} in force cannot be established.'
     require(declaration.repository and FULL_COMMIT.fullmatch(str(commit)) and re.fullmatch(r'[0-9a-f]{64}', str(sha256)),
             unknown)
     root = Path(declaration.repository)
@@ -414,7 +503,18 @@ def declared_limits_at(declaration, commit, sha256):
     require(_one(text, r'^campaign:[ \t]*(\S+)[ \t]*$', 'campaign:') == declaration.campaign
             and _one(text, r'^authority_id:[ \t]*(\S+)[ \t]*$', 'authority_id:') == declaration.authority_id,
             'An attempt was admitted under a declaration of another campaign or authority.')
-    total, stages = _limits_from_text(text)
+    return text
+
+
+def declared_terms_at(declaration, commit, sha256):
+    """The pricing terms of the declaration a legacy first attempt names, read back from git (see _declaration_blob)."""
+    return _terms_from_text(_declaration_blob(declaration, commit, sha256, 'terms'))[1]
+
+
+def declared_limits_at(declaration, commit, sha256):
+    """The limits of the declaration an earlier attempt names (`declaration_commit`, `declaration_sha256`), read from
+    the committed blob at that commit and accepted only if its bytes hash to the recorded sha256."""
+    total, stages = _limits_from_text(_declaration_blob(declaration, commit, sha256, 'limits'))
     return Limits(total, tuple(StageLimit(s.id, s.limit, s.max_requests, (s.requires,) if s.requires else ())
                                for s in stages))
 
@@ -449,18 +549,9 @@ def declared(path, *, repository=None, out=None):
     transfers = _one(text, r'^unused_stage_budget_transfers:[ \t]*(yes|no)[ \t]*$', 'unused_stage_budget_transfers:')
     require(transfers == 'no', 'This runner enforces per-stage limits with no transfer between stages.')
     total, parsed_stages = _limits_from_text(text)
-    provider = _one(text, r'^provider:[ \t]*(\S+)[ \t]*$', 'provider:')
-    model = _one(text, r'^model:[ \t]*(\S+)[ \t]*$', 'model:')
-    rates = Rates(*_one(text, r'^rates: input (\S+) output (\S+) cached (\S+) \(USD per million tokens\)[ \t]*$', 'rates:'))
-    for value in (rates.input, rates.output, rates.cached):
-        require(money(value) >= 0, 'A declared rate is negative.')
-    thinking = _one(text, r'^thinking:[ \t]*(\S+)[ \t]*$', 'thinking:')
-    effort = _one(text, r'^effort:[ \t]*(\S+)[ \t]*$', 'effort:')
-    geo = _one(text, r'^inference_geo:[ \t]*(\S+)[ \t]*$', 'inference_geo:')
-    versions = PRICING_LINE.findall(text)
-    require(len(re.findall(r'^pricing_version\b', text, re.M)) == len(versions), 'A `pricing_version` line does not have the required form.')
+    provider, terms = _terms_from_text(text)
+    versions = [(name, version) for name, version in PRICING_LINE.findall(text)]
     names = [name for name, _ in versions]
-    require(len(set(names)) == len(names), 'The declaration names a pricing version twice.')
     for stage in parsed_stages:
         require(stage.id in names, f'Stage {stage.id} has no declared pricing version.')
     credential_file = _one(text, r'^credential_file:[ \t]*(/\S+)[ \t]*$', 'credential_file:')
@@ -469,8 +560,9 @@ def declared(path, *, repository=None, out=None):
         path=str(path), sha256=hashlib.sha256(data).hexdigest(), commit=commit, commit_time=commit_time,
         campaign=campaign, authority_id=authority_id, authorization=lines[0].split(':', 1)[1].strip(),
         owner_words=owner_words, total_limit=total, stages=tuple(parsed_stages), transfers=False, provider=provider,
-        model=model, rates=rates, thinking=thinking, effort=effort, inference_geo='' if geo == 'unset' else geo,
-        pricing_versions=tuple(versions), credential_file=credential_file, repository=str(root))
+        model=terms.model, rates=terms.rates, thinking=terms.thinking, effort=terms.effort,
+        inference_geo=terms.inference_geo, pricing_versions=tuple(versions), credential_file=credential_file,
+        repository=str(root))
     print(f'declaration {relative}: committed {commit_time} in {commit}; sha256 {declaration.sha256}', file=out)
     return declaration
 
@@ -725,23 +817,26 @@ def attempt_bound(maximum_cost):
     return money(maximum_cost) * GEO_MARGIN
 
 
-def known_cost(attempt, outcome):
-    """The provider-reported usage of an outcome at the attempt's declared rates, or None when it is not known (no
-    usage, an unreported input or output count, an invalid count, no rates)."""
+def known_cost(attempt, outcome, rates=None):
+    """The provider-reported usage of an outcome at `rates` (a campaign passes the rates its ledger PINNED; without them,
+    the attempt's own recorded rates), or None when it is not known (no usage, an unreported input or output count, an
+    invalid count, no rates)."""
     usage = (outcome or {}).get('usage')
-    if not (isinstance(usage, dict) and isinstance(attempt.get('rates'), dict)):
+    rates = attempt.get('rates') if rates is None else rates
+    if not (isinstance(usage, dict) and isinstance(rates, (dict, Rates))):
         return None
     try:
-        return usage_cost(usage, attempt['rates'])
+        return usage_cost(usage, rates)
     except (KeyError, ValueError, TypeError, InvalidOperation):
         return None
 
 
-def exposure(attempt, outcome):
-    """What one attempt may have cost at the provider, worst case.
+def exposure(attempt, outcome, rates=None):
+    """What one attempt may have cost at the provider, worst case. `rates`: the rates it is costed at — a campaign always
+    passes the rates its ledger PINNED (Campaign.pinned_terms), never a later edit's.
 
-    completed         the provider-reported usage at the attempt's declared rates — when input and output tokens are
-                      both reported; a completed outcome without them is unknown;
+    completed         the provider-reported usage at those rates — when input and output tokens are both reported; a
+                      completed outcome without them is unknown;
     not_sent          zero — only when the product proved no request existed and none was captured;
     anything else     (unknown, uncertain, interrupted_unknown, reconciliation, no outcome) the attempt's maximum x 1.1,
                       or the reported usage's cost if that is higher."""
@@ -750,7 +845,7 @@ def exposure(attempt, outcome):
         return bound
     if outcome.get('class') == 'not_sent':
         return Decimal(0)
-    known = known_cost(attempt, outcome)
+    known = known_cost(attempt, outcome, rates)
     if outcome.get('class') == 'completed' and known is not None:
         return known
     return max(bound, known) if known is not None else bound
@@ -759,10 +854,12 @@ def exposure(attempt, outcome):
 class Campaign:
     """A declaration and the ledger that spends under it."""
 
-    def __init__(self, declaration, root):
+    def __init__(self, declaration, root, *, watched_files=()):
         self.declaration = declaration
         self.root = Path(root)
         self.ledger = Ledger(self.root / 'ledger')
+        #: The runner and engine files (repository-relative) a reopening must show were repaired (A2).
+        self.watched_files = tuple(watched_files)
 
     def rows(self):
         rows = self.ledger.rows()
@@ -774,11 +871,48 @@ class Campaign:
         return rows
 
     def totals(self, stage=None):
-        rows = [(a, o) for a, o in self.rows() if stage is None or a['stage'] == stage]
-        return {'attempts': len(rows), 'exposure': sum((exposure(a, o) for a, o in rows), Decimal(0)),
+        every = self.rows()
+        rates = self.pinned_terms(every).rates
+        rows = [(a, o) for a, o in every if stage is None or a['stage'] == stage]
+        return {'attempts': len(rows), 'exposure': sum((exposure(a, o, rates) for a, o in rows), Decimal(0)),
                 'open': sum(1 for _, o in rows if o is None),
                 'unknown': sum(1 for a, o in rows if o is None or o.get('class') != 'completed'
-                               or known_cost(a, o) is None)}
+                               or known_cost(a, o, rates) is None)}
+
+    def pinned_terms(self, rows=None):
+        """The pricing terms IN FORCE (A1, RR-MONEY-1): those the ledger's FIRST attempt records — or, for a legacy first
+        attempt that records none (the live ledger's attempt 1), those of the declaration it names by sha256, read back
+        from git at its declaration_commit when it is not the current declaration. With no attempt yet, the current
+        declaration's (the first attempt will record them). Every later attempt that records terms must record the same;
+        anything that cannot be established is refused."""
+        rows = self.rows() if rows is None else rows
+        if not rows:
+            return self.declaration.terms()
+        first = rows[0][0]
+        if 'terms' in first:
+            pinned = Terms.from_record(first['terms'], f'Attempt {first.get("number")}')
+        else:
+            sha256 = first.get('declaration_sha256')
+            require(isinstance(sha256, str) and re.fullmatch(r'[0-9a-f]{64}', sha256),
+                    'The first attempt records neither its terms nor its declaration; the terms in force cannot be established.')
+            pinned = (self.declaration.terms() if sha256 == self.declaration.sha256
+                      else declared_terms_at(self.declaration, first.get('declaration_commit'), sha256))
+        for attempt, _ in rows[1:]:
+            if 'terms' in attempt:
+                require(Terms.from_record(attempt['terms'], f'Attempt {attempt.get("number")}') == pinned,
+                        f'Attempt {attempt.get("number")} records other terms than the first attempt pinned; the ledger '
+                        'is not consistent.')
+        return pinned
+
+    def require_pinned_terms(self, rows):
+        """The pinned terms, refusing while the current declaration states any other rate, model, thinking, effort,
+        inference geography or pricing version: an edited declaration never changes what is admitted or how it is
+        costed."""
+        pinned = self.pinned_terms(rows)
+        changed = pinned.differences(self.declaration.terms())
+        require(not changed, 'The declaration\'s ' + ', '.join(changed) + ' differ from those the ledger\'s first attempt '
+                'pinned; an edited declaration never changes what is admitted or how it is costed.')
+        return pinned
 
     def pinned_limits(self, attempt):
         """The limits in force when `attempt` was written: the ones it records, or — for an attempt written before
@@ -824,6 +958,7 @@ class Campaign:
         rows = self.rows()
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before admitting.')
         limits = self.limits(rows)
+        rates = self.require_pinned_terms(rows).rates
         in_force = limits.stage(stage.id)
         for prerequisite in in_force.requires:
             require(self.ledger.stage_state(prerequisite)['state'] == 'passed',
@@ -834,8 +969,8 @@ class Campaign:
         if in_force.max_requests is not None:
             require(len(here) + 1 <= in_force.max_requests,
                     f'Stage {stage.id} has used all {in_force.max_requests} requests.')
-        spent = sum((exposure(a, o) for a, o in here), Decimal(0))
-        total = sum((exposure(a, o) for a, o in rows), Decimal(0))
+        spent = sum((exposure(a, o, rates) for a, o in here), Decimal(0))
+        total = sum((exposure(a, o, rates) for a, o in rows), Decimal(0))
         require(spent + bound <= in_force.limit,
                 f'Stage {stage.id} limit: {spent} exposed + {bound} would exceed ${in_force.limit}.')
         require(total + bound <= limits.total,
@@ -863,6 +998,7 @@ class Campaign:
         require(ledger.campaign_stop() is None, 'The campaign is stopped; no stage is reopened under a stop.')
         rows = self.rows()
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before reopening.')
+        rates = self.require_pinned_terms(rows).rates
         state = ledger.stage_state(stage.id)
         require(state['state'] == 'failed', f'Stage {stage.id} has not failed; only a failed stage is reopened.')
         here = [(a, o) for a, o in rows if a['stage'] == stage.id]
@@ -905,10 +1041,31 @@ class Campaign:
             require(not is_ancestor(root, repair, failed_runner),
                     f'The repair {repair} was already in the failed runner {failed_runner}; it does not repair this failure.')
 
+        # The repair changed what ran (A2): at least one runner or engine file differs between EVERY failed attempt's
+        # recorded hashes and this runner's checkout, and the repair commit itself touches at least one of them — a
+        # repair to a document alone, or one undone again, reopens nothing.
+        watched = self.watched_files
+        require(watched, 'This campaign watches no runner or engine file; a repair cannot be shown to change one.')
+        current = {name: blob_sha256(root, runner_commit, name) for name in watched}
+        changed = set()
+        for attempt, _ in here:
+            if attempt['number'] not in this_failure:
+                continue
+            recorded = attempt.get('engine_files')
+            require(isinstance(recorded, dict) and all(name in recorded for name in watched),
+                    f'Failed attempt {attempt["number"]} records no hash of every runner and engine file; a repair cannot '
+                    'be shown to differ.')
+            differs = [name for name in watched if recorded[name] != current[name]]
+            require(differs, f'No runner or engine file differs between failed attempt {attempt["number"]} and the runner '
+                             f'{runner_commit}; nothing that ran was repaired.')
+            changed.update(differs)
+        touched = sorted(set(files_changed_by(root, repair)) & set(watched))
+        require(touched, f'The repair {repair} touches no runner or engine file; it does not repair what ran.')
+
         # The stage's own limits in force: money and a request left.
         limits = self.limits(rows)
         in_force = limits.stage(stage.id)
-        spent = sum((exposure(a, o) for a, o in here), Decimal(0))
+        spent = sum((exposure(a, o, rates) for a, o in here), Decimal(0))
         require(spent < in_force.limit, f'Stage {stage.id} has no money left under its own ${in_force.limit} limit '
                                         f'({spent} exposed); another stage\'s budget is never used.')
         if in_force.max_requests is not None:
@@ -919,7 +1076,8 @@ class Campaign:
             'declaration_sha256': declaration.sha256, 'declaration_commit': declaration.commit,
             'diagnosis': {'path': relative, 'sha256': diagnosis_sha256, 'commit': commit, 'commit_time': commit_time},
             'failed_attempts': this_failure, 'failed_runner_commits': failed_runners, 'repair_commit': repair,
-            'runner_commit': runner_commit, 'ledger_attempts': len(rows),
+            'runner_commit': runner_commit, 'ledger_attempts': len(rows), 'engine_files': current,
+            'changed_files': sorted(changed), 'repair_touches': touched,
             'stage_exposure': format(spent, 'f'), 'stage_limit': format(in_force.limit, 'f'),
             'stage_remaining': format(in_force.limit - spent, 'f'), 'stage_requests': len(here),
             'max_requests': in_force.max_requests, 'limits': limits.record()}
@@ -1184,9 +1342,58 @@ def _scan_bytes(data, key):
     return (bool(key) and key.encode() in data) or bool(KEY_SHAPE.search(data))
 
 
+#: Archives inside retained files are opened and their members scanned, recursively, to this depth (a member of the
+#: file's own archive is depth 1) and within this many expanded bytes per retained file. Past either bound the file is
+#: UNSCANNABLE — a stop, never skipped and never "no leak".
+SCAN_NESTING_LIMIT = 4
+SCAN_EXPANDED_LIMIT = 256 * 1024 * 1024
+GZIP_MAGIC = b'\x1f\x8b'
+
+
+def _expand(stream, budget, relative):
+    """All of a decompressing stream, counted against the file's expanded-byte budget."""
+    parts = []
+    with stream:
+        while chunk := stream.read(1024 * 1024):
+            budget[0] -= len(chunk)
+            if budget[0] < 0:
+                raise Unscannable(f'{relative} expands to more than {SCAN_EXPANDED_LIMIT} bytes; the leak scan does not '
+                                  'read past its bound, so it is unscannable.')
+            parts.append(chunk)
+    return b''.join(parts)
+
+
+def _archive_kind(data):
+    if data[:2] == GZIP_MAGIC:
+        return 'gzip'
+    return 'zip' if zipfile.is_zipfile(io.BytesIO(data)) else None
+
+
+def _scan_archive(source, kind, key, relative, depth, budget):
+    """Every member of a zip (or the content of a gzip) at `depth`, each scanned whole and, when it is itself an archive,
+    opened in turn. Any decoding error propagates to the caller, which makes it `Unscannable`."""
+    if depth > SCAN_NESTING_LIMIT:
+        raise Unscannable(f'{relative} nests archives deeper than {SCAN_NESTING_LIMIT}; the leak scan does not read past '
+                          'its bound, so it is unscannable.')
+    if kind == 'zip':
+        members = []
+        with zipfile.ZipFile(source) as archive:
+            for member in archive.infolist():
+                members.append(_expand(archive.open(member), budget, relative))
+    else:
+        members = [_expand(gzip.GzipFile(fileobj=source, mode='rb'), budget, relative)]
+    for data in members:
+        if _scan_bytes(data, key):
+            return True
+        inner = _archive_kind(data)
+        if inner and _scan_archive(io.BytesIO(data), inner, key, relative, depth + 1, budget):
+            return True
+    return False
+
+
 def _scan_file(path, key, relative):
     overlap = max(len(key.encode()) if key else 0, 64)
-    tail = b''
+    tail = head = b''
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
     except OSError as error:
@@ -1197,35 +1404,50 @@ def _scan_file(path, key, relative):
             raise Unscannable(f'{relative} is not a regular file; the leak scan does not read it.')
         try:
             while block := handle.read(SCAN_CHUNK):
+                head = head or block[:4]
                 if _scan_bytes(tail + block, key):
                     return True
                 tail = block[-overlap:]
             handle.seek(0)
-            archived = zipfile.is_zipfile(handle)
-        except OSError as error:
-            raise Unscannable(f'The leak scan cannot read {relative} ({type(error).__name__}).') from None
-        if archived:
-            # (a Word export is compressed: a key inside its XML is invisible in the file's own bytes)
-            try:
-                with zipfile.ZipFile(handle) as archive:
-                    for member in archive.infolist():
-                        if member.file_size > 256 * 1024 * 1024:
-                            return True     # (unscannable: counted as a finding, never skipped)
-                        if _scan_bytes(archive.read(member), key):
-                            return True
-            except (zipfile.BadZipFile, RuntimeError, OSError):
-                return True
+            kind = 'gzip' if head[:2] == GZIP_MAGIC else ('zip' if zipfile.is_zipfile(handle) else None)
+            if kind:
+                # (a Word export is compressed: a key inside its XML is invisible in the file's own bytes; so is one
+                # inside a gzip, or an archive inside either)
+                handle.seek(0)
+                return _scan_archive(handle, kind, key, relative, 1, [SCAN_EXPANDED_LIMIT])
+        except Unscannable:
+            raise
+        except Exception as error:
+            # (a corrupt member, a truncated gzip, an unsupported compression, an encrypted member: never a finding that
+            # says "leaked", never "no leak" — the file could not be read whole)
+            raise Unscannable(f'The leak scan cannot decode {relative} ({type(error).__name__}); an undecodable file is a '
+                              'stop, never "no leak".') from None
     return False
 
 
 def leaked(root, key, exclude=()):
-    """Every retained file under `root` searched for the key (by value, never printed) and the sk-ant- shape. `exclude`:
-    exact files that are the credential itself. Returns the relative paths of the files that carry one.
+    """Every retained file under `root` searched for the key (by value, never printed) and the sk-ant- shape, archives
+    (zip and gzip, nested to SCAN_NESTING_LIMIT within SCAN_EXPANDED_LIMIT bytes) included. `exclude`: exact files that
+    are the credential itself. Returns the relative paths of the files that carry one.
 
-    FAILS CLOSED: a root that is not a real directory, a directory it cannot list or enter, a file it cannot read, any
-    symbolic link, special file or environment-named entry raises `Unscannable` (a `Refused`) — nothing unread is ever
-    reported as clean, and an environment file is never opened."""
+    FAILS CLOSED: a root that is not a real directory, or that is or lies under an environment-named directory; a
+    directory it cannot list or enter; a file it cannot read or decode; an archive past its bounds; any symbolic link,
+    special file or environment-named entry; and ANY unexpected exception raise `Unscannable` (a `Refused`) — nothing
+    unread is ever reported as clean, and an environment file is never opened."""
+    try:
+        return _leaked(root, key, exclude)
+    except Unscannable:
+        raise
+    except Exception as error:
+        raise Unscannable(f'The leak scan failed ({type(error).__name__}); a scan that did not finish is a stop, never '
+                          '"no leak".') from None
+
+
+def _leaked(root, key, exclude):
     root = Path(root)
+    for candidate in (Path(os.path.abspath(root)), Path(os.path.realpath(root))):
+        if any(env_name(part) for part in candidate.parts):
+            raise Unscannable('The leak scan root is, or lies under, an environment-named directory; it is never read.')
     excluded = {os.path.realpath(path) for path in exclude}
     found = []
 
@@ -1253,8 +1475,8 @@ def leaked(root, key, exclude=()):
         root_mode = os.lstat(root).st_mode
     except OSError as error:
         raise Unscannable(f'The leak scan cannot read its root ({type(error).__name__}).') from None
-    if not stat.S_ISDIR(root_mode) or env_name(root.name):
-        raise Unscannable('The leak scan root is not a real directory (a link or an environment name is not followed).')
+    if not stat.S_ISDIR(root_mode):
+        raise Unscannable('The leak scan root is not a real directory (a link is not followed).')
     for directory, subdirectories, files in os.walk(root, onerror=cannot_list, followlinks=False):
         subdirectories.sort()
         for name in subdirectories:

@@ -104,11 +104,17 @@ def declaration(**changes):
 
 
 def attempt(number, stage='model_check', maximum=MAXIMUM, campaign='quillmd-v1-sonnet5-staged-40',
-            authority='synthetic-authority', limits=None, runner_commit=None):
+            authority='synthetic-authority', limits=None, runner_commit=None, terms='synthetic', engine_files=None):
+    """A ledger attempt as the runner writes it. `terms` (A1): the pricing terms it records — by default those of the
+    synthetic `declaration()`; None writes a legacy attempt that records none (like the live ledger's attempt 1)."""
     record = {'number': number, 'campaign': campaign, 'authority_id': authority, 'stage': stage, 'maximum_cost': maximum,
               'rates': {'input': '2', 'output': '10', 'cached': '0.20'}, 'started_at': pc.now()}
     if limits is not None:
         record['limits'] = limits
+    if terms is not None:
+        record['terms'] = terms_record(declaration()) if terms == 'synthetic' else terms
+    if engine_files is not None:
+        record['engine_files'] = engine_files
     if runner_commit is not None:
         record['runner_commit'] = runner_commit
     return record
@@ -120,6 +126,14 @@ def limits_record(d):
     return {'total_limit_provider_usd': format(d.total_limit, 'f'),
             'stages': {s.id: {'limit_provider_usd': format(s.limit, 'f'), 'max_requests': s.max_requests,
                               'requires': [s.requires] if s.requires else []} for s in d.stages}}
+
+
+def terms_record(d):
+    """The pricing terms a new attempt records (A1), spelled out independently of the code under test: the declared
+    rates (as the declaration spells them), model, thinking, effort, inference geography and every pricing version."""
+    return {'rates': {'input': d.rates.input, 'output': d.rates.output, 'cached': d.rates.cached}, 'model': d.model,
+            'thinking': d.thinking, 'effort': d.effort, 'inference_geo': d.inference_geo,
+            'pricing_versions': {name: version for name, version in d.pricing_versions}}
 
 
 def usage(**changes):
@@ -833,6 +847,121 @@ class LeakScanFailsClosedTests(unittest.TestCase):
         self.assertEqual(pc.leaked(self.root, SYNTHETIC_KEY, exclude=(credential,)), ['evidence/001/copy'])
 
 
+class LeakScanDecodingTests(unittest.TestCase):
+    """A3: any decompression or decoding error, and any unexpected exception, while scanning is an `Unscannable` STOP
+    (never a finding that says 'leaked', never 'no leak'); nested zip and gzip members are scanned recursively to a depth
+    of 4 within a bounded number of expanded bytes, and exceeding either bound is a stop; a scan root that is, or lies
+    under, an environment-named directory is refused; the evidence manifest never opens an environment-named file."""
+
+    def setUp(self):
+        self.root = scratch(self)
+        self.evidence = self.root / 'evidence' / '001'
+        self.evidence.mkdir(parents=True)
+        (self.evidence / 'clean.json').write_text('{"ok": true}')
+
+    def unscannable(self, fragment=''):
+        with self.assertRaises(pc.Unscannable) as caught:
+            pc.leaked(self.root, SYNTHETIC_KEY)
+        self.assertIn(fragment, str(caught.exception))
+        return caught.exception
+
+    @staticmethod
+    def zipped(members):
+        data = io.BytesIO()
+        with zipfile.ZipFile(data, 'w', zipfile.ZIP_DEFLATED) as archive:
+            for name, content in members.items():
+                archive.writestr(name, content)
+        return data.getvalue()
+
+    @staticmethod
+    def gzipped(content):
+        import gzip
+        return gzip.compress(content, mtime=0)
+
+    def test_a_corrupt_archive_member_is_a_stop_not_a_finding(self):
+        archive = bytearray(self.zipped({'word/document.xml': b'<w:t>' + b'synthetic clean text ' * 200 + b'</w:t>'}))
+        start = archive.index(b'word/document.xml') + len('word/document.xml')
+        for offset in range(start + 10, start + 40):
+            archive[offset] ^= 0xFF                                    # (the deflated member data, not its header)
+        (self.evidence / 'export.docx').write_bytes(bytes(archive))
+        self.unscannable('evidence/001/export.docx')
+
+    def test_a_truncated_or_corrupt_gzip_is_a_stop(self):
+        whole = self.gzipped(b'synthetic clean text ' * 500)
+        for name, data in (('truncated.json.gz', whole[:len(whole) // 2]), ('corrupt.gz', whole[:10] + b'\x00' * 40)):
+            path = self.evidence / name
+            path.write_bytes(data)
+            with self.subTest(name=name):
+                self.unscannable(f'evidence/001/{name}')
+            path.unlink()
+        (self.evidence / 'whole.gz').write_bytes(whole)
+        self.assertEqual(pc.leaked(self.root, SYNTHETIC_KEY), [])
+
+    def test_a_key_in_a_gzip_file_or_a_gzip_member_is_found(self):
+        (self.evidence / 'result.json.gz').write_bytes(self.gzipped(b'{"x": "' + SYNTHETIC_KEY.encode() + b'"}'))
+        (self.evidence / 'bundle.zip').write_bytes(self.zipped({'inner.gz': self.gzipped(SYNTHETIC_KEY.encode())}))
+        self.assertEqual(sorted(pc.leaked(self.root, SYNTHETIC_KEY)), ['evidence/001/bundle.zip',
+                                                                      'evidence/001/result.json.gz'])
+
+    def nest(self, levels, payload):
+        """`payload` inside `levels` archives, alternating zip and gzip from the inside out (zip outermost)."""
+        data = payload
+        for level in range(levels):
+            data = self.zipped({f'level-{level}.bin': data}) if (levels - level) % 2 else self.gzipped(data)
+        return data
+
+    def test_nested_archives_are_scanned_to_a_depth_of_four_and_deeper_is_a_stop(self):
+        for levels in (2, 3, 4):
+            with self.subTest(levels=levels):
+                path = self.evidence / 'nested.bin'
+                path.write_bytes(self.nest(levels, b'prefix ' + SYNTHETIC_KEY.encode()))
+                self.assertEqual(pc.leaked(self.root, SYNTHETIC_KEY), ['evidence/001/nested.bin'])
+                path.write_bytes(self.nest(levels, b'nothing secret here'))
+                self.assertEqual(pc.leaked(self.root, SYNTHETIC_KEY), [])
+        (self.evidence / 'nested.bin').write_bytes(self.nest(5, b'nothing secret here'))
+        self.unscannable('deeper than 4')
+
+    def test_expanding_past_the_byte_bound_is_a_stop(self):
+        (self.evidence / 'large.zip').write_bytes(self.zipped({'a.txt': b'0' * 4096, 'b.txt': b'1' * 4096}))
+        with patch.object(pc, 'SCAN_EXPANDED_LIMIT', 6000):
+            self.unscannable('more than 6000 bytes')
+        with patch.object(pc, 'SCAN_EXPANDED_LIMIT', 9000):
+            self.assertEqual(pc.leaked(self.root, SYNTHETIC_KEY), [])
+        (self.evidence / 'large.zip').unlink()
+        (self.evidence / 'large.gz').write_bytes(self.gzipped(b'0' * 8192))
+        with patch.object(pc, 'SCAN_EXPANDED_LIMIT', 6000):
+            self.unscannable('more than 6000 bytes')
+
+    def test_an_unexpected_exception_while_scanning_is_a_stop(self):
+        for target in ('_scan_bytes', 'env_name'):
+            with self.subTest(target=target), patch.object(pc, target, side_effect=ValueError('synthetic fault')):
+                error = self.unscannable('ValueError')
+                self.assertIsInstance(error, pc.Refused)
+
+    def test_a_scan_root_under_an_environment_named_directory_is_refused(self):
+        for folder in ('config.env', '.env.local', 'Deploy.ENV'):
+            root = scratch(self) / folder / 'campaign'
+            (root / 'evidence').mkdir(parents=True)
+            (root / 'evidence' / 'clean.json').write_text('{}')
+            with self.subTest(folder=folder), NoEnvOpened() as guard, self.assertRaises(pc.Unscannable) as caught:
+                pc.leaked(root, SYNTHETIC_KEY)
+            self.assertIn('environment', str(caught.exception))
+            self.assertEqual(guard.attempts, [])
+
+    def test_the_manifest_never_opens_an_environment_named_file(self):
+        from ops import sonnet5_qa as sq
+        for relative in ('.env.local', 'deep/x.env', 'config.env/inner.txt'):
+            evidence = scratch(self) / 'evidence'
+            (evidence / relative).parent.mkdir(parents=True, exist_ok=True)
+            (evidence / relative).write_text('QUILLMD_SECRET_KEY=synthetic-not-a-secret')
+            (evidence / 'request.json').write_text('{}')
+            with self.subTest(relative=relative), NoEnvOpened() as guard, self.assertRaises(pc.Unscannable) as caught:
+                sq.write_manifest(evidence, {'number': 1, 'stage': 'model_check'}, {})
+            self.assertIn('environment file', str(caught.exception))
+            self.assertEqual(guard.attempts, [])
+            self.assertFalse((evidence / 'manifest.json').exists())
+
+
 class EnvironmentFileNameTests(unittest.TestCase):
     """Item 3: `.env`, `*.env`, `.env.*` and `*.env.*` (any case) are environment files — refused as a credential path
     and never opened by the leak scan, which stops on meeting one."""
@@ -1157,7 +1286,9 @@ class ExportCellTests(unittest.TestCase):
                 problems = self.problems(mutate)
                 self.assertTrue(any('Plan answer is not the reviewed answer' in p for p in problems), problems)
 
-    def test_an_answer_wrapped_whole_in_a_content_control_is_read(self):
+    def test_an_answer_wrapped_whole_in_a_content_control_is_read_and_is_a_problem(self):
+        # (its text is read — it equals the answer — and since A4 the content control itself is a problem: an answer
+        # cell holds plain paragraphs, runs and text only)
         def wrapped(cells, etree):
             cell = cells['Findings']
             paragraph = cell.find(f'{W_NS}p')
@@ -1165,7 +1296,78 @@ class ExportCellTests(unittest.TestCase):
             content = etree.SubElement(sdt, f'{W_NS}sdtContent')
             cell.replace(paragraph, sdt)
             content.append(paragraph)
-        self.assertEqual(self.problems(wrapped), [])
+        problems = self.problems(wrapped)
+        self.assertNotIn('the exported Findings answer is not the reviewed answer', problems)
+        self.assertTrue(any('Findings' in p and 'w:sdt' in p for p in problems), problems)
+
+    # ── A4: an exported answer cell may contain only w:tc, w:tcPr (and its children), w:p, w:pPr (and children), w:r,
+    # w:rPr (and children) and w:t; anything else is a problem, and the text a reader sees — python-docx's cell.text —
+    # must equal the answer too.
+    MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006'
+
+    def wrap_run(self, tag, namespace=None):
+        def mutate(cells, etree):
+            run = next(cells['History'].iter(f'{W_NS}r'))
+            wrapper = etree.Element(f'{{{namespace}}}{tag}' if namespace else f'{W_NS}{tag}')
+            run.getparent().replace(run, wrapper)
+            wrapper.append(run)
+        return mutate
+
+    def inside_run(self, tag, text=None):
+        def mutate(cells, etree):
+            run = next(cells['History'].iter(f'{W_NS}r'))
+            extra = etree.SubElement(run, f'{W_NS}{tag}')
+            if text is not None:
+                extra.text = text
+        return mutate
+
+    def test_every_element_but_plain_paragraphs_runs_and_text_is_a_problem(self):
+        cases = {'w:ins around the answer': self.wrap_run('ins'), 'w:del around the answer': self.wrap_run('del'),
+                 'w:hyperlink around the answer': self.wrap_run('hyperlink'),
+                 'w:smartTag around the answer': self.wrap_run('smartTag'),
+                 'mc:AlternateContent around the answer': self.wrap_run('AlternateContent', self.MC),
+                 'w:drawing in the run': self.inside_run('drawing'), 'w:fldChar in the run': self.inside_run('fldChar'),
+                 'w:instrText in the run': self.inside_run('instrText', ' DATE '),
+                 'w:object in the run': self.inside_run('object'), 'w:pict in the run': self.inside_run('pict'),
+                 'w:br in the run': self.inside_run('br'), 'w:tab in the run': self.inside_run('tab'),
+                 'w:delText in the run': self.inside_run('delText', 'removed')}
+        for name, mutate in cases.items():
+            with self.subTest(name=name):
+                problems = self.problems(mutate)
+                self.assertTrue(any('History' in p and 'may hold only' in p for p in problems), problems)
+
+    def test_revision_and_hidden_marks_inside_properties_are_problems(self):
+        def mark(tag, where):
+            def mutate(cells, etree):
+                paragraph = cells['History'].find(f'{W_NS}p')
+                if where == 'pPr':
+                    parent = etree.SubElement(paragraph, f'{W_NS}pPr')
+                    paragraph.insert(0, parent)
+                    parent = etree.SubElement(parent, f'{W_NS}rPr')
+                else:
+                    run = next(paragraph.iter(f'{W_NS}r'))
+                    parent = etree.Element(f'{W_NS}rPr')
+                    run.insert(0, parent)
+                etree.SubElement(parent, f'{W_NS}{tag}')
+            return mutate
+        for tag in ('ins', 'del', 'moveFrom', 'moveTo', 'rPrChange'):
+            for where in ('pPr', 'rPr'):
+                with self.subTest(tag=tag, where=where):
+                    problems = self.problems(mark(tag, where))
+                    self.assertTrue(any('History' in p and f'w:{tag}' in p for p in problems), problems)
+
+    def test_the_text_a_reader_sees_must_equal_the_answer(self):
+        # (a w:t outside any run passes the element list and is counted by the XML reading, but Word and python-docx
+        # show nothing for it: the displayed text is then not the answer)
+        def text_outside_the_run(cells, etree):
+            text = next(cells['Plan'].iter(f'{W_NS}t'))
+            run = text.getparent()
+            paragraph = run.getparent()
+            run.remove(text)
+            paragraph.remove(run)
+            paragraph.append(text)
+        problems = self.problems(text_outside_the_run)
+        self.assertEqual(problems, ['the displayed text of the exported Plan answer cell is not the reviewed answer'])
 
 
 class UnknownUsageTests(unittest.TestCase):
@@ -1326,7 +1528,7 @@ class PinnedLimitsTests(unittest.TestCase):
         repository, path = repository_with(self, REAL_TEXT)
         first = pc.declared(path, repository=repository, out=io.StringIO())
         campaign = self.campaign(first)
-        legacy = attempt(1, maximum='4.00', campaign=first.campaign, authority=first.authority_id)
+        legacy = attempt(1, maximum='4.00', campaign=first.campaign, authority=first.authority_id, terms=None)
         legacy.update(declaration_sha256=first.sha256, declaration_commit=first.commit)
         campaign.ledger.write_attempt(legacy)
         campaign.ledger.write_outcome(1, {'class': 'uncertain'})
@@ -1516,6 +1718,10 @@ class StageDecisionTests(unittest.TestCase):
                     ledger.stage_state('x')
 
 
+#: The runner and engine files a synthetic reopening watches (A2): the synthetic runner and an engine file.
+WATCHED = ('rebuild/ops/runner.py', 'rebuild/core/engine.py')
+
+
 class ReopenTests(unittest.TestCase):
     """Item 10: a failed stage is reopened ONLY by `reopen --stage <id> --diagnosis <path>`: a committed, unmodified
     diagnosis naming the failed attempts and the repair commit; a runner that is not the failed one and contains the
@@ -1528,9 +1734,17 @@ class ReopenTests(unittest.TestCase):
         self.failed_runner = self.commit_file('rebuild/ops/runner.py', 'version = 1\n', 'Runner v1')
         self.declaration = pc.declared(self.path, repository=self.repo, out=io.StringIO())
         self.root = scratch(self)
-        self.campaign = pc.Campaign(self.declaration, self.root)
+        self.campaign = pc.Campaign(self.declaration, self.root, watched_files=WATCHED)
         self.campaign.ledger.acquire()
         self.addCleanup(self.campaign.ledger.release)
+
+    def hashes(self, commit):
+        """What a runner at `commit` records (A2): the sha256 of each watched file there, None when it is absent."""
+        found = {}
+        for relative in WATCHED:
+            blob = git(self.repo, 'cat-file', 'blob', f'{commit}:{relative}', check=False)
+            found[relative] = hashlib.sha256(blob.stdout).hexdigest() if blob.returncode == 0 else None
+        return found
 
     def head(self):
         return git(self.repo, 'rev-parse', 'HEAD').stdout.decode().strip()
@@ -1543,10 +1757,13 @@ class ReopenTests(unittest.TestCase):
         git(self.repo, 'commit', '-q', '-m', message)
         return self.head()
 
-    def failed_attempt(self, number, stage='model_check', runner=None, maximum='0.50', limits=None):
+    def failed_attempt(self, number, stage='model_check', runner=None, maximum='0.50', limits=None,
+                       engine_files='at-runner'):
         d = self.declaration
         record = attempt(number, stage, maximum, campaign=d.campaign, authority=d.authority_id,
-                         limits=limits or limits_record(d), runner_commit=runner or self.failed_runner)
+                         limits=limits or limits_record(d), runner_commit=runner or self.failed_runner,
+                         terms=terms_record(d), engine_files=self.hashes(runner or self.failed_runner)
+                         if engine_files == 'at-runner' else engine_files)
         self.campaign.ledger.write_attempt(record)
         self.campaign.ledger.write_outcome(number, {'class': 'uncertain'})
         self.campaign.ledger.write_stage(stage, 'failed', {'attempt': number, 'reasons': ['synthetic failure']})
@@ -1621,7 +1838,7 @@ class ReopenTests(unittest.TestCase):
         self.assertEqual(sq.settle_open_stages(self.campaign), {'recovered': [], 'failed_stages': []})
         d = self.declaration
         self.campaign.ledger.write_attempt(attempt(2, campaign=d.campaign, authority=d.authority_id,
-                                                   limits=limits_record(d), runner_commit=runner))
+                                                   limits=limits_record(d), runner_commit=runner, terms=terms_record(d)))
         self.assertEqual(self.campaign.ledger.undecided(), {'model_check': [2]})
         self.assertEqual(sq.settle_open_stages(self.campaign), {'recovered': [2], 'failed_stages': ['model_check']})
         failure = self.campaign.ledger.stage_record('model_check', 'failed')
@@ -1684,12 +1901,12 @@ class ReopenTests(unittest.TestCase):
     def test_a_failed_attempt_without_a_runner_commit_or_a_declaration_without_a_checkout_refuses(self):
         d = self.declaration
         self.campaign.ledger.write_attempt(attempt(1, campaign=d.campaign, authority=d.authority_id,
-                                                   limits=limits_record(d)))
+                                                   limits=limits_record(d), terms=terms_record(d)))
         self.campaign.ledger.write_outcome(1, {'class': 'uncertain'})
         self.campaign.ledger.write_stage('model_check', 'failed', {'attempt': 1, 'reasons': ['synthetic failure']})
         _, diagnosis, runner = self.repaired()
         self.refused('records no runner commit', diagnosis=diagnosis, runner=runner)
-        unrooted = pc.Campaign(dataclasses.replace(d, repository=''), self.root)
+        unrooted = pc.Campaign(dataclasses.replace(d, repository=''), self.root, watched_files=WATCHED)
         self.campaign.ledger.release()
         unrooted.ledger.acquire()
         self.addCleanup(unrooted.ledger.release)
@@ -1720,7 +1937,7 @@ class ReopenTests(unittest.TestCase):
         self.campaign.ledger.release()
         with patch.object(sq, 'LIVE_ROOT', self.root), patch.object(sq, 'DECLARATION', self.path), \
                 patch.object(sq, 'REPOSITORY', self.repo), patch.object(sq, 'REBUILD', self.repo / 'rebuild'), \
-                patch('sys.stderr', io.StringIO()):
+                patch.object(sq, 'WATCHED_FILES', WATCHED), patch('sys.stderr', io.StringIO()):
             out = io.StringIO()
             with redirect_stdout(out):
                 self.assertEqual(sq.main(['reopen', '--stage', 'model_check', '--diagnosis', str(diagnosis)]), 0)
@@ -1729,6 +1946,228 @@ class ReopenTests(unittest.TestCase):
                 self.assertEqual(sq.main(['reopen', '--stage', 'model_check', '--diagnosis', str(diagnosis)]), 2)
                 self.assertEqual(sq.main(['reopen', '--stage', 'model_check']), 2)
         self.assertEqual(self.reopened(), ['stage-model_check-reopened-1.json'])
+
+    # ── A2: a reopening also requires that at least one runner or engine file (sonnet5_qa.WATCHED_FILES: ENGINE_FILES
+    # and the stage runner files) DIFFERS between each failed attempt's recorded hashes and the reopening runner's
+    # checkout, and that the repair commit itself TOUCHES at least one of them. A repair that changed only a document,
+    # or whose change was undone again, reopens nothing.
+
+    def test_a_repair_that_touches_no_runner_or_engine_file_refuses(self):
+        self.failed_attempt(1)
+        self.commit_file('rebuild/ops/runner.py', 'version = 2\n', 'An unnamed runner change')
+        repair = self.commit_file('docs/rebuild/notes.md', 'A note.\n', 'A documentation-only repair')
+        diagnosis = self.diagnosis(repair)
+        self.refused('touches no runner or engine file', diagnosis=diagnosis, runner=self.head())
+        self.assertEqual(self.reopened(), [])
+
+    def test_a_repair_undone_again_leaves_no_file_different_and_refuses(self):
+        self.failed_attempt(1)
+        repair = self.commit_file('rebuild/ops/runner.py', 'version = 2\n', 'Repair the runner')
+        self.commit_file('rebuild/ops/runner.py', 'version = 1\n', 'Undo the repair')
+        diagnosis = self.diagnosis(repair)
+        self.refused('runner or engine file differs', diagnosis=diagnosis, runner=self.head())
+        self.assertEqual(self.reopened(), [])
+
+    def test_a_failed_attempt_that_records_no_file_hashes_refuses(self):
+        for recorded in (None, {}, {WATCHED[0]: 'f' * 64}):
+            with self.subTest(recorded=recorded):
+                root = scratch(self)
+                self.campaign.ledger.release()
+                self.campaign = pc.Campaign(self.declaration, root, watched_files=WATCHED)
+                self.campaign.ledger.acquire()
+                self.failed_attempt(1, engine_files=recorded)
+                _, diagnosis, runner = self.repaired(name=f'diagnosis-{len(recorded or {})}-{recorded is None}.md')
+                self.refused('records no hash', diagnosis=diagnosis, runner=runner)
+
+    def test_a_campaign_that_watches_no_file_refuses(self):
+        self.failed_attempt(1)
+        _, diagnosis, runner = self.repaired()
+        self.campaign.ledger.release()
+        unwatched = pc.Campaign(self.declaration, self.root)
+        unwatched.ledger.acquire()
+        self.addCleanup(unwatched.ledger.release)
+        with self.assertRaises(pc.Refused) as caught:
+            unwatched.reopen('model_check', diagnosis, runner_commit=runner)
+        self.assertIn('watches no runner or engine file', str(caught.exception))
+        self.assertEqual(self.reopened(), [])
+
+    def test_money_left_for_a_reopening_is_counted_at_the_pinned_rates(self):
+        # attempt 1 records rates of $1/$5, but the ledger pinned $2/$10: 2,600,000 input tokens are $5.20, not $2.60
+        d = self.declaration
+        record = attempt(1, 'model_check', '0.50', campaign=d.campaign, authority=d.authority_id,
+                         limits=limits_record(d), runner_commit=self.failed_runner, terms=terms_record(d),
+                         engine_files=self.hashes(self.failed_runner))
+        record['rates'] = {'input': '1', 'output': '5', 'cached': '0.10'}
+        self.campaign.ledger.write_attempt(record)
+        self.campaign.ledger.write_outcome(1, {'class': 'completed', 'usage': usage(input_tokens=2600000, output_tokens=0)})
+        self.campaign.ledger.write_stage('model_check', 'failed', {'attempt': 1, 'reasons': ['synthetic failure']})
+        _, diagnosis, runner = self.repaired()
+        self.refused('no money left', diagnosis=diagnosis, runner=runner)
+        self.assertEqual(self.reopened(), [])
+
+    def test_only_this_failures_attempts_must_show_the_repair(self):
+        # (an earlier failure, reopened before attempts recorded file hashes, does not block a later reopening)
+        d = self.declaration
+        self.failed_attempt(1, engine_files=None)
+        first_repair, _, first_runner = self.repaired()
+        self.campaign.ledger.write_reopen('model_check', 1, {'ledger_attempts': 1, 'repair_commit': first_repair})
+        self.failed_attempt(2, runner=first_runner)
+        repair, diagnosis, runner = self.repaired('diagnosis-2.md', attempts='2')
+        record = self.campaign.reopen('model_check', diagnosis, runner_commit=runner)
+        self.assertEqual((record['number'], record['failed_attempts'], record['repair_commit']), (2, [2], repair))
+
+    def test_a_repair_to_the_engine_alone_reopens(self):
+        self.failed_attempt(1)
+        repair = self.commit_file('rebuild/core/engine.py', 'engine = 2\n', 'Repair the engine')
+        diagnosis = self.diagnosis(repair)
+        record = self.campaign.reopen('model_check', diagnosis, runner_commit=self.head())
+        self.assertEqual((record['number'], record['repair_commit']), (1, repair))
+        self.assertEqual(record['changed_files'], ['rebuild/core/engine.py'])
+        self.assertEqual(record['repair_touches'], ['rebuild/core/engine.py'])
+
+    def test_the_sonnet5_runner_watches_every_engine_file_and_the_stage_runner(self):
+        from ops import sonnet5_qa as sq
+        self.assertEqual(set(sq.WATCHED_FILES) >= {'rebuild/' + name for name in sq.ENGINE_FILES}, True)
+        self.assertIn('rebuild/ops/sonnet5_stages.py', sq.WATCHED_FILES)
+
+
+class PinnedTermsTests(unittest.TestCase):
+    """A1 (RR-MONEY-1): the RATES are pinned as well as the limits — with the model, thinking, effort, inference
+    geography and every pricing version — to those in force when the ledger's FIRST attempt was written (the terms it
+    records; for a legacy first attempt that records none, those of the declaration blob it names by sha256 at its
+    declaration_commit). Every outcome's exposure is costed at the PINNED rates, and admission refuses while the current
+    declaration states any other term: an edited declaration never changes what is admitted or how it is costed."""
+
+    def setUp(self):
+        self.root = scratch(self)
+
+    def campaign(self, d):
+        campaign = pc.Campaign(d, self.root)
+        campaign.ledger.acquire()
+        self.addCleanup(campaign.ledger.release)
+        return campaign
+
+    def spent(self, d, number=1, terms='synthetic'):
+        campaign = self.campaign(d)
+        campaign.ledger.write_attempt(attempt(number, limits=limits_record(d), terms=terms))
+        campaign.ledger.write_outcome(number, {'class': 'completed', 'usage': usage()})     # 1000 in, 200 out
+        return campaign
+
+    def test_every_new_attempt_records_the_terms_in_force(self):
+        d = declaration()
+        self.assertEqual(d.terms().record(), terms_record(d))
+        self.assertEqual(pc.Campaign(d, self.root).pinned_terms().record(), terms_record(d))
+
+    def test_an_edited_rate_changes_neither_admission_nor_the_cost_of_an_outcome(self):
+        d = declaration()
+        self.spent(d)
+        for rates in (pc.Rates('1', '5', '0.10'), pc.Rates('4', '20', '0.40'), pc.Rates('2', '10', '0.2')):
+            with self.subTest(rates=rates):
+                edited = pc.Campaign(dataclasses.replace(d, rates=rates), self.root)
+                # costed at the pinned $2/$10 (1000 x 2 + 200 x 10 per million), never at the edited rates
+                self.assertEqual(edited.totals()['exposure'], Decimal('0.004'))
+                self.assertEqual(edited.totals('model_check')['exposure'], Decimal('0.004'))
+                self.assertEqual(edited.pinned_terms().record(), terms_record(d))
+                with self.assertRaises(pc.Refused) as caught:
+                    edited.admit('model_check', MAXIMUM)
+                self.assertIn('rates', str(caught.exception))
+        self.assertEqual(pc.Campaign(d, self.root).admit('model_check', MAXIMUM), Decimal(MAXIMUM) * Decimal('1.1'))
+
+    def test_every_outcome_is_costed_at_the_pinned_rates_whatever_the_attempt_itself_says(self):
+        # (an attempt carries its own `rates` too; admission and every total cost it at the PINNED rates)
+        d = declaration()
+        campaign = self.campaign(d)
+        record = attempt(1, limits=limits_record(d))
+        record['rates'] = {'input': '1', 'output': '5', 'cached': '0.10'}
+        campaign.ledger.write_attempt(record)
+        campaign.ledger.write_outcome(1, {'class': 'completed', 'usage': usage(input_tokens=2000000, output_tokens=0)})
+        self.assertEqual(campaign.totals()['exposure'], Decimal('4.00'))          # 2,000,000 x $2/M, never x $1/M
+        with self.assertRaises(pc.Refused) as caught:
+            campaign.admit('model_check', '0.95')                              # 4.00 + 1.045 > 5.00
+        self.assertIn('Stage model_check limit', str(caught.exception))
+        self.assertEqual(campaign.admit('model_check', '0.80'), Decimal('0.880'))
+
+    def test_every_pinned_term_is_checked(self):
+        d = declaration()
+        self.spent(d)
+        edits = (({'model': 'claude-sonnet-4-6'}, 'model'), ({'thinking': 'adaptive'}, 'thinking'),
+                 ({'effort': 'high'}, 'effort'), ({'inference_geo': 'us'}, 'inference_geo'),
+                 ({'pricing_versions': (('model_check', 'configured-v1:' + 'b' * 64),)}, 'pricing'),
+                 ({'pricing_versions': d.pricing_versions + (('mapping', 'configured-v1:' + 'c' * 64),)}, 'pricing'))
+        for changes, word in edits:
+            with self.subTest(changes=changes), self.assertRaises(pc.Refused) as caught:
+                pc.Campaign(dataclasses.replace(d, **changes), self.root).admit('model_check', MAXIMUM)
+            self.assertIn(word, str(caught.exception))
+
+    def test_a_reopening_is_held_to_the_pinned_terms(self):
+        d = declaration()
+        campaign = self.spent(d)
+        campaign.ledger.write_stage('model_check', 'failed', {'reasons': ['synthetic']})
+        campaign.ledger.release()
+        edited = pc.Campaign(dataclasses.replace(d, rates=pc.Rates('1', '5', '0.10')), self.root)
+        edited.ledger.acquire()
+        self.addCleanup(edited.ledger.release)
+        with self.assertRaises(pc.Refused) as caught:
+            edited.reopen('model_check', '/nonexistent/diagnosis.md', runner_commit='0' * 40)
+        self.assertIn('rates', str(caught.exception))
+
+    def test_a_legacy_first_attempt_is_pinned_to_the_declaration_blob_it_names(self):
+        repository, path = repository_with(self, REAL_TEXT)
+        first = pc.declared(path, repository=repository, out=io.StringIO())
+        campaign = self.campaign(first)
+        legacy = attempt(1, campaign=first.campaign, authority=first.authority_id, terms=None)
+        legacy.update(declaration_sha256=first.sha256, declaration_commit=first.commit)
+        campaign.ledger.write_attempt(legacy)
+        campaign.ledger.write_outcome(1, {'class': 'completed', 'usage': usage()})
+        self.assertEqual(campaign.pinned_terms().record(), terms_record(first))
+        path.write_text(REAL_TEXT.replace('rates: input 2 output 10 cached 0.20', 'rates: input 1 output 5 cached 0.10'))
+        git(repository, 'commit', '-q', '-a', '-m', 'Lower the rates')
+        edited = pc.declared(path, repository=repository, out=io.StringIO())
+        self.assertEqual(edited.rates, pc.Rates('1', '5', '0.10'))
+        pinned = pc.Campaign(edited, self.root)
+        self.assertEqual(pinned.pinned_terms().record(), terms_record(first))
+        self.assertEqual(pinned.totals()['exposure'], Decimal('0.004'))
+        with self.assertRaises(pc.Refused) as caught:
+            pinned.admit('model_check', MAXIMUM)
+        self.assertIn('rates', str(caught.exception))
+        # a first attempt whose declaration cannot be read back pins nothing: refused
+        stray = pc.Campaign(edited, scratch(self))
+        stray.ledger.acquire()
+        self.addCleanup(stray.ledger.release)
+        stray.ledger.write_attempt(dict(legacy, declaration_sha256='f' * 64))
+        stray.ledger.write_outcome(1, {'class': 'completed', 'usage': usage()})
+        with self.assertRaises(pc.Refused) as caught:
+            stray.totals()
+        self.assertIn('cannot be read back', str(caught.exception))
+
+    def test_the_first_attempt_pins_and_a_later_one_that_disagrees_is_refused(self):
+        d = declaration()
+        campaign = self.spent(d)
+        other = terms_record(d)
+        other['rates']['output'] = '5'
+        campaign.ledger.write_attempt(attempt(2, limits=limits_record(d), terms=other))
+        campaign.ledger.write_outcome(2, {'class': 'completed', 'usage': usage()})
+        with self.assertRaises(pc.Refused) as caught:
+            campaign.admit('model_check', MAXIMUM)
+        self.assertIn('terms', str(caught.exception))
+
+    def test_recorded_terms_are_read_strictly(self):
+        good = terms_record(declaration())
+        broken = [
+            {**good, 'extra': 1},
+            {k: v for k, v in good.items() if k != 'effort'},
+            {**good, 'rates': {**good['rates'], 'input': 2}},
+            {**good, 'rates': {**good['rates'], 'extra': '1'}},
+            {**good, 'pricing_versions': [['model_check', good['pricing_versions']['model_check']]]},
+            {**good, 'pricing_versions': {'model_check': 'configured-v1:short'}},
+            {**good, 'model': None},
+            [good],
+        ]
+        for number, record in enumerate(broken, start=1):
+            with self.subTest(record=record), self.assertRaises(pc.Refused) as caught:
+                pc.Terms.from_record(record, f'Attempt {number}')
+            self.assertIn('terms', str(caught.exception))
+        self.assertEqual(pc.Terms.from_record(good, 'Attempt 1').record(), good)
 
 
 class LiveLedgerShapeTests(unittest.TestCase):
@@ -1812,6 +2251,21 @@ class LiveLedgerShapeTests(unittest.TestCase):
         self.assertIn('has not failed', str(caught.exception))
         self.assertEqual(sorted(os.listdir(self.root / 'ledger')),
                          ['001-attempt.json', '001-outcome.json', 'runner.lock', 'stage-model_check-passed.json'])
+
+    def test_the_terms_pin_to_the_documented_declaration_and_an_edit_admits_nothing(self):
+        # (A1: the live attempt 1 records no terms; it is pinned to the declaration it names — the current one, or the
+        # blob at 01ff8c7d when the current declaration differs — and every outcome is costed at those rates)
+        campaign = pc.Campaign(self.declaration, self.root)
+        self.assertEqual(campaign.pinned_terms().record(), terms_record(self.declaration))
+        self.assertEqual(campaign.pinned_terms().rates, pc.Rates('2', '10', '0.20'))
+        edited = dataclasses.replace(self.declaration, sha256='e' * 64, rates=pc.Rates('1', '5', '0.10'))
+        pinned = pc.Campaign(edited, self.root)
+        self.assertEqual(pinned.pinned_terms().record(), terms_record(self.declaration))     # (read back from git)
+        self.assertEqual(pinned.totals()['exposure'], Decimal('0.00286'))
+        for stage in ('mapping', 'ordinary_notes'):
+            with self.subTest(stage=stage), self.assertRaises(pc.Refused) as caught:
+                pinned.admit(stage, MAXIMUM)
+            self.assertIn('rates', str(caught.exception))
 
     def test_status_reads_it(self):
         from ops import sonnet5_qa as sq

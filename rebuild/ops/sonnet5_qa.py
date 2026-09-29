@@ -98,6 +98,14 @@ ENGINE_FILES = ('core/jobs.py', 'core/generation.py', 'core/billing.py', 'core/v
                 'core/models.py', 'core/middleware.py', 'core/management/commands/audit_billing.py',
                 'documents/service.py', 'documents/engine.py', 'documents/worker.py', 'documents/layout.py',
                 'quillmd/settings.py', 'quillmd/urls.py', 'ops/provider_campaign.py', 'ops/sonnet5_qa.py')
+#: The files a reopening must show were repaired (A2), repository-relative: every engine file above and the stage
+#: runner with the frozen diagnostic graders and walk steps it imports. Every new attempt records their sha256.
+STAGE_RUNNER_FILES = ('rebuild/ops/sonnet5_stages.py',
+                      'docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/grade_app_path.py',
+                      'docs/rebuild/v1/sonnet5-campaign/diagnostics/mapping/measure_baseline.py',
+                      'docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/app_path_steps.py',
+                      'docs/rebuild/v1/sonnet5-campaign/diagnostics/notes/offline_replay.py')
+WATCHED_FILES = tuple('rebuild/' + name for name in ENGINE_FILES) + STAGE_RUNNER_FILES
 EXIT = {'PASS': 0, 'FAIL': 3, 'REFUSED': 2}
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 
@@ -475,6 +483,38 @@ def review_form_problems(page, encounter_pk, fields, expected):
 
 #: Word properties that hide text when the document is shown or printed.
 HIDDEN = (f'{{{W}}}vanish', f'{{{W}}}specVanish', f'{{{W}}}webHidden')
+#: A4: the ONLY elements an exported answer cell may hold — the cell, paragraphs, runs and text — with the property
+#: elements whose whole subtree is formatting. Anything else (w:del, w:ins, mc:AlternateContent, w:drawing, w:fldChar,
+#: w:instrText, w:sdt, w:tbl, w:hyperlink, w:object, w:pict, w:br, w:tab, a comment …) is a problem.
+ANSWER_STRUCTURE = frozenset((f'{{{W}}}tc', f'{{{W}}}p', f'{{{W}}}r', f'{{{W}}}t'))
+ANSWER_PROPERTIES = frozenset((f'{{{W}}}tcPr', f'{{{W}}}pPr', f'{{{W}}}rPr'))
+#: Revision marks, which Word shows as inserted or deleted text, are problems even inside the properties (with HIDDEN).
+REVISION_MARKS = tuple(f'{{{W}}}{name}' for name in ('ins', 'del', 'moveFrom', 'moveTo', 'rPrChange', 'pPrChange',
+                                                     'tcPrChange', 'cellIns', 'cellDel', 'cellMerge'))
+
+
+def _answer_elements(cell):
+    """The elements of an answer cell outside ANSWER_STRUCTURE (a property element's subtree is formatting), by name."""
+    found = []
+
+    def visit(node):
+        if node.tag in ANSWER_PROPERTIES:
+            return
+        if node.tag not in ANSWER_STRUCTURE:
+            name = node.tag if isinstance(node.tag, str) else 'a comment or processing instruction'
+            found.append(name.replace(f'{{{W}}}', 'w:').replace(
+                '{http://schemas.openxmlformats.org/markup-compatibility/2006}', 'mc:'))
+            return
+        for child in node:
+            visit(child)
+    visit(cell)
+    return found
+
+
+def _displayed_cell_text(export, index):
+    """The text python-docx shows for the answer cell of question `index` — what a reader of the document sees."""
+    from docx import Document
+    return Document(io.BytesIO(export)).tables[0].rows[index].cells[1].text
 
 
 def _cell_text(cell):
@@ -521,7 +561,8 @@ def export_checks(original, export, expected):
     rows_after = [row.findall(f'{{{W}}}tc') for row in tables[1][0].findall(f'{{{W}}}tr')]
     if [len(r) for r in rows_before] != [2] * len(FORM_LABELS) or [len(r) for r in rows_after] != [2] * len(FORM_LABELS):
         return problems + ['the question table does not have its original rows']
-    for (label_before, answer_before), (label_after, answer_after), label in zip(rows_before, rows_after, FORM_LABELS):
+    for index, ((label_before, answer_before), (label_after, answer_after), label) in enumerate(
+            zip(rows_before, rows_after, FORM_LABELS)):
         if not (_cell_text(label_before) == _cell_text(label_after) == label):
             problems.append(f'the {label} question cell changed')
         if _cell_text(answer_before) != '':
@@ -532,6 +573,15 @@ def export_checks(original, export, expected):
             problems.append(f'the exported {label} answer cell holds hidden text')
         if answer_after.find(f'.//{{{W}}}tbl') is not None:
             problems.append(f'the exported {label} answer cell holds a nested table')
+        others = _answer_elements(answer_after)
+        if others:
+            problems.append(f'the exported {label} answer cell may hold only paragraphs, runs and text; it holds '
+                            + ', '.join(sorted(set(others))))
+        marks = sorted({node.tag.replace(f'{{{W}}}', 'w:') for node in answer_after.iter(*REVISION_MARKS)})
+        if marks:
+            problems.append(f'the exported {label} answer cell holds revision marks: ' + ', '.join(marks))
+        if _displayed_cell_text(export, index) != expected[label]:
+            problems.append(f'the displayed text of the exported {label} answer cell is not the reviewed answer')
         answer_after.getparent().replace(answer_after, deepcopy(answer_before))
     if etree.tostring(before, method='c14n') != etree.tostring(after, method='c14n'):
         problems.append('the document body differs from the original outside the answer cells')
@@ -556,6 +606,14 @@ def audit_checks(report, job):
 
 def engine_hashes():
     return {name: pc.file_sha256(REBUILD / name) for name in ENGINE_FILES}
+
+
+def watched_hashes(repository=None):
+    """{repository-relative path: sha256, or None when absent} of every WATCHED_FILES entry in this checkout — what a new
+    attempt records, so a reopening can show the repair changed what ran (A2)."""
+    repository = REPOSITORY if repository is None else Path(repository)
+    return {name: (pc.file_sha256(repository / name) if (repository / name).is_file() else None)
+            for name in WATCHED_FILES}
 
 
 # Every file stage_passed claims was retained (manifest.json is written by the decision itself, after this is checked).
@@ -583,8 +641,19 @@ def retained_evidence_problems(evidence):
 
 
 def write_manifest(evidence, attempt, context):
+    """The provenance manifest: every retained file's sha256. EVERY name under the evidence is checked BEFORE anything is
+    hashed (A3): an environment-named file or directory anywhere is `Unscannable` and nothing is opened."""
+    evidence = Path(evidence)
+    names = []
+    for directory, subdirectories, files in os.walk(evidence, followlinks=False):
+        for name in subdirectories + files:
+            path = Path(directory) / name
+            if pc.env_name(name):
+                raise pc.Unscannable(f'The evidence holds an environment file ({path.relative_to(evidence)}); it is never '
+                                     'opened, so the evidence cannot be read whole for its manifest.')
+            names.append(path)
     listed = {}
-    for path in sorted(p for p in evidence.rglob('*') if p.is_file() and not p.is_symlink()):
+    for path in sorted(p for p in names if p.is_file() and not p.is_symlink()):
         listed[str(path.relative_to(evidence))] = pc.file_sha256(path)
     return pc.write_new(evidence / 'manifest.json', {**context, 'attempt': attempt['number'], 'stage': attempt['stage'],
                                                      'evidence': listed, 'recorded_at': pc.now()})
@@ -664,6 +733,7 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
     try:
         bound = campaign.admit(STAGE, maximum, runner_commit=runner_commit)
         limits = campaign.limits().record()
+        terms = campaign.pinned_terms().record()
     except Refused:
         from core.jobs import cancel
         cancel(job, world.user)      # (never run: the product's own cancellation releases its hold)
@@ -675,7 +745,8 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
                'pricing_version': job.config['pricing_version'], 'request_profile': job.config['request_profile'],
                'encounter': str(encounter.pk), 'job': str(job.pk), 'form_sha256': FORM_SHA256, 'notes_sha256': NOTES_SHA256,
                'declaration_sha256': declaration.sha256, 'declaration_commit': declaration.commit,
-               'limits': limits, 'runner_commit': runner_commit, 'started_at': pc.now(), 'pid': os.getpid()}
+               'limits': limits, 'terms': terms, 'engine_files': watched_hashes(),
+               'runner_commit': runner_commit, 'started_at': pc.now(), 'pid': os.getpid()}
     ledger.write_attempt(attempt)                                            # BEFORE anything can be sent
     base = {'stage': STAGE, 'attempt': number, 'recovered_before_start': settled, 'stale_jobs_cancelled': stale}
     try:
@@ -722,10 +793,11 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
                                       ).order_by('-created_at').first()
     details = audit.details if audit else {}
     computed = standard = None
+    rates = campaign.pinned_terms().rates
     if usage is not None:
         try:
-            computed = pc.usage_cost(usage, declaration.rates)
-            standard = pc.usage_cost(usage, declaration.rates, unknown_geography_margin=False)
+            computed = pc.usage_cost(usage, rates)
+            standard = pc.usage_cost(usage, rates, unknown_geography_margin=False)
         except (KeyError, ValueError, TypeError):
             computed = standard = None
     outcome = {'class': cls, 'job': str(job.pk), 'job_state': job.state, 'job_error': job.error, 'worker_ran': worked,
@@ -740,7 +812,7 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
                               'charged_cost': str(usage_row.charged_cost) if usage_row else None,
                               'reservations': sorted(r.state for r in Reservation.objects.filter(job=job))},
                'recorded_at': pc.now()}
-    outcome['exposure'] = format(pc.exposure(attempt, outcome), 'f')
+    outcome['exposure'] = format(pc.exposure(attempt, outcome, rates), 'f')
     ledger.write_outcome(number, outcome)                                    # AFTER, whatever happened
     encounter.refresh_from_db()
     pc.write_new(evidence / 'records-after-run.json', job_records(job))
@@ -875,6 +947,8 @@ def _decide(campaign, attempt, evidence, secret, reasons, result, provenance, ch
         write_manifest(evidence, attempt, context)
     except OSError as error:
         unscannable = f'the evidence could not be read for its manifest ({type(error).__name__})'
+    except pc.Refused as refused:
+        unscannable = f'the evidence could not be read for its manifest: {refused}'
     try:
         hits = pc.leaked(root, secret, exclude=(declaration.credential_file,))
     except pc.Refused as refused:
@@ -1090,7 +1164,7 @@ def reopen(stage, diagnosis, root=None, declaration_path=None, repository=None, 
                               repository=REPOSITORY if repository is None else repository)
     identity = pc.git_identity(REBUILD if rebuild is None else rebuild)
     require(identity['clean'], 'The runner checkout must be a clean commit.')
-    campaign = pc.Campaign(declaration, root)
+    campaign = pc.Campaign(declaration, root, watched_files=WATCHED_FILES)
     campaign.ledger.acquire()
     try:
         record = campaign.reopen(stage, diagnosis, runner_commit=identity['commit'])
