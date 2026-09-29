@@ -30,7 +30,7 @@ def patient_relations(units, patients, subjects, parsed, *, finite, denial, acce
 rules. This grammar never supplies a field, rewrites a value, or interprets a
 medicine. The original patient-history block must still be selected completely.
 """
-    empty = {'units': {}, 'qualifiers': {}, 'boundaries': set(), 'separators': set()}
+    empty = {'units': {}, 'qualifiers': {}, 'boundaries': set(), 'separators': set(), 'topic': frozenset()}
     if not units or not patients.get(units[0]['id']):
         return empty
     anchor = units[0]
@@ -114,4 +114,7 @@ medicine. The original patient-history block must still be selected completely.
         ledger[unit['id']] = {'anchor': anchor['id'], 'relation': relation,
                               'start': unit['start'], 'end': unit['end']}
         prior_relation = relation
-    return {'units': ledger, 'qualifiers': qualifiers, 'boundaries': boundaries, 'separators': separators}
+    # 'topic': the anchor's literal topic words (casefolded, one closing s removed), so a reader can tell a ledger
+    # unit restating that topic ('The headaches started ...') from one naming something else.
+    return {'units': ledger, 'qualifiers': qualifiers, 'boundaries': boundaries, 'separators': separators,
+            'topic': frozenset(tokens)}

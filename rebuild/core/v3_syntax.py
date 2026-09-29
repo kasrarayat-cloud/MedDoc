@@ -72,17 +72,76 @@ def _parser():
         return None
 
 
-def _complete(doc, subject_span=None):
+def _admissible_adverbials(doc, root):
+    """Token indices inside adverbial clauses the caller may accept (G-E, 2026-09-29): an `advcl` attached to the root
+    whose own subject, when it has one, is a THING (a noun or proper noun that names no person; never a personal or
+    demonstrative pronoun), with no modal anywhere inside it. The caller has already refused every unit carrying a
+    scope reframer or pointer (`INHERITED_SCOPE`), so 'if'/'would'/'could'/'might' clauses never reach this."""
+    from .v3_actors import names_person
+    allowed = set()
+    for head in root.children:
+        if head.dep_ != 'advcl':
+            continue
+        inner = list(head.subtree)
+        if any(token.tag_ == 'MD' for token in inner):
+            continue
+        subjects = [token for token in inner if token.dep_ in ('nsubj', 'nsubjpass')]
+        if any(token.pos_ not in ('NOUN', 'PROPN') or names_person(token) for token in subjects):
+            continue
+        allowed.update(token.i for token in inner)
+    return allowed
+
+
+@lru_cache(maxsize=1)
+def _reader():
+    """The same verified bytes as `_parser`, with the model's own rule lemmatizer kept (its lookups file is in the
+    manifest). Used only by the actor reader (`v3_actors`); `_parser` and every existing caller are unchanged."""
+    if _parser() is None:
+        return None
+    try:
+        import spacy
+        package = importlib.metadata.distribution(MODEL)
+        directory = Path(package.locate_file(f'{MODEL}/{MODEL}-{MODEL_VERSION}'))
+        return spacy.load(directory, exclude=['ner'])
+    except (ImportError, OSError, ValueError, KeyError, importlib.metadata.PackageNotFoundError):
+        return None
+
+
+def docs(texts):
+    """Parse bounded source texts with `_reader`, in order: a list with a Doc per text, or None in its place when that
+    text is out of bounds (over `MAX_CHARACTERS` characters or `MAX_TOKENS` tokens); None instead of the list when the
+    verified model is missing or the parser fails. Every caller fails closed on a None."""
+    texts = list(texts)
+    bounded = [index for index, text in enumerate(texts) if isinstance(text, str) and 0 < len(text) <= MAX_CHARACTERS]
+    try:
+        with _lock:
+            reader = _reader()
+            if reader is None:
+                return None
+            parsed = list(reader.pipe((texts[index] for index in bounded), batch_size=32))
+    except (ValueError, TypeError, RuntimeError, OSError, KeyError, importlib.metadata.PackageNotFoundError):
+        return None
+    out = [None] * len(texts)
+    for index, doc in zip(bounded, parsed):
+        out[index] = doc if len(doc) <= MAX_TOKENS else None
+    return out
+
+
+def _complete(doc, subject_span=None, adverbial=False):
     if len(doc) > MAX_TOKENS or len(list(doc.sents)) != 1:
         return False
     sentence = next(iter(doc.sents))
     root = sentence.root
     if root.pos_ not in ('VERB', 'AUX'):
         return False
+    # An adverbial clause is accepted only when the caller asked for it (explicit-patient units and pronouns already
+    # resolved to the patient) and only in the admissible shape above. Everything else is exactly as before.
+    inside = _admissible_adverbials(doc, root) if adverbial else set()
     # Only a simple declarative clause gets this additional syntax allowance.
     # Quoted/embedded, relative, conditional, passive and infinitival clauses
     # need a separately qualified source relation, not inferred actor/scope.
-    if any(token.tag_ == 'MD' or token.dep_ in ('ccomp', 'xcomp', 'advcl', 'relcl', 'acl', 'parataxis', 'csubj', 'csubjpass', 'auxpass')
+    if any(token.tag_ == 'MD' or (token.dep_ in ('ccomp', 'xcomp', 'advcl', 'relcl', 'acl', 'parataxis', 'csubj', 'csubjpass', 'auxpass')
+                                  and not (token.dep_ == 'advcl' and token.i in inside))
            for token in doc):
         return False
     finite = [token for token in [root, *root.children]
@@ -93,7 +152,7 @@ def _complete(doc, subject_span=None):
         return False
     # A second explicit subject in a coordinated clause is a separate actor;
     # shared-subject coordination retains just this one subject token.
-    if sum(token.dep_ in ('nsubj', 'nsubjpass') for token in doc) != 1:
+    if sum(token.dep_ in ('nsubj', 'nsubjpass') and token.i not in inside for token in doc) != 1:
         return False
     if any(token.dep_ == 'conj' for token in subjects[0].children):
         return False
@@ -111,7 +170,7 @@ def _complete(doc, subject_span=None):
     return bool(words and words[-1].pos_ not in ('CCONJ', 'SCONJ', 'ADP', 'DET', 'AUX', 'PART'))
 
 
-def complete_ids(units, *, subject_spans=None):
+def complete_ids(units, *, subject_spans=None, adverbial=frozenset()):
     """Syntax proof for at most 64 bounded source units in their original order.
 
     A missing model, excess unit, long text or parser error yields no new allowance.
@@ -119,6 +178,7 @@ def complete_ids(units, *, subject_spans=None):
     which lack the existing finite-word proof, never labelled values or options.
     When the caller supplies already established actor spans, syntax must bind
     that exact token to the sole subject; it cannot invent or expand the actor.
+    `adverbial`: unit ids for which one admissible adverbial clause is accepted (`_admissible_adverbials`).
     """
     candidates = [unit for unit in units[:MAX_UNITS]
                   if isinstance(unit.get('quote'), str) and 0 < len(unit['quote']) <= MAX_CHARACTERS]
@@ -134,7 +194,7 @@ def complete_ids(units, *, subject_spans=None):
                 if subject_spans is not None and unit['id'] not in subject_spans:
                     continue
                 span = None if subject_spans is None else subject_spans[unit['id']]
-                if _complete(doc, span) or _bare_patient_clause(unit['quote'], span):
+                if _complete(doc, span, unit['id'] in adverbial) or _bare_patient_clause(unit['quote'], span):
                     result.add(unit['id'])
             return result
     except (ValueError, TypeError, RuntimeError, OSError, KeyError, importlib.metadata.PackageNotFoundError):

@@ -26,13 +26,21 @@ VALUES = {'Allergies': 'No known drug allergies.', 'Examination': 'Neurological 
           'Assessment': 'tension-type headache.',
           'Plan': 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'}
 AUTOMATIC = {label: value for label, value in VALUES.items() if label != 'Allergies'}
+#: ⚠️ DELIBERATE CHANGE 2026-09-29 (notes usefulness, G-A + G-B1): the form title is no longer read as a field
+#: qualifier, and a typed unit of the complete actor ledger may be selected ALONE for its destination, so these are
+#: released too (they were held with the rest of the note). Smoker (an option from prose, G-G) and Allergies (G-I) stay.
+LEDGER = {'Chief complaint': 'This is a 30-year-old female seen for headaches.',
+          'History of present illness': 'The headaches started two months ago and are worse in the morning.\n'
+                                        'She denies visual changes, nausea, or weakness.',
+          'Medications': 'She takes ibuprofen as needed.'}
+RELEASED = {**AUTOMATIC, **LEDGER}
 
 
 class PatientSourceTopics(SimpleTestCase):
     def test_retained_complete_note_keeps_exact_named_answers_and_unresolved_values(self):
         case = retained()
         answers = run(case['notes'], case['unchanged_picks'], fields=case['fields'])
-        for label, value in AUTOMATIC.items():
+        for label, value in RELEASED.items():
             with self.subTest(label=label):
                 self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', value))
                 quotes = case['unchanged_picks'][label]
@@ -42,7 +50,7 @@ class PatientSourceTopics(SimpleTestCase):
                 key = next(f['key'] for f in case['fields'] if f['label'] == label)
                 self.assertEqual(g.governed_decisions(case['notes'], case['fields'],
                     {key: {**answers[label], 'reviewed': True}}), [])
-        for label in ('Chief complaint', 'History of present illness', 'Medications', 'Smoker', 'Allergies'):
+        for label in ('Smoker', 'Allergies'):
             self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''), label)
 
     def assert_named_hold(self, notes, labels=('Allergies', 'Examination', 'Assessment')):
@@ -62,6 +70,17 @@ class PatientSourceTopics(SimpleTestCase):
                 self.assertIsNotNone(g.governed_supported(reading, notes, stored, label))
                 self.assertEqual(g.governed_decisions(notes, case['fields'], {key: stored}), [label])
 
+    def assert_named_released(self, notes, labels=('Examination', 'Assessment')):
+        """2026-09-29: an encounter topic whose actor resolves to the patient and that nothing later LINKS to is
+        released without the complete ledger; generation, page and finalization agree."""
+        case = retained()
+        answers = run(notes, {label: case['unchanged_picks'][label] for label in labels}, fields=case['fields'])
+        for label in labels:
+            with self.subTest(label=label, notes=notes):
+                self.assertEqual((answers[label]['status'], answers[label]['text']), ('supported', VALUES[label]))
+                key = next(f['key'] for f in case['fields'] if f['label'] == label)
+                self.assertEqual(g.governed_decisions(notes, case['fields'], {key: {**answers[label], 'reviewed': True}}), [])
+
     def test_new_subject_or_unparsed_relationship_breaks_the_chain(self):
         notes = retained()['notes']
         for changed in (
@@ -72,24 +91,38 @@ class PatientSourceTopics(SimpleTestCase):
             notes.replace('She takes ibuprofen as needed.', 'She takes ibuprofen and he takes aspirin.'),
             notes.replace('She takes ibuprofen as needed.', '"She takes ibuprofen as needed," the donor said.'),
             notes.replace('in the morning.', 'in the donor.'),
-            notes.replace('at night.', 'on the donor.'),
         ):
             self.assert_named_hold(changed)
+        # ⚠️ DELIBERATE CHANGE 2026-09-29: a LATER plan naming another person holds the plan itself (b''), not the
+        # examination and assessment before it, which nothing links to it (they were held with the whole chain).
+        changed = notes.replace('at night.', 'on the donor.')
+        self.assert_named_hold(changed, ('Allergies',))
+        self.assert_named_released(changed)
+        plan = run(changed, {'Plan': ['Plan is to start amitriptyline 10 mg on the donor.', 'She will follow up in six weeks.']},
+                   fields=retained()['fields'])['Plan']
+        self.assertEqual((plan['status'], plan['text']), ('conflict', ''))
 
     def test_negation_correction_question_and_scoped_source_do_not_become_independent(self):
         notes = retained()['notes']
         for changed in (
             'Family history:\n' + notes,
             'For the donor only:\n' + notes,
-            notes.replace('visual changes, nausea, or weakness', 'headaches, nausea, or weakness'),
-            notes.replace('visual changes, nausea, or weakness', 'visual changes or has nausea'),
-            notes.replace('visual changes, nausea, or weakness', 'visual changes, nausea, or not weakness'),
             notes.replace('two months ago', 'two months ago, actually yesterday'),
             notes.replace('at night.', 'at night?'),
             notes.replace('at night.', 'at night, if symptoms continue.'),
             notes + ' Correction: the earlier answers are wrong.',
         ):
             self.assert_named_hold(changed)
+        # ⚠️ DELIBERATE CHANGE 2026-09-29: an earlier DENIAL of the assessment's own word holds the assessment (an earlier
+        # linked unit); the examination, which nothing links to, and the reworded denials that link to neither, no
+        # longer hold them (they were held with the whole chain). Allergies (G-I) stays held throughout.
+        changed = notes.replace('visual changes, nausea, or weakness', 'headaches, nausea, or weakness')
+        self.assert_named_hold(changed, ('Allergies', 'Assessment'))
+        self.assert_named_released(changed, ('Examination',))
+        for changed in (notes.replace('visual changes, nausea, or weakness', 'visual changes or has nausea'),
+                        notes.replace('visual changes, nausea, or weakness', 'visual changes, nausea, or not weakness')):
+            self.assert_named_hold(changed, ('Allergies',))
+            self.assert_named_released(changed)
 
     def test_plan_cannot_lose_its_followup_or_borrow_a_different_patient(self):
         case = retained()
@@ -101,8 +134,14 @@ class PatientSourceTopics(SimpleTestCase):
                'evidence': [{'quote': first, 'start': start, 'end': start + len(first)}]}
         key = next(f['key'] for f in case['fields'] if f['label'] == 'Plan')
         self.assertEqual(g.governed_decisions(case['notes'], case['fields'], {key: old}), ['Plan'])
-        self.assert_named_hold(case['notes'].replace(followup, 'Her father will follow up in six weeks.'))
-        self.assert_named_hold(case['notes'].replace(followup, 'She will follow up in six weeks for the donor.'))
+        # ⚠️ DELIBERATE CHANGE 2026-09-29: a follow-up that belongs to another person holds the PLAN it continues (b''
+        # and the owned block), not the examination and assessment before it (they were held with the whole chain).
+        for other in ('Her father will follow up in six weeks.', 'She will follow up in six weeks for the donor.'):
+            changed = case['notes'].replace(followup, other)
+            self.assert_named_hold(changed, ('Allergies',))
+            self.assert_named_released(changed)
+            plan = run(changed, {'Plan': [first, other]}, fields=case['fields'])['Plan']
+            self.assertEqual((plan['status'], plan['text']), ('conflict', ''), other)
 
     def test_source_relation_cannot_grant_a_scoped_or_duplicate_destination(self):
         case = retained()
@@ -114,19 +153,26 @@ class PatientSourceTopics(SimpleTestCase):
                 self.assertEqual((answer['status'], answer['text']), ('conflict', ''), (label, context))
 
     def test_retained_ambiguous_and_implicit_patient_cases_are_not_reinterpreted(self):
-        for name, held in (('r1-note1', ('Chief complaint', 'History of present illness', 'Past medical history', 'Medications')),
+        for name, held in (('r1-note1', ('Past medical history', 'Medications')),
                            ('r1-note8', ('Chief complaint', 'History of present illness', 'Medications', 'Plan')),
                            ('r1-note10', ('Past medical history', 'Medications'))):
             case = retained(name)
             answers = run(case['notes'], case['unchanged_picks'], fields=case['fields'])
             for label in held:
                 self.assertEqual((answers[label]['status'], answers[label]['text']), ('conflict', ''), (name, label))
+        # ⚠️ DELIBERATE CHANGE 2026-09-29 (notes usefulness, G-B): r1-note1's presentation is the Chief complaint and the
+        # History of present illness on its own; nothing later links to it (it was held by position).
+        case = retained('r1-note1')
+        answers = run(case['notes'], case['unchanged_picks'], fields=case['fields'])
+        for label in ('Chief complaint', 'History of present illness'):
+            self.assertEqual((answers[label]['status'], answers[label]['text']),
+                             ('supported', case['unchanged_picks'][label][0]), label)
 
     def test_literal_source_ledger_preserves_positions_and_sentence_boundaries(self):
         case = retained()
         for notes in (case['notes'], case['notes'].replace('. ', '.\n')):
             answers = run(notes, case['unchanged_picks'], fields=case['fields'])
-            self.assertEqual({label: answers[label]['text'] for label in AUTOMATIC}, AUTOMATIC)
+            self.assertEqual({label: answers[label]['text'] for label in RELEASED}, RELEASED)
             reading = g.governance_for(notes, case['fields'])[11]['preceding']
             relations = reading['actor_relations']
             self.assertEqual(set(relations['units']), {u['id'] for u in reading['units']})
@@ -136,7 +182,11 @@ class PatientSourceTopics(SimpleTestCase):
                 self.assertEqual(relation['anchor'], 1)
             self.assertEqual([notes[low:high] for spans in relations['qualifiers'].values() for low, high in spans],
                              ['ago', 'or', 'nonsmoker', 'to'])
-        self.assert_named_hold(case['notes'].replace('headaches. The headaches', 'headaches The headaches'))
+        # ⚠️ DELIBERATE CHANGE 2026-09-29: a missing full stop breaks the ledger, but the examination and assessment
+        # resolve to the patient without it and nothing links to them; Allergies (G-I) stays held.
+        changed = case['notes'].replace('headaches. The headaches', 'headaches The headaches')
+        self.assert_named_hold(changed, ('Allergies',))
+        self.assert_named_released(changed)
         self.assert_named_hold(case['notes'].replace('She denies', 'He denies'))
 
     def test_negative_allergy_cannot_drop_a_clinically_related_assessment(self):
@@ -173,17 +223,15 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
         page = self.client.get(f'/encounters/{self.encounter.pk}/')
         rows = {row['label']: row for row in page.context['answer_rows']}
         for label in case['unchanged_picks']:
-            expected = ('supported', AUTOMATIC[label]) if label in AUTOMATIC else ('conflict', '')
+            expected = ('supported', RELEASED[label]) if label in RELEASED else ('conflict', '')
             self.assertEqual((rows[label]['status'], rows[label]['text']), expected, label)
         self.finalize(); self.encounter.refresh_from_db()
         self.assertNotEqual(self.encounter.status, 'finalized')
         self.assertFalse(self.encounter.export_path)
-        # These five explicit clinician decisions are assisted completion, never
-        # automatic recognition or source-selection successes.
-        manual = {label: '\n'.join(case['unchanged_picks'][label])
-                  for label in ('Chief complaint', 'History of present illness', 'Medications', 'Allergies')}
-        manual['Smoker'] = 'No'
-        payload = self.answers_payload({**AUTOMATIC, **manual})
+        # These explicit clinician decisions are assisted completion, never automatic recognition or source-selection
+        # successes. ⚠️ 2026-09-29: Chief complaint, HPI and Medications are now automatic (RELEASED); two remain.
+        manual = {'Allergies': '\n'.join(case['unchanged_picks']['Allergies']), 'Smoker': 'No'}
+        payload = self.answers_payload({**RELEASED, **manual})
         for label in manual: payload['held_shown_' + self.key(label)] = '1'
         for field in self.version.fields:
             if field['label'] not in case['unchanged_picks'] and field['kind'] not in ('signature', 'initials'):
@@ -191,13 +239,13 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
         saved = self.client.post(f'/encounters/{self.encounter.pk}/save/', payload)
         self.assertEqual(saved.status_code, 302, saved.content.decode())
         self.encounter.refresh_from_db()
-        for label, value in {**AUTOMATIC, **manual}.items():
+        for label, value in {**RELEASED, **manual}.items():
             self.assertEqual(self.encounter.answers[self.key(label)]['text'], value)
         self.finalize(); self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.status, 'finalized')
         exported = private_path(self.encounter.export_path).read_bytes()
         body = part_text(exported)
-        for value in (*AUTOMATIC.values(), *manual.values()):
+        for value in (*RELEASED.values(), *manual.values()):
             for line in value.splitlines():
                 if line != 'No': self.assertIn(line, body)
         self.assertIn('Smoker  ☐ Yes  ☒ No', body)

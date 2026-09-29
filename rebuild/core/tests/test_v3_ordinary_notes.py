@@ -105,8 +105,14 @@ class OrdinaryNotesOnV3Forms(SimpleTestCase):
             answer = run(notes, {label: [quote]})[label]
             self.assertEqual((answer['status'], answer['text']), ('conflict', ''), notes)
             self.assertEqual(answer['held_candidate']['evidence'][0]['quote'], quote, notes)
-        # A line of its own still names its option.
-        self.assertEqual(run('Father: MI at 50.\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']['text'], 'Yes')
+        # ⚠️ DELIBERATE CHANGE 2026-09-29 (X1, step 1 of the notes-usefulness change): on the next line of the SAME
+        # paragraph as another person's line, a subject-less labelled person attribute cannot be shown to be the
+        # patient's, so it is held (it was filled 'Yes'). A line in its own paragraph still names its option: actor
+        # resolution is paragraph-scoped, like every neighbour rule.
+        smoker = run('Father: MI at 50.\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']
+        self.assertEqual((smoker['status'], smoker['text']), ('conflict', ''))
+        self.assertEqual(smoker['held_candidate']['context'][0]['quote'], 'Father: MI at 50.')
+        self.assertEqual(run('Father: MI at 50.\n\nSmoker: yes.', {'Smoker': ['Smoker: yes.']})['Smoker']['text'], 'Yes')
 
     def test_an_unlabelled_sentence_never_becomes_an_option(self):
         notes = 'The patient does not smoke. Allergies: none known.'
@@ -1276,10 +1282,14 @@ class RecoveredNoteContext(SimpleTestCase):
             # A provider's order cannot reverse the source's clinical sequence.
             reversed_out = run(notes, {'History of present illness': quotes[::-1]}, fields=fields)['History of present illness']
             self.assertEqual(reversed_out, out)
+            # ⚠️ DELIBERATE CHANGE 2026-09-29 (notes usefulness, G-B): a PART of the paragraph is judged by the ONE
+            # neighbour rule (`v3_neighbour_causes`), no longer by position. Nothing later is linked to the first
+            # sentence and 'He' resolves uniquely to the patient, so each part alone is supported with exactly its own
+            # text (both were held). A part that a later sentence links to stays held (test_v3_notes_usefulness).
             for partial in ([quotes[0]], [quotes[1]]):
-                held = run(notes, {'History of present illness': partial}, fields=fields)['History of present illness']
-                self.assertEqual(held['status'], 'conflict')
-                self.assertNotIn('suggestion', held)
+                alone = run(notes, {'History of present illness': partial}, fields=fields)['History of present illness']
+                self.assertEqual((alone['status'], alone['text']), ('supported', partial[0]))
+                self.assertNotIn('suggestion', alone)
 
     def test_complete_paragraph_does_not_release_correction_or_option_guards(self):
         notes = 'The patient takes penicillin. Sorry, I mean amoxicillin.'

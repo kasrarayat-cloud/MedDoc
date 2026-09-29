@@ -69,8 +69,14 @@ class HistoryContextContract(SimpleTestCase):
                     f = next(f for f in case['fields'] if f['label'] == label)
                     self.assertEqual(g.governed_decisions(case['notes'], case['fields'], {f['key']: answer}), [])
             if case['name'] == 'r1-note4':
-                for label in ('Allergies', 'Medications', 'Smoker'):
+                # ⚠️ DELIBERATE CHANGE 2026-09-29 (notes usefulness, G-A + G-B1): 'She takes ibuprofen as needed.' is a
+                # typed 'takes' statement of the complete actor ledger and is now released into Medications on the
+                # default reader too (it was held with the rest of the note). Allergies (G-I) and Smoker (an option
+                # from prose, G-G) stay held.
+                for label in ('Allergies', 'Smoker'):
                     self.assertEqual(out[label]['status'], 'conflict')
+                self.assertEqual((out['Medications']['status'], out['Medications']['text']),
+                                 ('supported', 'She takes ibuprofen as needed.'))
 
     def test_partition_is_complete_closed_and_bound_to_exact_output(self):
         case = cases()[0]
@@ -132,8 +138,13 @@ class HistoryContextContract(SimpleTestCase):
             picks = copy.deepcopy(case['original_all_picks'])
             picks['Assessment'] = ['Assessment is ' + assessment]
             out = offered(notes, case['fields'], picks)
-            for label in ('Allergies', 'Medications', 'Smoker'):
+            # ⚠️ DELIBERATE CHANGE 2026-09-29 (notes usefulness): Medications is held by the assessment that repeats
+            # its own word ('ibuprofen cessation.': a linked later unit); an unrelated assessment no longer holds it.
+            held = ('Allergies', 'Smoker', 'Medications') if 'ibuprofen' in assessment else ('Allergies', 'Smoker')
+            for label in held:
                 self.assertEqual((out[label]['status'], out[label]['text']), ('conflict', ''), (assessment, label))
+            if 'ibuprofen' not in assessment:
+                self.assertEqual(out['Medications']['status'], 'supported', assessment)
 
     def test_identical_occurrences_keep_order_and_separate_evidence(self):
         fs = [field('hpi', 'History of present illness')]
@@ -163,8 +174,14 @@ class HistoryContextContract(SimpleTestCase):
                 self.assertIn(label, g.governed_decisions(notes, fields, {f['key']: value}))
         with override_settings(V3_HISTORY_CONTEXT=False):
             self.assertIn(label, g.governed_decisions(case['notes'], case['fields'], {f['key']: answer}))
+        # ⚠️ DELIBERATE CHANGE 2026-09-29 (notes usefulness, G-B): a LEGACY answer without the history record is decided
+        # by the DEFAULT reader, exactly as a fresh default generation would. For this note that reader now supports the
+        # presentation sentence as the Chief complaint on its own (it held it with the rest of the paragraph), so the
+        # legacy answer is not governed; the tampered and flag-off variants above still are.
+        default = run(case['notes'], {label: case['original_all_picks'][label]}, fields=case['fields'])[label]
+        self.assertEqual((default['status'], default['text']), (answer['status'], answer['text']))
         legacy = {key: value for key, value in answer.items() if key != 'history_context'}
-        self.assertIn(label, g.governed_decisions(case['notes'], case['fields'], {f['key']: legacy}))
+        self.assertEqual(g.governed_decisions(case['notes'], case['fields'], {f['key']: legacy}), [])
 
     def test_same_role_aliases_scoped_fields_and_source_capacity_get_no_new_contract(self):
         unit = [{'id': 1, 'quote': 'Patient presents with a cough.', 'start': 0, 'end': 29}]
