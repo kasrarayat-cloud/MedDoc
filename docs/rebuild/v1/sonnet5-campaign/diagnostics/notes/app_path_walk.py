@@ -27,10 +27,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
-from lxml import html
+from django.utils import timezone
 
 from core.jobs import run_one
-from core.models import Encounter, Job
+from core.models import Encounter, Job, Template
 from core.security import private_path
 from core.tests.test_v3_field_relations_workflow import sdk_response
 from core.tests.test_v3_ordinary_notes import LIVE
@@ -72,12 +72,17 @@ class NotesAppPath(V3Fixture, TestCase):
             return response
         try:
             with override_settings(**PATH_SETTINGS[path]):
-                template, version = self.uploaded(data=original, name='SYNTHETIC NOTES %s %s' % (cid, path))
+                name = 'SYNTHETIC NOTES %s %s' % (cid, path)
+                uploaded = steps.upload_form(self.client, self.department.pk, original, name)
+                self.assertEqual(uploaded.status_code, 302)
+                template = Template.objects.get(name=name)
+                version = template.versions.get(number=1)
                 result['mapping_equals_cases_json'] = version.fields == form['fields']
                 self.assertTrue(result['mapping_equals_cases_json'], 'stored mapping differs from cases.json fields')
                 stage('mapping-review', self.client.get(f'/templates/{template.pk}/'))
-                self.confirm(template, version)
-                stage('new-encounter', self.new_encounter(version, notes=case['notes']))
+                self.assertEqual(steps.confirm_mapping(self.client, template.pk, version.pk).status_code, 302)
+                stage('new-encounter', steps.create_encounter(self.client, self.patient.pk, version.pk, case['notes'],
+                                                              timezone.localdate().isoformat()))
                 encounter = Encounter.objects.latest('created_at')
                 self.assertEqual(encounter.notes, case['notes'])
                 page = stage('before-generation', self.client.get(f'/encounters/{encounter.pk}/'))
@@ -98,7 +103,7 @@ class NotesAppPath(V3Fixture, TestCase):
 
                 with patch('anthropic.Anthropic') as provider:
                     provider.return_value.messages.create.side_effect = respond
-                    stage('generate', self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': quote}))
+                    stage('generate', steps.request_generation(self.client, encounter.pk, quote))
                     jobs = list(Job.objects.filter(encounter=encounter))
                     if jobs:
                         result['worker_ran'] = run_one()
@@ -117,16 +122,14 @@ class NotesAppPath(V3Fixture, TestCase):
                     for k, v in result['fields'].items()}
                 page = stage('generated-review', self.client.get(f'/encounters/{encounter.pk}/'))
                 result['review_rows'] = {row['key']: row.get('status') for row in page.context['answer_rows']}
-                controls = set(html.fromstring(page.content).xpath('//*[@name]/@name'))
-                payload = steps.review_payload(version.fields, generated, controls, encounter.revision,
-                                               version.review_requirements)
-                saved = stage('save-review', self.client.post(f'/encounters/{encounter.pk}/save/', payload))
+                payload = steps.review_payload(version.fields, generated, steps.review_controls(page.content),
+                                               encounter.revision, version.review_requirements)
+                saved = stage('save-review', steps.save_review(self.client, encounter.pk, payload))
                 if saved.status_code != 302:
                     result['failure_boundary'] = 'review save'
                     return result
                 encounter.refresh_from_db()
-                stage('finalize', self.client.post(f'/encounters/{encounter.pk}/finalize/',
-                                                   {'revision': encounter.revision, 'reviewed': 'on'}))
+                stage('finalize', steps.finalize(self.client, encounter.pk, encounter.revision))
                 encounter.refresh_from_db()
                 result['encounter_status'] = encounter.status
                 if encounter.status != 'finalized':
@@ -134,8 +137,8 @@ class NotesAppPath(V3Fixture, TestCase):
                     result['finalize_messages'] = [str(m) for m in page.context.get('messages', [])][:5]
                     result['failure_boundary'] = 'finalization'
                     return result
-                download = stage('export', self.client.get(f'/encounters/{encounter.pk}/export/'))
-                exported = b''.join(download.streaming_content)
+                status, exported = steps.export(self.client, encounter.pk)
+                result['http'].append({'stage': 'export', 'status': status})
                 result['export_sha256'] = hashlib.sha256(exported).hexdigest()
                 self.assertEqual(result['export_sha256'], encounter.export_sha256)
                 self.assertEqual(private_path(template.original_path).read_bytes(), original)

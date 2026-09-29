@@ -4,6 +4,9 @@
 
   PATH_FLAGS            the two send paths as settings (default: every contract flag off; field_relations: only
                         V3_FIELD_RELATIONS on). The caller supplies the model and rates.
+  upload_form … export  the authenticated requests of the walk, in order: the upload view, the mapping confirmation,
+                        a new encounter, Generate, the review save, finalization and the export.
+  review_controls       the input names the review page offers (what review_payload may post).
   reference_selection   each field's REFERENCE selection (the first acceptable entry that applies on the path).
   reference_answer      the provider body a model returning the reference selection sends, built against the request
                         the application actually made (used only by mocked or fake providers).
@@ -26,6 +29,52 @@ PATH_FLAGS = {'default': {'V3_HISTORY_CONTEXT': False, 'V3_FIELD_RELATIONS': Fal
                           'WM_NARRATIVE': False},
               'field_relations': {'V3_HISTORY_CONTEXT': False, 'V3_FIELD_RELATIONS': True, 'V3_GENERATION_BATCHES': False,
                                   'WM_NARRATIVE': False}}
+
+
+def upload_form(client, department_pk, data, name, filename='intake.docx'):
+    """The authenticated upload view (a synthetic blank .docx)."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    return client.post('/templates/upload/', {'name': name, 'department': department_pk, 'synthetic_only': 'on',
+                                              'file': SimpleUploadedFile(filename, data)})
+
+
+def confirm_mapping(client, template_pk, version_pk):
+    """The clinician's confirmation that every field of THIS mapping version was checked against the form."""
+    return client.post(f'/templates/{template_pk}/', {'action': 'v3_confirm', 'mapping_version': version_pk,
+                                                      'checked_every_field': 'on'})
+
+
+def create_encounter(client, patient_pk, version_pk, notes, service_date):
+    return client.post('/encounters/new/', {'patient': patient_pk, 'template_version': version_pk, 'notes': notes,
+                                            'service_date': service_date, 'synthetic_only': 'on'})
+
+
+def request_generation(client, encounter_pk, usage_quote, revision=None):
+    """The doctor's Generate request with the quote the page signed (and the revision it showed, when given)."""
+    posted = {'usage_quote': usage_quote}
+    if revision is not None:
+        posted['revision'] = revision
+    return client.post(f'/encounters/{encounter_pk}/generate/', posted)
+
+
+def review_controls(content):
+    """Every input name the review page carries — review_payload posts only to names the page offers."""
+    from lxml import html
+    return set(html.fromstring(content).xpath('//*[@name]/@name'))
+
+
+def save_review(client, encounter_pk, payload):
+    return client.post(f'/encounters/{encounter_pk}/save/', payload)
+
+
+def finalize(client, encounter_pk, revision):
+    return client.post(f'/encounters/{encounter_pk}/finalize/', {'revision': revision, 'reviewed': 'on'})
+
+
+def export(client, encounter_pk):
+    """(status, bytes) of the authenticated export; the stream is consumed whole."""
+    download = client.get(f'/encounters/{encounter_pk}/export/')
+    return download.status_code, (b''.join(download.streaming_content) if download.status_code == 200 else b'')
 
 
 def applies(selection, path):

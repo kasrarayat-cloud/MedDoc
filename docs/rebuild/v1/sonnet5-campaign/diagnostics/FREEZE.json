@@ -327,7 +327,7 @@
    "mapping/grade_app_path.py": "R1: held_safe only when a covering field is held by a field verdict or a keyed record, or no field covers the area; a covered area under slot records only is graded by its field with hold_reaches_field false (summary areas_slot_record_over_kept_field). Self-test: a slot_only response per form and four assertions. R2: --grade and --self-test refuse (exit 2, nothing written) unless freeze_check.verify() holds; outputs carry provenance.",
    "notes/offline_replay.py": "R2: --replay refuses unless the freeze holds and the cases are the frozen cases.json; output {provenance, responses}; --out honoured.",
    "freeze_check.py": "new: the one freeze check and the provenance record (manifest, grader, inputs, candidate).",
-   "notes/app_path_steps.py": "new: the app-path steps that must stay identical between the mocked walk and the campaign's live ordinary_notes stage (path flags, reference answer, review save, export verification), moved out of app_path_walk.py unchanged.",
+   "notes/app_path_steps.py": "new: the app-path steps that must stay identical between the mocked walk and the campaign's live ordinary_notes stage (path flags, reference answer, review save, export verification), moved out of app_path_walk.py unchanged. Then (third freeze) the walk's authenticated requests (upload_form, confirm_mapping, create_encounter, request_generation, review_controls, save_review, finalize, export), which app_path_walk.py now calls.",
    "notes/app_path_walk.py": "imports app_path_steps (behaviour unchanged: a pre-freeze dry run on quillmd_qa_diag_notes_dryrunc reproduced all 21 committed per-walk records exactly, export sha256 included; not recorded as a result).",
    "notes/run_app_path_walk.py": "--runtime DIR; the candidate check compares rebuild/ outside rebuild/ops/.",
    "mapping/README.md, notes/README.md": "banners for R1, R2, R3."
@@ -335,7 +335,8 @@
   "r3_f6b_source_note": "exercised by the mapping stage: rebuild/ops/sonnet5_stages.py confirms f6b's proposed mapping, generates it with f6b-admin-missing.expected.json source_note.text and checks every answer stays missing; `plan --stage mapping` lists that send with its bound.",
   "pre_freeze_dry_runs": [
    "grade_app_path.self_test() called directly (the R2 guard refuses an unfrozen run): 22 of 22 assertions passed; not recorded",
-   "the notes walk (tag dryrunc, scratch runtime): 21 of 21, identical to app-path-walk.json; not recorded"
+   "the notes walk (tag dryrunc, scratch runtime): 21 of 21, identical to app-path-walk.json; not recorded",
+   "the notes walk after the HTTP steps moved (tag dryrund, scratch runtime): 21 of 21, identical to app-path-walk.json; not recorded"
   ],
   "expected_sha256sums": [
    "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae  f1-guidance-confirmation.expected.json",
@@ -356,11 +357,11 @@
    "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b  ../notes/cases.json",
    "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6  ../notes/offline_replay.py",
    "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e  ../notes/build_note_forms.py",
-   "b1d85973fa7981c6455a44567d345d9362c8976664ce585736ba191985734757  ../notes/app_path_walk.py",
+   "0f407081859522077983ef5d570fd9692774cc840b2d0c48348278617c629433  ../notes/app_path_walk.py",
    "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39  ../notes/app_path_settings.py",
    "f42bc3a0d08de040bf27ac99ea8d3b7b64c8e2f392caa8e9be570facf9c2fb14  ../notes/run_app_path_walk.py",
    "cbd0e79331e5780eb505b843cb71db481b3b773135c8c54d9a1156e82c84d9c5  ../freeze_check.py",
-   "732e7b18933aaad08b103c904113885f80ed305bb50be5304587ed84bb580878  ../notes/app_path_steps.py"
+   "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c  ../notes/app_path_steps.py"
   ],
   "files_sha256": {
    "CHECK.md": "96b5e768a0a3f2c7f2c17bcfcfab7a433a585041a0a64c6ea932ce60ce243596",
@@ -368,10 +369,10 @@
    "REPAIR.md": "89d53ca01e724f1a6a728412b33342285b11ea101881bc17cdb874fe98f62c19",
    "freeze_check.py": "cbd0e79331e5780eb505b843cb71db481b3b773135c8c54d9a1156e82c84d9c5",
    "layout-path/REPORT.md": "7279420df9a60938fcc1bf9ef3cd64c7a00ba209483e12da5973101772ec70bc",
-   "mapping/EXPECTED-SHA256SUMS": "70097790bad1e45f3e4169650e4b13b4248a1671b6b230951c4a8211482a0f2b",
+   "mapping/EXPECTED-SHA256SUMS": "7a141d05bcd92d2d522dff773bea74150793ff2c0149aceefbdc8231cde6afe3",
    "mapping/README.md": "f052113225b1253954a92f9393241c112285e5fb413b26f3d4a5bf0c63fd6a1c",
-   "mapping/app-path-selftest.json": "53a5ca8f98ba4cd7c35e9594c76518bec1dfc3a0ce99e85b7b42b85d37bbc7c6",
-   "mapping/baseline-deterministic.json": "aa09c858abcbae6010269acb04addc569997524bd52918444e1b296716c4a22b",
+   "mapping/app-path-selftest.json": "f4077d3439ac5a59eb329d20030744d3c974d68184380b1a8d9a3a4490b3283c",
+   "mapping/baseline-deterministic.json": "3285170fcd0b1a629807713c6154734b10947a424e0bfeff647d62931499ec0e",
    "mapping/build_forms.py": "32e72baeb9f05b48059c0ca1b9ffc0b66cdb945b4ee7002d701c8c84d3ac1ab4",
    "mapping/check_expected.py": "b2fec94b3808be9d98c4a5d6e5b6bed6af8c1e20eaa2b61cfd1bca3da7b185ff",
    "mapping/f1-guidance-confirmation.expected.json": "ee3270564304ffbac0e93333d71646f13955ae536ad3e886fa3a571a5d270dae",
@@ -390,14 +391,14 @@
    "mapping/wording-check.json": "60c69d053f7467b4906ed946995dc1b33de32914d9af3d3f302af3775e18ddf3",
    "mapping/wording_check.py": "e40012d9cb1a15a673ed850659ad94ace1a752bd172cbafa9575e34c72221878",
    "notes/README.md": "65efcb965c8614158918fbabe20f67a8ef8184a960efb6ca3a39e301110c3659",
-   "notes/app-path-walk.json": "cfeb0f6fd69c2af4764c8a2e9cb3206e6364df5c59b9c216b908574d6e5f911d",
+   "notes/app-path-walk.json": "8a9f4f66df002070941e0b4064cba82127aa9ec5137e380f79881b5cd9e9eddc",
    "notes/app_path_settings.py": "452354b1780db57ea59b59fd3e1a1a464ff1fef72acd68ceacaefe959df06f39",
-   "notes/app_path_steps.py": "732e7b18933aaad08b103c904113885f80ed305bb50be5304587ed84bb580878",
-   "notes/app_path_walk.py": "b1d85973fa7981c6455a44567d345d9362c8976664ce585736ba191985734757",
+   "notes/app_path_steps.py": "77201cd7a1b1050b01debf01ac3ec96344ecca19da36a6bffc0ac41d8ff7cc6c",
+   "notes/app_path_walk.py": "0f407081859522077983ef5d570fd9692774cc840b2d0c48348278617c629433",
    "notes/build_note_forms.py": "79774d434d98baa663e3ecc69959667587395da0f9ff21d5f758c4a46659669e",
    "notes/cases.json": "59955bf319e5e87a1a2d591baafa35f188a136406640b7e5a6af9cc4e008941b",
    "notes/note-forms-inspection.json": "6c8b540b8b9fef1b71525cd1cc3dcc9f3dbe456e57b284b2e79a795c9c4e09e2",
-   "notes/offline-observations.json": "6ee94382eb8b18a4573f0540408418a8a8756dbeab7b65ea27f3a6a74bb87f93",
+   "notes/offline-observations.json": "908849578df85f19b1f15621e99313202a3ee8a79364603c2e8136528de4408e",
    "notes/offline_replay.py": "a43f1e47011176d712e49eabf2b121ef1c1a9660c27b3ffb6d8432945daaf3a6",
    "notes/run_app_path_walk.py": "f42bc3a0d08de040bf27ac99ea8d3b7b64c8e2f392caa8e9be570facf9c2fb14",
    "offline-replays/REPORT.md": "1ce35a376c1ace771806dfb2ce125a88be287af909fa148cb05cdb3977cdae3a",
@@ -418,6 +419,10 @@
    {
     "at": "2026-09-29T02:41:47Z",
     "note": "freeze_check.py read the candidate from docs/ instead of the checkout root (parents[3] for parents[4]), so provenance recorded rebuild_equals_candidate false and every engine sha256 as null; caught by the first recorded self-test's provenance before that record was kept (it was discarded, uncommitted). Fixed test-first (test_the_candidate_is_read_from_the_checkout_that_holds_the_diagnostics) and re-frozen here, still before any record."
+   },
+   {
+    "at": "2026-09-29T03:00:51Z",
+    "note": "app_path_steps.py gained the walk's authenticated requests (upload_form, confirm_mapping, create_encounter, request_generation, review_controls, save_review, finalize, export) and app_path_walk.py now calls them instead of the test fixture's helpers, so the campaign's ordinary_notes stage imports every step it shares with the walk. A pre-freeze dry run (tag dryrund, scratch runtime) reproduced all 21 committed per-walk records exactly. Re-frozen here before the records that depend on it."
    }
   ]
  },
@@ -523,6 +528,7 @@
    "recorded_at": "2026-09-29T02:44:53Z",
    "script_sha256": "cdcb91871d4ca4fccd4dc786e29e0a09891b153359f5ccca6037d7a432fa062e",
    "totals_and_per_form_identical_to_previous_record": true
-  }
+  },
+  "superseded_by": "the records committed after the third freeze (same scripts, same results)"
  }
 }
