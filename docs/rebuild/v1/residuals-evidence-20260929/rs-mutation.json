@@ -1,0 +1,597 @@
+{
+ "baseline": {
+  "jobs": {
+   "exit": 0,
+   "seconds": 21.8,
+   "summary": [
+    "Ran 23 tests in 20.085s",
+    "OK"
+   ],
+   "failures": []
+  },
+  "mapping": {
+   "exit": 0,
+   "seconds": 6.6,
+   "summary": [
+    "Ran 1 test in 4.525s",
+    "OK"
+   ],
+   "failures": []
+  },
+  "email": {
+   "exit": 0,
+   "seconds": 2.7,
+   "summary": [
+    "Ran 12 tests in 1.068s",
+    "OK"
+   ],
+   "failures": []
+  }
+ },
+ "mutants": [
+  {
+   "mutant": "RS1-M1 in-doubt settlement treated as established",
+   "file": "core/jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "applied": true,
+   "exit": 1,
+   "seconds": 21.8,
+   "summary": [
+    "Ran 23 tests in 20.166s",
+    "FAILED (failures=5)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_settlement_whose_commit_answer_was_lost_keeps_its_request_key",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('failed', 'platform_failure: Output could [48 chars]ed.') != ('reconciliation', 'The settlement outcome [60 chars]it.')"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger",
+     "subtest": "outcome='release_no_cost'",
+     "raised": "AssertionError: Tuples differ: ('reconciliation', 'Provider completed, but settlement needs [67 chars]ed.') != ('reconciliation', 'The settlement outcome of thi"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger",
+     "subtest": "outcome='absorb_platform_failure'",
+     "raised": "AssertionError: Tuples differ: ('reconciliation', 'Provider completed, but settlement needs [67 chars]ed.') != ('reconciliation', 'The settlement outcome of thi"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger",
+     "subtest": "outcome='release_no_cost'",
+     "raised": "AssertionError: Tuples differ: ('failed', 'platform_failure: Output could [48 chars]ed.') != ('reconciliation', 'The settlement outcome [60 chars]it.')"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger",
+     "subtest": "outcome='absorb_platform_failure'",
+     "raised": "AssertionError: Tuples differ: ('failed', 'platform_failure: Output could [48 chars]ed.') != ('reconciliation', 'The settlement outcome [60 chars]it.')"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "restored": true
+  },
+  {
+   "mutant": "RS1-M2 a COMMIT the server refused counted as in doubt (connection identity ignored)",
+   "file": "core/jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "applied": true,
+   "exit": 1,
+   "seconds": 21.2,
+   "summary": [
+    "Ran 23 tests in 19.586s",
+    "FAILED (failures=2)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_settlement_the_server_refused_at_commit_is_still_established",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('reconciliation', 'The settlement outcome of this request is[42 chars]it.') != ('reconciliation', 'Provider completed, but settl"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_generation_held_for_reconciliation_at_every_stage",
+     "subtest": "stage='commit'",
+     "raised": "AssertionError: Tuples differ: ('reconciliation', 'The settlement outcome of this request is[42 chars]it.') != ('reconciliation', 'Provider completed, but settl"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "restored": true
+  },
+  {
+   "mutant": "RS1-M3 a statement error counted as in doubt (commit frame ignored)",
+   "file": "core/jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "applied": true,
+   "exit": 1,
+   "seconds": 22.4,
+   "summary": [
+    "Ran 23 tests in 20.612s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_connection_terminated_during_settlement_is_held_for_reconciliation",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('reconciliation', 'The settlement outcome of this request is[42 chars]it.') != ('reconciliation', 'Provider completed, but settl"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "restored": true
+  },
+  {
+   "mutant": "RS2-M4 the handler failure re-raised instead of held",
+   "file": "core/jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "applied": true,
+   "exit": 1,
+   "seconds": 23.4,
+   "summary": [
+    "Ran 23 tests in 21.574s",
+    "FAILED (errors=1)"
+   ],
+   "failures": [
+    {
+     "kind": "ERROR",
+     "test": "test_a_handler_whose_first_statement_loses_the_connection_holds_the_job",
+     "subtest": null,
+     "raised": "django.db.utils.OperationalError: terminating connection due to administrator command"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "restored": true
+  },
+  {
+   "mutant": "RS2-M5 no connection repair before the handler reads",
+   "file": "core/jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "applied": true,
+   "exit": 1,
+   "seconds": 22.1,
+   "summary": [
+    "Ran 23 tests in 20.517s",
+    "FAILED (errors=1)"
+   ],
+   "failures": [
+    {
+     "kind": "ERROR",
+     "test": "test_a_connection_lost_outside_a_transaction_is_repaired_before_the_handler_reads",
+     "subtest": null,
+     "raised": "django.db.utils.OperationalError: the connection is lost"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "restored": true
+  },
+  {
+   "mutant": "RS1-M6 no committed-state guard under the job lock",
+   "file": "core/jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "applied": true,
+   "exit": 1,
+   "seconds": 22.1,
+   "summary": [
+    "Ran 23 tests in 20.452s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged",
+     "subtest": null,
+     "raised": "AssertionError: 'failed' != 'succeeded'"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "restored": true
+  },
+  {
+   "mutant": "RS3-M7 a failed reversal swallowed, the failed state kept (the old handler)",
+   "file": "core/jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "applied": true,
+   "exit": 1,
+   "seconds": 22.0,
+   "summary": [
+    "Ran 23 tests in 20.406s",
+    "FAILED (failures=2)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_failed_reversal_never_stops_the_worker_and_holds_the_job_with_its_key",
+     "subtest": null,
+     "raised": "AssertionError: 'failed' != 'reconciliation'"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_a_reversal_the_database_refuses_keeps_the_job_held_with_its_request_key",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('failed', 'platform_failure: Output could [47 chars]ed.') != ('reconciliation', 'The output could not be[94 chars]it.')"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "restored": true
+  },
+  {
+   "mutant": "RS5-M8 every fixture failure called a validation failure",
+   "file": "core/jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "applied": true,
+   "exit": 1,
+   "seconds": 22.4,
+   "summary": [
+    "Ran 23 tests in 20.680s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_database_error_is_named_as_one_not_as_a_validation_failure",
+     "subtest": null,
+     "raised": "AssertionError: 'validation' unexpectedly found in 'Generation failed validation.'"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "a72a3370077a4d7e68c71468e540529922bde2f0fa7cd95669a4e043b6051d43",
+   "restored": true
+  },
+  {
+   "mutant": "RS3-M9 mapping: the old handler (reversal outside the failed-state transaction, failure swallowed)",
+   "file": "core/mapping_jobs.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "1a0b08adb2ff85019b6526f4c088a63f9526fa95dbf55d962560a818015e9a60",
+   "applied": true,
+   "exit": 1,
+   "seconds": 5.8,
+   "summary": [
+    "Ran 1 test in 3.831s",
+    "FAILED (failures=1)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge",
+     "subtest": null,
+     "raised": "AssertionError: Tuples differ: ('failed', 'mapping:96355bb9-e5af-4341-8dd7[115 chars]da8') != ('reconciliation', 'mapping:96355bb9-e5af-4[83 chars]84a')"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "1a0b08adb2ff85019b6526f4c088a63f9526fa95dbf55d962560a818015e9a60",
+   "restored": true
+  },
+  {
+   "mutant": "RA-M10 non-ASCII addresses accepted",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "applied": true,
+   "exit": 1,
+   "seconds": 2.6,
+   "summary": [
+    "Ran 12 tests in 1.093s",
+    "FAILED (failures=16)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_clinic_invitation_cannot_create_the_long_s_twin",
+     "subtest": null,
+     "raised": "AssertionError: 'Enter the email address in ASCII characters' not found in 'An account with this email address already exists.'"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_department_invitation_cannot_create_the_long_s_twin",
+     "subtest": null,
+     "raised": "AssertionError: 'Enter the email address in ASCII characters' not found in 'An account with this email address already exists.'"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_account_form_refuses_every_address_outside_the_rule",
+     "subtest": "email='ſam@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_account_form_refuses_every_address_outside_the_rule",
+     "subtest": "email='ıan@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_account_form_refuses_every_address_outside_the_rule",
+     "subtest": "email='İan@synthetic.invalid'",
+     "raised": "AssertionError: 'Enter the email address in ASCII characters' not found in 'Enter a valid email address.'"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_account_form_refuses_every_address_outside_the_rule",
+     "subtest": "email='Kate@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_every_account_form_refuses_every_address_outside_the_rule",
+     "subtest": "email='sam@bücher.example'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='ſam@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='ıan@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='İan@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='Kate@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='sam@bücher.example'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_the_long_s_twin_of_an_existing_account",
+     "subtest": null,
+     "raised": "AssertionError: False is not true : Couldn't find 'Enter the email address in ASCII characters' in the following response"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_address_outside_the_rule_is_refused_before_any_account_exists",
+     "subtest": "email='ſowner@example.org'",
+     "raised": "AssertionError: OperatorError not raised"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_address_outside_the_rule_is_refused_before_any_account_exists",
+     "subtest": "email='Owner@example.org'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_address_outside_the_rule_is_refused_before_any_account_exists",
+     "subtest": "email='owner@bücher.example'",
+     "raised": "AssertionError: \"first_admin_email\" does not match \"bootstrap_user_exists\""
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "restored": true
+  },
+  {
+   "mutant": "RA-M11 lowercased before the ASCII check (the Kelvin sign folds to k)",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "applied": true,
+   "exit": 1,
+   "seconds": 2.8,
+   "summary": [
+    "Ran 12 tests in 1.041s",
+    "FAILED (failures=2)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_every_account_form_refuses_every_address_outside_the_rule",
+     "subtest": "email='Kate@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='Kate@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "restored": true
+  },
+  {
+   "mutant": "RA-M12 no refusal of an address the lookup already answers",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "applied": true,
+   "exit": 1,
+   "seconds": 2.9,
+   "summary": [
+    "Ran 12 tests in 1.318s",
+    "FAILED (failures=3)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers",
+     "subtest": null,
+     "raised": "AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers",
+     "subtest": null,
+     "raised": "AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_register_refuses_an_address_a_legacy_long_s_account_already_answers",
+     "subtest": null,
+     "raised": "AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "restored": true
+  },
+  {
+   "mutant": "RA-M13 department invitation issued without the rule",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "applied": true,
+   "exit": 1,
+   "seconds": 2.5,
+   "summary": [
+    "Ran 12 tests in 0.937s",
+    "FAILED (failures=5)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='ſam@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='ıan@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='İan@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='Kate@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='sam@bücher.example'",
+     "raised": "AssertionError: True is not false"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "restored": true
+  },
+  {
+   "mutant": "RA-M14 clinic invitation issued without the rule (the old clean_email)",
+   "file": "core/forms.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "applied": true,
+   "exit": 1,
+   "seconds": 2.5,
+   "summary": [
+    "Ran 12 tests in 1.014s",
+    "FAILED (failures=5)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='ſam@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='ıan@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='İan@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='Kate@synthetic.invalid'",
+     "raised": "AssertionError: True is not false"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_invitations_are_not_issued_to_an_address_no_account_may_have",
+     "subtest": "email='sam@bücher.example'",
+     "raised": "AssertionError: True is not false"
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "4fa972813527102013bd4627fcb1ead29587b1e207545af131cb83641985635d",
+   "restored": true
+  },
+  {
+   "mutant": "RA-M15 first administrator created without the rule",
+   "file": "core/management/commands/bootstrap_first_admin.py",
+   "anchor_occurrences": 1,
+   "sha256_before": "bf5498703e115db008752f5c4990de94c5251006cf27a61a3d749320c5af6efe",
+   "applied": true,
+   "exit": 1,
+   "seconds": 2.6,
+   "summary": [
+    "Ran 12 tests in 0.990s",
+    "FAILED (failures=3)"
+   ],
+   "failures": [
+    {
+     "kind": "FAIL",
+     "test": "test_an_address_outside_the_rule_is_refused_before_any_account_exists",
+     "subtest": "email='ſowner@example.org'",
+     "raised": "AssertionError: OperatorError not raised"
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_address_outside_the_rule_is_refused_before_any_account_exists",
+     "subtest": "email='Owner@example.org'",
+     "raised": "AssertionError: \"first_admin_email\" does not match \"bootstrap_user_exists\""
+    },
+    {
+     "kind": "FAIL",
+     "test": "test_an_address_outside_the_rule_is_refused_before_any_account_exists",
+     "subtest": "email='owner@bücher.example'",
+     "raised": "AssertionError: \"first_admin_email\" does not match \"bootstrap_user_exists\""
+    }
+   ],
+   "result": "KILLED",
+   "sha256_after_restore": "bf5498703e115db008752f5c4990de94c5251006cf27a61a3d749320c5af6efe",
+   "restored": true
+  }
+ ]
+}

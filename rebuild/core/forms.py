@@ -25,12 +25,37 @@ class LoginForm(forms.Form):
         if settings.QUILLMD_MFA_REQUIRED_ALL:
             self.fields['otp'].label='Authenticator code'
             self.fields['otp'].help_text='Required once you have set up an authenticator. Leave it blank on your first sign-in and you will be asked to set one up.'
+#: ⚠️ ONE RULE FOR AN ACCOUNT'S EMAIL ADDRESS (RA-LOW-1, docs/rebuild/v1/residuals-assessment-20260929.md). The database's
+#: case-insensitive uniqueness is lower(email) (User.Meta); every lookup of an account by address is email__iexact, which is
+#: PostgreSQL's UPPER(); the views compare with str.lower() and the email allowlist with str.casefold(). They agree on ASCII
+#: and nowhere else: lower('ſ') is 'ſ' but upper('ſ') is 'S', so 'ſam@…' passed the unique index beside 'sam@…' and both
+#: answered the same iexact lookup — two accounts for one address. Django's EmailValidator admits exactly four non-ASCII
+#: letters in a local part (ſ ı İ and the Kelvin sign U+212A), and only because re.IGNORECASE folds them onto its ASCII
+#: class; every other one is refused already. So an account address is ASCII, stripped and lowercased: the one set on which
+#: every comparison agrees. Nothing is folded into a different address (NFKC or casefold would rewrite 'ſ' as 's', and the
+#: stored address is where the account's mail goes); an internationalized domain is entered in its ASCII ("xn--") form.
+#: Applied where an account's address is chosen: registration, both invitation acceptances (RegisterForm), both invitation
+#: issuances, and the first administrator (bootstrap_first_admin).
+ACCOUNT_EMAIL_NOT_ASCII=('Enter the email address in ASCII characters. An internationalized domain can be entered in its '
+                         'ASCII ("xn--") form.')
+def account_email(value):
+    """The address an account is created with or invited at, under the one rule above; ValidationError otherwise.
+    ASCII is checked on the address as typed, before lowercasing: str.lower() itself folds the Kelvin sign onto 'k'."""
+    email=(value or '').strip()
+    if not email.isascii(): raise forms.ValidationError(ACCOUNT_EMAIL_NOT_ASCII)
+    return email.lower()
+
 class RegisterForm(SyntheticAttestation,UserCreationForm):
     synthetic_only=forms.BooleanField(label='I will use synthetic test data only.')
     class Meta: model=User; fields=['email','first_name','last_name']
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs); self.drop_synthetic_attestation()
-    def clean_email(self): return self.cleaned_data['email'].lower().strip()
+    def clean_email(self):
+        email=account_email(self.cleaned_data['email'])
+        # Refused when the lookup every door uses already answers with an account: an account stored before the rule (for
+        # example 'ſam@…') answers email__iexact for 'sam@…', although the lower() unique index does not see one address.
+        if account_created_meanwhile(email): raise forms.ValidationError(ACCOUNT_EXISTS)
+        return email
 
 #: ⚠️ TWO REQUESTS CAN CREATE ONE NEW ACCOUNT AT THE SAME MOMENT (R-A, docs/rebuild/v1/residuals-assessment-20260929.md).
 #: RegisterForm's unique-email check reads committed rows, so two acceptances of different invitations for one new address
@@ -101,6 +126,7 @@ class InvitationForm(ScopedForm):
     def __init__(self,*args,user,**kwargs):
         super().__init__(*args,user=user,**kwargs)
         self.fields['department'].queryset=departments(user).filter(membership__user=user,membership__active=True,membership__role__in=['owner','manager']).distinct()
+    def clean_email(self): return account_email(self.cleaned_data['email'])
 class DepartmentForm(forms.Form):
     name=forms.CharField(max_length=120)
     organization_pays=forms.BooleanField(required=False,label='Charge this organization after each user’s personal promotional credit')
@@ -148,7 +174,7 @@ class ClinicInvitationForm(forms.Form):
     email=forms.EmailField(label='Clinic owner email')
     organization_name=forms.CharField(max_length=140,label='Clinic (organization) name')
     department_name=forms.CharField(max_length=120,label='First department name',initial='Main practice')
-    def clean_email(self): return self.cleaned_data['email'].lower().strip()
+    def clean_email(self): return account_email(self.cleaned_data['email'])
 class MfaResetForm(forms.Form):
     reason=forms.CharField(min_length=12,max_length=240,label='How the account holder’s identity was checked',help_text='Kept with the audit entry; it is the only record of the check.')
     confirm=forms.BooleanField(label='Remove every authenticator on this account and sign it out everywhere.')

@@ -24,7 +24,7 @@ The installed application and its database were not touched. No environment file
 |---|---|---|---|---|
 | **R-A** invitation race | **Yes, deterministically** (barrier before the account insert): 4 of 4 races answered `[302, 500]`, `IntegrityError` on `core_user_username_key` — two department invitations, two clinic invitations, one of each, and two `/register/` submissions | The later request gets the answer the same request gets a moment later: 200, "this email already has an account, sign in", its invitation unused and still valid; one account; audit rows untouched | `invite_accept`, `clinic_invitations.accept`, `register` catch the `IntegrityError` only when the account now exists (`forms.account_created_meanwhile`); any other `IntegrityError` still raises | 7 tests (4 RED → GREEN), 8 of 8 repeated runs green, 4 of 4 mutants killed, restores verified by sha256 |
 | **R-B** (1) safe? | Injected as real PostgreSQL errors at settle's first statement, after its money writes, at its last statement, at COMMIT, after COMMIT, and a killed connection | **Reconciliation is the safe outcome**: hold kept, nothing charged, receipt kept, nothing adopted or delivered, no retry | none | 5 tests green on the unmodified code; 2 of 2 mutants of the handler killed |
-| **R-B** (2) ordinary trigger? | **No.** Lock/constraint enumeration below, and a two-party search over every lock-statement prefix of either side: 654 scenarios against 34 operations (33 ordinary, plus a second settlement one worker cannot produce), 0 failures | Recorded as evidenced; no code change | none | `residuals-evidence-20260929/`; the positive control deadlocks exactly where predicted |
+| **R-B** (2) ordinary trigger? | **No.** Lock/constraint enumeration below, and a two-party search over every lock-statement prefix of either side: 632 scenarios against 33 ordinary operations, of which the stale sweep's 13 were vacuous (it found no job to sweep and took no lock), so 619 scenarios over 32 operations exercised a lock interplay; plus 22 for a second settlement one worker cannot produce (not ordinary) and 16 for the positive control. 0 failures outside the control | Recorded as evidenced; no code change | none | `residuals-evidence-20260929/`; the positive control deadlocks exactly where predicted |
 | **R-B** (3) resolution correct? | **Defect (LOW, admin-only accounting).** A receipt-backed job resolved as `release_no_cost` recorded "no provider cost evidenced" and no platform cost; `absorb_platform_failure` recorded the typed amount | The durable receipt is authoritative, as the batch resolution and the settled branch already treat it | `admin_resolve_job`: receipt branch | 2 tests RED → GREEN; 1 mutant killed |
 
 ## R-A — two invitations for one new address
@@ -178,7 +178,7 @@ failure audits (`usage.reconciliation_apply_failed`, `usage.absorb_failed`), an 
 callback, settlement not completed, any wallet of the scenario not equal to its ledger and held reservations, and the
 server's own `pg_stat_database.deadlocks`.
 
-**Result: 670 scenarios (654 ordinary plus 16 for the control) in 232.0 s. Zero failures of any kind in the 654 ordinary scenarios**: no `DatabaseError` from any statement on either side, no exception, no HTTP 5xx, no failure audit, no logged error, no hang, every settlement completed and every wallet reconciled. The server's deadlock counter rose by exactly 2 during the run — the control's two. Settlement ran 11 lock-taking statements; in the pending-charge scenarios its thread also ran the on-commit application of the payer's pending charge (13 or 18 statements), which was raced the same way.
+**Result: 670 scenarios in 232.0 s: 632 for the 33 ordinary operations, 22 for a second settlement (not an ordinary operation: the worker is one process, so two settlements never run at once) and 16 for the control. Zero failures of any kind in the 654 scenarios outside the control**: no `DatabaseError` from any statement on either side, no exception, no HTTP 5xx, no failure audit, no logged error, no hang, every settlement completed and every wallet reconciled. The server's deadlock counter rose by exactly 2 during the run — the control's two. **What the 632 ordinary scenarios exercised:** 619 of them, over 32 operations, raced a lock-taking operation against settlement. The stale sweep's 13 did not: `mark_stale` selects only jobs that have been running for more than five minutes, J had just been started, so in every one of the 13 the sweep found nothing, executed no lock-taking statement and never met settlement. They are vacuous and are not evidence about the sweep. Settlement ran 11 lock-taking statements; in the pending-charge scenarios its thread also ran the on-commit application of the payer's pending charge (13 or 18 statements), which was raced the same way.
 
 | Other operation | Scenarios | Other side waited | Answers | Failures |
 |---|---|---|---|---|
@@ -214,9 +214,10 @@ server's own `pg_stat_database.deadlocks`.
 | preservation hold on the running document | 17 | 13 | returned | 0 |
 | global preservation hold | 16 | 13 | returned | 0 |
 | second custodian releases a hold | 16 | 13 | returned | 0 |
-| the stale sweep | 13 | 0 | returned | 0 |
+| the stale sweep — **vacuous**: no job had run for five minutes, so it found nothing and took no lock (0 lock-taking statements in all 13) | 13 | 0 | returned | 0 |
+| **all 33 ordinary operations** | **632** (619 excluding the vacuous stale sweep) | | | **0** |
 | a second settlement for the same payer (not ordinary: one worker) | 22 | 18 | returned | 0 |
-| **all ordinary operations** | **654** | | | **0** |
+| **all scenarios outside the control** | **654** | | | **0** |
 
 **Positive control.** A synthetic transaction that locks W and then the preservation lock — the order the global lock
 order forbids — must deadlock with settlement, and did, in exactly the two predicted interleavings (2 of its 16 scenarios, SQLSTATE 40P01, both counted by the server): with settlement paused holding J and the preservation lock, the control took W and waited for the preservation lock, and settlement's wallet lock closed the cycle (the control was the victim); with the control paused holding W, settlement took J and the preservation lock and waited for W, and the control's preservation lock closed it (**settlement was the victim — this is what R-B looks like when it happens**). The instrument sees the failure class it is looking for, and no ordinary operation has that shape.
@@ -259,7 +260,7 @@ RB-M1 (the receipt ignored again) killed by both.
 | `core.tests.test_invitation_account_race` | 7 of 7 (RED first: 4 failures on `8e3dcfd0`) |
 | `core.tests.test_settlement_database_error` | 7 of 7 (RED first: the 2 resolution tests on `8e3dcfd0`) |
 | `test_v1_invite_only`, `test_retention_flow_locks`, `test_worker_financial_reliability`, before any change | 63 of 63 |
-| the interleaving search (`settle_interleavings`) | OK: 670 scenarios, control deadlocked as predicted, 0 ordinary failures |
+| the interleaving search (`settle_interleavings`) | OK: 670 scenarios (632 ordinary, 13 of them vacuous; 22 second settlement; 16 control), control deadlocked as predicted, 0 failures outside the control |
 | **`core.tests`, the whole core suite, after the changes** (29 min 43 s, one run) | 2,381 run, 31 skipped, **1 failure**: `test_wm_narrative.ReviewCost.test_round_13_a_whole_leg_unexamined_is_read_once_per_sentence`, a wall-clock bound (5.12 s against 5.0 s) on WM narrative computation this change does not touch, on a shared host under load; it passed 3 of 3 isolated re-runs (whole test 4.56–4.94 s). Recorded as a pre-existing tight timing bound, not a result of this change (`core-suite.txt`) |
 | `manage.py check` | no issues |
 
@@ -267,6 +268,10 @@ RB-M1 (the receipt ignored again) killed by both.
 
 - **Three or more parties** are not enumerated by the interleaving search; the lens's randomized stress (five runs,
   mixed doctors, worker, administrators and webhooks) covered mixes, with 0 deadlocks.
+- **The stale sweep was not raced against settlement.** Its 13 scenarios are vacuous (the sweep found no job running for
+  five minutes). What keeps it from meeting settlement is structural, not searched: the worker runs `mark_stale` and
+  `run_one` in one process, one after the other. The second settlement's 22 scenarios are likewise not an ordinary
+  operation. The ordinary evidence is 619 scenarios over 32 operations.
 - **Operations not in the search**: voice uploads (their `reserve()` is the generation request's), disposition
   execution (refuses any document with a job, so it cannot touch a running job's rows), generation batches and mapping
   jobs (default-off flags; separate settlement callers), and the production server's own configuration, which this

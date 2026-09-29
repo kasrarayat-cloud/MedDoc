@@ -155,12 +155,19 @@ def run_one():
                    'Provider outcome or settlement is uncertain; reconcile before retrying.')
         job.finished_at=timezone.now()
         if job.state=='failed':job.request_key=ended_key(job,'failed')
-        with transaction.atomic():
-            job.save(update_fields=['state','error','finished_at','request_key'])
-            if unsent:release(job)
-        if known and not declined:
-            try:absorb_failed_job(job)
-            except Exception as absorb_error:
-                audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
+        absorbing=False
+        try:
+            with transaction.atomic():
+                job.save(update_fields=['state','error','finished_at','request_key'])
+                if unsent:release(job)
+                # ⚠️ In the same transaction as the failed state (RS-3, as core.jobs): a reversal that fails never leaves a
+                # 'failed' job charged with its request key freed, which let the same mapping be bought again.
+                if known and not declined:absorbing=True;absorb_failed_job(job);absorbing=False
+        except Exception as absorb_error:
+            if not absorbing:raise
+            from .jobs import ABSORPTION_FAILED, hold_for_reconciliation
+            hold_for_reconciliation(job,exc,ABSORPTION_FAILED,billing='platform_failure',absorb_error=absorb_error,
+                                    action='mapping.reconciliation')
+            return True
         audit(job.user,'mapping.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__)
     return True

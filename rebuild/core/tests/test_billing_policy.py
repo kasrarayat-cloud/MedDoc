@@ -194,18 +194,29 @@ class AbsorbedPlatformFailure(PolicyFixture,TestCase):
         self.assertTrue(reported['checks']['failed_settled_usage_absorbed']);self.assertTrue(reported['checks']['reconciliation_delta_arithmetic'])
 
     @override_settings(AI_MODE='live')
-    def test_failed_reversal_never_stops_the_worker_and_is_flagged_by_the_audit(self):
+    def test_failed_reversal_never_stops_the_worker_and_holds_the_job_with_its_key(self):
+        # RS-3 (docs/rebuild/v1/residuals-assessment-20260929.md). This test used to pin the defect: the job ended 'failed'
+        # with the charge kept and its request key freed, so the same request could be bought again. A reversal that fails
+        # now leaves nothing of that transaction: the job is held with its key and its charge for an administrator.
         job=Job.objects.create(encounter=self.encounter,user=self.user,request_key='policy-absorb-error')
         reserve(job,Decimal('0.2'))
         with patch('core.jobs.generation.generate',return_value=self._unadopted_live_result('req_absorb_error')),patch('core.jobs.absorb_failed_job',side_effect=RuntimeError('synthetic reversal failure')):
             self.assertTrue(run_one())
-        job.refresh_from_db();self.assertEqual(job.state,'failed')
-        self.assertTrue(AuditEvent.objects.filter(action='usage.absorb_failed',target=str(job.pk)).exists())
+        job.refresh_from_db();self.assertEqual(job.state,'reconciliation');self.assertEqual(job.request_key,'policy-absorb-error')
+        self.assertEqual(AuditEvent.objects.get(action='usage.absorb_failed',target=str(job.pk)).details['error_class'],'RuntimeError')
         self.assertFalse(LedgerEntry.objects.filter(kind='absorbed').exists());self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
-        report=audit_report();reported=report['rows'][0]
-        self.assertFalse(reported['checks']['failed_settled_usage_absorbed']);self.assertFalse(report['all_checks_pass'])
-        absorb_failed_job(job)  # the operator repair path is the same idempotent reversal
-        self.assertTrue(audit_report()['all_checks_pass']);self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
+        report=audit_report()
+        self.assertIn(job.pk,[row['id'] for row in report['unresolved_jobs']])
+        with self.assertRaises(ValidationError):absorb_failed_job(job)  # only an ended job is absorbed; the resolution ends it
+        admin=User.objects.create_user(username='absorb-resolver',email='absorb-resolver@synthetic.invalid',verified_at=timezone.now(),is_staff=True)
+        device=TOTPDevice.objects.create(user=admin,confirmed=True,name='Synthetic authenticator')
+        self.client.force_login(admin);session=self.client.session;session['otp_device_id']=device.persistent_id;session.save()
+        response=self.client.post(f'/console/jobs/{job.pk}/resolve/',{'outcome':'release_no_cost','evidence_note':'Synthetic reversal repaired by the administrator'})
+        self.assertEqual(response.status_code,302)
+        job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertIn(':failed:',job.request_key)
+        report=audit_report()
+        self.assertTrue(report['all_checks_pass']);self.assertEqual(report['unresolved_jobs'],[]);self.assertTrue(report['rows'][0]['checks']['failed_settled_usage_absorbed'])
+        self.assertEqual(self.balances(),(Decimal('10'),Decimal('0')))
 
 @override_settings(ADMIN_SITE=False,STORAGES=STORAGES)
 class ReconciliationLedger(PolicyFixture,TestCase):
@@ -409,11 +420,17 @@ class RefutationRegressions(PolicyFixture,TestCase):
     password='Synthetic-console-proof-52831!'
 
     def failed_unabsorbed_job(self,key):
+        """A settled platform failure whose reversal has not happened yet. The worker no longer leaves one behind: since RS-3
+        (docs/rebuild/v1/residuals-assessment-20260929.md) a reversal that fails holds the job in reconciliation with its
+        key. So the row is written as the worker wrote it before that repair (and as admin_resolve_job's settled branch
+        writes it just before absorbing, in the same transaction); these tests are about the absorption's netting."""
         job=Job.objects.create(encounter=self.encounter,user=self.user,request_key=key)
         reserve(job,Decimal('0.2'))
         with patch('core.jobs.generation.generate',return_value=unadopted_live_result(self.encounter.notes,f'req_{key}')),patch('core.jobs.absorb_failed_job',side_effect=RuntimeError('synthetic transient reversal failure')):
             self.assertTrue(run_one())
-        job.refresh_from_db();self.assertEqual(job.state,'failed');self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+        job.refresh_from_db();self.assertEqual(job.state,'reconciliation');self.assertEqual(self.balances(),(Decimal('9.8125'),Decimal('0')))
+        Job.objects.filter(pk=job.pk).update(state='failed',error='platform_failure: Output could not be adopted (ValidationError); review required.')
+        job.refresh_from_db()
         return job,Usage.objects.get(job=job)
 
     def admin_login(self):

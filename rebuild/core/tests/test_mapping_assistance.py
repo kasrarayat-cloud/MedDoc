@@ -17,7 +17,7 @@ from django.utils import timezone
 from docx import Document
 from core import generation, mapping_assistance as mapping, mapping_jobs, jobs
 from core.billing import welcome_credit
-from core.models import Department, Encounter, Job, LedgerEntry, Membership, Organization, Patient, PlatformCost, ProviderReceipt, Reservation, Template, TemplateVersion, Usage, User, Wallet
+from core.models import AuditEvent, Department, Encounter, Job, LedgerEntry, Membership, Organization, Patient, PlatformCost, ProviderReceipt, Reservation, Template, TemplateVersion, Usage, User, Wallet
 from core.security import private_path
 from documents.service import inspect_template, fill_template
 from core.tests.test_workflow import TEST_SETTINGS
@@ -332,6 +332,27 @@ class MappingAssistance(TestCase):
                 self.assertTrue(PlatformCost.objects.filter(job=job,kind='absorbed_failure').exists())
                 self.assertEqual(sum(LedgerEntry.objects.filter(job=job).values_list('amount',flat=True)),Decimal(0))
                 self.assertEqual(self.template.versions.count(),1)
+
+    @override_settings(AI_MODE='live',QUILLMD_MAPPING_ASSISTANCE_LIVE=True)
+    def test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge(self):
+        # RS-3 (docs/rebuild/v1/residuals-assessment-20260929.md), the mapping worker's copy of the rule. RED on 61c5cc8f:
+        # 'failed' with the charge kept and the request key freed, so the same mapping could be bought again.
+        self.config=generation.configuration();self.compiled=mapping.compile_request(self.version,self.config)
+        job=self.enqueue();key=job.request_key
+        with patch('anthropic.Anthropic') as client,patch('core.mapping_jobs.absorb_failed_job',side_effect=RuntimeError('synthetic reversal failure')):
+            client.return_value.messages.create.return_value=self.response(stop='max_tokens')
+            self.assertTrue(jobs.run_one())
+        job.refresh_from_db()
+        self.assertEqual((job.state,job.request_key),('reconciliation',key))
+        self.assertEqual(job.error,jobs.ABSORPTION_FAILED)
+        usage=Usage.objects.get(job=job)
+        self.assertEqual(-sum(LedgerEntry.objects.filter(job=job,kind='usage').values_list('amount',flat=True)),usage.charged_cost)
+        self.assertFalse(LedgerEntry.objects.filter(job=job,kind='absorbed').exists())
+        self.assertFalse(PlatformCost.objects.filter(job=job,kind='absorbed_failure').exists())
+        self.assertEqual(AuditEvent.objects.get(action='usage.absorb_failed',target=str(job.pk)).details['error_class'],'RuntimeError')
+        self.assertEqual(AuditEvent.objects.get(action='mapping.reconciliation',target=str(job.pk)).details['billing'],'platform_failure')
+        self.assertEqual(self.enqueue().pk,job.pk)  # the same request is not bought twice
+        self.assertEqual(self.template.versions.count(),1)
 
     @override_settings(AI_MODE='live',QUILLMD_MAPPING_ASSISTANCE_LIVE=True)
     def test_definite_constructor_failure_releases_without_unknown_outcome(self):

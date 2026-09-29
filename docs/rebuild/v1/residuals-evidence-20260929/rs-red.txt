@@ -1,0 +1,694 @@
+RED run: sources of 61c5cc8f (core/jobs.py, core/mapping_jobs.py, core/forms.py, bootstrap_first_admin.py), tests of this change
+Using existing test database for alias 'default' ('quillmd_qa_resid2_t1')...
+test_an_ordinary_address_is_stored_lowercased_and_its_case_variant_refused (core.tests.test_account_email_rule.AccountEmailRule.test_an_ordinary_address_is_stored_lowercased_and_its_case_variant_refused) ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_an_ordinary_invitation_still_creates_its_account (core.tests.test_account_email_rule.AccountEmailRule.test_an_ordinary_invitation_still_creates_its_account) ... ok
+test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers (core.tests.test_account_email_rule.AccountEmailRule.test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers) ... FAIL
+test_clinic_invitation_cannot_create_the_long_s_twin (core.tests.test_account_email_rule.AccountEmailRule.test_clinic_invitation_cannot_create_the_long_s_twin) ... FAIL
+test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers (core.tests.test_account_email_rule.AccountEmailRule.test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers) ... FAIL
+test_department_invitation_cannot_create_the_long_s_twin (core.tests.test_account_email_rule.AccountEmailRule.test_department_invitation_cannot_create_the_long_s_twin) ... FAIL
+test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) ... 
+  test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='ſam@synthetic.invalid') ... FAIL
+  test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='ıan@synthetic.invalid') ... FAIL
+  test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='İan@synthetic.invalid') ... FAIL
+  test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='Kate@synthetic.invalid') ... FAIL
+  test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='sam@bücher.example') ... FAIL
+test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) ... 
+  test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='ſam@synthetic.invalid') ... FAIL
+  test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='ıan@synthetic.invalid') ... FAIL
+  test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='İan@synthetic.invalid') ... FAIL
+  test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='Kate@synthetic.invalid') ... FAIL
+  test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='sam@bücher.example') ... FAIL
+test_register_refuses_an_address_a_legacy_long_s_account_already_answers (core.tests.test_account_email_rule.AccountEmailRule.test_register_refuses_an_address_a_legacy_long_s_account_already_answers) ... FAIL
+test_register_refuses_the_long_s_twin_of_an_existing_account (core.tests.test_account_email_rule.AccountEmailRule.test_register_refuses_the_long_s_twin_of_an_existing_account) ... FAIL
+test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) ... 
+  test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) (email='ſowner@example.org') ... FAIL
+  test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) (email='Owner@example.org') ... FAIL
+  test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) (email='owner@bücher.example') ... FAIL
+test_an_ordinary_address_creates_the_first_account (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_ordinary_address_creates_the_first_account) ... ok
+test_failed_reversal_never_stops_the_worker_and_holds_the_job_with_its_key (core.tests.test_billing_policy.AbsorbedPlatformFailure.test_failed_reversal_never_stops_the_worker_and_holds_the_job_with_its_key) ... FAIL
+test_batch_without_a_credential_is_proved_untransmitted_and_releases_every_hold (core.tests.test_money_closeout.NoCredentialBatch.test_batch_without_a_credential_is_proved_untransmitted_and_releases_every_hold) ... ok
+test_control_a_type_error_from_the_send_itself_keeps_the_part_in_reconciliation (core.tests.test_money_closeout.NoCredentialBatch.test_control_a_type_error_from_the_send_itself_keeps_the_part_in_reconciliation)
+Without the SDK's own proof, a send-intent child that raised is an unknown outcome, exactly as before. ... ok
+test_control_with_the_credential_every_part_leaves_once_and_the_form_is_adopted (core.tests.test_money_closeout.NoCredentialBatch.test_control_with_the_credential_every_part_leaves_once_and_the_form_is_adopted) ... ok
+test_control_a_connection_error_from_the_real_sdk_stays_an_unknown_outcome_with_its_hold (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_a_connection_error_from_the_real_sdk_stays_an_unknown_outcome_with_its_hold)
+A subclass of OpenAIError raised by the real SDK after it tried to send is never read as 'nothing left'. ... ok
+test_control_a_stand_in_constructor_at_generates_own_call_site_stays_an_unknown_outcome (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_a_stand_in_constructor_at_generates_own_call_site_stays_an_unknown_outcome)
+Only the SDK's own constructor frame is proof. The same class and message raised at the very same call site by ... ok
+test_control_a_type_error_from_the_openai_send_itself_stays_an_unknown_outcome (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_a_type_error_from_the_openai_send_itself_stays_an_unknown_outcome) ... ok
+test_control_the_same_openai_error_from_the_send_stays_an_unknown_outcome_with_its_hold (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_the_same_openai_error_from_the_send_stays_an_unknown_outcome_with_its_hold)
+The constructor's class and message, raised by the send itself, prove nothing: a failure after transmission ... ok
+test_control_with_the_credential_the_request_leaves_once_and_is_settled (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_control_with_the_credential_the_request_leaves_once_and_is_settled) ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:
+  PydanticSerializationUnexpectedValue(PydanticSerializationUnexpectedValue: Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections]
+PydanticSerializationUnexpectedValue: Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ParsedResponseFunctionToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFileSearchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionWebSearch` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseComputerToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseToolSearchOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `AdditionalTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseReasoningItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `Program` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ProgramOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalRequest` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpApprovalResponse` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ImageGenerationCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `LocalShellCallAction` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `McpListTools` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCodeInterpreterToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCompactionItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionShellToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseApplyPatchToolCallOutput` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseFunctionToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCall` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `ResponseCustomToolCallOutputItem` - serialized value may not be as expected [field_name='output', input_value=ParsedResponseOutputMessa...e='message', phase=None), input_type=ParsedResponseOutputMessage[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  PydanticSerializationUnexpectedValue(Expected `ResponseOutputRefusal` - serialized value may not be as expected [field_name='content', input_value=ParsedResponseOutputText[...in'], conflict=False)])), input_type=ParsedResponseOutputText[TypeVar]])
+  PydanticSerializationUnexpectedValue(Expected `none` - serialized value may not be as expected [field_name='parsed', input_value=Selections(fields=[Select...ain'], conflict=False)]), input_type=Selections])
+  return self.__pydantic_serializer__.to_python(
+ok
+test_legacy_form_with_only_an_admin_key_is_refused_at_request_build_and_releases_the_hold (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_legacy_form_with_only_an_admin_key_is_refused_at_request_build_and_releases_the_hold)
+The SDK is constructed (an admin key satisfies its constructor) but the Responses request carries no bearer ... ok
+test_legacy_form_without_any_credential_is_not_processed_and_releases_the_hold (core.tests.test_money_closeout.NoCredentialOpenAIAdapter.test_legacy_form_without_any_credential_is_not_processed_and_releases_the_hold) ... ok
+test_control_a_type_error_from_anywhere_else_stays_an_unknown_outcome_with_its_hold (core.tests.test_money_closeout.NoCredentialSingleJob.test_control_a_type_error_from_anywhere_else_stays_an_unknown_outcome_with_its_hold)
+Only the SDK's own request-build refusal proves nothing left. The same class and message raised by the send ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_control_default_path_with_the_credential_leaves_once_and_is_settled (core.tests.test_money_closeout.NoCredentialSingleJob.test_control_default_path_with_the_credential_leaves_once_and_is_settled) ... ok
+test_control_ordinary_path_with_the_credential_leaves_once_and_is_settled (core.tests.test_money_closeout.NoCredentialSingleJob.test_control_ordinary_path_with_the_credential_leaves_once_and_is_settled) ... ok
+test_default_path_without_a_credential_is_not_processed_and_releases_the_hold (core.tests.test_money_closeout.NoCredentialSingleJob.test_default_path_without_a_credential_is_not_processed_and_releases_the_hold) ... ok
+test_ordinary_path_without_a_credential_is_not_processed_and_releases_the_hold (core.tests.test_money_closeout.NoCredentialSingleJob.test_ordinary_path_without_a_credential_is_not_processed_and_releases_the_hold) ... ok
+test_a_rate_change_at_finish_is_absorbed_not_billed (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_a_rate_change_at_finish_is_absorbed_not_billed) ... ok
+test_an_unrelated_voice_setting_at_finish_is_absorbed_not_billed (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_an_unrelated_voice_setting_at_finish_is_absorbed_not_billed) ... ok
+test_control_an_unchanged_configuration_is_adopted_and_charged (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_control_an_unchanged_configuration_is_adopted_and_charged) ... ok
+test_control_the_users_own_revoked_access_at_finish_stays_not_adopted_and_charged (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_control_the_users_own_revoked_access_at_finish_stays_not_adopted_and_charged)
+The design keeps not-adopted billing for the user's own source, permission or decision changes. ... ok
+test_our_change_is_never_billed_even_when_the_users_access_also_changed (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_our_change_is_never_billed_even_when_the_users_access_also_changed)
+Both at once: QuillMD's change alone makes the output unusable, so the user is not charged for it. ... ok
+test_the_batch_flag_turned_off_at_finish_is_absorbed_not_billed (core.tests.test_money_closeout.QuillMDConfigurationChangeAtFinish.test_the_batch_flag_turned_off_at_finish_is_absorbed_not_billed) ... ok
+test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge (core.tests.test_mapping_assistance.MappingAssistance.test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge) ... FAIL
+test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged (core.tests.test_settlement_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged) ... FAIL
+test_an_adoption_that_did_not_commit_is_a_platform_failure_absorbed (core.tests.test_settlement_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_did_not_commit_is_a_platform_failure_absorbed) ... ok
+test_a_database_error_is_named_as_one_not_as_a_validation_failure (core.tests.test_settlement_outcome_unknown.FixtureFailures.test_a_database_error_is_named_as_one_not_as_a_validation_failure)
+RED on 61c5cc8f: 'Generation failed validation.' for a settlement the database refused. ... FAIL
+test_a_settlement_whose_commit_answer_was_lost_keeps_its_request_key (core.tests.test_settlement_outcome_unknown.FixtureFailures.test_a_settlement_whose_commit_answer_was_lost_keeps_its_request_key)
+A charge may exist (the settlement may have committed): the key is not freed and nothing is claimed. ... FAIL
+test_a_validation_failure_is_still_named_as_one (core.tests.test_settlement_outcome_unknown.FixtureFailures.test_a_validation_failure_is_still_named_as_one) ... ok
+test_a_connection_lost_outside_a_transaction_is_repaired_before_the_handler_reads (core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_connection_lost_outside_a_transaction_is_repaired_before_the_handler_reads)
+RS-2, where it is possible. The server ended the connection at the worker's autocommit write of the result path ... ERROR
+test_a_handler_whose_first_statement_loses_the_connection_holds_the_job (core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_handler_whose_first_statement_loses_the_connection_holds_the_job)
+RS-2. The settlement committed, the output could not be adopted, and the server ended the connection at the ... ERROR
+test_a_reversal_the_database_refuses_keeps_the_job_held_with_its_request_key (core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_reversal_the_database_refuses_keeps_the_job_held_with_its_request_key)
+RS-3. The output could not be adopted and the database refused the absorption's ledger write. RED on 61c5cc8f: ... FAIL
+test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) ... 
+  test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) (outcome='release_no_cost') ... FAIL
+  test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) (outcome='absorb_platform_failure') ... FAIL
+test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) ... 
+  test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) (outcome='release_no_cost') ... FAIL
+  test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) (outcome='absorb_platform_failure') ... FAIL
+test_a_settlement_the_server_refused_at_commit_is_still_established (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_settlement_the_server_refused_at_commit_is_still_established)
+Narrowness: a COMMIT the server answered with an error (a deferred foreign-key violation) rolled back, and the ... ok
+test_control_narrative_with_the_credential_sends_once (core.tests.test_money_closeout.NoCredentialNarrative.test_control_narrative_with_the_credential_sends_once) ... ok
+test_narrative_without_a_credential_is_proved_untransmitted (core.tests.test_money_closeout.NoCredentialNarrative.test_narrative_without_a_credential_is_proved_untransmitted) ... ok
+test_the_sdk_constructor_refusing_outside_generate_is_not_proof (core.tests.test_money_closeout.OpenAIConstructorProof.test_the_sdk_constructor_refusing_outside_generate_is_not_proof) ... ok
+
+======================================================================
+ERROR: test_a_connection_lost_outside_a_transaction_is_repaired_before_the_handler_reads (core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_connection_lost_outside_a_transaction_is_repaired_before_the_handler_reads)
+RS-2, where it is possible. The server ended the connection at the worker's autocommit write of the result path
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 103, in _execute
+    return self.cursor.execute(sql)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AdminShutdown: terminating connection due to administrator command
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/jobs.py", line 727, in run_one
+    job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
+                                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 902, in save
+    self.save_base(
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1008, in save_base
+    updated = self._save_table(
+              ^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1138, in _save_table
+    updated = self._do_update(
+              ^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/base.py", line 1203, in _do_update
+    return filtered._update(values) > 0
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1288, in _update
+    return query.get_compiler(self.db).execute_sql(ROW_COUNT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 2060, in execute_sql
+    row_count = super().execute_sql(result_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 348, in wrapper
+    return execute('SELECT pg_terminate_backend(pg_backend_pid())', None, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 103, in _execute
+    return self.cursor.execute(sql)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.OperationalError: terminating connection due to administrator command
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/base/base.py", line 298, in _cursor
+    return self._prepare_cursor(self.create_cursor(name))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/postgresql/base.py", line 429, in create_cursor
+    cursor = self.connection.cursor()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/connection.py", line 240, in cursor
+    self._check_connection_ok()
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/_connection_base.py", line 541, in _check_connection_ok
+    raise e.OperationalError("the connection is closed")
+psycopg.OperationalError: the connection is closed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 352, in test_a_connection_lost_outside_a_transaction_is_repaired_before_the_handler_reads
+    self.assertTrue(run_one())
+                    ^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/jobs.py", line 763, in run_one
+    known=Usage.objects.filter(job=job).exists()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1298, in exists
+    return self.query.has_results(using=self.db)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/query.py", line 676, in has_results
+    return compiler.has_results()
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1591, in has_results
+    return bool(self.execute_sql(SINGLE))
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1621, in execute_sql
+    cursor = self.connection.cursor()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/base/base.py", line 320, in cursor
+    return self._cursor()
+           ^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/base/base.py", line 297, in _cursor
+    with self.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/base/base.py", line 298, in _cursor
+    return self._prepare_cursor(self.create_cursor(name))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/utils/asyncio.py", line 26, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/postgresql/base.py", line 429, in create_cursor
+    cursor = self.connection.cursor()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/connection.py", line 240, in cursor
+    self._check_connection_ok()
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/_connection_base.py", line 541, in _check_connection_ok
+    raise e.OperationalError("the connection is closed")
+django.db.utils.OperationalError: the connection is closed
+
+======================================================================
+ERROR: test_a_handler_whose_first_statement_loses_the_connection_holds_the_job (core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_handler_whose_first_statement_loses_the_connection_holds_the_job)
+RS-2. The settlement committed, the output could not be adopted, and the server ended the connection at the
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/jobs.py", line 733, in run_one
+    if job.kind=='generation': answers,review=generation.adoption(result)
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/unittest/mock.py", line 1134, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/unittest/mock.py", line 1138, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/unittest/mock.py", line 1199, in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 297, in adoption
+    raise ValidationError('synthetic: the provider output cannot be adopted')
+django.core.exceptions.ValidationError: ['synthetic: the provider output cannot be adopted']
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 103, in _execute
+    return self.cursor.execute(sql)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.AdminShutdown: terminating connection due to administrator command
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 318, in test_a_handler_whose_first_statement_loses_the_connection_holds_the_job
+    self.assertTrue(run_one())
+                    ^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/jobs.py", line 763, in run_one
+    known=Usage.objects.filter(job=job).exists()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/query.py", line 1298, in exists
+    return self.query.has_results(using=self.db)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/query.py", line 676, in has_results
+    return compiler.has_results()
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1591, in has_results
+    return bool(self.execute_sql(SINGLE))
+                ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 314, in wrapper
+    return execute('SELECT pg_terminate_backend(pg_backend_pid())', None, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/db/backends/utils.py", line 103, in _execute
+    return self.cursor.execute(sql)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.OperationalError: terminating connection due to administrator command
+
+======================================================================
+FAIL: test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers (core.tests.test_account_email_rule.AccountEmailRule.test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 141, in test_clinic_invitation_cannot_create_an_account_a_legacy_long_s_account_answers
+    self.refused(response, 'An account with this email address already exists.')
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 69, in refused
+    self.assertContains(response, 'This email already has an account.', status_code=200)
+AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)
+
+======================================================================
+FAIL: test_clinic_invitation_cannot_create_the_long_s_twin (core.tests.test_account_email_rule.AccountEmailRule.test_clinic_invitation_cannot_create_the_long_s_twin)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 131, in test_clinic_invitation_cannot_create_the_long_s_twin
+    self.refused(response, ASCII_REFUSAL)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 69, in refused
+    self.assertContains(response, 'This email already has an account.', status_code=200)
+AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)
+
+======================================================================
+FAIL: test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers (core.tests.test_account_email_rule.AccountEmailRule.test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 122, in test_department_invitation_cannot_create_an_account_a_legacy_long_s_account_answers
+    self.refused(response, 'An account with this email address already exists.')
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 69, in refused
+    self.assertContains(response, 'This email already has an account.', status_code=200)
+AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)
+
+======================================================================
+FAIL: test_department_invitation_cannot_create_the_long_s_twin (core.tests.test_account_email_rule.AccountEmailRule.test_department_invitation_cannot_create_the_long_s_twin)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 113, in test_department_invitation_cannot_create_the_long_s_twin
+    self.refused(response, ASCII_REFUSAL)
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 69, in refused
+    self.assertContains(response, 'This email already has an account.', status_code=200)
+AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)
+
+======================================================================
+FAIL: test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='ſam@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 159, in test_every_account_form_refuses_every_address_outside_the_rule
+    self.assertFalse(form.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='ıan@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 159, in test_every_account_form_refuses_every_address_outside_the_rule
+    self.assertFalse(form.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='İan@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 160, in test_every_account_form_refuses_every_address_outside_the_rule
+    self.assertIn(ASCII_REFUSAL, ' '.join(form.errors['email']))
+AssertionError: 'Enter the email address in ASCII characters' not found in 'Enter a valid email address.'
+
+======================================================================
+FAIL: test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='Kate@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 159, in test_every_account_form_refuses_every_address_outside_the_rule
+    self.assertFalse(form.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_every_account_form_refuses_every_address_outside_the_rule (core.tests.test_account_email_rule.AccountEmailRule.test_every_account_form_refuses_every_address_outside_the_rule) (email='sam@bücher.example')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 159, in test_every_account_form_refuses_every_address_outside_the_rule
+    self.assertFalse(form.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='ſam@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 149, in test_invitations_are_not_issued_to_an_address_no_account_may_have
+    self.assertFalse(department.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='ıan@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 149, in test_invitations_are_not_issued_to_an_address_no_account_may_have
+    self.assertFalse(department.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='İan@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 149, in test_invitations_are_not_issued_to_an_address_no_account_may_have
+    self.assertFalse(department.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='Kate@synthetic.invalid')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 149, in test_invitations_are_not_issued_to_an_address_no_account_may_have
+    self.assertFalse(department.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_invitations_are_not_issued_to_an_address_no_account_may_have (core.tests.test_account_email_rule.AccountEmailRule.test_invitations_are_not_issued_to_an_address_no_account_may_have) (email='sam@bücher.example')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 149, in test_invitations_are_not_issued_to_an_address_no_account_may_have
+    self.assertFalse(department.is_valid())
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_register_refuses_an_address_a_legacy_long_s_account_already_answers (core.tests.test_account_email_rule.AccountEmailRule.test_register_refuses_an_address_a_legacy_long_s_account_already_answers)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 104, in test_register_refuses_an_address_a_legacy_long_s_account_already_answers
+    self.assertContains(response, 'An account with this email address already exists.', status_code=200)
+AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)
+
+======================================================================
+FAIL: test_register_refuses_the_long_s_twin_of_an_existing_account (core.tests.test_account_email_rule.AccountEmailRule.test_register_refuses_the_long_s_twin_of_an_existing_account)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 97, in test_register_refuses_the_long_s_twin_of_an_existing_account
+    self.assertContains(response, ASCII_REFUSAL, status_code=200)
+AssertionError: 302 != 200 : Couldn't retrieve content: Response code was 302 (expected 200)
+
+======================================================================
+FAIL: test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) (email='ſowner@example.org')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 207, in test_an_address_outside_the_rule_is_refused_before_any_account_exists
+    with self.assertRaisesRegex(OperatorError, 'first_admin_email'):
+AssertionError: OperatorError not raised
+
+======================================================================
+FAIL: test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) (email='Owner@example.org')
+----------------------------------------------------------------------
+ops.production_operator.OperatorError: bootstrap_user_exists
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 207, in test_an_address_outside_the_rule_is_refused_before_any_account_exists
+    with self.assertRaisesRegex(OperatorError, 'first_admin_email'):
+AssertionError: "first_admin_email" does not match "bootstrap_user_exists"
+
+======================================================================
+FAIL: test_an_address_outside_the_rule_is_refused_before_any_account_exists (core.tests.test_account_email_rule.FirstAdministratorEmailRule.test_an_address_outside_the_rule_is_refused_before_any_account_exists) (email='owner@bücher.example')
+----------------------------------------------------------------------
+ops.production_operator.OperatorError: bootstrap_user_exists
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_account_email_rule.py", line 207, in test_an_address_outside_the_rule_is_refused_before_any_account_exists
+    with self.assertRaisesRegex(OperatorError, 'first_admin_email'):
+AssertionError: "first_admin_email" does not match "bootstrap_user_exists"
+
+======================================================================
+FAIL: test_failed_reversal_never_stops_the_worker_and_holds_the_job_with_its_key (core.tests.test_billing_policy.AbsorbedPlatformFailure.test_failed_reversal_never_stops_the_worker_and_holds_the_job_with_its_key)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_billing_policy.py", line 205, in test_failed_reversal_never_stops_the_worker_and_holds_the_job_with_its_key
+    job.refresh_from_db();self.assertEqual(job.state,'reconciliation');self.assertEqual(job.request_key,'policy-absorb-error')
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'failed' != 'reconciliation'
+- failed
++ reconciliation
+
+
+======================================================================
+FAIL: test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge (core.tests.test_mapping_assistance.MappingAssistance.test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/test/utils.py", line 456, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_mapping_assistance.py", line 346, in test_a_reversal_that_fails_holds_the_mapping_job_with_its_key_and_charge
+    self.assertEqual((job.state,job.request_key),('reconciliation',key))
+AssertionError: Tuples differ: ('failed', 'mapping:fdd4c293-22b6-4081-8861[115 chars]11a') != ('reconciliation', 'mapping:fdd4c293-22b6-4[83 chars]265')
+
+First differing element 0:
+'failed'
+'reconciliation'
+
+- ('failed',
++ ('reconciliation',
+-  'mapping:fdd4c293-22b6-4081-8861-310a1f473a08:1bae6851e1490c52cab361d04af716beea8907ba637ec023d02a28a8bc78a265:failed:e621b62fb37142e98c138728a918811a')
+?                                                                                                                ----------------------------------------
+
++  'mapping:fdd4c293-22b6-4081-8861-310a1f473a08:1bae6851e1490c52cab361d04af716beea8907ba637ec023d02a28a8bc78a265')
+
+======================================================================
+FAIL: test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged (core.tests.test_settlement_outcome_unknown.AdoptionCommitAnswerLost.test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 264, in test_an_adoption_that_committed_before_its_answer_was_lost_stays_succeeded_and_charged
+    self.assertEqual(job.state, 'succeeded')
+AssertionError: 'failed' != 'succeeded'
+- failed
++ succeeded
+
+
+======================================================================
+FAIL: test_a_database_error_is_named_as_one_not_as_a_validation_failure (core.tests.test_settlement_outcome_unknown.FixtureFailures.test_a_database_error_is_named_as_one_not_as_a_validation_failure)
+RED on 61c5cc8f: 'Generation failed validation.' for a settlement the database refused.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 408, in test_a_database_error_is_named_as_one_not_as_a_validation_failure
+    self.assertNotIn('validation', job.error)
+AssertionError: 'validation' unexpectedly found in 'Generation failed validation.'
+
+======================================================================
+FAIL: test_a_settlement_whose_commit_answer_was_lost_keeps_its_request_key (core.tests.test_settlement_outcome_unknown.FixtureFailures.test_a_settlement_whose_commit_answer_was_lost_keeps_its_request_key)
+A charge may exist (the settlement may have committed): the key is not freed and nothing is claimed.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 439, in test_a_settlement_whose_commit_answer_was_lost_keeps_its_request_key
+    self.assertEqual((job.state, job.error), ('reconciliation', UNKNOWN))
+AssertionError: Tuples differ: ('failed', 'Generation failed validation.') != ('reconciliation', 'The settlement outcome [60 chars]it.')
+
+First differing element 0:
+'failed'
+'reconciliation'
+
+- ('failed', 'Generation failed validation.')
++ ('reconciliation',
++  'The settlement outcome of this request is unknown; an administrator must '
++  'reconcile it.')
+
+======================================================================
+FAIL: test_a_reversal_the_database_refuses_keeps_the_job_held_with_its_request_key (core.tests.test_settlement_outcome_unknown.HandlerFailures.test_a_reversal_the_database_refuses_keeps_the_job_held_with_its_request_key)
+RS-3. The output could not be adopted and the database refused the absorption's ledger write. RED on 61c5cc8f:
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 372, in test_a_reversal_the_database_refuses_keeps_the_job_held_with_its_request_key
+    self.assertEqual((job.state, job.error), ('reconciliation', ABSORPTION_FAILED))
+AssertionError: Tuples differ: ('failed', 'platform_failure: Output could [47 chars]ed.') != ('reconciliation', 'The output could not be[94 chars]it.')
+
+First differing element 0:
+'failed'
+'reconciliation'
+
+- ('failed',
+-  'platform_failure: Output could not be adopted (ValidationError); review '
+-  'required.')
++ ('reconciliation',
++  'The output could not be adopted, and its charge could not be reversed '
++  'automatically; an administrator must reconcile it.')
+
+======================================================================
+FAIL: test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) (outcome='release_no_cost')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 215, in test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger
+    job, before, before_enqueue = self.settle_with_lost_answer(landed=False)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 179, in settle_with_lost_answer
+    self.assertEqual((job.state, job.error), ('reconciliation', UNKNOWN))
+AssertionError: Tuples differ: ('reconciliation', 'Provider completed, but settlement needs [67 chars]ed.') != ('reconciliation', 'The settlement outcome of this request is[42 chars]it.')
+
+First differing element 1:
+'Provider completed, but settlement needs [66 chars]ved.'
+'The settlement outcome of this request is[41 chars] it.'
+
+  ('reconciliation',
+-  'Provider completed, but settlement needs administrator reconciliation; '
+-  'nothing is charged until it is resolved.')
++  'The settlement outcome of this request is unknown; an administrator must '
++  'reconcile it.')
+
+======================================================================
+FAIL: test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) (outcome='absorb_platform_failure')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 215, in test_a_commit_that_did_not_land_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger
+    job, before, before_enqueue = self.settle_with_lost_answer(landed=False)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 179, in settle_with_lost_answer
+    self.assertEqual((job.state, job.error), ('reconciliation', UNKNOWN))
+AssertionError: Tuples differ: ('reconciliation', 'Provider completed, but settlement needs [67 chars]ed.') != ('reconciliation', 'The settlement outcome of this request is[42 chars]it.')
+
+First differing element 1:
+'Provider completed, but settlement needs [66 chars]ved.'
+'The settlement outcome of this request is[41 chars] it.'
+
+  ('reconciliation',
+-  'Provider completed, but settlement needs administrator reconciliation; '
+-  'nothing is charged until it is resolved.')
++  'The settlement outcome of this request is unknown; an administrator must '
++  'reconcile it.')
+
+======================================================================
+FAIL: test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) (outcome='release_no_cost')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 196, in test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger
+    job, before, before_enqueue = self.settle_with_lost_answer(landed=True)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 179, in settle_with_lost_answer
+    self.assertEqual((job.state, job.error), ('reconciliation', UNKNOWN))
+AssertionError: Tuples differ: ('reconciliation', 'Provider completed, but settlement needs [67 chars]ed.') != ('reconciliation', 'The settlement outcome of this request is[42 chars]it.')
+
+First differing element 1:
+'Provider completed, but settlement needs [66 chars]ved.'
+'The settlement outcome of this request is[41 chars] it.'
+
+  ('reconciliation',
+-  'Provider completed, but settlement needs administrator reconciliation; '
+-  'nothing is charged until it is resolved.')
++  'The settlement outcome of this request is unknown; an administrator must '
++  'reconcile it.')
+
+======================================================================
+FAIL: test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger (core.tests.test_settlement_outcome_unknown.SettlementCommitAnswerLost.test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger) (outcome='absorb_platform_failure')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 196, in test_a_commit_that_landed_after_its_answer_was_lost_is_held_as_unknown_and_resolved_from_the_ledger
+    job, before, before_enqueue = self.settle_with_lost_answer(landed=True)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/meddoc-pro/.worktrees/v1-residuals/rebuild/core/tests/test_settlement_outcome_unknown.py", line 179, in settle_with_lost_answer
+    self.assertEqual((job.state, job.error), ('reconciliation', UNKNOWN))
+AssertionError: Tuples differ: ('reconciliation', 'Provider completed, but settlement needs [67 chars]ed.') != ('reconciliation', 'The settlement outcome of this request is[42 chars]it.')
+
+First differing element 1:
+'Provider completed, but settlement needs [66 chars]ved.'
+'The settlement outcome of this request is[41 chars] it.'
+
+  ('reconciliation',
+-  'Provider completed, but settlement needs administrator reconciliation; '
+-  'nothing is charged until it is resolved.')
++  'The settlement outcome of this request is unknown; an administrator must '
++  'reconcile it.')
+
+----------------------------------------------------------------------
+Ran 49 tests in 82.710s
+
+FAILED (failures=29, errors=2)
+Preserving test database for alias 'default' ('quillmd_qa_resid2_t1')...
+Found 49 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

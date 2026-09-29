@@ -9,9 +9,11 @@ import os
 import sys
 import time
 import httpx
+from inspect import unwrap
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import DatabaseError, connection, transaction
+from django.db.backends.base.base import BaseDatabaseWrapper
 from django.utils import timezone
 from .models import AuditEvent, Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
 from .security import membership,audit,private_path
@@ -685,7 +687,7 @@ def run_one():
         except Exception:
             job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.request_key=ended_key(job,'failed'); job.save();release(job); return True
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
-    provider_returned=False
+    provider_returned=False; settling=False; carrier=None
     try:
         # A hold taken before the switch to real data mode may sit on sandbox money, or its payer's paid balance (which a
         # reconciled cost would debit) may hold it: real mode never spends it, and refuses the job as reserve() would.
@@ -726,7 +728,10 @@ def run_one():
         with path.open('xb') as file:path.chmod(0o600);file.write(payload)
         job.result_path=result_path;job.result_sha256=hashlib.sha256(payload).hexdigest();job.save(update_fields=['result_path','result_sha256'])
         # Settling provider cost is independent of clinical acceptance: invalid answers are never adopted.
+        # The connection that will carry settlement's COMMIT, kept to tell afterwards whether Django had to drop it (RS-1).
+        connection.ensure_connection(); carrier=connection.connection; settling=True
         settle(job,cost,units,rates,provider,request_id,simulated,provider_resource_id=resource_id)
+        settling=False
         with transaction.atomic():
             e=Encounter.objects.select_for_update().get(pk=e.pk)
             # Output QuillMD cannot use is a platform failure whatever the user did meanwhile, so it is checked first and absorbed.
@@ -759,41 +764,125 @@ def run_one():
     except Exception as exc:
         # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
         if not provider_returned and never_transmitted(exc): exc=NoProviderRequest(PROVIDER_NOT_CONNECTED)
-        # A timeout can be billable. Never retry it or release its reservation as if cost were known.
-        known=Usage.objects.filter(job=job).exists()
-        fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'
-        declined=known and isinstance(exc,NotAdoptedByUser)
-        unsent=not known and not provider_returned and isinstance(exc,NoProviderRequest)
-        job.state='failed' if known or fixture or unsent else 'reconciliation'
-        # After settlement the error prefix is the billing classification audit_billing reads: not_adopted stays charged, platform_failure is absorbed.
-        if known: job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
-        elif unsent: job.error=(NOT_PROCESSED+failure_reason(exc)+' No provider request was made; nothing was charged and the held funds were released.')[:250]
-        elif fixture: job.error='Generation failed validation.'
-        elif ProviderReceipt.objects.filter(job=job).exists():
-            # The provider completed and its receipt is durable; only settlement failed (for example cost above the held maximum).
-            job.error='Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.'
-        else: job.error='Provider outcome is uncertain; reconcile before retrying.'
-        job.finished_at=timezone.now()
-        fields=['state','error','finished_at']
-        if job.state=='failed': job.request_key=ended_key(job,'failed'); fields.append('request_key')
-        if fixture or unsent:
-            # One transaction: a job never reads 'held funds were released' while its hold is still held. If the release
-            # fails, the job stays 'running', mark_stale moves it to reconciliation and the audit lists it as unresolved.
-            with transaction.atomic():
-                job.save(update_fields=fields); release(job)
-        else: job.save(update_fields=fields)
-        # Released above (fixture, not processed), or a successful generation the user did not adopt: it remains billable,
-        # with no reversal and no platform cost.
-        if fixture or unsent or declined: pass
-        # Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the user's charge.
-        elif known:
-            try: absorb_failed_job(job)
-            except Exception as absorb_error:
-                # The failed job state is already durable; a failed reversal must never stop the worker. audit_billing flags settled-but-unabsorbed failures.
-                audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
-        audit(job.user,'job.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
-              billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'fixture' if fixture else 'uncertain')
+        # Read before anything reconnects: whether settle()'s COMMIT went out and its answer was lost (RS-1).
+        in_doubt=settling and commit_in_doubt(exc,carrier)
+        usable_connection()
+        try: end_failed_job(job,exc,provider_returned,in_doubt)
+        except DatabaseError:
+            # ⚠️ THE HANDLER'S OWN READ OR WRITE FAILED (RS-2): it used to leave the job 'running' — with a settled charge, if
+            # settlement had committed — until the stale sweep. What is left is to hold the job for an administrator,
+            # asserting nothing, on a fresh connection; if even that fails, the exception leaves run_one as before (the
+            # worker restarts and mark_stale holds the job).
+            usable_connection()
+            hold_for_reconciliation(job,exc,OUTCOME_UNRECORDED)
     return True
+
+
+#: ⚠️ WHAT THE WORKER SAYS WHEN IT CANNOT KNOW WHETHER A CHARGE COMMITTED (RS-1, RS-2): nothing about what was or was not
+#: charged. The administrator's resolution (views.admin_resolve_job) reads the committed usage, ledger and holds under the
+#: job's row lock and resolves from them, whichever way the commit went.
+SETTLEMENT_UNKNOWN='The settlement outcome of this request is unknown; an administrator must reconcile it.'
+OUTCOME_UNRECORDED='The outcome of this request could not be recorded; an administrator must reconcile it.'
+#: The settled charge of an output that was not adopted could not be reversed (RS-3): the job is held with its key.
+ABSORPTION_FAILED=('The output could not be adopted, and its charge could not be reversed automatically; an administrator '
+                   'must reconcile it.')
+FIXTURE_VALIDATION='Generation failed validation.'
+#: RS-5: in fixture (synthetic) mode a failure that is not a validation refusal is named as what it was.
+FIXTURE_PLATFORM_ERROR=('Generation failed: a platform {kind}error ({name}) stopped it before its output was adopted. '
+                        'Synthetic generation carries no charge; the held funds were released.')
+
+
+def commit_in_doubt(error,carrier):
+    """True when a COMMIT went out and its answer was lost, so whether that transaction committed is unknown here (RS-1).
+
+    Structural, like never_transmitted: the exception passed through Django's own commit() (its code object, identity),
+    and `carrier`, the connection that sent it, is gone — Django drops a connection whose rollback after a failed commit
+    fails too (and reconnects at once, in atomic's exit, so an absent connection proves nothing; identity does). A COMMIT
+    the server answered with an error (a deferred constraint) rolled back on a connection that survived to say so:
+    established, not in doubt. An error raised by a statement before the COMMIT never reached one: it cannot commit.
+    """
+    if not isinstance(error,DatabaseError) or carrier is None or connection.connection is carrier: return False
+    commit=unwrap(BaseDatabaseWrapper.commit).__code__
+    trace=error.__traceback__
+    while trace is not None:
+        if trace.tb_frame.f_code is commit: return True
+        trace=trace.tb_next
+    return False
+
+
+def usable_connection():
+    """A connection that broke outside a transaction stays broken until it is closed, and Django closes one only at a
+    request boundary; the worker has none. Before the handler reads and records an outcome, do what that boundary does."""
+    if not connection.in_atomic_block: connection.close_if_unusable_or_obsolete()
+
+
+def outcome_already_recorded(job,exc,state):
+    """A committed transaction ended this job before the handler got its lock (the adoption, whose COMMIT answer was lost
+    after it committed): that record stands, and the error is recorded beside it."""
+    audit(job.user,'job.error_after_commit',job.pk,department=job.department,state=state,error_class=type(exc).__name__)
+
+
+def hold_for_reconciliation(job,exc,message,billing='uncertain',absorb_error=None,action='job.reconciliation'):
+    """Hold a running job for an administrator, asserting nothing: no release, no absorption, and its request key kept, so
+    the same request cannot be bought twice meanwhile. Also the mapping worker's (core.mapping_jobs)."""
+    with transaction.atomic():
+        state=Job.objects.select_for_update().get(pk=job.pk).state
+        if state!='running': return outcome_already_recorded(job,exc,state)
+        job.state='reconciliation';job.error=message;job.finished_at=timezone.now()
+        job.save(update_fields=['state','error','finished_at'])
+        if absorb_error is not None: audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
+        audit(job.user,action,job.pk,department=job.department,error_class=type(exc).__name__,billing=billing)
+
+
+def end_failed_job(job,exc,provider_returned,in_doubt):
+    """Record how a running job that raised ended, from what is committed, under its row lock."""
+    # ⚠️ AN IN-DOUBT SETTLEMENT ASSERTS NOTHING (RS-1). Its COMMIT may still be in flight: a read here can come before it is
+    # visible, and this used to record 'nothing is charged' for a charge that committed a moment later.
+    if in_doubt: return hold_for_reconciliation(job,exc,SETTLEMENT_UNKNOWN)
+    absorbing=False
+    try:
+        with transaction.atomic():
+            # Under the job's row lock the committed record is final: a transaction whose COMMIT answer was lost still holds
+            # this lock until it ends, and one that committed (the adoption) has already ended the job.
+            state=Job.objects.select_for_update().get(pk=job.pk).state
+            if state!='running': return outcome_already_recorded(job,exc,state)
+            # A timeout can be billable. Never retry it or release its reservation as if cost were known.
+            known=Usage.objects.filter(job=job).exists()
+            fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'
+            declined=known and isinstance(exc,NotAdoptedByUser)
+            unsent=not known and not provider_returned and isinstance(exc,NoProviderRequest)
+            job.state='failed' if known or fixture or unsent else 'reconciliation'
+            # After settlement the error prefix is the billing classification audit_billing reads: not_adopted stays charged, platform_failure is absorbed.
+            if known: job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
+            elif unsent: job.error=(NOT_PROCESSED+failure_reason(exc)+' No provider request was made; nothing was charged and the held funds were released.')[:250]
+            elif fixture:
+                job.error=FIXTURE_VALIDATION if isinstance(exc,ValidationError) else FIXTURE_PLATFORM_ERROR.format(
+                    kind='database ' if isinstance(exc,DatabaseError) else '',name=type(exc).__name__)[:250]
+            elif ProviderReceipt.objects.filter(job=job).exists():
+                # The provider completed and its receipt is durable; only settlement failed (for example cost above the held
+                # maximum), and settlement's transaction is known to have rolled back.
+                job.error='Provider completed, but settlement needs administrator reconciliation; nothing is charged until it is resolved.'
+            else: job.error='Provider outcome is uncertain; reconcile before retrying.'
+            job.finished_at=timezone.now()
+            fields=['state','error','finished_at']
+            if job.state=='failed': job.request_key=ended_key(job,'failed'); fields.append('request_key')
+            job.save(update_fields=fields)
+            # One transaction: a job never reads 'held funds were released' while its hold is still held.
+            if fixture or unsent: release(job)
+            # ⚠️ Settled provider cost whose output was never adopted is a platform failure: QuillMD absorbs it and reverses the
+            # user's charge IN THE SAME TRANSACTION as the failed state (RS-3). A successful generation the user did not adopt
+            # (declined) remains billable, with no reversal and no platform cost.
+            elif known and not declined:
+                absorbing=True; absorb_failed_job(job); absorbing=False
+            audit(job.user,'job.'+job.state,job.pk,department=job.department,error_class=type(exc).__name__,
+                  billing='not_adopted' if declined else 'platform_failure' if known and not fixture else 'not_processed' if unsent else 'fixture' if fixture else 'uncertain')
+    except Exception as absorb_error:
+        if not absorbing: raise
+        # ⚠️ A REVERSAL THAT FAILED NEVER LEAVES A 'failed' JOB CHARGED (RS-3). It used to: the failed state was durable, the
+        # charge stayed and the request key was freed, so the same request was bought again. Now nothing of that transaction
+        # stands; the job is held with its key and its charge until an administrator resolves it (the settled branch of
+        # admin_resolve_job absorbs it).
+        hold_for_reconciliation(job,exc,ABSORPTION_FAILED,billing='platform_failure',absorb_error=absorb_error)
 
 
 @transaction.atomic
