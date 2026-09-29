@@ -51,7 +51,10 @@ What each piece guarantees, stated so a reader can see how it would fail:
                       The exact outbound request (method, URL, JSON body, headers without x-api-key/authorization) is
                       written to the current attempt's evidence BEFORE it is sent; a request outside an attempt, a second
                       request inside one, a non-Anthropic URL, a retrying client or a credential-provider client is
-                      refused and never sent.
+                      refused and never sent. The response is retained AS RECEIVED (status, headers without cookies or
+                      credentials, the exact body bytes) the moment the SDK has it — before the SDK parses it and before
+                      the product settles, refuses or stores anything — so a billed response the product cannot settle is
+                      never lost (refutation RAW-RESPONSE-LOST-200). `received_response` reads it back.
   leaked()            Every retained file (zip and gzip members included, nested to depth 4 within a byte bound) is
                       searched for the key and the sk-ant- shape. It FAILS CLOSED: a directory it cannot list or enter, a
                       file it cannot read or decode, an archive past its bounds, a link or special file, an
@@ -1284,6 +1287,84 @@ def install_request_capture():
     _prepare_request._campaign_capture = True
     _prepare_request._campaign_original = original
     SyncAPIClient._prepare_request = _prepare_request
+    install_response_capture()
+
+
+#: The response of an attempt, retained as received: its record (JSON) and its exact body bytes.
+RESPONSE_FILE = 'provider-response.json'
+RESPONSE_BODY = 'provider-response.body'
+#: Response headers never retained (a cookie is not evidence and may be a session token).
+DROPPED_RESPONSE_HEADERS = SECRET_HEADERS | frozenset(('set-cookie',))
+
+
+def response_record(response, secret):
+    """The response as it arrived: status, headers without cookies or credentials, the body's sha256 and size, and the
+    body as JSON when it parses. Refused if the key (or anything key-shaped) is anywhere in it."""
+    headers, removed = {}, set()
+    for name, value in response.headers.multi_items():
+        if name.lower() in DROPPED_RESPONSE_HEADERS or (secret and secret in value):
+            removed.add(name.lower())
+            continue
+        headers[name.lower()] = value
+    body = response.content
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        parsed = None
+    record = {'status_code': response.status_code, 'reason': response.reason_phrase,
+              'http_version': response.http_version, 'headers': headers, 'removed_headers': sorted(removed),
+              'request_id': headers.get('request-id', ''), 'body_file': RESPONSE_BODY,
+              'body_sha256': hashlib.sha256(body).hexdigest(), 'body_bytes': len(body), 'body_json': parsed}
+    text = json.dumps(record, sort_keys=True).encode()
+    require(not (secret and (secret.encode() in text or secret.encode() in body))
+            and not KEY_SHAPE.search(text) and not KEY_SHAPE.search(body),
+            'The provider response would carry the credential; it was not retained.')
+    return record
+
+
+def install_response_capture():
+    """Wrap the SDK's one send site (`SyncAPIClient._attempt_request`: build, `_prepare_request`, `_client.send`) so the
+    response of an attempt's one request is written to its evidence AS RECEIVED, whatever its status, before the SDK
+    parses it and before the product settles, refuses or stores anything. O_EXCL: a second response inside one attempt
+    is refused. Fails closed when this SDK has no such send site. In this process only: the product is not changed."""
+    from anthropic._base_client import SyncAPIClient
+    original = getattr(SyncAPIClient, '_attempt_request', None)
+    require(callable(original), 'This provider SDK has no single send site the response capture can wrap.')
+    if getattr(original, '_campaign_capture', False):
+        return
+
+    def _attempt_request(self, *args, **kwargs):
+        response, prepared = original(self, *args, **kwargs)
+        attempt = dict(CURRENT_ATTEMPT)
+        require(attempt.get('number') and attempt.get('evidence_dir'),
+                'A provider response outside an attempt was refused.')
+        response.read()                                   # (no-op when httpx already read it: stream=False)
+        record = response_record(response, attempt.get('secret', ''))
+        record.update(attempt=attempt['number'], received_at=now())
+        evidence = Path(attempt['evidence_dir'])
+        try:
+            write_new(evidence / RESPONSE_BODY, response.content, raw=True)
+            write_new(evidence / RESPONSE_FILE, record)
+        except FileExistsError:
+            raise Refused('A second provider response inside one attempt was refused.') from None
+        return response, prepared
+
+    _attempt_request._campaign_capture = True
+    _attempt_request._campaign_original = original
+    SyncAPIClient._attempt_request = _attempt_request
+
+
+def received_response(evidence):
+    """The response retained for an attempt (its record, `body_json` the parsed body), or None when none arrived.
+    Refused when the record and the body retained beside it disagree."""
+    evidence = Path(evidence)
+    if not (evidence / RESPONSE_FILE).exists():
+        return None
+    record = read_json(evidence / RESPONSE_FILE)
+    body = (evidence / RESPONSE_BODY).read_bytes()
+    require(isinstance(record, dict) and record.get('body_sha256') == hashlib.sha256(body).hexdigest(),
+            'The retained provider response does not match the body retained beside it.')
+    return record
 
 
 #: Sends that reached the transport, per attempt number (this process only).
@@ -1329,6 +1410,9 @@ def uninstall_request_capture():
     current = SyncAPIClient._prepare_request
     if getattr(current, '_campaign_capture', False):
         SyncAPIClient._prepare_request = current._campaign_original
+    current = getattr(SyncAPIClient, '_attempt_request', None)
+    if getattr(current, '_campaign_capture', False):
+        SyncAPIClient._attempt_request = current._campaign_original
 
 
 # ── the leak scan ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1505,17 +1589,19 @@ UNSAFE_FINDINGS = frozenset(('adopted_without_source_support', 'wrong_destinatio
 CONTRACT_FINDINGS = frozenset(('wrong_served_model', 'stop_reason_not_end_turn', 'reconciliation', 'uncertain_outcome',
                                'output_over_70_percent', 'metered_us_while_unset', 'settlement_mismatch', 'audit_failure',
                                'validator_failure', 'more_than_one_request', 'request_not_captured',
-                               'export_verification_failed'))
+                               'export_verification_failed', 'response_not_captured'))
 #: What happened to each field (or, for mapping, each expected area, control or false field) of a case: USEFULNESS,
 #: recorded per item. Held, missing, over-held and refused answers are the product declining to guess — measured, never
-#: a stop. The outcomes in IMPLIED_FINDINGS ARE unsafe output: each carries its unsafe finding, so a case cannot record
+#: a stop ('held_unadjudicated': a hold of an UNLISTED model selection on a field that may be supported — the frozen
+#: README's scoring never auto-scores an unlisted response, so it is neither a correct hold nor an over-hold until it
+#: is adjudicated by hand). The outcomes in IMPLIED_FINDINGS ARE unsafe output: each carries its unsafe finding, so a case cannot record
 #: one without stopping. 'wrong' (a kept deterministic mapping defect) carries none: the runner adds a finding when it is
 #: a wrong destination or a change the proposal made.
 FIELD_OUTCOMES = frozenset((
     'adopted', 'held', 'missing', 'refused',
     'right', 'held_safe', 'wrong', 'missed', 'false_field', 'false_field_held',
     'supported_correct', 'held_correct', 'over_held', 'usefulness_loss', 'recorded_not_asserted', 'supported_incomplete',
-    'clinician_correction',
+    'clinician_correction', 'held_unadjudicated',
     'unsupported_accepted', 'wrong_side_adopted', 'wrong_denial_adopted', 'contradiction_adopted'))
 IMPLIED_FINDINGS = {'unsupported_accepted': 'adopted_without_source_support', 'wrong_side_adopted': 'wrong_side',
                     'wrong_denial_adopted': 'wrong_denial', 'contradiction_adopted': 'contradiction_adopted',

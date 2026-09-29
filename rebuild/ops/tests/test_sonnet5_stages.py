@@ -19,7 +19,13 @@ walk's own builder). What each test proves:
     relations-path adoption is recorded as veto evidence and does not;
   · every contract stop class (served model, stop reason, output share, geography, a lost response, the deadline, a
     leak) stops the stage, the lost response is never re-sent, and nothing is admitted afterwards;
-  · admission near the limit refuses the next send BEFORE its attempt is written, and its queued job is cancelled.
+  · admission near the limit refuses the next send BEFORE its attempt is written, and its queued job is cancelled;
+  · (refutation F1) a held forbidden selection is a caught model error (held_correct) and a held unlisted one is left
+    for adjudication (held_unadjudicated) — neither is an over-hold;
+  · (refutation EXPORT-CHECK-DOES-NOT-READ) a defective writer that exports a mark other than the reviewed one, or fills
+    a held field, stops the stage through the stage's own read-back although the frozen check passes it;
+  · (refutation RAW-RESPONSE-LOST-200) a billed response the product cannot settle is retained as received (id,
+    request-id, served model, stop reason, usage) with the money at the bound, and a response not retained stops.
 """
 import dataclasses
 import io
@@ -75,12 +81,14 @@ else:
     REAL_CLIENT = anthropic.Anthropic
 
     def message(answer, *, number=0, model='claude-sonnet-5', stop_reason='end_turn', input_tokens=2000,
-                output_tokens=300, geo='global'):
+                output_tokens=300, geo='global', cache_written=0, cache_split=(0, 0)):
         return {'id': f'msg_01SyntheticStage{number:012d}', 'type': 'message', 'role': 'assistant', 'model': model,
                 'content': [{'type': 'text', 'text': json.dumps(answer)}], 'stop_reason': stop_reason,
                 'stop_sequence': None, 'stop_details': None,
-                'usage': {'input_tokens': input_tokens, 'cache_creation_input_tokens': 0, 'cache_read_input_tokens': 0,
-                          'cache_creation': {'ephemeral_5m_input_tokens': 0, 'ephemeral_1h_input_tokens': 0},
+                'usage': {'input_tokens': input_tokens, 'cache_creation_input_tokens': cache_written,
+                          'cache_read_input_tokens': 0,
+                          'cache_creation': {'ephemeral_5m_input_tokens': cache_split[0],
+                                             'ephemeral_1h_input_tokens': cache_split[1]},
                           'output_tokens': output_tokens, 'service_tier': 'standard', 'inference_geo': geo,
                           'server_tool_use': None}}
 
@@ -283,8 +291,11 @@ else:
                     self.assertEqual(attempt['freeze_manifest_sha256'], self.inputs['freeze']['manifest_sha256'])
                     evidence = self.root / 'evidence' / f'{attempt["number"]:03d}'
                     for name in ('request.json', 'provider-result.json', 'classification.json', 'manifest.json',
-                                 'audit-billing.json'):
+                                 'audit-billing.json', 'provider-response.json', 'provider-response.body'):
                         self.assertTrue((evidence / name).is_file(), name)
+                    self.assertEqual(outcome['message_source'], 'product_result')
+                    self.assertEqual(outcome['provider_response']['request_id'],
+                                     f'req_011SyntheticStage{attempt["number"]:03d}')
                     classification = json.loads((evidence / 'classification.json').read_text())
                     self.assertFalse(classification['stops_stage'], classification)
             mapping_rows = [a for a, _ in rows if a['send']['kind'] == 'mapping']
@@ -310,6 +321,7 @@ else:
                 evidence = self.root / 'evidence' / f'{attempt["number"]:03d}'
                 export = json.loads((evidence / 'export.json').read_text())
                 self.assertTrue(export['workflow_success'], export)
+                self.assertEqual((export['read_back']['passed'], export['read_back']['problems']), (True, []))
                 self.assertEqual(export['sha256'], pc.file_sha256(evidence / 'export.docx'))
             f6a = json.loads((self.root / 'evidence' / f'{encounters[0]["number"]:03d}' / 'classification.json').read_text())
             f6b = json.loads((self.root / 'evidence' / f'{encounters[1]["number"]:03d}' / 'classification.json').read_text())
@@ -365,14 +377,19 @@ else:
                                      Decimal(case['cost_bound_usd'][send.path]['provider_cost_max']))
                     evidence = self.root / 'evidence' / f'{attempt["number"]:03d}'
                     for name in ('raw-selection.json', 'answers-adopted.json', 'answers-reviewed.json', 'replay.json',
-                                 'export.docx', 'export.json', 'classification.json', 'manifest.json'):
+                                 'export.docx', 'export.json', 'classification.json', 'manifest.json',
+                                 'provider-response.json', 'provider-response.body'):
                         self.assertTrue((evidence / name).is_file(), name)
+                    self.assertEqual((outcome['message_source'], outcome['provider_response']['message_id']),
+                                     ('product_result', f'msg_01SyntheticStage{attempt["number"]:012d}'))
                     replayed = json.loads((evidence / 'replay.json').read_text())
                     self.assertEqual(replayed['provenance']['manifest_sha256'], self.inputs['freeze']['manifest_sha256'])
                     classification = json.loads((evidence / 'classification.json').read_text())
                     self.assertFalse(classification['stops_stage'], classification)
                     self.assertEqual(classification['verdict']['unsafe'], [])
-                    self.assertTrue(json.loads((evidence / 'export.json').read_text())['workflow_success'])
+                    export = json.loads((evidence / 'export.json').read_text())
+                    self.assertTrue(export['workflow_success'])
+                    self.assertEqual((export['read_back']['passed'], export['read_back']['problems']), (True, []))
                     for key, outcome_class in classification['verdict']['fields'].items():
                         classes[outcome_class] = classes.get(outcome_class, 0) + 1
             self.assertIn('supported_correct', classes)
@@ -421,6 +438,119 @@ else:
             self.assertIn('contradiction_adopted', summary['veto_evidence'][0]['unsafe'])
             first = summary['sends'][0]
             self.assertEqual((first['recorded_as'], first['stops_stage']), ('veto_evidence', False))
+
+        def selection_answer(self, case_id, changes):
+            """The provider body for `case_id`'s reference selection with `changes` ({key: selection}) applied."""
+            case = next(c for c in self.inputs['cases']['cases'] if c['id'] == case_id)
+            selection = {**st.steps.reference_selection(case, 'default'), **changes}
+
+            def answer(payload):
+                from core.models import Encounter
+                encounter = Encounter.objects.latest('created_at')
+                return st.steps.reference_answer(encounter.notes, encounter.template_version.fields, payload,
+                                                 selection)[0]
+            return answer
+
+        def held_v3_9(self, chosen, outcome, verdict):
+            """N06 sent once with Plan's selection replaced by `chosen`: the stage passes, the application holds Plan, the
+            frozen replay gives `verdict` and the field is classified `outcome`."""
+            self.answers['notes:N06:default'] = self.selection_answer('N06', {'v3_9': chosen})
+            with self.only('notes:N06:default'):
+                result = self.run_stage()
+            self.assertEqual(result['verdict'], 'PASS', result['reasons'])
+            (attempt, _), = self.rows()
+            evidence = self.root / 'evidence' / f'{attempt["number"]:03d}'
+            replayed = json.loads((evidence / 'replay.json').read_text())['responses']['N06']['default']
+            self.assertEqual((replayed['v3_9']['status'], replayed['v3_9']['verdict']), ('held', verdict))
+            classification = json.loads((evidence / 'classification.json').read_text())
+            self.assertEqual(classification['verdict']['fields']['v3_9'], outcome)
+            self.assertEqual(classification['fields']['v3_9']['replay_verdict'], verdict)
+            self.assertEqual(classification['verdict']['unsafe'], [])
+            return classification
+
+        def test_a_held_forbidden_selection_is_a_caught_model_error_not_an_over_hold(self):
+            # Refutation F1, end to end: N06's Plan gets the frozen FORBIDDEN two-unit selection (the tolerance sentence
+            # with the plan); the application holds it and the frozen replay says 'caught' — a model error the
+            # application caught (README scoring step 4), never an application over-hold.
+            case = next(c for c in self.inputs['cases']['cases'] if c['id'] == 'N06')
+            forbidden = case['fields']['v3_9']['raw_model_expectation']['forbidden'][0]
+            classification = self.held_v3_9({'units': forbidden['units'], 'conflict': forbidden['conflict']},
+                                             'held_correct', 'caught')
+            self.assertEqual(classification['fields']['v3_9']['attribution'], 'model_error_caught')
+
+        def test_a_held_unlisted_selection_is_left_for_adjudication(self):
+            # (README scoring step 2: an unlisted response is adjudicated by hand, never auto-scored)
+            classification = self.held_v3_9({'units': ['She tolerated the procedure well.'], 'conflict': False},
+                                             'held_unadjudicated', 'adjudicate_by_hand')
+            self.assertEqual(classification['fields']['v3_9']['attribution'], 'adjudicate_by_hand')
+
+        def defective_export(self, send, key, value):
+            """`send` with a defective writer (core.v3_mapping.fill_answers patched to also write `value` into `key`): the
+            frozen check passes the export (it never reads a mark or a held field); the stage's own read-back fails it,
+            and the stage stops."""
+            from core import v3_mapping
+            real = v3_mapping.fill_answers
+
+            def defective(fields, answers):
+                return {**real(fields, answers), key: value}
+            with self.only(send), patch.object(v3_mapping, 'fill_answers', side_effect=defective):
+                result = self.run_stage()
+            self.assertEqual(result['verdict'], 'FAIL')
+            failed = self.stopped(send)
+            record = failed['summary']['sends'][0]
+            self.assertEqual((record['verdict']['contract'], record['verdict']['unsafe']),
+                             (['export_verification_failed'], []))
+            evidence = self.root / 'evidence' / f'{record["attempt"]:03d}'
+            export = json.loads((evidence / 'export.json').read_text())
+            self.assertTrue(export['workflow_success'])                          # (the frozen check: vacuous here)
+            self.assertFalse(export['read_back']['passed'])
+            self.assertIn(key, {p['where'] for p in export['read_back']['problems']})
+
+        def test_an_exported_mark_that_is_not_the_reviewed_answer_stops_the_stage(self):
+            # Refutation EXPORT-CHECK-DOES-NOT-READ (a): N04's reviewed Smoker 'No' exported as 'Yes'
+            self.defective_export('notes:N04:default', 'v3_6', 'Yes')
+
+        def test_a_held_field_the_export_fills_stops_the_stage(self):
+            # Refutation EXPORT-CHECK-DOES-NOT-READ (b): N11's HELD allergy field (left blank at review) exported with the
+            # corrected-away 'penicillin.'
+            self.defective_export('notes:N11:default', 'v3_2', 'penicillin.')
+
+        def test_a_response_the_product_cannot_settle_is_retained_as_received(self):
+            # Refutation RAW-RESPONSE-LOST-200: HTTP 200, a normal Sonnet 5 message, but a cache-write split that does
+            # not reconcile — the product refuses to settle it (reconciliation) and stores no result. The response is
+            # retained as received: its id, request-id, served model, stop reason and usage; the money stays at the
+            # bound.
+            self.shapes['notes:N01:default'] = {'cache_written': 0, 'cache_split': (7, 0)}
+            with self.only('notes:N01:default', 'notes:N02:default'):
+                result = self.run_stage()
+            self.assertEqual(result['verdict'], 'FAIL')
+            self.stopped('notes:N01:default')
+            (attempt, outcome), = self.rows()
+            number = attempt['number']
+            self.assertEqual((outcome['class'], outcome['raw_result_sha256']), ('reconciliation', None))
+            evidence = self.root / 'evidence' / f'{number:03d}'
+            self.assertFalse((evidence / 'provider-result.json').exists())      # (the product kept nothing)
+            record = pc.received_response(evidence)
+            self.assertEqual((record['status_code'], record['request_id'], record['body_json']['id']),
+                             (200, f'req_011SyntheticStage{number:03d}', f'msg_01SyntheticStage{number:012d}'))
+            self.assertEqual((outcome['message_source'], outcome['served_model'], outcome['stop_reason']),
+                             ('provider_response', 'claude-sonnet-5', 'end_turn'))
+            self.assertEqual(outcome['usage']['cache_creation'], {'ephemeral_5m_input_tokens': 7,
+                                                                  'ephemeral_1h_input_tokens': 0})
+            self.assertEqual(outcome['provider_response']['request_id'], f'req_011SyntheticStage{number:03d}')
+            self.assertEqual(Decimal(outcome['exposure']), Decimal(attempt['maximum_cost']) * Decimal('1.1'))
+            manifest = json.loads((evidence / 'manifest.json').read_text())
+            self.assertEqual(manifest['evidence']['provider-response.json'], pc.file_sha256(evidence / 'provider-response.json'))
+
+        def test_a_response_that_was_not_retained_stops_the_stage(self):
+            # the provider answered and the product settled, but no response was retained as received: the declared
+            # evidence is incomplete — a contract stop, never a pass
+            with self.only('notes:N01:default', 'notes:N02:default'), \
+                    patch.object(pc, 'received_response', return_value=None):
+                result = self.run_stage()
+            self.assertEqual(result['verdict'], 'FAIL')
+            failed = self.stopped('notes:N01:default')
+            self.assertIn('response_not_captured', failed['summary']['sends'][0]['verdict']['contract'])
 
         def stop_class(self, fragment, **shape):
             self.shapes['notes:N01:default'] = shape

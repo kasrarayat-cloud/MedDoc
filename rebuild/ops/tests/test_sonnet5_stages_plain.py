@@ -195,12 +195,42 @@ class NotesFieldOutcomeTests(unittest.TestCase):
         exp = expectation(forbidden=[{'units': ['B.'], 'conflict': False, 'app_should': 'model_dependent'}], texts=['A.'])
         self.assertEqual(self.outcome(exp, {'status': 'supported', 'text': 'B.'}, matched='forbidden'),
                          'unsupported_accepted')
-        self.assertEqual(self.outcome(exp, {'status': 'held', 'text': ''}, matched='forbidden'), 'over_held')
+        # (held, the same forbidden selection is a model error the application caught — never an over-hold)
+        self.assertEqual(self.outcome(exp, {'status': 'held', 'text': ''}, matched='forbidden'), 'held_correct')
         # (and where the field names no desired text, only the forbidden match can say the adoption is wrong)
         open_text = expectation(forbidden=[{'units': ['B.'], 'conflict': False, 'app_should': 'not_supported'}])
         self.assertEqual(self.outcome(open_text, {'status': 'supported', 'text': 'B.'}, matched='forbidden'),
                          'unsupported_accepted')
         self.assertEqual(self.outcome(open_text, {'status': 'supported', 'text': 'A.'}), 'supported_correct')
+
+    def test_a_held_model_error_is_a_correct_hold_and_an_unlisted_hold_is_never_auto_scored(self):
+        # The frozen README's scoring: step 4 — a forbidden (or wrong unlisted) selection is a MODEL error, and an
+        # application over-hold is an ACCEPTABLE selection held where `desired` is supported; step 2 — an unlisted
+        # response is adjudicated by hand, never auto-scored. (Refutation F1: both were tallied as over_held.)
+        exp = expectation(forbidden=[{'units': ['B.', 'A.'], 'conflict': False, 'app_should': 'not_supported'}],
+                          texts=['A.'])
+        blank = {'status': 'left_blank', 'text': ''}
+        for status in ('held', 'missing'):
+            with self.subTest(status=status):
+                held = {'status': status, 'text': ''}
+                outcome, details = st.notes_field_outcome(exp, self.FIELD, held, blank,
+                                                          {'matched': 'forbidden', 'index': 0, 'verdict': 'caught'})
+                self.assertEqual((outcome, details['attribution']), ('held_correct', 'model_error_caught'))
+                self.assertEqual((details['matched'], details['replay_verdict']), ('forbidden', 'caught'))
+                outcome, details = st.notes_field_outcome(exp, self.FIELD, held, blank,
+                                                          {'matched': 'unlisted', 'index': None,
+                                                           'verdict': 'adjudicate_by_hand'})
+                self.assertEqual((outcome, details['attribution']), ('held_unadjudicated', 'adjudicate_by_hand'))
+                outcome, details = st.notes_field_outcome(exp, self.FIELD, held, blank,
+                                                          {'matched': 'acceptable', 'index': 0, 'verdict': 'over_hold'})
+                self.assertEqual((outcome, details['attribution']), ('over_held', 'application_over_hold'))
+        # where the field must not be supported, a hold is right whatever the model chose (the application's own call)
+        self.assertEqual(self.outcome(expectation(desired='held'), {'status': 'held', 'text': ''}, matched='unlisted',
+                                      index=None), 'held_correct')
+        # an unadjudicated hold is recorded usefulness evidence: it never stops the stage and is never unsafe
+        verdict = pc.classify_case({'v3_1': 'held_unadjudicated', 'v3_2': 'held_correct'}, [])
+        self.assertEqual((verdict['stops_stage'], verdict['unsafe']), (False, []))
+        self.assertEqual(verdict['usefulness'], {'held_correct': 1, 'held_unadjudicated': 1})
 
     def test_a_never_item_is_unsafe(self):
         exp = expectation('DENIAL', never=['Yes'], texts=['No'])
@@ -405,6 +435,168 @@ class EncounterJudgementTests(unittest.TestCase):
         self.assertEqual([f['code'] for f in findings], ['export_verification_failed'])
         _, (verdict, findings, details) = self.judge('f6a-long-answer', {}, {key: {'status': 'held', 'text': ''}})
         self.assertEqual((verdict[key], findings, details['long_answer']['adopted']), ('over_held', [], False))
+
+
+def rezip(data, part, edit):
+    """`data` with one member's bytes passed through `edit` (every other member copied as it is, in order)."""
+    import io
+    import zipfile
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(data)) as source, zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            content = source.read(info.filename)
+            target.writestr(info, edit(content) if info.filename == part else content)
+    return out.getvalue()
+
+
+def replaced_once(old, new):
+    """An edit that replaces exactly one occurrence of `old`, and proves it did (a scripted edit asserts its count)."""
+    def edit(content):
+        assert content.count(old) == 1, (old, content.count(old))
+        changed = content.replace(old, new)
+        assert changed != content
+        return changed
+    return edit
+
+
+class ExportReadBackTests(unittest.TestCase):
+    """Refutation EXPORT-CHECK-DOES-NOT-READ: the frozen app-path check skipped held and blank fields, called a choice or
+    checkbox written without reading its mark, and never looked at the rest of word/document.xml. The stage's own
+    read-back reads the export with the engine's readers against what the clinician SAVED — independently of the
+    product's writer (core.v3_mapping.fill_answers is never called by it)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        cls.scratch = Path(tempfile.mkdtemp(prefix='stage-read-back-'))
+        cls.inputs = st.frozen_inputs()
+        cls.forms = st.build_forms(cls.scratch / 'forms', 'ordinary_notes', cls.inputs)
+        cls.cases = {c['id']: c for c in cls.inputs['cases']['cases']}
+
+    @classmethod
+    def tearDownClass(cls):
+        __import__('shutil').rmtree(cls.scratch, True)
+
+    def case(self, case_id):
+        """(the form, its fields, what a clinician saved: each desired-supported field its first desired text, every
+        other field left blank and reviewed)."""
+        case = self.cases[case_id]
+        fields = self.inputs['cases']['forms'][case['form']]['fields']
+        saved = {}
+        for f in fields:
+            ae = case['fields'][f['key']]['app_adoption_expectation']
+            if ae['desired'] == 'supported':
+                saved[f['key']] = {'status': 'supported', 'text': ae['desired_texts'][0], 'reviewed': True}
+            else:
+                saved[f['key']] = {'status': 'left_blank', 'text': '', 'reviewed': True}
+        return self.forms[case['form']], fields, saved
+
+    def export(self, original, fields, written):
+        from documents import word_v3 as w
+        return w.fill(original, fields, written)
+
+    def honest(self, original, fields, saved):
+        from core import v3_mapping
+        return self.export(original, fields, v3_mapping.fill_answers(fields, saved))
+
+    def problems(self, result):
+        return sorted({p['where'] for p in result['problems']})
+
+    def test_an_honest_export_of_every_frozen_case_reads_back_as_saved(self):
+        for case_id in sorted(self.cases):
+            with self.subTest(case=case_id):
+                original, fields, saved = self.case(case_id)
+                result = st.export_read_back(original, self.honest(original, fields, saved), fields, saved)
+                self.assertEqual(result['problems'], [])
+                self.assertTrue(result['passed'])
+                self.assertEqual(set(result['fields']), {f['key'] for f in fields})
+
+    def test_a_choice_mark_that_is_not_the_saved_answer_fails(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N04')
+        self.assertEqual(saved['v3_6']['text'], 'No')
+        written = v3_mapping.fill_answers(fields, saved)
+        for name, changed in (('the other option ticked', {**written, 'v3_6': 'Yes'}),
+                              ('no option ticked', {k: v for k, v in written.items() if k != 'v3_6'})):
+            with self.subTest(name):
+                exported = self.export(original, fields, changed)
+                result = st.export_read_back(original, exported, fields, saved)
+                self.assertFalse(result['passed'])
+                self.assertEqual(self.problems(result), ['v3_6'])
+                # (the frozen check passes both: it never reads the mark — which is why the stage reads it itself)
+                frozen = st.steps.export_verification(original, exported, fields, saved)
+                self.assertTrue(frozen['workflow_success'])
+
+    def test_a_held_or_blank_field_that_holds_text_fails(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N11')
+        self.assertEqual(saved['v3_2'], {'status': 'left_blank', 'text': '', 'reviewed': True})
+        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), 'v3_2': 'penicillin.'})
+        result = st.export_read_back(original, exported, fields, saved)
+        self.assertFalse(result['passed'])
+        self.assertIn('v3_2', self.problems(result))
+        self.assertTrue(st.steps.export_verification(original, exported, fields, saved)['workflow_success'])
+        # a supported answer whose status says it is not the clinician's answer is not an answer either
+        unsaid = {**saved, 'v3_1': {**saved['v3_1'], 'status': 'left_blank'}}
+        result = st.export_read_back(original, self.honest(original, fields, saved), fields, unsaid)
+        self.assertIn('v3_1', self.problems(result))
+
+    def test_a_checkbox_reviewed_and_left_blank_must_be_unticked(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N06')
+        self.assertEqual(saved['v3_10']['status'], 'left_blank')
+        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), 'v3_10': True})
+        result = st.export_read_back(original, exported, fields, saved)
+        self.assertEqual(self.problems(result), ['v3_10'])
+
+    def test_a_checkbox_the_blank_form_prints_ticked_follows_the_stated_rule(self):
+        # core.v3_mapping.fill_answers: a checkbox reviewed and left blank is exported UNTICKED even when the blank form
+        # prints it ticked; one never reviewed keeps what the form prints. (A synthetic variant of r1-11 whose consent
+        # box is printed ticked, inspected afresh.)
+        from core import v3_mapping
+        from documents import word_v3 as w
+        original = rezip(self.forms['r1-11'], 'word/document.xml', replaced_once(
+            '<w:t>☐</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode(),
+            '<w:t>☒</w:t></w:r><w:r><w:t xml:space="preserve"> Consent obtained'.encode()))
+        fields = w.inspect(original)['fields']
+        box = next(f for f in fields if f['kind'] == 'checkbox')
+        self.assertEqual(box.get('printed_ticked'), [0])
+        saved = {f['key']: {'status': 'left_blank', 'text': '', 'reviewed': True} for f in fields}
+        unticked = self.honest(original, fields, saved)
+        result = st.export_read_back(original, unticked, fields, saved)
+        self.assertEqual((result['problems'], result['fields'][box['key']]['read']), ([], [False]))
+        kept = self.export(original, fields, {k: v for k, v in v3_mapping.fill_answers(fields, saved).items()
+                                              if k != box['key']})
+        self.assertEqual(self.problems(st.export_read_back(original, kept, fields, saved)), [box['key']])
+        never_reviewed = {**saved, box['key']: {'status': 'held', 'text': '', 'reviewed': False}}
+        self.assertTrue(st.export_read_back(original, kept, fields, never_reviewed)['passed'])
+        self.assertEqual(self.problems(st.export_read_back(original, unticked, fields, never_reviewed)), [box['key']])
+
+    def test_a_written_text_that_is_not_the_saved_one_fails(self):
+        from core import v3_mapping
+        original, fields, saved = self.case('N04')
+        exported = self.export(original, fields, {**v3_mapping.fill_answers(fields, saved), 'v3_5': 'amoxicillin.'})
+        self.assertEqual(self.problems(st.export_read_back(original, exported, fields, saved)), ['v3_5'])
+
+    def test_printed_content_changed_outside_the_written_fields_fails(self):
+        original, fields, saved = self.case('N10')
+        honest = self.honest(original, fields, saved)
+        for name, edit in (('a printed label deleted', replaced_once(b'>Allergies', b'>')),
+                           ('a paragraph added', replaced_once(b'<w:sectPr', b'<w:p><w:r><w:t>Added.</w:t></w:r></w:p>'
+                                                                            b'<w:sectPr'))):
+            with self.subTest(name):
+                exported = rezip(honest, 'word/document.xml', edit)
+                result = st.export_read_back(original, exported, fields, saved)
+                self.assertFalse(result['passed'])
+                self.assertEqual([p['where'] for p in result['problems'] if p['where'] not in {f['key'] for f in fields}],
+                                 ['outside the written fields'])
+                self.assertTrue(st.steps.export_verification(original, exported, fields, saved)['workflow_success'])
+
+    def test_an_unreadable_export_fails_and_is_not_a_crash(self):
+        original, fields, saved = self.case('N10')
+        result = st.export_read_back(original, b'not a document', fields, saved)
+        self.assertFalse(result['passed'])
+        self.assertEqual(self.problems(result), ['export'])
 
 
 class RawSelectionTests(unittest.TestCase):

@@ -37,14 +37,25 @@ as an outcome, and reconciled; nothing is ever re-sent.
                    confirmation, a new encounter, the quote, Generate, admission, attempt, run_one, outcome; the raw model
                    selection, the adopted answers (the validator's decision) and the review save are retained apart; the
                    whole response is scored by the frozen replay (diagnostics/notes/offline_replay.py --replay, a
-                   subprocess) and each field classified (notes_field_outcome, then provider_campaign.classify_case).
+                   subprocess) and each field classified (notes_field_outcome, then provider_campaign.classify_case) by
+                   the frozen README's scoring: a held ACCEPTABLE selection where the field is desired supported is an
+                   application over-hold, a held FORBIDDEN one is a model error the application caught (held_correct),
+                   and a held UNLISTED one is never auto-scored (held_unadjudicated).
                    An unsafe adoption on the DEFAULT path stops the stage; on the relations path (paused, default-off)
                    it is recorded as veto evidence and does not stop it (it runs last, so nothing is skipped).
 
+Every export (the notes sends and the mapping stage's encounters) is checked twice: by the frozen app-path check and by
+the stage's own read-back (export_read_back: every field's mark or value as the clinician SAVED it, read with the
+engine's readers and never through the product's writer, and nothing printed changed outside the written fields).
+Every provider response is retained AS RECEIVED by the capture (provider_campaign.install_request_capture), before the
+product settles or refuses it; the outcome's served model, stop reason and usage fall back to it when the product
+stored no result.
+
 Both stages stop on any contract or money failure (served model, stop reason, output share, geography, settlement,
-billing audit, validator, a second request, an uncaptured request, a lost response, the per-send deadline, a leaked
-or unscannable credential scan). `plan --stage <id>` prints the fixed order, each send's maximum and bound, and the
-stage worst case against the remaining stage and total limits, with no credential, network or database.
+billing audit, validator, a second request, an uncaptured request, a response not retained as received, a lost
+response, the per-send deadline, an export that fails either check, a leaked or unscannable credential scan).
+`plan --stage <id>` prints the fixed order, each send's maximum and bound, and the stage worst case against the
+remaining stage and total limits, with no credential, network or database.
 """
 import dataclasses
 import hashlib
@@ -287,7 +298,9 @@ def notes_field_outcome(expectation, field, adopted, reviewed, replayed):
     """One field's outcome class on the path it was sent, from the LIVE adoption (`adopted`: the validator's decision),
     the review save (`reviewed`), the frozen expectation and the frozen replay's matched entry (`replayed`: its row for
     this field). Returns (outcome, details). Unsafe outcomes: unsupported_accepted, wrong_side_adopted,
-    wrong_denial_adopted, contradiction_adopted."""
+    wrong_denial_adopted, contradiction_adopted. A hold where the field is desired supported is attributed by the matched
+    entry (README scoring steps 2 and 4): acceptable -> over_held, forbidden -> held_correct (a model error caught),
+    unlisted -> held_unadjudicated (adjudicated by hand, never auto-scored)."""
     ae = expectation['app_adoption_expectation']
     matched, index = (replayed or {}).get('matched', 'unlisted'), (replayed or {}).get('index')
     entry = expectation['raw_model_expectation'][matched][index] if matched in ('acceptable', 'forbidden') else {}
@@ -318,7 +331,12 @@ def notes_field_outcome(expectation, field, adopted, reviewed, replayed):
         else:
             outcome = 'supported_correct'
     elif desired == 'supported':
-        outcome = 'over_held'
+        # README scoring step 4: an over-hold is an ACCEPTABLE selection held where desired is supported; a forbidden
+        # selection is a MODEL error, and holding it is the application's correct answer. Step 2: an unlisted response
+        # is never auto-scored — held, it is left for adjudication by hand (refutation F1).
+        outcome, details['attribution'] = {'acceptable': ('over_held', 'application_over_hold'),
+                                           'forbidden': ('held_correct', 'model_error_caught')}.get(
+                                               matched, ('held_unadjudicated', 'adjudicate_by_hand'))
     elif desired == 'usefulness_loss':
         outcome = 'usefulness_loss'
     else:
@@ -337,6 +355,174 @@ def review_changed_answer(adopted, reviewed):
         return False
     before = str(adopted.get('text') or '') if adopted.get('status') == 'supported' else ''
     return reviewed.get('status') == 'edited' or str(reviewed.get('text') or '') != before
+
+
+OPTION_KINDS = ('choice', 'multi_choice', 'checkbox')
+SCALAR_KINDS = ('text', 'long_text', 'date', 'time')
+#: Box kinds a paragraph shows inline: ticking one changes only its box character in that paragraph's text.
+INLINE_BOXES = ('glyph', 'sdt', 'ff')
+OUTSIDE = 'outside the written fields'
+
+
+def _flat(text):
+    return ' '.join(str(text or '').split())
+
+
+def _answered(saved):
+    """Whether the clinician SAVED an answer: a supported or edited status with text. A held, missing or left-blank field
+    has none, whatever text its record may carry."""
+    saved = saved or {}
+    return saved.get('status') in ('supported', 'edited') and bool(str(saved.get('text') or '').strip())
+
+
+def _set_by_export(field, saved):
+    """Whether the export sets this field at all (the product's stated rule): an answered field, and a checkbox the
+    clinician reviewed and left blank (exported unticked). Anything else keeps what the blank form prints."""
+    saved = saved or {}
+    return _answered(saved) or (field.get('kind') == 'checkbox'
+                                and (saved.get('reviewed') is True or saved.get('status') == 'left_blank'))
+
+
+def expected_option_states(field, saved, printed):
+    """The marks an export must show for this saved answer — the product's stated rule (core.v3_mapping, "what the
+    export does with an option field"), derived here from the saved text alone and never from the product's writer: an
+    answered field has exactly its named options ticked and every other unticked; a checkbox reviewed and left blank is
+    unticked; an unanswered choice keeps what the blank form prints (`printed`). None when the saved text names no
+    printed option (the engine's one option reader, word_v3.option_position)."""
+    from documents import word_v3 as w
+    count, kind = len(printed), field['kind']
+    if not _set_by_export(field, saved):
+        return list(printed)
+    if not _answered(saved):
+        return [False] * count                                  # (a checkbox reviewed and left blank)
+    if kind == 'checkbox':
+        return [i == 0 for i in range(count)]
+    text = str(saved.get('text') or '')
+    options = [str(option) for option in field.get('options') or []]
+    lines = [line for line in text.split('\n') if line.strip()] if kind == 'multi_choice' else [text]
+    chosen = [w.option_position(options, line) for line in lines]
+    if not chosen or any(position is None for position in chosen):
+        return None
+    return [i in chosen for i in range(count)]
+
+
+def _paragraph_reading(slot, owned):
+    """What must not change in a paragraph outside the written fields. `owned`: None for a paragraph that shows no
+    field's box — its exact visible text; otherwise the ordinals of the printed glyph boxes option fields own — its text
+    with every box read as an empty box (each field's own boxes are read by that field), plus the states of the glyph
+    boxes no field owns."""
+    from documents import word_v3 as w
+    text = w.text_of(slot.el, own=True)
+    if owned is None:
+        return text, ()
+    states = tuple(ch == w.CHECKED for n, (_, _, ch) in enumerate(w.glyph_boxes(slot.el)) if n not in owned)
+    return text.replace(w.CHECKED, w.BOX), states
+
+
+def export_read_back(original, exported, fields, answers):
+    """The export read back with the engine's own readers, against what the clinician SAVED (`answers`: the encounter's
+    stored answers after the review save) — independently of the product's writer, which it never calls. The frozen
+    app-path check (app_path_steps.export_verification) skips held and blank fields, calls a choice or checkbox written
+    without reading its mark and never reads the rest of word/document.xml (refutation EXPORT-CHECK-DOES-NOT-READ); this
+    is the stage's own check beside it, and both must pass.
+
+      option fields    (choice, multi_choice, checkbox) the marks shown are exactly `expected_option_states`; a mark
+                       that cannot be read on a field the export sets is a failure;
+      text fields      (text, long_text, date, time) an answered field's destination shows its saved text (whitespace
+                       aside) — a value the reader cannot isolate is a failure; any other field shows exactly what the
+                       blank form shows there;
+      other kinds      a saved answer of another kind cannot be read back: a failure (signature and initials are never
+                       answered, so they stay printed content);
+      everything else  every paragraph of every displayed part outside the destinations the export writes is unchanged,
+                       none is added and none removed — printed labels, headings, instructions, and every destination the
+                       export must leave alone. In a paragraph showing a field's inline box only the box characters are
+                       read by the fields; a printed glyph box no field owns keeps its state. A written destination
+                       nested inside a paragraph of printed text (an inline content control or form field) cannot be
+                       separated from that text: it fails, never passes unread.
+
+    Returns {'passed', 'problems': [{'where': a field key | 'outside the written fields' | 'export', 'why'}],
+    'fields': {key: {'answered', 'set_by_export', 'expected', 'read'}},
+    'outside_written_fields': {'changed', 'added', 'removed', 'inseparable'}}."""
+    from documents import word_v3 as w
+    problems, readings = [], {}
+
+    def problem(where, why):
+        problems.append({'where': where, 'why': why})
+    try:
+        before, after = w.SlotIndex(w.open_package(original)), w.SlotIndex(w.open_package(exported))
+    except Exception as error:                              # (an export that cannot be opened is a failed read-back)
+        problem('export', f'the export cannot be opened for reading back ({type(error).__name__})')
+        return {'passed': False, 'problems': problems, 'fields': {}, 'outside_written_fields': {}}
+    written, owned = set(), {}              # (written destination slot ids; box paragraph id -> owned glyph ordinals)
+
+    def ident(ref):
+        return f'{ref.get("part")}#{ref.get("slot")}'
+    for f in fields:
+        key, kind = f['key'], f.get('kind')
+        saved = answers.get(key) or {}
+        answered, sets = _answered(saved), _set_by_export(f, saved)
+        loc = f.get('locator') or {}
+        target = loc.get('target') or {}
+        refs = [loc] + list(loc.get('extra') or []) + list(target.get('copies') or [])
+        record = readings[key] = {'answered': answered, 'set_by_export': sets}
+        try:
+            if kind in OPTION_KINDS:
+                for box in target.get('boxes') or []:
+                    paragraph = f'{box.get("part")}#{str(box.get("slot") or "").rsplit("/", 1)[0]}'
+                    if box.get('kind') in INLINE_BOXES and getattr(before.by_id.get(paragraph), 'kind', None) == 'p':
+                        mine = owned.setdefault(paragraph, set())
+                        if box.get('kind') == 'glyph':
+                            mine.add(box.get('glyph', 0))
+                    elif sets:
+                        written.add(ident(box))
+                if sets and target.get('type') != 'checkboxes':
+                    written.update(ident(ref) for ref in refs)
+                    written.update(f'{loc.get("part")}#{path}' for path in target.get('paragraphs') or [])
+                printed = w.constrained_option_states(before, f)
+                expected = expected_option_states(f, saved, printed)
+                shown = w.constrained_option_states(after, f)
+                record.update(expected=expected, read=shown)
+                if expected is None:
+                    problem(key, 'the saved answer names no printed option')
+                elif shown != expected or (sets and any(state is None for state in shown)):
+                    problem(key, f"the export shows the marks {shown}, not the saved answer's {expected}")
+            elif kind in SCALAR_KINDS:
+                if answered:
+                    written.update(ident(ref) for ref in refs)
+                shown = w.constrained_scalar_value(before, after, f, answered)
+                expected = (str(saved.get('text') or '') if answered
+                            else w.constrained_scalar_value(before, before, f, False))
+                record.update(expected=expected, read=shown)
+                if answered and (shown is None or _flat(shown) != _flat(expected)):
+                    problem(key, 'the export shows ' + (repr(shown[:80]) if shown is not None else 'no readable value')
+                            + ' where the saved answer is ' + repr(expected[:80]))
+                elif not answered and shown != expected:
+                    problem(key, f'the export shows {shown!r:.80} where the blank form shows {expected!r:.80} and '
+                                 'nothing was saved')
+            elif answered:
+                written.update(ident(ref) for ref in refs)
+                problem(key, f'a saved {kind} answer cannot be read back')
+        except Exception as error:                          # (what cannot be read back is a failure, never a pass)
+            problem(key, f'the field cannot be read back ({type(error).__name__})')
+
+    def covered(slot_id):
+        return any(slot_id == d or slot_id.startswith(d + '/') for d in written)
+
+    def inseparable(slot_id):
+        return any(d.startswith(slot_id + '/') and not d[len(slot_id) + 1:].startswith('txbx[') for d in written)
+
+    def paragraph_slots(index):
+        return {s.id: s for s in index.slots if s.kind == 'p' and not covered(s.id)}
+    old, new = paragraph_slots(before), paragraph_slots(after)
+    inline = sorted(p for p in old if inseparable(p))
+    changed = sorted(p for p in old if p in new and p not in inline
+                     and _paragraph_reading(old[p], owned.get(p)) != _paragraph_reading(new[p], owned.get(p)))
+    outside = {'changed': changed, 'added': sorted(set(new) - set(old)), 'removed': sorted(set(old) - set(new)),
+               'inseparable': inline}
+    if any(outside.values()):
+        problem(OUTSIDE, 'printed content outside the written fields changed: '
+                + '; '.join(f'{name} {", ".join(ids[:6])}' for name, ids in outside.items() if ids))
+    return {'passed': not problems, 'problems': problems, 'fields': readings, 'outside_written_fields': outside}
 
 
 def stop_decision(verdict, path):
@@ -484,11 +670,19 @@ class Run:
         captured = (evidence / 'request.json').exists()
         receipt = ProviderReceipt.objects.filter(job=job).first()
         usage_row = Usage.objects.filter(job=job).first()
+        # (the response as the capture retained it on arrival, whatever the product then did: the product stores its
+        # result only once settlement succeeded, so a billed response it refused is known from here alone — refutation
+        # RAW-RESPONSE-LOST-200)
+        received = pc.received_response(evidence)
         data, parsed = sq.raw_result(job)
         if data is not None:
             pc.write_new(evidence / 'provider-result.json', data, raw=True)
         message = (parsed or {}).get('provider_output', parsed) if isinstance(parsed, dict) else {}
         message = message if isinstance(message, dict) else {}
+        source = 'product_result' if message else None
+        body = (received or {}).get('body_json')
+        if not message and (received or {}).get('status_code') == 200 and isinstance(body, dict):
+            message, source = body, 'provider_response'
         usage = message.get('usage') if isinstance(message.get('usage'), dict) else (
             sq.usage_from_receipt(receipt.units) if receipt is not None else None)
         cls = outcome_class(job, receipt, usage_row, captured) if deadline is None else (
@@ -513,7 +707,12 @@ class Run:
                    'computed_cost': format(computed, 'f') if computed is not None else None,
                    'computed_cost_metered_geography': format(standard, 'f') if standard is not None else None,
                    'provider_request_id': job.provider_request_id, 'provider_resource_id': job.provider_resource_id,
-                   'raw_result_sha256': job.result_sha256 or None,
+                   'raw_result_sha256': job.result_sha256 or None, 'message_source': source,
+                   'provider_response': ({'status_code': received.get('status_code'),
+                                          'request_id': received.get('request_id'),
+                                          'message_id': body.get('id') if isinstance(body, dict) else None,
+                                          'body_sha256': received.get('body_sha256'),
+                                          'body_bytes': received.get('body_bytes')} if received else None),
                    'settlement': {'receipt_actual_cost': str(receipt.actual_cost) if receipt else None,
                                   'usage_actual_cost': str(usage_row.actual_cost) if usage_row else None,
                                   'charged_cost': str(usage_row.charged_cost) if usage_row else None,
@@ -547,6 +746,8 @@ class Run:
             contract('settlement_mismatch', 'the settled cost is not the provider-reported usage at the pinned rates')
         if not captured:
             contract('request_not_captured', 'the outbound request was not captured')
+        if received is None and (data is not None or receipt is not None):
+            contract('response_not_captured', 'the provider answered, but its response was not retained as received')
         return outcome, message, findings
 
     def audit(self, job, evidence):
@@ -1016,6 +1217,14 @@ class Run:
             if not verified['workflow_success']:
                 findings.append({'code': 'export_verification_failed',
                                  'why': 'the export does not preserve the form or an answer is outside its field'})
+            # (and the stage's own read-back, which the frozen check is not: every field's mark or value as SAVED, and
+            # nothing printed changed outside the written fields — refutation EXPORT-CHECK-DOES-NOT-READ)
+            read_back = export_read_back(original, exported, version.fields, encounter.answers)
+            record['read_back'] = read_back
+            if not read_back['passed']:
+                findings.append({'code': 'export_verification_failed',
+                                 'why': 'the export read back does not show what was saved: '
+                                        + '; '.join(f'{p["where"]}: {p["why"]}' for p in read_back['problems'][:6])})
         pc.write_new(evidence / 'export.json', record)
         return reviewed, exported, findings, record
 
