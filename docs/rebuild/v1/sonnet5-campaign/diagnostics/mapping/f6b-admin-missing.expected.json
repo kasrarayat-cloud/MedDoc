@@ -1,0 +1,81 @@
+{
+  "schema": "quillmd-sonnet5-mapping-expected/1",
+  "form": "f6b-admin-missing",
+  "docx": "f6b-admin-missing.docx",
+  "origin_findings": ["missing-answer path (the D30/D31 'missing' workflow mode)"],
+  "structure": "A small clinical wound-review form (write-in, measurement, one-box-only choice, date, single legacy checkbox) that will be paired with a purely ADMINISTRATIVE note: the mapping is ordinary, and every expected answer is missing.",
+  "authored_from": "build_forms.py intent (f6b_admin_missing), written before any engine run on this form",
+  "slot_grammar": "neutral v3 ground-truth grammar; see check_expected.py",
+  "source_note": {
+    "kind": "synthetic administrative note (written for this diagnostic; no patient data)",
+    "text": "Administrative note. The patient telephoned the clinic to move the dressing-clinic appointment from Tuesday morning to Thursday afternoon. Hospital transport has been rebooked for the new time and the change was confirmed by text message. No clinical matters were discussed."
+  },
+  "expected_answers_from_source_note": "ALL MISSING: f6b.A1..A5 are left blank/unticked. The note's words 'dressing' and 'Thursday' are NOT a wound site, an exudate level or a next-dressing date; filling any of them is a fabrication.",
+  "areas": [
+    {
+      "id": "f6b.A1",
+      "label": "Wound site",
+      "kind": "text",
+      "options": [],
+      "cardinality": "one value",
+      "destination": {"description": "table 0, row 0, column 1: blank cell", "label_slot": "b/tbl[0]/tr[0]/tc[0]/p[0]", "region": "b/tbl[0]/tr[0]/tc[1]", "answer_at": "b/tbl[0]/tr[0]/tc[1]/p[0]"},
+      "must_name": ["Wound site"],
+      "expected_answer": null
+    },
+    {
+      "id": "f6b.A2",
+      "label": "Wound length (cm)",
+      "kind": "measurement",
+      "options": [],
+      "cardinality": "one value in centimetres",
+      "destination": {"description": "table 0, row 1, column 1: blank cell", "label_slot": "b/tbl[0]/tr[1]/tc[0]/p[0]", "region": "b/tbl[0]/tr[1]/tc[1]", "answer_at": "b/tbl[0]/tr[1]/tc[1]/p[0]"},
+      "must_name": ["length"],
+      "expected_answer": null
+    },
+    {
+      "id": "f6b.A3",
+      "label": "Exudate",
+      "kind": "choice",
+      "options": ["None", "Light", "Heavy"],
+      "cardinality": "exactly one ('(one box only)')",
+      "destination": {
+        "description": "table 0, row 2, column 1: one paragraph with three printed ☐ glyphs, each before its option word",
+        "label_slot": "b/tbl[0]/tr[2]/tc[0]/p[0]",
+        "controls": ["b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#0", "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#1", "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#2"]
+      },
+      "must_name": ["Exudate"],
+      "expected_answer": null,
+      "note": "'None' is an OPTION here; a missing answer is no tick at all, never a tick on 'None'."
+    },
+    {
+      "id": "f6b.A4",
+      "label": "Date of next dressing change",
+      "kind": "date",
+      "options": [],
+      "cardinality": "one date",
+      "destination": {"description": "table 0, row 3, column 1: blank cell", "label_slot": "b/tbl[0]/tr[3]/tc[0]/p[0]", "region": "b/tbl[0]/tr[3]/tc[1]", "answer_at": "b/tbl[0]/tr[3]/tc[1]/p[0]"},
+      "must_name": ["dressing"],
+      "expected_answer": null
+    },
+    {
+      "id": "f6b.A5",
+      "label": "Wound photographed at this visit",
+      "kind": "checkbox",
+      "options": ["Wound photographed at this visit"],
+      "cardinality": "one boolean",
+      "destination": {"description": "body paragraph b/p[1]: one legacy FORMCHECKBOX before its statement", "controls": ["b/p[1]/ff[0]"]},
+      "must_name": ["photographed"],
+      "expected_answer": null
+    }
+  ],
+  "controls": [
+    {
+      "id": "f6b.C1",
+      "type": "not_an_answer",
+      "printed": "Wound review",
+      "destination": {"description": "heading b/p[0]", "region": "b/p[0]"},
+      "reason": "A heading has no answer area."
+    }
+  ],
+  "extras_policy": "Any other answerable field (label cells) is a false field."
+}

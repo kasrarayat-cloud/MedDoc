@@ -1,0 +1,165 @@
+{
+  "schema": "quillmd-sonnet5-mapping-expected/1",
+  "form": "f3-selection-instructions",
+  "docx": "f3-selection-instructions.docx",
+  "origin_findings": ["D28", "D35", "D07"],
+  "structure": "Seven selection-instruction shapes on one form: '(one box only)' over inline content-control boxes; 'Tick all that apply' over glyph boxes one per line; 'You may tick more than one box' over inline legacy boxes; '(select up to 3)' over content-control boxes one per line; a D28-like table whose box COLUMN is headed 'Select up to 3'; a D35-like blank medicines table with a 'Route (e.g., po)' column; and a D07-like ambiguous plural owner 'Recipient(s)' with no instruction.",
+  "authored_from": "build_forms.py intent (f3_selection_instructions), written before any engine run on this form",
+  "slot_grammar": "neutral v3 ground-truth grammar; see check_expected.py",
+  "areas": [
+    {
+      "id": "f3.A1",
+      "label": "Smoking status",
+      "kind": "choice",
+      "options": ["Never smoked", "Ex-smoker", "Current smoker"],
+      "cardinality": "exactly one ('(one box only)')",
+      "destination": {
+        "description": "body paragraph b/p[2]: three inline checkbox content controls, each followed by its option words",
+        "label_slot": "b/p[1]",
+        "controls": ["b/p[2]/sdt[0]", "b/p[2]/sdt[1]", "b/p[2]/sdt[2]"]
+      },
+      "printed_on_form": [{"slot": "b/p[1]", "text": "(one box only)"}]
+    },
+    {
+      "id": "f3.A2",
+      "label": "Symptoms during the past week.",
+      "kind": "multi_choice",
+      "options": ["Cough", "Breathlessness", "Wheeze", "Chest tightness"],
+      "cardinality": "any number, 0..4 ('Tick all that apply')",
+      "destination": {
+        "description": "body paragraphs b/p[5..8]: one printed ☐ glyph each, before its option word",
+        "label_slot": "b/p[4]",
+        "controls": ["b/p[5]/glyphs#0", "b/p[6]/glyphs#0", "b/p[7]/glyphs#0", "b/p[8]/glyphs#0"]
+      },
+      "printed_on_form": [{"slot": "b/p[4]", "text": "Tick all that apply."}]
+    },
+    {
+      "id": "f3.A3",
+      "label": "Services already involved.",
+      "kind": "multi_choice",
+      "options": ["District nursing", "Physiotherapy", "Occupational therapy", "Social care"],
+      "cardinality": "any number, 0..4 ('You may tick more than one box')",
+      "destination": {
+        "description": "body paragraph b/p[11]: four inline legacy FORMCHECKBOX fields, each followed by its option words",
+        "label_slot": "b/p[10]",
+        "controls": ["b/p[11]/ff[0]", "b/p[11]/ff[1]", "b/p[11]/ff[2]", "b/p[11]/ff[3]"]
+      },
+      "printed_on_form": [{"slot": "b/p[10]", "text": "You may tick more than one box."}]
+    },
+    {
+      "id": "f3.A4",
+      "label": "Recipient(s) of this summary",
+      "kind": "multi_choice",
+      "options": ["Family doctor", "Referring specialist", "Patient", "Community pharmacist"],
+      "cardinality": "one or more by the owner's plural '(s)'; no printed instruction either way",
+      "destination": {
+        "description": "body paragraph b/p[21]: four printed ☐ glyphs on one line, each before its option words",
+        "label_slot": "b/p[20]",
+        "controls": ["b/p[21]/glyphs#0", "b/p[21]/glyphs#1", "b/p[21]/glyphs#2", "b/p[21]/glyphs#3"]
+      },
+      "ambiguity": "D07-like: the only cardinality evidence is the '(s)' of the owner label. The intended reading is multi-select (a summary can go to several recipients).",
+      "if_held": "safe_usefulness_loss",
+      "grading_note": "multi_choice = right. No field (held for the clinician) = safe, recorded as a usefulness loss. A single choice = wrong: it refuses a valid two-recipient answer (the D07 A20 failure)."
+    },
+    {"id": "f3.A5", "label": "Medicine (row 1)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 1, column 0 (blank write-in cell)", "region": "b/tbl[1]/tr[1]/tc[0]", "answer_at": "b/tbl[1]/tr[1]/tc[0]/p[0]"},
+     "printed_on_form": [{"slot": "b/tbl[1]/tr[0]/tc[0]/p[0]", "text": "Medicine"}], "must_name": ["Medicine"], "table_group": "medicines"},
+    {"id": "f3.A6", "label": "Dose (row 1)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 1, column 1", "region": "b/tbl[1]/tr[1]/tc[1]", "answer_at": "b/tbl[1]/tr[1]/tc[1]/p[0]"},
+     "printed_on_form": [{"slot": "b/tbl[1]/tr[0]/tc[1]/p[0]", "text": "Dose"}], "must_name": ["Dose"], "table_group": "medicines"},
+    {"id": "f3.A7", "label": "Route (e.g., po) (row 1)", "kind": "text", "options": [], "cardinality": "one value; '(e.g., po)' is a printed EXAMPLE, never an option or a default",
+     "destination": {"description": "medicines table b/tbl[1], row 1, column 2", "region": "b/tbl[1]/tr[1]/tc[2]", "answer_at": "b/tbl[1]/tr[1]/tc[2]/p[0]"},
+     "printed_on_form": [{"slot": "b/tbl[1]/tr[0]/tc[2]/p[0]", "text": "Route (e.g., po)"}], "must_name": ["Route"], "table_group": "medicines"},
+    {"id": "f3.A8", "label": "How often (row 1)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 1, column 3", "region": "b/tbl[1]/tr[1]/tc[3]", "answer_at": "b/tbl[1]/tr[1]/tc[3]/p[0]"},
+     "printed_on_form": [{"slot": "b/tbl[1]/tr[0]/tc[3]/p[0]", "text": "How often"}], "must_name": ["How often"], "table_group": "medicines"},
+    {"id": "f3.A9", "label": "Medicine (row 2)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 2, column 0", "region": "b/tbl[1]/tr[2]/tc[0]", "answer_at": "b/tbl[1]/tr[2]/tc[0]/p[0]"},
+     "must_name": ["Medicine"], "table_group": "medicines"},
+    {"id": "f3.A10", "label": "Dose (row 2)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 2, column 1", "region": "b/tbl[1]/tr[2]/tc[1]", "answer_at": "b/tbl[1]/tr[2]/tc[1]/p[0]"},
+     "must_name": ["Dose"], "table_group": "medicines"},
+    {"id": "f3.A11", "label": "Route (e.g., po) (row 2)", "kind": "text", "options": [], "cardinality": "one value; '(e.g., po)' is an example, never an option",
+     "destination": {"description": "medicines table b/tbl[1], row 2, column 2", "region": "b/tbl[1]/tr[2]/tc[2]", "answer_at": "b/tbl[1]/tr[2]/tc[2]/p[0]"},
+     "must_name": ["Route"], "table_group": "medicines"},
+    {"id": "f3.A12", "label": "How often (row 2)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 2, column 3", "region": "b/tbl[1]/tr[2]/tc[3]", "answer_at": "b/tbl[1]/tr[2]/tc[3]/p[0]"},
+     "must_name": ["How often"], "table_group": "medicines"},
+    {"id": "f3.A13", "label": "Medicine (row 3)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 3, column 0", "region": "b/tbl[1]/tr[3]/tc[0]", "answer_at": "b/tbl[1]/tr[3]/tc[0]/p[0]"},
+     "must_name": ["Medicine"], "table_group": "medicines"},
+    {"id": "f3.A14", "label": "Dose (row 3)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 3, column 1", "region": "b/tbl[1]/tr[3]/tc[1]", "answer_at": "b/tbl[1]/tr[3]/tc[1]/p[0]"},
+     "must_name": ["Dose"], "table_group": "medicines"},
+    {"id": "f3.A15", "label": "Route (e.g., po) (row 3)", "kind": "text", "options": [], "cardinality": "one value; '(e.g., po)' is an example, never an option",
+     "destination": {"description": "medicines table b/tbl[1], row 3, column 2", "region": "b/tbl[1]/tr[3]/tc[2]", "answer_at": "b/tbl[1]/tr[3]/tc[2]/p[0]"},
+     "must_name": ["Route"], "table_group": "medicines"},
+    {"id": "f3.A16", "label": "How often (row 3)", "kind": "text", "options": [], "cardinality": "one value",
+     "destination": {"description": "medicines table b/tbl[1], row 3, column 3", "region": "b/tbl[1]/tr[3]/tc[3]", "answer_at": "b/tbl[1]/tr[3]/tc[3]/p[0]"},
+     "must_name": ["How often"], "table_group": "medicines"}
+  ],
+  "table_groups": {
+    "medicines": {
+      "description": "D35-like: three blank medicine rows. Either twelve separate write-in cells (f3.A5..A16) or ONE repeating-rows area over the same table is a correct representation.",
+      "equivalent_representation": {"kind": "table_rows", "table": "b/tbl[1]", "rows": [1, 2, 3], "columns": [0, 1, 2, 3],
+                                     "columns_printed": ["Medicine", "Dose", "Route (e.g., po)", "How often"]},
+      "must_never": "a Route cell (or column) mapped as a choice whose options come from the example '(e.g., po)', or 'po' offered as a value"
+    }
+  },
+  "controls": [
+    {
+      "id": "f3.C1",
+      "type": "must_hold",
+      "printed": "Goals for this admission (select up to 3)",
+      "destination": {
+        "description": "body paragraphs b/p[14..18]: one checkbox content control each, before its option words",
+        "label_slot": "b/p[13]",
+        "controls": ["b/p[14]/sdt[0]", "b/p[15]/sdt[0]", "b/p[16]/sdt[0]", "b/p[17]/sdt[0]", "b/p[18]/sdt[0]"]
+      },
+      "intent_if_representable": {
+        "kind": "multi_choice",
+        "options": ["Pain relief", "Walking without help", "Better sleep", "Managing own medicines", "Returning home"],
+        "cardinality": "0..3"
+      },
+      "reason": "The field contract has no selection limit. A multi_choice would accept four or five ticks against the printed rule; a single choice would refuse a legitimate two- or three-goal answer. The structural rule (V1-DECISIONS 2026-09-28) therefore HOLDS it for the clinician. This is a documented usefulness-loss control: holding is the expected outcome, not a defect."
+    },
+    {
+      "id": "f3.C2",
+      "type": "must_hold",
+      "printed": "Select up to 3",
+      "destination": {
+        "description": "D28-like: table b/tbl[0], box column tc[1] under the header 'Select up to 3'; one printed ☐ glyph per row, the option words in column tc[0] of the same row",
+        "label_slot": "b/tbl[0]/tr[0]/tc[1]/p[0]",
+        "controls": [
+          "b/tbl[0]/tr[1]/tc[1]/p[0]/glyphs#0", "b/tbl[0]/tr[2]/tc[1]/p[0]/glyphs#0", "b/tbl[0]/tr[3]/tc[1]/p[0]/glyphs#0",
+          "b/tbl[0]/tr[4]/tc[1]/p[0]/glyphs#0", "b/tbl[0]/tr[5]/tc[1]/p[0]/glyphs#0", "b/tbl[0]/tr[6]/tc[1]/p[0]/glyphs#0"
+        ],
+        "option_slots": [
+          "b/tbl[0]/tr[1]/tc[0]/p[0]", "b/tbl[0]/tr[2]/tc[0]/p[0]", "b/tbl[0]/tr[3]/tc[0]/p[0]",
+          "b/tbl[0]/tr[4]/tc[0]/p[0]", "b/tbl[0]/tr[5]/tc[0]/p[0]", "b/tbl[0]/tr[6]/tc[0]/p[0]"
+        ]
+      },
+      "intent_if_representable": {
+        "kind": "multi_choice",
+        "options": ["Falls", "Confusion", "Poor appetite", "Low mood", "Continence problems", "Pressure damage"],
+        "cardinality": "0..3 across the whole column"
+      },
+      "reason": "One limited selection spread over a column of per-row boxes. Mapping each row as an independent checkbox (or the column as an unlimited multi_choice) silently permits four or more ticks; the limit is unrepresentable, so the expected outcome is a hold. Documented usefulness-loss control, as f3.C1."
+    },
+    {
+      "id": "f3.C3",
+      "type": "not_an_answer",
+      "printed": "Route (e.g., po)",
+      "destination": {"description": "the medicines table's header cell", "region": "b/tbl[1]/tr[0]/tc[2]"},
+      "reason": "A printed column header with an example. It is neither a write-in nor a set of options."
+    },
+    {
+      "id": "f3.C4",
+      "type": "not_an_answer",
+      "printed": "Select up to 3",
+      "destination": {"description": "the box column's header cell in the D28-like table", "region": "b/tbl[0]/tr[0]/tc[1]"},
+      "reason": "A column header carrying the selection rule. It is not a write-in and not a question of its own words."
+    }
+  ],
+  "extras_policy": "Any other answerable field (spacers b/p[3], b/p[9], b/p[12], b/p[19], b/p[22], trailing b/p[25], headings, header cells) is a false field."
+}

@@ -1,0 +1,3084 @@
+{
+  "generated_at": "2026-09-28T23:49:31.831626+00:00",
+  "classification": "OFFLINE synthetic replays: provider MOCKED (anthropic.Anthropic patched, socket.connect denied); authenticated Django test-client workflow on a throwaway PostgreSQL test database; no native Word, no real-model semantics, no corpus scoring",
+  "candidate": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+  "prior": {
+    "D30": "0313bd942c490ae543be2563ab154621273f71ad",
+    "D31": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+    "prior_manifest_sha256": "b9e00ecd2de6edb6f01aca2c99ccb3627cbbf7b8baff60f5b3fe56a9f0378379"
+  },
+  "database": "127.0.0.1:55731 (campaign QA PostgreSQL), test databases quillmd_qa_replay_*, created and destroyed by the Django runner",
+  "exports_directory": "/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/offline-replays",
+  "inputs_sha256": {
+    "d30_cases_v2": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+    "d31_cases_v2": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+    "a15_cases_v1_declared_before_first_run": "a8ea826f2bffd0b6ee527d922e3f3c354a9a4a1e77a07f53570be335e7cdfb94",
+    "d30_original": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+    "d31_original": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+    "harness_d30_original": "fafc94ac821da503fb3d05f5554419a9b8e997e087c4dd74aeaf2f6317519f5d",
+    "harness_d31_original": "e1d8ab782c98503f9efa92716ad1f5a5d173ba2dd674669079ef4c12988730d0",
+    "harness_d30_diff": "ed1f0f581d97281a32c1bb3c5014ae0037e38b413b6095d57ab0fff41addd0db",
+    "harness_d31_diff": "0cabb9855107ac6ea4ac7c5df77ba12b75b160b0e4de1f7af7284f7c160ea1ed"
+  },
+  "runs": {
+    "d30-rel1-01": {
+      "manifest": {
+        "started_at": "2026-09-28T23:40:36.393249+00:00",
+        "completed_at": "2026-09-28T23:41:26.536793+00:00",
+        "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "head_after": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "labels": [
+          "d30_replay"
+        ],
+        "field_relations": true,
+        "test_database": "quillmd_qa_replay_d30_rel1_01",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "source_files_hashed": 618,
+        "harness_sha256": {
+          "d30_replay.py": "c73fe59b5e0714e5ad8f491ce67718ed5ce7ac003b8ba53f2f3c64f0a442cb51",
+          "d31_replay.py": "074fe6ba9d1728459190823e0719b796d22f354f9524d7715965b1126aabc540",
+          "precheck_units.py": "cc623a2adec8800e7d271af690df1c6619e50c3d9b3cdc8be620500ef04492aa",
+          "replay_mock.py": "616f6363462bb75845a44b5cf45fb4689ed5f239759f75c10ffb9353edf765e4",
+          "replay_settings.py": "dd15a49f1ca8d64249d9e516577793fb7cba3aad78d823dd7aacf9f7da6ac82a",
+          "run_replay.py": "be9792ac21401649622875bdee87823811bf534b5155a4a59ca9bb927d9403d2"
+        }
+      },
+      "manifest_sha256": "48754eaa96aaad03a8517c9f2d01cdd91e9c75873ae944adc41f06b197e8e302",
+      "log_sha256": "3e35ed009615ee2f01d28e1deb65baedd0d405711ec41d7e4c496dc107f58071",
+      "cases": {
+        "accommodation": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "fa4771f3ede8ad93652437dcd50feac03f15417c1ecf1ff2ac48cea6cfe3082d",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 57,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "01db7a70475a31d3e83f6a50cbf0789f6009f0737c97cdd721f908d7ff4060d7",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "fa4771f3ede8ad93652437dcd50feac03f15417c1ecf1ff2ac48cea6cfe3082d",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": true
+        },
+        "combined_accommodation": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "90a7940d7f24150811442e2273bcda58a74bed2887ed5218716c6b44bc217bc3",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 57,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "f7f19af5c0380262409dca6d375e3527b3c45c1f670107aa34598c23799f2d41",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "90a7940d7f24150811442e2273bcda58a74bed2887ed5218716c6b44bc217bc3",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": true
+        },
+        "long": {
+          "workflow_success": false,
+          "failure_boundary": "answer validation/review",
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {
+            "v3_34": {
+              "area": "A35",
+              "status": "conflict",
+              "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a co"
+            }
+          },
+          "encounter_status": null,
+          "export_sha256": null,
+          "preservation": null,
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 57,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "e513c261e34ac8ee8fcdbe9853d3591eaa6ca6043ac492330d9cd33cd79d10bb",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "388d42cbf57ba54d090d970a1f76e06f66e544299ce6ecded050cab926f5aa06",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": false,
+          "mapping_identical_to_prior": true
+        },
+        "missing": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 57,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "39572b5e3a882c22ebd3f3a70195fc786808d61d78fe48073651ad1bda54dba9",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": true
+        },
+        "ordinary": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "c6f55499c541d8570f91b02d66fdf0a6b1f3f7ce1280677057d0f2b1b2179b2d",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 57,
+              "source_units": 12,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "8ca474d14fcfc9efb5df9a19d60aa8c1d2e6185e037b9ccd4a960881d2e170be",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "c6f55499c541d8570f91b02d66fdf0a6b1f3f7ce1280677057d0f2b1b2179b2d",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": true
+        }
+      }
+    },
+    "d30-rel0-01": {
+      "manifest": {
+        "started_at": "2026-09-28T23:41:31.367742+00:00",
+        "completed_at": "2026-09-28T23:42:18.197053+00:00",
+        "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "head_after": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "labels": [
+          "d30_replay"
+        ],
+        "field_relations": false,
+        "test_database": "quillmd_qa_replay_d30_rel0_01",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "source_files_hashed": 618,
+        "harness_sha256": {
+          "d30_replay.py": "c73fe59b5e0714e5ad8f491ce67718ed5ce7ac003b8ba53f2f3c64f0a442cb51",
+          "d31_replay.py": "074fe6ba9d1728459190823e0719b796d22f354f9524d7715965b1126aabc540",
+          "precheck_units.py": "cc623a2adec8800e7d271af690df1c6619e50c3d9b3cdc8be620500ef04492aa",
+          "replay_mock.py": "616f6363462bb75845a44b5cf45fb4689ed5f239759f75c10ffb9353edf765e4",
+          "replay_settings.py": "dd15a49f1ca8d64249d9e516577793fb7cba3aad78d823dd7aacf9f7da6ac82a",
+          "run_replay.py": "be9792ac21401649622875bdee87823811bf534b5155a4a59ca9bb927d9403d2"
+        }
+      },
+      "manifest_sha256": "611d026c67f079f4b516e8764656ce74afe22d62c90e22912bfb96d92e8d8321",
+      "log_sha256": "94db65bb7d02e5130cf8bc1803afcc23d6f64eac90a747bf60753436c1f5f45e",
+      "cases": {
+        "accommodation": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "fa4771f3ede8ad93652437dcd50feac03f15417c1ecf1ff2ac48cea6cfe3082d",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 57,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "c40dbf7d7340539c89a26861b60e8a395b3323faaa5fb300d2ac003d1a1a3aa1",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "fa4771f3ede8ad93652437dcd50feac03f15417c1ecf1ff2ac48cea6cfe3082d",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": true
+        },
+        "combined_accommodation": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "90a7940d7f24150811442e2273bcda58a74bed2887ed5218716c6b44bc217bc3",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 57,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "23232c24dbddd16fd0d533e7695cf2b50689ae927e4f644d14ee9d26e4c5a3b0",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "90a7940d7f24150811442e2273bcda58a74bed2887ed5218716c6b44bc217bc3",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": true
+        },
+        "long": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "388d42cbf57ba54d090d970a1f76e06f66e544299ce6ecded050cab926f5aa06",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 57,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "8f75c5328917a06e42ce6bb23e688732484e89c6b861613a1194f7162779f761",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "388d42cbf57ba54d090d970a1f76e06f66e544299ce6ecded050cab926f5aa06",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": true
+        },
+        "missing": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 57,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "92576208351a9d4e48c0d517a795210084fcf3cd3ed606c9e5a84860366d8a08",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "fdeafbee872f987325e544953ad930e8e8db8ed6bd30ccab0375f2b50ecbff2f",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": true
+        },
+        "ordinary": {
+          "workflow_success": false,
+          "failure_boundary": "answer validation/review",
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {
+            "v3_21": {
+              "area": "A22",
+              "status": "conflict",
+              "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or an"
+            },
+            "v3_53": {
+              "area": "A54",
+              "status": "conflict",
+              "reason": "Read from the notes but NOT used as an answer: on its own it may not be a complete statement (a fragment, a question, or words that point to other lines), or an"
+            }
+          },
+          "encounter_status": null,
+          "export_sha256": null,
+          "preservation": null,
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 57,
+              "requested_field_ids": null,
+              "source_units": 12,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "026d679b3b7175474aa5fd834fec1588674b9126c35453098d456900b7c47286",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa",
+          "prior": {
+            "head": "0313bd942c490ae543be2563ab154621273f71ad",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "c6f55499c541d8570f91b02d66fdf0a6b1f3f7ce1280677057d0f2b1b2179b2d",
+            "destinations_mapped": 61,
+            "held_required": []
+          },
+          "export_identical_to_prior": false,
+          "mapping_identical_to_prior": true
+        }
+      }
+    },
+    "d31-rel1-01": {
+      "manifest": {
+        "started_at": "2026-09-28T23:42:18.360428+00:00",
+        "completed_at": "2026-09-28T23:43:16.327923+00:00",
+        "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "head_after": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "labels": [
+          "d31_replay"
+        ],
+        "field_relations": true,
+        "test_database": "quillmd_qa_replay_d31_rel1_01",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "source_files_hashed": 618,
+        "harness_sha256": {
+          "d30_replay.py": "c73fe59b5e0714e5ad8f491ce67718ed5ce7ac003b8ba53f2f3c64f0a442cb51",
+          "d31_replay.py": "074fe6ba9d1728459190823e0719b796d22f354f9524d7715965b1126aabc540",
+          "precheck_units.py": "cc623a2adec8800e7d271af690df1c6619e50c3d9b3cdc8be620500ef04492aa",
+          "replay_mock.py": "616f6363462bb75845a44b5cf45fb4689ed5f239759f75c10ffb9353edf765e4",
+          "replay_settings.py": "dd15a49f1ca8d64249d9e516577793fb7cba3aad78d823dd7aacf9f7da6ac82a",
+          "run_replay.py": "be9792ac21401649622875bdee87823811bf534b5155a4a59ca9bb927d9403d2"
+        }
+      },
+      "manifest_sha256": "7be62bba0d7455b6f26b99937f8d0078f22a44f88c5f8ae283d77d5be748ce44",
+      "log_sha256": "aaa2f88f0aedd1f966857d15f0c0d43c0089f0586d666033cf9db832612f2518",
+      "cases": {
+        "a15_one_sentence": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "b24936e8ecb951553d3e94273ff31b3d5f4271b50c0121173893607d03fddf0b",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "option_box_states": {
+            "before": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "after": [
+              true,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ],
+            "expected": [
+              true,
+              true,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
+            ]
+          },
+          "option_field": {
+            "area": "A15",
+            "key": "v3_17",
+            "kind": "multi_choice",
+            "option_count": 9
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "d5e8e3c47018edf7318386ec3b9fb32612473760f15932d8447e9bcfde1e2b3e",
+          "cases_file_sha256": "a8ea826f2bffd0b6ee527d922e3f3c354a9a4a1e77a07f53570be335e7cdfb94",
+          "prior": null,
+          "mapping_identical_to_prior": false
+        },
+        "a15_two_lines": {
+          "workflow_success": false,
+          "failure_boundary": "answer validation/review",
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {
+            "v3_17": {
+              "area": "A15",
+              "status": "conflict",
+              "reason": "Read from the notes but NOT offered as an answer: the notes give this question more than one answer, or an answer that differs from its own labelled line. Read "
+            }
+          },
+          "encounter_status": null,
+          "export_sha256": null,
+          "preservation": null,
+          "option_field": {
+            "area": "A15",
+            "key": "v3_17",
+            "kind": "multi_choice",
+            "option_count": 9
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 2,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "a1c0eea7b083cabbc525e5d95b2d3158f01c28dbcbfccff9434a1dc2856fd1c4",
+          "cases_file_sha256": "a8ea826f2bffd0b6ee527d922e3f3c354a9a4a1e77a07f53570be335e7cdfb94",
+          "prior": null,
+          "mapping_identical_to_prior": false
+        },
+        "linked_ordinary": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "7dc38c12558658edf5ba77c33f06388b27f7c8379fe9389470a4922ee85f5859",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "f57f7c79d910f64e1b6f471ebab39a737f292bfaaea9e787bd2e20036c70138a",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "prior": {
+            "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+            "field_relations": true,
+            "workflow_success": false,
+            "failure_boundary": "answer validation/review",
+            "export_sha256": null,
+            "destinations_mapped": 51,
+            "held_required": [
+              "v3_48"
+            ]
+          },
+          "export_identical_to_prior": false,
+          "mapping_identical_to_prior": false
+        },
+        "long": {
+          "workflow_success": false,
+          "failure_boundary": "answer validation/review",
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {
+            "v3_58": {
+              "area": "A48",
+              "status": "conflict",
+              "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a co"
+            }
+          },
+          "encounter_status": null,
+          "export_sha256": null,
+          "preservation": null,
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "d2c160b9e418f13ca995c3f95c6c88782f8bcdd8352754d00af82bb0ff44683c",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "prior": {
+            "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "0093933d9a212ce43cc4554261f1fd4dd7d290bf41f5e30a929fc3c2a0c67c73",
+            "destinations_mapped": 51,
+            "held_required": []
+          },
+          "export_identical_to_prior": false,
+          "mapping_identical_to_prior": false
+        },
+        "missing": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "cb95c22caa971f3d2d21348399b818cce9006e922a75ffcd833fe0861c7983a0",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "prior": {
+            "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+            "destinations_mapped": 51,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": false
+        },
+        "ordinary": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "a67c6c1086c491ab04d49b56f4549afd4439312f44470d0f6200d49a3f01e895",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "ed02e176333b1faf1c4529fc607b0010d1b52e0c8a724b4365c3741467e0aa3c",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "prior": {
+            "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "a67c6c1086c491ab04d49b56f4549afd4439312f44470d0f6200d49a3f01e895",
+            "destinations_mapped": 51,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": false
+        }
+      }
+    },
+    "d31-rel0-01": {
+      "manifest": {
+        "started_at": "2026-09-28T23:43:16.501556+00:00",
+        "completed_at": "2026-09-28T23:44:13.914599+00:00",
+        "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "head_after": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "labels": [
+          "d31_replay"
+        ],
+        "field_relations": false,
+        "test_database": "quillmd_qa_replay_d31_rel0_01",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "source_files_hashed": 618,
+        "harness_sha256": {
+          "d30_replay.py": "c73fe59b5e0714e5ad8f491ce67718ed5ce7ac003b8ba53f2f3c64f0a442cb51",
+          "d31_replay.py": "074fe6ba9d1728459190823e0719b796d22f354f9524d7715965b1126aabc540",
+          "precheck_units.py": "cc623a2adec8800e7d271af690df1c6619e50c3d9b3cdc8be620500ef04492aa",
+          "replay_mock.py": "616f6363462bb75845a44b5cf45fb4689ed5f239759f75c10ffb9353edf765e4",
+          "replay_settings.py": "dd15a49f1ca8d64249d9e516577793fb7cba3aad78d823dd7aacf9f7da6ac82a",
+          "run_replay.py": "be9792ac21401649622875bdee87823811bf534b5155a4a59ca9bb927d9403d2"
+        }
+      },
+      "manifest_sha256": "247a0c8e1058efd783273ac7b22a8d98c1edc56f068ca48aa5198fee5907628c",
+      "log_sha256": "f6987404dae9d97367f2ecfd9bc299b4d42a7776c6af08b4d156f5d9bac3772f",
+      "cases": {
+        "a15_one_sentence": {
+          "workflow_success": false,
+          "failure_boundary": "answer validation/review",
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {
+            "v3_17": {
+              "area": "A15",
+              "status": "conflict",
+              "reason": "Read from the notes but NOT used as an answer: this question takes an option printed on the form, and its own labelled line in the notes does not name exactly o"
+            }
+          },
+          "encounter_status": null,
+          "export_sha256": null,
+          "preservation": null,
+          "option_field": {
+            "area": "A15",
+            "key": "v3_17",
+            "kind": "multi_choice",
+            "option_count": 9
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 50,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "13b8ff1f0d74b8eb0dd33ef8f4a2abd857da6e0f9128ea3d95018cb6ccce3249",
+          "cases_file_sha256": "a8ea826f2bffd0b6ee527d922e3f3c354a9a4a1e77a07f53570be335e7cdfb94",
+          "prior": null,
+          "mapping_identical_to_prior": false
+        },
+        "a15_two_lines": {
+          "workflow_success": false,
+          "failure_boundary": "answer validation/review",
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {
+            "v3_17": {
+              "area": "A15",
+              "status": "conflict",
+              "reason": "Read from the notes but NOT offered as an answer: the notes give this question more than one answer, or an answer that differs from its own labelled line. Read "
+            }
+          },
+          "encounter_status": null,
+          "export_sha256": null,
+          "preservation": null,
+          "option_field": {
+            "area": "A15",
+            "key": "v3_17",
+            "kind": "multi_choice",
+            "option_count": 9
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 50,
+              "requested_field_ids": null,
+              "source_units": 2,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "ecf5f6616f1cec8a565d8cb3eb0401e8329ee4aac8ec863353a44d1ac0c77e2a",
+          "cases_file_sha256": "a8ea826f2bffd0b6ee527d922e3f3c354a9a4a1e77a07f53570be335e7cdfb94",
+          "prior": null,
+          "mapping_identical_to_prior": false
+        },
+        "linked_ordinary": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "7dc38c12558658edf5ba77c33f06388b27f7c8379fe9389470a4922ee85f5859",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 50,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "60e1a6bcf1130d915dfa39f6e944970fbd104695ceb7d13ee2299c87de02af27",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "prior": {
+            "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+            "field_relations": true,
+            "workflow_success": false,
+            "failure_boundary": "answer validation/review",
+            "export_sha256": null,
+            "destinations_mapped": 51,
+            "held_required": [
+              "v3_48"
+            ]
+          },
+          "export_identical_to_prior": false,
+          "mapping_identical_to_prior": false
+        },
+        "long": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "0093933d9a212ce43cc4554261f1fd4dd7d290bf41f5e30a929fc3c2a0c67c73",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 50,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "c731a9bf78fc7c177af92062ff0885601e468de4d162457d48ac9680a28b35ac",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "prior": {
+            "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "0093933d9a212ce43cc4554261f1fd4dd7d290bf41f5e30a929fc3c2a0c67c73",
+            "destinations_mapped": 51,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": false
+        },
+        "missing": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 50,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "d7de4bbac2d97c97c6b55fedf90546b29c9860cc59dd73ef06ff30141c8d8a91",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "prior": {
+            "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "f730aa53671ab367eb5e89376d653ef0d51f096962ae616480711a292eeed36d",
+            "destinations_mapped": 51,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": false
+        },
+        "ordinary": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "a67c6c1086c491ab04d49b56f4549afd4439312f44470d0f6200d49a3f01e895",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 50,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "47d2a009c67b27da1fd99f4f08adc9e2110054953e1168f7d4ea5900bf48cf73",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "prior": {
+            "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+            "field_relations": true,
+            "workflow_success": true,
+            "failure_boundary": null,
+            "export_sha256": "a67c6c1086c491ab04d49b56f4549afd4439312f44470d0f6200d49a3f01e895",
+            "destinations_mapped": 51,
+            "held_required": []
+          },
+          "export_identical_to_prior": true,
+          "mapping_identical_to_prior": false
+        }
+      }
+    },
+    "spy-d31-rel1-01": {
+      "manifest": {
+        "started_at": "2026-09-28T23:46:10.772845+00:00",
+        "completed_at": "2026-09-28T23:46:36.050027+00:00",
+        "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "head_after": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "labels": [
+          "spy_replay.SpyD31.test_linked_ordinary",
+          "spy_replay.SpyD31.test_long"
+        ],
+        "field_relations": true,
+        "test_database": "quillmd_qa_replay_spy_d31_rel1_01",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "source_files_hashed": 618,
+        "harness_sha256": {
+          "d30_replay.py": "c73fe59b5e0714e5ad8f491ce67718ed5ce7ac003b8ba53f2f3c64f0a442cb51",
+          "d31_replay.py": "074fe6ba9d1728459190823e0719b796d22f354f9524d7715965b1126aabc540",
+          "precheck_units.py": "cc623a2adec8800e7d271af690df1c6619e50c3d9b3cdc8be620500ef04492aa",
+          "replay_mock.py": "616f6363462bb75845a44b5cf45fb4689ed5f239759f75c10ffb9353edf765e4",
+          "replay_settings.py": "dd15a49f1ca8d64249d9e516577793fb7cba3aad78d823dd7aacf9f7da6ac82a",
+          "run_replay.py": "be9792ac21401649622875bdee87823811bf534b5155a4a59ca9bb927d9403d2",
+          "spy_replay.py": "a43bc82b9698cba8abe76b537371c70c2513e05680e8d57571ffa1a1c28a3b74"
+        }
+      },
+      "manifest_sha256": "253f7e504ed8e0b23501e33fcd4d49dc9abb3775abf440cfc4aa81a73348c046",
+      "log_sha256": "e0df6e68ae4b62ccf7b00a4dc266f9b63674b108938c65597b24b0d4123314ff",
+      "cases": {
+        "linked_ordinary": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "7dc38c12558658edf5ba77c33f06388b27f7c8379fe9389470a4922ee85f5859",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "ed2d654359d032a92c96d02ddd3324c70dab6ab59fbf98b6fad1f54127b52883",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "spy": {
+            "complete_ids": 104,
+            "opposed_ids": 104,
+            "opposed_nonempty": 0,
+            "complete_ids_raised": 0
+          }
+        },
+        "long": {
+          "workflow_success": false,
+          "failure_boundary": "answer validation/review",
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {
+            "v3_58": {
+              "area": "A48",
+              "status": "conflict",
+              "reason": "Read from the notes but NOT offered as an answer: the line shown with it may change what it means (a heading, a denial, a family history, a hypothetical or a co"
+            }
+          },
+          "encounter_status": null,
+          "export_sha256": null,
+          "preservation": null,
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "466cf507b78c63ac7889996635d5a9c25f85f26719ff2d19ab8af75a61b36176",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "spy": {
+            "complete_ids": 101,
+            "opposed_ids": 101,
+            "opposed_nonempty": 3,
+            "complete_ids_raised": 3
+          }
+        }
+      }
+    },
+    "spy-d31-rel0-01": {
+      "manifest": {
+        "started_at": "2026-09-28T23:46:36.210088+00:00",
+        "completed_at": "2026-09-28T23:47:02.896578+00:00",
+        "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "head_after": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "labels": [
+          "spy_replay.SpyD31.test_linked_ordinary",
+          "spy_replay.SpyD31.test_long"
+        ],
+        "field_relations": false,
+        "test_database": "quillmd_qa_replay_spy_d31_rel0_01",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "source_files_hashed": 618,
+        "harness_sha256": {
+          "d30_replay.py": "c73fe59b5e0714e5ad8f491ce67718ed5ce7ac003b8ba53f2f3c64f0a442cb51",
+          "d31_replay.py": "074fe6ba9d1728459190823e0719b796d22f354f9524d7715965b1126aabc540",
+          "precheck_units.py": "cc623a2adec8800e7d271af690df1c6619e50c3d9b3cdc8be620500ef04492aa",
+          "replay_mock.py": "616f6363462bb75845a44b5cf45fb4689ed5f239759f75c10ffb9353edf765e4",
+          "replay_settings.py": "dd15a49f1ca8d64249d9e516577793fb7cba3aad78d823dd7aacf9f7da6ac82a",
+          "run_replay.py": "be9792ac21401649622875bdee87823811bf534b5155a4a59ca9bb927d9403d2",
+          "spy_replay.py": "a43bc82b9698cba8abe76b537371c70c2513e05680e8d57571ffa1a1c28a3b74"
+        }
+      },
+      "manifest_sha256": "8d996b32c3f1a9e28846a4b03f93bfa7eb40a9db79b53f8329ad4bb2bc02503a",
+      "log_sha256": "253e7058851fe1249e7a2409ce292c2f01a01f581ad588d2c3dadca918f9eeb7",
+      "cases": {
+        "linked_ordinary": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "7dc38c12558658edf5ba77c33f06388b27f7c8379fe9389470a4922ee85f5859",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 50,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "8de509f2e356b5e53c6f1a62321025f5f8a8148d2d7edcb20d482f64bbcab1ee",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "spy": {
+            "complete_ids": 0,
+            "opposed_ids": 0,
+            "opposed_nonempty": 0,
+            "complete_ids_raised": 0
+          }
+        },
+        "long": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "0093933d9a212ce43cc4554261f1fd4dd7d290bf41f5e30a929fc3c2a0c67c73",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": false,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": false,
+              "contract": null,
+              "questions": 50,
+              "requested_field_ids": null,
+              "source_units": 1,
+              "schema_title": "UnitSelections"
+            }
+          ],
+          "result_sha256": "4b3ed8574f197895819eff3b2bf1575000a5144db83ecb3f96571049ec00fc96",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7",
+          "spy": {
+            "complete_ids": 0,
+            "opposed_ids": 0,
+            "opposed_nonempty": 0,
+            "complete_ids_raised": 0
+          }
+        }
+      }
+    },
+    "cf-d30-rel1-01": {
+      "manifest": {
+        "started_at": "2026-09-28T23:47:03.063616+00:00",
+        "completed_at": "2026-09-28T23:47:19.803088+00:00",
+        "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "head_after": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "labels": [
+          "spy_replay.CfD30.test_long"
+        ],
+        "field_relations": true,
+        "test_database": "quillmd_qa_replay_cf_d30_rel1_01",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "source_files_hashed": 618,
+        "harness_sha256": {
+          "d30_replay.py": "c73fe59b5e0714e5ad8f491ce67718ed5ce7ac003b8ba53f2f3c64f0a442cb51",
+          "d31_replay.py": "074fe6ba9d1728459190823e0719b796d22f354f9524d7715965b1126aabc540",
+          "precheck_units.py": "cc623a2adec8800e7d271af690df1c6619e50c3d9b3cdc8be620500ef04492aa",
+          "replay_mock.py": "616f6363462bb75845a44b5cf45fb4689ed5f239759f75c10ffb9353edf765e4",
+          "replay_settings.py": "dd15a49f1ca8d64249d9e516577793fb7cba3aad78d823dd7aacf9f7da6ac82a",
+          "run_replay.py": "be9792ac21401649622875bdee87823811bf534b5155a4a59ca9bb927d9403d2",
+          "spy_replay.py": "a43bc82b9698cba8abe76b537371c70c2513e05680e8d57571ffa1a1c28a3b74"
+        }
+      },
+      "manifest_sha256": "ef7d9b461e4c8fe2626c2af2f3d4737674c3377d147659a8874b11376fc561f0",
+      "log_sha256": "4bc4fc568e4a1ccdbc697d0681662173979aec534d9002d089c86fae71e4053e",
+      "cases": {
+        "long": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 61,
+          "destinations_expected": 61,
+          "historical_expected": 62,
+          "extra_fields": [],
+          "extras_all_write_protected": null,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "388d42cbf57ba54d090d970a1f76e06f66e544299ce6ecded050cab926f5aa06",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 57,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "a748dd4267d2a30a0117f59e71b46f18279cfd0286e5258936483a9917029390",
+          "cases_file_sha256": "b2622b25b1797d7ef16044ea9e51da5ce076ae8e494f7438ddcc1a74be6f5caa"
+        }
+      }
+    },
+    "cf-d31-rel1-01": {
+      "manifest": {
+        "started_at": "2026-09-28T23:47:19.974844+00:00",
+        "completed_at": "2026-09-28T23:47:37.469743+00:00",
+        "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "head_after": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+        "labels": [
+          "spy_replay.CfD31.test_long"
+        ],
+        "field_relations": true,
+        "test_database": "quillmd_qa_replay_cf_d31_rel1_01",
+        "exit_code": 0,
+        "source_unchanged": true,
+        "source_files_hashed": 618,
+        "harness_sha256": {
+          "d30_replay.py": "c73fe59b5e0714e5ad8f491ce67718ed5ce7ac003b8ba53f2f3c64f0a442cb51",
+          "d31_replay.py": "074fe6ba9d1728459190823e0719b796d22f354f9524d7715965b1126aabc540",
+          "precheck_units.py": "cc623a2adec8800e7d271af690df1c6619e50c3d9b3cdc8be620500ef04492aa",
+          "replay_mock.py": "616f6363462bb75845a44b5cf45fb4689ed5f239759f75c10ffb9353edf765e4",
+          "replay_settings.py": "dd15a49f1ca8d64249d9e516577793fb7cba3aad78d823dd7aacf9f7da6ac82a",
+          "run_replay.py": "be9792ac21401649622875bdee87823811bf534b5155a4a59ca9bb927d9403d2",
+          "spy_replay.py": "a43bc82b9698cba8abe76b537371c70c2513e05680e8d57571ffa1a1c28a3b74"
+        }
+      },
+      "manifest_sha256": "65c9d19fff5fccfcda992109fae245d991c8b4d246809488e32ce297111b9068",
+      "log_sha256": "6c33ff6f214f2ba2edf74afc9eee7ad8ace393151724e6cf368240843a53158a",
+      "cases": {
+        "long": {
+          "workflow_success": true,
+          "failure_boundary": null,
+          "exception": null,
+          "http": [
+            [
+              "mapping-review",
+              200
+            ],
+            [
+              "new-encounter",
+              302
+            ],
+            [
+              "before-generation",
+              200
+            ],
+            [
+              "generate",
+              302
+            ],
+            [
+              "generated-review",
+              200
+            ],
+            [
+              "save-unchanged",
+              302
+            ],
+            [
+              "finalize",
+              302
+            ],
+            [
+              "authenticated-export",
+              200
+            ],
+            [
+              "foreign-export",
+              404
+            ]
+          ],
+          "destinations_mapped": 51,
+          "destinations_expected": 51,
+          "historical_expected": null,
+          "extra_fields": [
+            "v3_1",
+            "v3_2",
+            "v3_30",
+            "v3_31",
+            "v3_34",
+            "v3_35",
+            "v3_40",
+            "v3_41",
+            "v3_42",
+            "v3_57"
+          ],
+          "extras_all_write_protected": true,
+          "provider_mock_calls": 1,
+          "jobs": [
+            "succeeded"
+          ],
+          "held_required": {},
+          "encounter_status": "finalized",
+          "export_sha256": "0093933d9a212ce43cc4554261f1fd4dd7d290bf41f5e30a929fc3c2a0c67c73",
+          "preservation": {
+            "unexpected_original_slot_changes": [],
+            "changed_parts": [
+              "word/document.xml"
+            ],
+            "stored_original_unchanged": true,
+            "foreign_export_status": 404
+          },
+          "settings_effective": {
+            "QUILLMD_WORD_ENGINE": "v3",
+            "AI_MODE": "live",
+            "AI_PROVIDER": "anthropic",
+            "AI_MODEL": "claude-sonnet-5",
+            "AI_THINKING": "disabled",
+            "V3_FIELD_RELATIONS": true,
+            "V3_GENERATION_BATCHES": true,
+            "V3_HISTORY_CONTEXT": false,
+            "WM_NARRATIVE": false
+          },
+          "request_shapes": [
+            {
+              "relations_payload": true,
+              "contract": "ordinary-field-relations-v1",
+              "questions": 0,
+              "requested_field_ids": 50,
+              "source_units": 1,
+              "schema_title": "FieldSelections"
+            }
+          ],
+          "result_sha256": "875c377ff0d82f8d3c47131c9e3e59e143d0c27cb61859330b9d0e27199e6201",
+          "cases_file_sha256": "720c63f738192546d3156762576ea1dbef5c854e63e0aca5f58faa1a581ab5e7"
+        }
+      }
+    }
+  },
+  "a15_component_probe": {
+    "candidate": {
+      "head": "8e3dcfd07a5946430e7291b520faf35c8055127b",
+      "field_key": "v3_17",
+      "field_kind": "multi_choice",
+      "field_options": 9,
+      "field_count": 61,
+      "module_unchanged": true,
+      "source_unchanged": true,
+      "two_options": {
+        "export_accepted": true,
+        "box_states": [
+          true,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "changed_parts": [
+          "word/document.xml"
+        ],
+        "normalize_accepted": true,
+        "normalized_lines": 2
+      },
+      "one_option": {
+        "export_accepted": true,
+        "box_states": [
+          false,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "changed_parts": [
+          "word/document.xml"
+        ],
+        "normalize_accepted": true,
+        "normalized_lines": 1
+      },
+      "one_only_control_kind": "choice",
+      "one_only_control_two": {
+        "export_accepted": false,
+        "code": "invalid_answer"
+      }
+    },
+    "candidate_sha256": "14647b2ebedf4fa193f88a4cfb2723a88b811c45b33eb8ae1a8effe2e75cd68f",
+    "prior": {
+      "head": "fba37e2fec9df86bee18b31798c22e44014be3c3",
+      "field_kind": "choice",
+      "accepted": false,
+      "code": "invalid_answer",
+      "error": "Only one option can be chosen for this question.",
+      "sha256": "588a780957193a8bec7ad001622cf408c27f915546beada1a246afb917fc7fa1"
+    }
+  }
+}
