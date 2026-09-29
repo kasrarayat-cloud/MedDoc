@@ -415,3 +415,46 @@ class VetoControls(SimpleTestCase):
             with self.subTest(other=other):
                 self.assertEqual(self.outcome(notes, 'MAPPA status', ['The patient is subject to MAPPA.'], other=other),
                                  ('conflict', ''))
+
+
+@override_settings(**RELATIONS)
+class FrozenWalkShape(SimpleTestCase):
+    """Refutation F2-FROZEN-WALK, measured independently of the campaign runner (which states the same fact in its notes
+    plan and stage decisions: ops/sonnet5_stages.frozen_walk_check). The frozen N6 walk's provider answers through the
+    FROZEN diagnostics/notes/app_path_steps.reference_answer, which builds contract v1's list body; this engine refuses it
+    on every relations case, and the keyed translation of the SAME selection is accepted — so the refusal is the answer's
+    shape, not its content. The frozen file is read, never changed (the freeze manifest pins it)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        import sys
+        from pathlib import Path
+        notes = Path(__file__).resolve().parents[3] / 'docs' / 'rebuild' / 'v1' / 'sonnet5-campaign' / 'diagnostics' / 'notes'
+        if str(notes) not in sys.path:
+            sys.path.insert(0, str(notes))
+        import app_path_steps
+        cls.steps = app_path_steps
+        cls.cases = json.loads((notes / 'cases.json').read_text())
+
+    def test_the_frozen_walks_relations_answer_is_refused_and_its_keyed_translation_read(self):
+        measured = []
+        for case in self.cases['cases']:
+            if 'field_relations' not in case['send_paths']:
+                continue
+            measured.append(case['id'])
+            fields = self.cases['forms'][case['form']]['fields']
+            with self.subTest(case=case['id']), override_settings(**self.steps.PATH_FLAGS['field_relations']):
+                compiled = r.compile_request(case['notes'], fields, g.configuration(fields))
+                payload = json.loads(compiled['wire']['messages'][0]['content'])
+                body, _ = self.steps.reference_answer(case['notes'], fields, payload,
+                                                      self.steps.reference_selection(case, 'field_relations'))
+                self.assertIsInstance(body['fields'], list)                       # (contract v1's shape)
+                with self.assertRaises(ValidationError) as caught:
+                    r.parse(json.dumps(body), compiled['asked'], compiled['units'])
+                self.assertIn('malformed', ' '.join(caught.exception.messages))
+                translated = keyed(body, compiled['asked'], compiled['units'])
+                parsed = r.parse(json.dumps(translated), compiled['asked'], compiled['units'])
+                self.assertEqual([(row.key, list(row.unit_ids), row.conflict) for row in parsed.fields],
+                                 [(item['key'], item['unit_ids'], item['conflict']) for item in body['fields']])
+        self.assertEqual(sorted(measured), ['N02', 'N03', 'N10', 'N13', 'N14', 'N15', 'N16'])

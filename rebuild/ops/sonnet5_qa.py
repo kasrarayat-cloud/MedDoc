@@ -922,11 +922,12 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
     return _decide(campaign, attempt, evidence, secret, reasons, result, provenance, checked)
 
 
-def _record_interruption(ledger, attempt, error):
+def _record_interruption(ledger, attempt, error, *, fail_stage=True):
     """The runner failed or was interrupted after the attempt was written: the attempt gets an outcome (unknown, unless
     one was already recorded), its stage is failed, and a stage that had already passed is followed by a campaign stop.
-    Best effort: whatever cannot be written now is recorded by the next start (recover_interrupted +
-    settle_open_stages)."""
+    `fail_stage=False` (the stage runner, for an error its run survives): the outcome only — the run's own decision fails
+    the stage with what it did not send. Best effort: whatever cannot be written now is recorded by the next start
+    (recover_interrupted + settle_open_stages)."""
     name = type(error).__name__
     try:
         if ledger.rows()[attempt['number'] - 1][1] is None:
@@ -934,6 +935,8 @@ def _record_interruption(ledger, attempt, error):
                                                      'recorded_at': pc.now()})
     except Exception:
         pass
+    if not fail_stage:
+        return
     try:
         state = ledger.stage_state(attempt['stage'])['state']
         if state == 'open':
@@ -1221,17 +1224,27 @@ def recover(root=LIVE_ROOT, declaration_path=DECLARATION):
 
 def reopen(stage, diagnosis, root=None, declaration_path=None, repository=None, rebuild=None):
     """Reopens a FAILED stage after offline repair (Campaign.reopen): the diagnosis committed and unmodified in this
-    checkout, naming the failed attempts and the repair commit, which this clean runner commit contains. Writes
-    stage-<id>-reopened-<n>.json; nothing is sent."""
+    checkout, naming the failed attempts and the repair commit, which this clean runner commit contains; for a stage the
+    stage runner resumes (mapping, ordinary_notes), its failure must establish the remainder it would send
+    (sonnet5_stages.pending_sends), which the reopening records. Writes stage-<id>-reopened-<n>.json; nothing is sent."""
     root = LIVE_ROOT if root is None else root
     declaration = pc.declared(DECLARATION if declaration_path is None else declaration_path,
                               repository=REPOSITORY if repository is None else repository)
     identity = pc.git_identity(REBUILD if rebuild is None else rebuild)
     require(identity['clean'], 'The runner checkout must be a clean commit.')
     campaign = pc.Campaign(declaration, root, watched_files=WATCHED_FILES)
+    remainder = None
+    if stage != STAGE and stage in stages_module().STAGES:
+        # (the stage runner resumes a stage from its failure's record: the reopening is refused unless that record
+        # establishes something to send — refutation F2; nothing is written first)
+        stages = stages_module()
+
+        def remainder():
+            sends, _ = stages.pending_sends(campaign, stage, stages.plan_sends(stage, stages.frozen_inputs()))
+            return [send.id for send in sends]
     campaign.ledger.acquire()
     try:
-        record = campaign.reopen(stage, diagnosis, runner_commit=identity['commit'])
+        record = campaign.reopen(stage, diagnosis, runner_commit=identity['commit'], remainder=remainder)
     finally:
         campaign.ledger.release()
     print(json.dumps(record, indent=1, default=str))

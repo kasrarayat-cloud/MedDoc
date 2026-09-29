@@ -11,7 +11,10 @@ What each test proves, and how it would fail:
   · without the amendment the relations sends refuse at the declared version;
   · a changed rate, an amendment whose base is not the pinned one, one naming a contract the engine does not run, a
     maximum (or the sum) that does not fit the limit left, and a failure record that would re-send a made send all
-    refuse before anything is planned.
+    refuse before anything is planned;
+  · (repair round) an amended send's version is reported as NOT the declared one and as the amendment's
+    (F3-IS-DECLARED); the plan says the stage cannot pass while N02:field_relations' stop stands (F1); and it states,
+    measured, that the frozen N6 walk's relations answers are refused by this engine (F2-FROZEN-WALK).
 """
 import json
 import os
@@ -32,6 +35,8 @@ REBUILD = Path(__file__).resolve().parents[2]
 DRIVER = Path(__file__).resolve().parent / 'amendment_plan_driver.py'
 UNSENT = ['notes:N03:field_relations', 'notes:N10:field_relations', 'notes:N13:field_relations',
           'notes:N14:field_relations', 'notes:N15:field_relations', 'notes:N16:field_relations']
+#: The send whose attempt (17) stopped the live stage (a validator failure on contract v1's answer shape).
+STOPPER = 'notes:N02:field_relations'
 
 
 def setUpModule():
@@ -44,8 +49,9 @@ def tearDownModule():
 
 def live_shape(test, declaration, *, not_sent=UNSENT, reopened=False, exposure_tokens=2000, extra_attempted=()):
     """A temporary campaign root whose ledger is the live one's shape after ordinary_notes failure 1 (RECONSTRUCTED from
-    the live stage-ordinary_notes-failed-1.json: its plan, its attempts 3..17 and its not_sent list): model_check passed
-    on attempt 1, mapping failed on attempt 2, ordinary_notes attempts 3..17 completed, failure 1 recorded."""
+    the live stage-ordinary_notes-failed-1.json: its plan, its attempts 3..17 with their per-send rows — only
+    N02:field_relations stopped the stage — and its not_sent list): model_check passed on attempt 1, mapping failed on
+    attempt 2, ordinary_notes attempts 3..17 completed, failure 1 recorded."""
     root = scratch(test)
     campaign = pc.Campaign(declaration, root)
     ledger = campaign.ledger
@@ -69,7 +75,9 @@ def live_shape(test, declaration, *, not_sent=UNSENT, reopened=False, exposure_t
         write(number, 'ordinary_notes', send, '0.2332', exposure_tokens)
     ledger.write_stage('ordinary_notes', 'failed', {
         'reasons': ['notes:N02:field_relations: the attempt ended completed with the job failed (ValidationError)'],
-        'summary': {'plan': plan, 'sends': [{'send': {'id': send}, 'attempt': number} for number, send in enumerate(made, 3)],
+        'summary': {'plan': plan, 'sends': [{'send': {'id': send}, 'attempt': number, 'stops_stage': send == STOPPER,
+                                             'recorded_as': 'contract' if send == STOPPER else None}
+                                            for number, send in enumerate(made, 3)],
                     'not_sent': list(not_sent), 'attempts': list(range(3, 3 + len(made)))}})
     if reopened:
         ledger.write_reopen('ordinary_notes', 1, {'ledger_attempts': len(ledger.rows()), 'repair_commit': '0' * 40})
@@ -119,8 +127,13 @@ class AmendedPlanTests(unittest.TestCase):
                 self.assertEqual(report['remainder']['failure'], 1)
                 self.assertEqual(report['amendment']['pricing_version'], RELATIONS_V2)
                 for row in report['order']:
-                    self.assertEqual((row['pricing_version'], row['pricing_version_is_declared'], row['amended']),
-                                     (RELATIONS_V2, True, True))
+                    # (refutation F3-IS-DECLARED: the amended version is NOT the declared one, and says so; it is the
+                    # amendment's, which is its own column)
+                    self.assertEqual((row['pricing_version'], row['pricing_version_is_declared'],
+                                      row['pricing_version_is_amended'], row['amended']),
+                                     (RELATIONS_V2, False, True, True))
+                    self.assertEqual(row['pricing_version_is_declared'],
+                                     row['pricing_version'] == self.declaration.pricing_version(row['pricing_key']))
                     case = next(c for c in self.inputs['cases']['cases'] if c['id'] == row['case'])
                     frozen = Decimal(case['cost_bound_usd']['field_relations']['provider_cost_max'])
                     self.assertGreater(Decimal(row['maximum_cost']), frozen)        # (the keyed schema is larger)
@@ -130,6 +143,11 @@ class AmendedPlanTests(unittest.TestCase):
                 self.assertEqual(Decimal(report['stage_worst_case']),
                                  sum(Decimal(row['bound_x1_1']) for row in report['order']))
                 self.assertEqual(report['stage_state'], 'open' if reopened else 'failed')
+                # (refutation F1: N02:field_relations stopped the stage and is never sent again, so whatever the six do
+                # the stage cannot pass — the plan says so before anything is spent)
+                self.assertEqual([e['send'] for e in report['earlier_stops']], ['notes:N02:field_relations'])
+                self.assertFalse(report['can_pass'])
+                self.frozen_walk_is_stated(report)
 
     def test_a_fresh_ledger_plans_every_send_and_keeps_every_default_send_at_its_frozen_maximum(self):
         root = scratch(self)
@@ -141,12 +159,30 @@ class AmendedPlanTests(unittest.TestCase):
             case = next(c for c in self.inputs['cases']['cases'] if c['id'] == row['case'])
             frozen = Decimal(case['cost_bound_usd'][row['path']]['provider_cost_max'])
             if row['path'] == 'default':
-                self.assertEqual((Decimal(row['maximum_cost']), row['amended'], row['pricing_version']),
-                                 (frozen, False, self.declaration.pricing_version('ordinary_notes')))
+                self.assertEqual((Decimal(row['maximum_cost']), row['amended'], row['pricing_version'],
+                                  row['pricing_version_is_declared'], row['pricing_version_is_amended']),
+                                 (frozen, False, self.declaration.pricing_version('ordinary_notes'), True, False))
             else:
-                self.assertEqual((row['amended'], row['pricing_version']), (True, RELATIONS_V2))
+                self.assertEqual((row['amended'], row['pricing_version'], row['pricing_version_is_declared'],
+                                  row['pricing_version_is_amended']), (True, RELATIONS_V2, False, True))
                 self.assertNotEqual(Decimal(row['maximum_cost']), frozen)
+        self.assertEqual((report['earlier_stops'], report['can_pass']), ([], True))
+        self.frozen_walk_is_stated(report)
         self.assertEqual(Decimal(report['order'][0]['maximum_cost']), Decimal('0.116794'))
+
+    def frozen_walk_is_stated(self, report):
+        """Refutation F2-FROZEN-WALK: the frozen N6 walk (notes/app_path_walk.py, through app_path_steps.reference_answer)
+        answers the relations path in contract v1's list shape, which this engine refuses — the freeze still verifies,
+        so the plan states it, measured on every relations case (the keyed translation of the SAME selection is
+        accepted: core.tests.test_v3_field_relations_contract)."""
+        walk = report['frozen_walk']
+        relations = sorted(c['id'] for c in self.inputs['cases']['cases'] if 'field_relations' in c['send_paths'])
+        self.assertEqual((walk['engine_contract'], walk['path'], walk['valid']),
+                         ('ordinary-field-relations-v2', 'field_relations', False))
+        self.assertEqual(sorted(walk['cases']), relations)
+        for case, verdict in walk['cases'].items():
+            self.assertTrue(verdict.startswith('refused: ') and 'malformed' in verdict, (case, verdict))
+        self.assertIn('not evidence', walk['statement'])
 
     def test_every_other_send_keeps_its_frozen_maximum_under_an_amendment(self):
         out = self.plan(scratch(self), self.amendment(), drift_default=True)

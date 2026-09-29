@@ -2040,6 +2040,86 @@ class ReopenTests(unittest.TestCase):
                 self.assertEqual(sq.main(['reopen', '--stage', 'model_check']), 2)
         self.assertEqual(self.reopened(), ['stage-model_check-reopened-1.json'])
 
+    # ── refutation F2: a stage the stage runner resumes from its failure record (mapping, ordinary_notes) is reopened
+    # only when that record establishes something to send. Before, the reopening was written first and the runner
+    # refused afterwards, leaving the stage OPEN with nothing it could ever send, no second reopening possible and
+    # nothing that would fail it again. Now the reopening itself refuses, before anything is written.
+
+    def failed_notes_run(self, summary):
+        """Attempt 1 (notes:N01:default, completed), then ordinary_notes failure 1 with `summary` (None: none)."""
+        d = self.declaration
+        record = attempt(1, 'ordinary_notes', '0.50', campaign=d.campaign, authority=d.authority_id,
+                         limits=limits_record(d), runner_commit=self.failed_runner, terms=terms_record(d),
+                         engine_files=self.hashes(self.failed_runner))
+        record['send'] = {'id': 'notes:N01:default'}
+        self.campaign.ledger.write_attempt(record)
+        self.campaign.ledger.write_outcome(1, {'class': 'completed', 'usage': usage()})
+        document = {'reasons': ['synthetic failure']}
+        if summary is not None:
+            document['summary'] = summary
+        self.campaign.ledger.write_stage('ordinary_notes', 'failed', document)
+
+    def reopen_command(self, stage, diagnosis):
+        from ops import sonnet5_qa as sq
+        self.campaign.ledger.release()
+        err = io.StringIO()
+        with patch.object(sq, 'LIVE_ROOT', self.root), patch.object(sq, 'DECLARATION', self.path), \
+                patch.object(sq, 'REPOSITORY', self.repo), patch.object(sq, 'REBUILD', self.repo / 'rebuild'), \
+                patch.object(sq, 'WATCHED_FILES', WATCHED), patch('sys.stderr', err):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                code = sq.main(['reopen', '--stage', stage, '--diagnosis', str(diagnosis)])
+        self.campaign.ledger.acquire()
+        return code, out.getvalue(), err.getvalue()
+
+    def test_a_stage_runner_reopening_with_nothing_it_could_send_is_refused_before_it_is_written(self):
+        from ops import sonnet5_stages as st
+        plan = [s.id for s in st.plan_sends('ordinary_notes', st.frozen_inputs())]
+        cases = {
+            'no summary (an interruption that ended the process, or a settled run)': (None, 'no readable list'),
+            'the last planned send stopped the stage': ({'plan': plan, 'sends': [], 'not_sent': []}, 'no remainder'),
+        }
+        for name, (summary, fragment) in cases.items():
+            with self.subTest(name=name):
+                self.campaign.ledger.release()
+                self.root = scratch(self)
+                self.campaign = pc.Campaign(self.declaration, self.root, watched_files=WATCHED)
+                self.campaign.ledger.acquire()
+                self.failed_notes_run(summary)
+                tag = abs(hash(name))
+                repair = self.commit_file('rebuild/ops/runner.py', f'version = 2  # {tag}\n', 'Repair the runner')
+                diagnosis = self.diagnosis(repair, stage='ordinary_notes', name=f'notes-{tag}.md')
+                code, _, err = self.reopen_command('ordinary_notes', diagnosis)
+                self.assertEqual(code, 2, err)
+                self.assertIn(fragment, err)
+                self.assertEqual(self.reopened(), [])
+                self.assertEqual(self.campaign.ledger.stage_state('ordinary_notes')['state'], 'failed')
+
+    def test_a_stage_runner_reopening_records_the_remainder_it_establishes(self):
+        from ops import sonnet5_stages as st
+        plan = [s.id for s in st.plan_sends('ordinary_notes', st.frozen_inputs())]
+        self.failed_notes_run({'plan': plan, 'sends': [], 'not_sent': plan[1:]})
+        repair = self.commit_file('rebuild/ops/runner.py', 'version = 2\n', 'Repair the runner')
+        diagnosis = self.diagnosis(repair, stage='ordinary_notes', name='notes-diagnosis.md')
+        code, out, err = self.reopen_command('ordinary_notes', diagnosis)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(out)['remainder'], plan[1:])
+        self.assertEqual(self.reopened(), ['stage-ordinary_notes-reopened-1.json'])
+
+    def test_a_reopening_is_refused_when_its_remainder_cannot_be_established(self):
+        self.failed_attempt(1)
+        _, diagnosis, runner = self.repaired()
+
+        def nothing():
+            raise pc.Refused('Stage model_check failure 1 left no send unsent; there is no remainder to send.')
+        with self.assertRaises(pc.Refused) as caught:
+            self.campaign.reopen('model_check', diagnosis, runner_commit=runner, remainder=nothing)
+        self.assertIn('no remainder', str(caught.exception))
+        self.assertEqual(self.reopened(), [])
+        record = self.campaign.reopen('model_check', diagnosis, runner_commit=runner, remainder=lambda: ['a', 'b'])
+        self.assertEqual(record['remainder'], ['a', 'b'])
+        self.assertEqual(self.reopened(), ['stage-model_check-reopened-1.json'])
+
     # ── A2: a reopening also requires that at least one runner or engine file (sonnet5_qa.WATCHED_FILES: ENGINE_FILES
     # and the stage runner files) DIFFERS between each failed attempt's recorded hashes and the reopening runner's
     # checkout, and that the repair commit itself TOUCHES at least one of them. A repair that changed only a document,
@@ -2425,10 +2505,36 @@ class AmendmentTests(unittest.TestCase):
             'owner words': 'owner_words: Approve more', 'an authorization': 'authorization: owner 2026-09-29 approved more',
             'a decorated limit': '> **total_limit_provider_usd: 400.00**', 'a revocation': 'The owner revoked this campaign.',
             'a reopening': 'reopen_stage: ordinary_notes',
+            # refutation F3: a declaration line behind ANY prefix — a list number, code, a tilde, quotes — or anywhere
+            # in a line, is still that line (these were accepted by the old prefix list)
+            'a numbered limit': '1. total_limit_provider_usd: 400.00',
+            'a stage in code': '`stage: ordinary_notes limit_provider_usd 90.00 requires none`',
+            'a numbered model': '2) model: claude-opus-5',
+            'a tilde rate': '~ rates: input 1 output 5 cached 0.10 (USD per million tokens)',
+            'a numbered pricing version': f'1. pricing_version ordinary_notes: {RELATIONS_V2}',
+            'a numbered credential': '3. credential_file: /tmp/other-key',
+            'numbered transfers': '4. unused_stage_budget_transfers: yes',
+            'a quoted limit': '"total_limit_provider_usd: 400.00"',
+            'an authorization in code': '`authorization: owner 2026-09-29 approved more at the stated limits`',
+            'a limit mid-line': 'Note that total_limit_provider_usd: 400.00 applies from now.',
+            'a bare stage limit': 'ordinary_notes limit_provider_usd 90.00',
+            'a request count': 'max_requests 99',
+            'a fullwidth colon': 'total_limit_provider_usd\uff1a 400.00',
+            'a zero-width space inside a name': 'total_limit\u200b_provider_usd: 400.00',
+            'fullwidth letters': '\uff4d\uff4f\uff44\uff45\uff4c: claude-opus-5',
         }
         for name, line in extra.items():
             with self.subTest(name=name):
-                self.refused(self.commit(good.replace('```\n', '```\n' + line + '\n', 1), f'{abs(hash(name))}-x.md'))
+                self.refused(self.commit(good.replace('```\n', '```\n' + line + '\n', 1), f'{abs(hash(name))}-x.md'),
+                             '' if name == 'a revocation' else 'may change only the field-relations contract identity')
+
+    def test_prose_that_names_a_term_without_stating_it_is_accepted(self):
+        # (the rule refuses a STATED line — a name followed by its colon, or a pricing/limit token — not the words)
+        prose = ('The stage limits, the rates, the model and the provider stay exactly as declared; the staged '
+                 'campaign keeps its authority.\n\n')
+        good = amendment_text(self.declaration.sha256)
+        path = self.commit(good.replace('```\n', prose + '```\n', 1), 'prose.md')
+        self.assertEqual(pc.declared_amendment(path, self.declaration, out=io.StringIO()).pricing_version, RELATIONS_V2)
 
     def test_a_missing_or_repeated_line_refuses(self):
         sha = self.declaration.sha256

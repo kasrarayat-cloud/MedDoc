@@ -59,6 +59,12 @@ remaining stage and total limits, with no credential, network or database.
 
 REMAINDER. Once a stage has failed (and until it passes) it sends ONLY the sends its latest failure recorded as not
 sent (`pending_sends`): nothing with an attempt in the ledger is ever sent again, and `plan` shows exactly those sends.
+A reopening is refused when that record establishes nothing to send (sonnet5_qa.reopen). A remainder completes the
+stage's EVIDENCE, never by itself its pass: the stage passes only when no attempt of any of its runs stopped it or ended
+with no decision recording how (`earlier_stops`) — a send that stopped the stage is never sent again, so after one the
+stage can never pass, and `plan` says so (`earlier_stops`, `can_pass`) before anything is spent. The notes plan and
+every notes stage decision also state, measured, whether the frozen N6 walk's relations answers are still read by this
+engine (`frozen_walk_check`).
 AMENDMENT. `--amendment <path>` (ordinary_notes only) names a committed contract-identity amendment
 (provider_campaign.declared_amendment): the field-relations sends must then carry its pricing version, which must be the
 engine's contract bound to the pinned base price; their maxima are recomputed by the same compiler (the frozen v1 bounds
@@ -661,6 +667,43 @@ def pending_sends(campaign, stage, plan):
                                                         'and that send was already made; it is not sent.')
     return sends, {'failure': number, 'plan': [send.id for send in plan], 'sends': [send.id for send in sends],
                    'already_made': sorted(attempted)}
+
+
+def earlier_stops(ledger, stage, current=()):
+    """The attempts of `stage` outside the run deciding now (`current`: that run's attempt numbers) that did not end
+    clean: the stage's failures record each attempt's per-send row, and an attempt is clean only when exactly one row
+    names it, for the send the attempt records, and says it did not stop the stage. Anything else — a row that stopped
+    the stage (a contract failure, unsafe output, an interruption), or no row at all (a run that ended before it could
+    be decided) — is returned. A send is never made twice, so while any is left the stage can NEVER pass: a remainder
+    completes the stage's evidence, not its pass (refutations F1 and F1-REMAINDER-FALSE-PASS). Read-only.
+    Returns [{'send', 'attempt', 'failure', 'why'}] in attempt order."""
+    state = ledger.stage_state(stage)
+    rows = {}
+    for failure in state['failed']:
+        summary = failure.get('summary')
+        recorded = summary.get('sends') if isinstance(summary, dict) else None
+        for row in recorded if isinstance(recorded, list) else []:
+            if isinstance(row, dict) and type(row.get('attempt')) is int:
+                rows.setdefault(row['attempt'], []).append((failure.get('number'), row))
+    current, found = set(current), []
+    for attempt, _ in ledger.rows():
+        number = attempt.get('number')
+        if attempt.get('stage') != stage or number in current:
+            continue
+        send = attempt.get('send') if isinstance(attempt.get('send'), dict) else {}
+        named = rows.get(number, [])
+        failure, row = named[0] if len(named) == 1 else (None, None)
+        if row is None:
+            why = ('no decision of the stage records how it ended' if not named
+                   else 'more than one decision of the stage records it')
+        elif not (isinstance(row.get('send'), dict) and row['send'].get('id') == send.get('id')):
+            why = 'its decision records it for another send'
+        elif row.get('stops_stage') is not False:
+            why = f'it stopped the stage ({row.get("recorded_as") or "no reason recorded"})'
+        else:
+            continue
+        found.append({'send': send.get('id'), 'attempt': number, 'failure': failure, 'why': why})
+    return found
 
 
 # ── the per-send machinery ───────────────────────────────────────────────────────────────────────────────────────
@@ -1324,8 +1367,11 @@ class Run:
 
     def interrupted(self, send, attempt, evidence, error):
         """After an attempt is written nothing escapes as 'refused': the attempt gets an outcome (unknown unless one was
-        recorded), the stage fails, and nothing is re-sent."""
-        sq._record_interruption(self.ledger, attempt, error)
+        recorded), the stage fails, and nothing is re-sent. An ordinary exception returns to run_stage, whose decision
+        (decide_stage) fails the stage WITH the sends it did not make, so a reopening can establish its remainder; only
+        an interruption that ends the process fails the stage here, at once (refutation F2: failing it here for every
+        error left a failure that recorded nothing unsent, and a reopened stage that could never send or fail again)."""
+        sq._record_interruption(self.ledger, attempt, error, fail_stage=not isinstance(error, Exception))
         record = {'send': send.record(), 'attempt': attempt['number'], 'stops_stage': True, 'recorded_as': 'interrupted',
                   'findings': [{'code': 'uncertain_outcome', 'why': f'the runner failed after the attempt was written '
                                                                    f'({type(error).__name__}: {str(error)[:300]}); '
@@ -1411,6 +1457,7 @@ def run_stage(campaign, stage, *, secret, provenance, database_prefix=sq.DATABAS
     run.planned = {key: value['maximum_cost'] for key, value in price_sends(
         stage, sends, inputs, scratch, declaration, amendment=amendment,
         remaining=remaining_limits(campaign, stage)).items()}
+    walk = frozen_walk_check(inputs) if stage == 'ordinary_notes' else None       # (refutation F2-FROZEN-WALK)
     reasons, not_sent = [], []
     for send in sends:
         if run.stopped:
@@ -1434,17 +1481,25 @@ def run_stage(campaign, stage, *, secret, provenance, database_prefix=sq.DATABAS
         base['remainder'] = remainder
     if amendment is not None:
         base['amendment'] = amendment.record()
+    if walk is not None:
+        base['frozen_walk'] = walk
     return decide_stage(run, sends, reasons, not_sent, base)
 
 
 def decide_stage(run, sends, reasons, not_sent, base):
-    """passed ONLY when every planned send was made (or recorded as not exercised) and none stopped; failed otherwise,
-    with the reasons and the sends not made. A final leak scan covers the decision's own inputs."""
+    """passed ONLY when every planned send was made (or recorded as not exercised) and none stopped — in THIS run and in
+    every earlier run of the stage (earlier_stops: a send that stopped the stage is never sent again, so a remainder
+    that runs clean after one completes the evidence and is decided failed, naming it); failed otherwise, with the
+    reasons and the sends not made. A final leak scan covers the decision's own inputs."""
     ledger, stage = run.ledger, run.stage
     attempts = [record.get('attempt') for record in run.sends if record.get('attempt')]
+    earlier = earlier_stops(ledger, stage, attempts)
     summary = {'plan': [send.id for send in sends], 'sends': run.sends, 'not_sent': not_sent,
-               'veto_evidence': run.veto_evidence, 'attempts': attempts,
+               'veto_evidence': run.veto_evidence, 'attempts': attempts, 'earlier_stops': earlier,
                'freeze_manifest_sha256': run.inputs['freeze']['manifest_sha256'], **base}
+    if earlier:
+        reasons = list(reasons) + ['the stage cannot pass: an earlier run of it did not end clean — ' + '; '.join(
+            f'{e["send"]} (attempt {e["attempt"]}): {e["why"]}' for e in earlier) + '. A send is never made twice.']
     try:
         late = pc.leaked(run.root, run.secret, exclude=(run.declaration.credential_file,))
     except pc.Refused as refused:
@@ -1535,6 +1590,44 @@ def price_sends(stage, sends, inputs, state_dir, declaration, *, amendment=None,
     return priced
 
 
+def frozen_walk_check(inputs):
+    """Refutation F2-FROZEN-WALK. The frozen N6 mocked walk (diagnostics/notes/app_path_walk.py, whose provider answers
+    through app_path_steps.reference_answer) builds the relations answer in contract v1's shape; the freeze still
+    verifies (the file is unchanged), so nothing said that this engine refuses that answer. Measured here on every
+    relations case — the request compiled by this engine, the frozen builder's answer to it, this engine's parser — and
+    stated in the notes plan and in every notes stage decision. Nothing is sent; no database. Needs Django configured."""
+    from django.core.exceptions import ValidationError
+    from django.test.utils import override_settings
+    from core import generation, v3_field_relations as rel
+    cases = {}
+    try:
+        for case in sorted(inputs['cases']['cases'], key=lambda c: c['id']):
+            if 'field_relations' not in case['send_paths']:
+                continue
+            fields = inputs['cases']['forms'][case['form']]['fields']
+            with override_settings(**steps.PATH_FLAGS['field_relations']):
+                compiled = rel.compile_request(case['notes'], fields, generation.configuration(fields))
+                payload = json.loads(compiled['wire']['messages'][0]['content'])
+                body, _ = steps.reference_answer(case['notes'], fields, payload,
+                                                 steps.reference_selection(case, 'field_relations'))
+                try:
+                    rel.parse(json.dumps(body), compiled['asked'], compiled['units'])
+                    cases[case['id']] = 'accepted'
+                except ValidationError as error:
+                    cases[case['id']] = 'refused: ' + '; '.join(error.messages)
+    except Exception as error:                              # (a statement that cannot be measured says so; never green)
+        return {'walk': 'notes/app_path_walk.py (app_path_steps.reference_answer)', 'path': 'field_relations',
+                'engine_contract': None, 'valid': None, 'cases': cases,
+                'statement': f'not established ({type(error).__name__}: {str(error)[:200]})'}
+    valid = bool(cases) and all(verdict == 'accepted' for verdict in cases.values())
+    return {'walk': 'notes/app_path_walk.py (app_path_steps.reference_answer)', 'path': 'field_relations',
+            'engine_contract': rel.CONTRACT, 'valid': valid, 'cases': cases,
+            'statement': ('the frozen walk\'s field_relations answers are read by this engine' if valid else
+                          f'the frozen walk\'s field_relations answers are refused by this engine ({rel.CONTRACT}): its '
+                          'recorded field_relations results are not evidence for this contract, and a re-run of it '
+                          'fails at the worker (only the field_relations path is measured here)')}
+
+
 def plan_report(stage, declaration, root, state_dir, amendment=None):
     inputs = frozen_inputs()
     campaign = pc.Campaign(declaration, root, amendment=amendment)
@@ -1547,16 +1640,25 @@ def plan_report(stage, declaration, root, state_dir, amendment=None):
     in_force = limits.stage(stage)
     spent, total = campaign.totals(stage)['exposure'], campaign.totals()['exposure']
     worst = sum((priced[s.id]['bound'] for s in sends), Decimal(0))
+    earlier = earlier_stops(campaign.ledger, stage)
     return {'campaign': declaration.campaign, 'stage': stage,
             'declaration': {'commit': declaration.commit, 'sha256': declaration.sha256},
             'freeze_manifest_sha256': inputs['freeze']['manifest_sha256'],
+            'frozen_walk': frozen_walk_check(inputs) if stage == 'ordinary_notes' else None,
             'settings': STAGE_FLAGS[stage], 'order': [
+                # (is_declared: the DECLARATION's own version, never the amendment's — refutation F3-IS-DECLARED;
+                # is_amended: the verified amendment's)
                 {**s.record(), 'maximum_cost': format(priced[s.id]['maximum_cost'], 'f'),
                  'bound_x1_1': format(priced[s.id]['bound'], 'f'), 'pricing_version': priced[s.id]['pricing_version'],
                  'pricing_version_is_declared': priced[s.id]['pricing_version']
-                 == (amendment.pricing_version if amended(amendment, s) else declaration.pricing_version(s.pricing_key)),
+                 == declaration.pricing_version(s.pricing_key),
+                 'pricing_version_is_amended': amended(amendment, s)
+                 and priced[s.id]['pricing_version'] == amendment.pricing_version,
                  'amended': priced[s.id]['amended'], 'basis': priced[s.id]['basis']} for s in sends],
             'sends': len(sends), 'remainder': remainder,
+            # (whatever the sends above do, the stage cannot pass while an earlier run's attempt stopped it or ended
+            # unrecorded — refutation F1; the plan says so before anything is spent)
+            'earlier_stops': earlier, 'can_pass': not earlier,
             'amendment': amendment.record() if amendment is not None else None,
             'stage_worst_case': format(worst, 'f'),
             'stage_limit': format(in_force.limit, 'f'), 'stage_exposure': format(spent, 'f'),

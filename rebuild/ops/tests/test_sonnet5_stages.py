@@ -31,7 +31,9 @@ walk's own builder). What each test proves:
     (in memory here: its committed-file rules are proved in test_provider_campaign), at its pricing version and at a
     maximum recomputed by the same compiler; without it they refuse before anything is created;
   · (REMAINDER) a stage reopened after the live failure's shape sends ONLY the six relations sends that failure did not
-    make, never one already made, and passes on them alone.
+    make, never one already made — and, since N02:field_relations stopped it and is never sent again, is decided FAILED
+    naming that stop (refutation F1: a remainder completes the evidence, never the pass); a stage whose earlier failure
+    stopped before any attempt passes on its remainder.
 """
 import dataclasses
 import io
@@ -764,9 +766,10 @@ else:
             self.assertEqual(done.returncode, 0)
             return done.stdout.strip()
 
-        def failed_and_reopened(self, not_sent=UNSENT):
-            """Attempts 2..16: the plan's sends minus `not_sent`, each completed; failure 1 lists `not_sent`; reopening 1
-            names this checkout's HEAD as the repair."""
+        def failed_and_reopened(self, not_sent=UNSENT, stopper='notes:N02:field_relations'):
+            """Attempts 2..: the plan's sends minus `not_sent`, each completed, with the per-send rows Run.finish writes
+            (`stopper`, if made, stopped the stage — the live shape: attempt 17 there); failure 1 lists `not_sent`;
+            reopening 1 names this checkout's HEAD as the repair."""
             from .test_provider_campaign import attempt, limits_record, usage
             plan = [s.id for s in st.plan_sends('ordinary_notes', self.inputs)]
             made = [send for send in plan if send not in not_sent]
@@ -779,19 +782,26 @@ else:
                 record['send'] = {'id': send}
                 ledger.write_attempt(record)
                 ledger.write_outcome(number, {'class': 'completed', 'usage': usage(input_tokens=2000, output_tokens=300)})
+            rows = [{'send': {'id': send}, 'attempt': number, 'stops_stage': send == stopper,
+                     'recorded_as': 'contract' if send == stopper else None} for number, send in enumerate(made, 2)]
             ledger.write_stage('ordinary_notes', 'failed', {'reasons': ['synthetic'], 'summary': {
-                'plan': plan, 'not_sent': list(not_sent), 'sends': [{'send': {'id': send}} for send in made]}})
+                'plan': plan, 'not_sent': list(not_sent), 'sends': rows}})
             head = self.head()
             ledger.write_reopen('ordinary_notes', 1, {'ledger_attempts': len(ledger.rows()), 'repair_commit': head,
                                                       'runner_commit': head})
             ledger.release()
             return len(made) + 1, head
 
-        def test_a_reopened_stage_sends_only_what_its_failure_did_not_send(self):
+        def test_a_reopened_stage_sends_only_what_its_failure_did_not_send_and_cannot_pass(self):
+            # the live shape: N02:field_relations stopped the stage and is never sent again, so the six complete the
+            # stage's evidence and the stage is decided FAILED, naming that stop — never passed (refutation F1)
             before, head = self.failed_and_reopened()
             result = st.run_stage(self.campaign, self.STAGE, secret=SYNTHETIC_KEY, provenance={'runner_commit': head},
                                   database_prefix='test_quillmd_qa_')
-            self.assertEqual(result['verdict'], 'PASS', result['reasons'])
+            self.assertEqual(result['verdict'], 'FAIL', result['reasons'])
+            self.assertEqual(result['reasons'], [result['reasons'][0]])
+            self.assertIn('cannot pass', result['reasons'][0])
+            self.assertIn('notes:N02:field_relations', result['reasons'][0])
             self.assertEqual([s['send'] for s in self.sent], UNSENT)
             self.assert_every_send_was_durable_and_captured_first()
             rows = self.campaign.ledger.rows()
@@ -805,11 +815,34 @@ else:
                     self.assertEqual((outcome['class'], attempt['pricing_version'], attempt['amendment']),
                                      ('completed', RELATIONS_V2, self.amendment.record()))
                     self.assertEqual(attempt['runner_commit'], head)
+            self.assertIsNone(self.campaign.ledger.stage_record('ordinary_notes', 'passed'))
+            failed = self.campaign.ledger.stage_record('ordinary_notes', 'failed')
+            self.assertEqual(failed['number'], 2)
+            self.assertEqual((failed['summary']['plan'], failed['summary']['not_sent']), (UNSENT, []))
+            self.assertEqual([r['stops_stage'] for r in failed['summary']['sends']], [False] * 6)
+            self.assertEqual([(e['send'], e['attempt']) for e in failed['summary']['earlier_stops']],
+                             [('notes:N02:field_relations', before)])            # (the last one made)
+            self.assertEqual(failed['summary']['remainder']['sends'], UNSENT)
+            self.assertEqual(failed['summary']['remainder']['failure'], 1)
+            self.assertEqual(failed['summary']['amendment'], self.amendment.record())
+            self.assertFalse(failed['summary']['frozen_walk']['valid'])          # (refutation F2-FROZEN-WALK)
+            with self.assertRaises(pc.Refused) as caught:                           # (nothing is left to send)
+                st.pending_sends(self.campaign, self.STAGE, st.plan_sends(self.STAGE, self.inputs))
+            self.assertIn('no remainder', str(caught.exception))
+
+        def test_a_remainder_after_a_stop_before_any_attempt_passes_the_stage(self):
+            # nothing was ever sent for N02:field_relations (it stopped before its attempt was written): it is in the
+            # remainder, and seven clean sends complete the plan with every send made once — a pass that was earned
+            relations = ['notes:N02:field_relations'] + UNSENT
+            before, head = self.failed_and_reopened(not_sent=relations)
+            result = st.run_stage(self.campaign, self.STAGE, secret=SYNTHETIC_KEY, provenance={'runner_commit': head},
+                                  database_prefix='test_quillmd_qa_')
+            self.assertEqual(result['verdict'], 'PASS', result['reasons'])
+            self.assertEqual([s['send'] for s in self.sent], relations)
             passed = self.campaign.ledger.stage_record('ordinary_notes', 'passed')
-            self.assertEqual(passed['summary']['plan'], UNSENT)
-            self.assertEqual(passed['summary']['remainder']['sends'], UNSENT)
-            self.assertEqual(passed['summary']['remainder']['failure'], 1)
-            self.assertEqual(passed['summary']['amendment'], self.amendment.record())
+            self.assertEqual((passed['summary']['plan'], passed['summary']['earlier_stops']), (relations, []))
+            made = sorted(a['send']['id'] for a, _ in self.campaign.ledger.rows() if a['stage'] == 'ordinary_notes')
+            self.assertEqual(made, sorted(s.id for s in st.plan_sends(self.STAGE, self.inputs)))
 
         def test_without_the_amendment_the_remainder_refuses_before_anything(self):
             from core.models import Job, Template
