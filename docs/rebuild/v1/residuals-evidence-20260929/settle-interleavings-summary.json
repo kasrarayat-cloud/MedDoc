@@ -1,0 +1,362 @@
+{
+ "scenarios": 670,
+ "seconds": 232.0,
+ "server_deadlocks_during_run": 2,
+ "failed_scenarios_excluding_control": 0,
+ "control": {
+  "scenarios": 16,
+  "failed": 2,
+  "second_waited": 13,
+  "statuses": [
+   "None"
+  ],
+  "settle_errors": [
+   "40P01"
+  ],
+  "other_errors": [
+   "40P01"
+  ]
+ },
+ "by_party": {
+  "generate_other_document": {
+   "scenarios": 26,
+   "failed": 0,
+   "second_waited": 16,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "generate_on_the_running_document": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 0,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "cancel_another_queued_job": {
+   "scenarios": 24,
+   "failed": 0,
+   "second_waited": 19,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "cancel_the_running_job": {
+   "scenarios": 15,
+   "failed": 0,
+   "second_waited": 12,
+   "statuses": [
+    "409"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "resolve_another_held_job": {
+   "scenarios": 24,
+   "failed": 0,
+   "second_waited": 18,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "resolve_another_held_job_with_a_receipt": {
+   "scenarios": 25,
+   "failed": 0,
+   "second_waited": 19,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "resolve_the_running_job": {
+   "scenarios": 15,
+   "failed": 0,
+   "second_waited": 12,
+   "statuses": [
+    "409"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "absorb_a_failed_job": {
+   "scenarios": 21,
+   "failed": 0,
+   "second_waited": 17,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "reconcile_usage_additional_charge": {
+   "scenarios": 20,
+   "failed": 0,
+   "second_waited": 14,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "reconcile_usage_credit_back": {
+   "scenarios": 20,
+   "failed": 0,
+   "second_waited": 14,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "apply_a_pending_reconciliation": {
+   "scenarios": 27,
+   "failed": 0,
+   "second_waited": 23,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "webhook_credits_a_top_up": {
+   "scenarios": 20,
+   "failed": 0,
+   "second_waited": 14,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "webhook_records_a_refund": {
+   "scenarios": 21,
+   "failed": 0,
+   "second_waited": 15,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "personal_checkout": {
+   "scenarios": 21,
+   "failed": 0,
+   "second_waited": 9,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "department_invitation_existing_account": {
+   "scenarios": 21,
+   "failed": 0,
+   "second_waited": 12,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "clinic_invitation_existing_account": {
+   "scenarios": 23,
+   "failed": 0,
+   "second_waited": 12,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "suspend_the_account": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 3,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "revoke_the_accounts_sessions": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 3,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "reset_the_accounts_mfa": {
+   "scenarios": 18,
+   "failed": 0,
+   "second_waited": 4,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "password_recovery": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 3,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "sign_in": {
+   "scenarios": 22,
+   "failed": 0,
+   "second_waited": 0,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "owner_deactivates_the_membership": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 0,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "owner_creates_a_department": {
+   "scenarios": 18,
+   "failed": 0,
+   "second_waited": 0,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "payer_change": {
+   "scenarios": 18,
+   "failed": 0,
+   "second_waited": 13,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "notes_save_on_another_document": {
+   "scenarios": 20,
+   "failed": 0,
+   "second_waited": 15,
+   "statuses": [
+    "302"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "notes_save_on_the_running_document": {
+   "scenarios": 15,
+   "failed": 0,
+   "second_waited": 0,
+   "statuses": [
+    "409"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "preservation_hold_organization": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 13,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "preservation_hold_department": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 13,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "preservation_hold_patient": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 13,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "preservation_hold_encounter": {
+   "scenarios": 17,
+   "failed": 0,
+   "second_waited": 13,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "preservation_hold_global": {
+   "scenarios": 16,
+   "failed": 0,
+   "second_waited": 13,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "release_a_hold": {
+   "scenarios": 16,
+   "failed": 0,
+   "second_waited": 13,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "mark_stale": {
+   "scenarios": 13,
+   "failed": 0,
+   "second_waited": 0,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  },
+  "second_worker_settles_another_job": {
+   "scenarios": 22,
+   "failed": 0,
+   "second_waited": 18,
+   "statuses": [
+    "None"
+   ],
+   "settle_errors": [],
+   "other_errors": []
+  }
+ }
+}

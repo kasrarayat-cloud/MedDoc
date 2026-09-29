@@ -1,0 +1,29 @@
+Using existing test database for alias 'default' ('quillmd_qa_resid_t1')...
+test_absorb_records_the_receipts_cost_whatever_the_form_carried (core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError.test_absorb_records_the_receipts_cost_whatever_the_form_carried) ... /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/.venv/lib/python3.12/site-packages/django/core/handlers/base.py:61: UserWarning: No directory at: /opt/meddoc-pro/.worktrees/v1-residuals/rebuild/staticfiles/
+  mw_instance = middleware(adapted_handler)
+ok
+test_release_records_the_receipts_cost_as_the_platforms (core.tests.test_settlement_database_error.ResolvingASettlementHeldByADatabaseError.test_release_records_the_receipts_cost_as_the_platforms) ... ok
+test_a_connection_terminated_during_settlement_is_held_for_reconciliation (core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_a_connection_terminated_during_settlement_is_held_for_reconciliation)
+Django closes the broken connection when its rollback fails and the handler reconnects: the same outcome. ... ok
+test_an_error_after_the_settlement_committed_is_absorbed_never_charged (core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_an_error_after_the_settlement_committed_is_absorbed_never_charged)
+The other shape of a DatabaseError 'from settle()': the settlement committed and the error surfaced afterwards ... ok
+test_an_unreachable_database_after_the_termination_waits_for_the_stale_sweep (core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_an_unreachable_database_after_the_termination_waits_for_the_stale_sweep)
+The handler cannot even read the usage table, so the exception leaves run_one (the worker process exits; ... ok
+test_generation_held_for_reconciliation_at_every_stage (core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_generation_held_for_reconciliation_at_every_stage) ... ok
+test_transcription_held_for_reconciliation_and_notes_untouched (core.tests.test_settlement_database_error.SettlementFailsAtTheDatabase.test_transcription_held_for_reconciliation_and_notes_untouched) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 7.530s
+
+OK
+Preserving test database for alias 'default' ('quillmd_qa_resid_t1')...
+Found 7 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: django_otp, messages, staticfiles
+  Apply all migrations: auth, contenttypes, core, otp_totp, sessions
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  No migrations to apply.
+System check identified no issues (0 silenced).

@@ -31,6 +31,16 @@ class RegisterForm(SyntheticAttestation,UserCreationForm):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs); self.drop_synthetic_attestation()
     def clean_email(self): return self.cleaned_data['email'].lower().strip()
+
+#: ⚠️ TWO REQUESTS CAN CREATE ONE NEW ACCOUNT AT THE SAME MOMENT (R-A, docs/rebuild/v1/residuals-assessment-20260929.md).
+#: RegisterForm's unique-email check reads committed rows, so two acceptances of different invitations for one new address
+#: (or two registrations of it) can both pass it; the later account insert then waits on the unique index and fails with an
+#: IntegrityError when the first commits. Its transaction rolled back whole: it created nothing and its invitation is unused.
+#: The views answer it as the same request a moment later is answered (the address already has an account; sign in), never
+#: with a 500 and never with a second account. Only when the account now exists: any other IntegrityError is still raised.
+ACCOUNT_CREATED_MEANWHILE='An account for this email address was created a moment ago. This invitation has not been used: sign in, then open it again to accept it.'
+ACCOUNT_EXISTS='An account with this email address already exists.'
+def account_created_meanwhile(email): return User.objects.filter(email__iexact=email).exists()
 class OTPForm(forms.Form):
     code=forms.CharField(label='Six-digit authenticator code',min_length=6,max_length=6)
 class ScopedForm(forms.Form):
