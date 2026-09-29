@@ -95,7 +95,10 @@ def retain_verified(fields, warnings, manifest, proof, receipt):
 
 
 def qualify(request, evidence_root):
-    if not isinstance(request, dict) or set(request) != {'source', 'mapping', 'answers'}:
+    if not isinstance(request, dict) or set(request) - {'readings'} != {'source', 'mapping', 'answers'}:
+        raise ValueError('Invalid layout request')
+    readings = request.get('readings')
+    if readings is not None and not isinstance(readings, dict):
         raise ValueError('Invalid layout request')
     data = base64.b64decode(request['source'], validate=True)
     if not 0 < len(data) <= 10 * 1024 * 1024 or not data.startswith(b'PK\x03\x04'):
@@ -108,7 +111,7 @@ def qualify(request, evidence_root):
     workspace = Path(tempfile.mkdtemp(prefix='layout-', dir=evidence_root))
     (workspace / 'input.docx').write_bytes(data)
     (workspace / 'request.json').write_bytes(canonical({'operation': 'layout_prepare', 'format': 'docx',
-        'engine': 'v3', 'mapping': mapping, 'answers': answers}))
+        'engine': 'v3', 'mapping': mapping, 'answers': answers, 'readings': readings}))
     try:
         prepared = worker(workspace, 'worker.py')
         manifest = prepared['manifest']
@@ -141,6 +144,7 @@ def qualify(request, evidence_root):
         receipt = {'contract': manifest['contract'], 'source_sha256': digest(data), 'document_sha256': digest(document),
             'mapping_sha256': digest(canonical(mapping)) if mapping is not None else '',
             'answers_sha256': digest(canonical(answers)) if answers is not None else '',
+            **({'readings_sha256': digest(canonical(readings))} if readings is not None else {}),
             'manifest_sha256': digest(canonical(manifest)), 'proof_sha256': digest(canonical(proof)),
             'profile': profile, 'profile_sha256': profile_sha,
             'requested_fonts': manifest['requested_fonts'],

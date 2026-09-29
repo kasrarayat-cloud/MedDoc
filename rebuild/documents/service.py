@@ -36,7 +36,7 @@ def word_engine():
 
 def _run(path, operation, mapping=None, answers=None, output_path=None, *,
          document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,
-         engine=None, targets=None):
+         engine=None, targets=None, identity_keys=None):
     source = Path(path)
     try:
         fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -64,10 +64,15 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
         (workspace / ("input" + suffix)).write_bytes(payload)
         request = {"operation": operation, "format": suffix[1:], "mapping": mapping, "answers": answers,
                    "engine": engine or "legacy", "targets": targets}
-        raw_request = json.dumps(request, ensure_ascii=False).encode()
-        if len(raw_request) > 2 * 1024 * 1024:
-            raise DocumentError("Mapping and answers exceed the 2 MiB processing limit.", "answer_limit")
-        (workspace / "request.json").write_bytes(raw_request)
+        if identity_keys is not None:
+            request["identity_keys"] = list(identity_keys)
+
+        def write_request():
+            raw_request = json.dumps(request, ensure_ascii=False).encode()
+            if len(raw_request) > 2 * 1024 * 1024:
+                raise DocumentError("Mapping and answers exceed the 2 MiB processing limit.", "answer_limit")
+            (workspace / "request.json").write_bytes(raw_request)
+        write_request()
         from .sdk_service import WM_IOV_SHA256, run as run_sdk, SdkUnavailable
         if suffix == ".docx" and digest == WM_IOV_SHA256:
             sdk_request = {"operation": operation}
@@ -92,28 +97,44 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
             if operation == "resolve" or document_backend:
                 raise DocumentError("The advanced Word mapping does not match this original.", "stale_mapping")
             worker = Path(__file__).with_name("worker.py").resolve()
-            try:
-                result = subprocess.run(
-                    [sys.executable, "-I", "-B", str(worker), str(workspace)],
-                    cwd=workspace,
-                    env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "TZ": "UTC"},
-                    capture_output=True, timeout=TIMEOUT_SECONDS, check=False,
-                    start_new_session=True,
-                )
-            except subprocess.TimeoutExpired as exc:
-                raise DocumentError("Document processing exceeded its time limit.", "parser_timeout") from exc
-            if result.returncode != 0:
-                raise DocumentError("The isolated document processor failed or reached a resource limit.", "parser_failed")
-            try:
-                response = json.loads(result.stdout)
-            except (ValueError, UnicodeError) as exc:
-                raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed") from exc
+
+            def isolated():
+                try:
+                    result = subprocess.run(
+                        [sys.executable, "-I", "-B", str(worker), str(workspace)],
+                        cwd=workspace,
+                        env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "TZ": "UTC"},
+                        capture_output=True, timeout=TIMEOUT_SECONDS, check=False,
+                        start_new_session=True,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    raise DocumentError("Document processing exceeded its time limit.", "parser_timeout") from exc
+                if result.returncode != 0:
+                    raise DocumentError("The isolated document processor failed or reached a resource limit.", "parser_failed")
+                try:
+                    return json.loads(result.stdout)
+                except (ValueError, UnicodeError) as exc:
+                    raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed") from exc
+            response = isolated()
+            if isinstance(response, dict) and "readings_needed" in response:
+                # The isolated parser cannot load the pinned syntax model: it names the clauses it must classify, this
+                # trusted parent reads them (documents/syntax_readings.py) and the SAME request runs again with them. A
+                # clause left unread is read inside the sandbox in the holding direction.
+                needed = response["readings_needed"]
+                if not isinstance(needed, list) or not all(isinstance(x, str) for x in needed):
+                    raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed")
+                from .syntax_readings import read_clauses
+                request["readings"] = read_clauses(needed)
+                write_request()
+                response = isolated()
+                if not isinstance(response, dict) or "readings_needed" in response:
+                    raise DocumentError("The isolated document processor returned an invalid response.", "parser_failed")
         needs_layout = response.get("code") == "layout_verification_required"
         if (operation == "inspect" and response.get("layout_pending")) or needs_layout:
             from .layout_transport import verify_document
             try:
                 verified, actual = verify_document(payload, mapping if needs_layout else None,
-                                                   answers if needs_layout else None)
+                                                   answers if needs_layout else None, request.get("readings"))
             except DocumentError as exc:
                 if needs_layout:
                     raise
@@ -180,6 +201,15 @@ def assistance_places(path):
     return _run(path, "assistance_places", engine="v3")
 
 
+def held_places(path, mapping=None):
+    """The ONE authority (word_v3.held_places) over a v3 Word original, in the isolated parser: every held signing,
+    initials, consent, declaration, attestation, protected or authorship place, the anchored places, and - for a
+    supplied mapping - which fields violate a held place. The response carries the original's sha256."""
+    if mapping is not None and (not isinstance(mapping, list) or len(mapping) > 1500):
+        raise DocumentError("The held-place mapping is invalid.", "invalid_mapping")
+    return _run(path, "held_places", mapping, engine="v3")
+
+
 def locate_fields(path, targets: list):
     """Clinician-chosen places -> contract v3 fields with verified anchors (recorded as manual)."""
     if not isinstance(targets, list) or len(targets) > 200:
@@ -206,13 +236,15 @@ def effective_values(path, mapping: list, answers: dict):
 
 
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,
-                  document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None):
-    """Fill only the verified original's mapped fields, writing a new private file."""
+                  document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,
+                  identity_keys=None):
+    """Fill only the verified original's mapped fields, writing a new private file. `identity_keys` (legacy forms
+    only): the clinician-identity fields whose value the caller has validated as the finalizer's own name."""
     if not isinstance(mapping, list) or not isinstance(answers, dict):
         raise DocumentError("Mapping must be a list and answers must be a dictionary.", "invalid_mapping")
     return _run(original_path, "fill", mapping, answers, output_path,
                 document_backend=document_backend, reviewed_requirements=reviewed_requirements,
-                trusted_context=trusted_context, claim_variants=claim_variants)
+                trusted_context=trusted_context, claim_variants=claim_variants, identity_keys=identity_keys)
 
 
 def resolve_template(original_path, document_backend: dict, answers: dict, *, claim_variants=None, trusted_context=None):

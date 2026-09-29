@@ -13,15 +13,20 @@ from django.core.exceptions import ValidationError
 #: diverged on `,` and `;`, and the agreement test only checked one direction.
 TRAILING = ':：.,;· \t'
 
-_ROLE = r"(?:physician|provider|surgeon|clinician|attending|resident|doctor|md|do|np|pa|author)"
-#: A signature answer area names a PERSON. Enumerated deliberately rather than by "contains
-#: signature", because `Signature date` and `Date of signature` are DATE questions — refusing to
-#: finalize them unless they equal the clinician's name would be a false rejection, and this
-#: file has already shipped one of those.
+#: The signer named by the label: one to three words, by STRUCTURE rather than a list of roles ('Consultant signature',
+#: 'Signature of examining clinician', 'Signed by the reviewing nurse'). A word that asks a date or time question (the
+#: DATE_QUESTION words below) is never part of it - `Signature date` and `Date of signature` are DATE questions, and
+#: refusing to finalize them unless they equal the clinician's name would be a false rejection, which this file has
+#: already shipped once - and nor is a preposition or conjunction, which would make the phrase something else than one
+#: noun phrase ('Place of signature', 'Signature and date'). Somebody else's signature is refused by NOT_THE_CLINICIAN.
+_NOT_A_SIGNER = r"(?:date|dated|time|day|of|by|for|and|or|at|in|on|to)\b"
+_WORD = rf"(?!{_NOT_A_SIGNER})[a-z][a-z'.-]*"
+_SIGNER = rf"{_WORD}(?: {_WORD}){{0,2}}"
+#: A signature answer area names a PERSON.
 SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
     r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",
-    rf"{_ROLE}'?s? sign(?:ature|ed)(?: by)?",
-    rf"sign(?:ature|ed)(?: by| of)? (?:the )?{_ROLE}",
+    rf"{_SIGNER}'?s? sign(?:ature|ed)(?: by)?",
+    rf"sign(?:ature|ed)(?: by| of)? (?:the )?{_SIGNER}",
     r"signature ?/ ?date",
 ))
 

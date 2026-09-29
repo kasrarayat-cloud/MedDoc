@@ -127,6 +127,7 @@ def expand(payload,response):
         if (len(change)-7)%3:raise ValidationError('Incomplete mapping option span triple.')
         if not -1<=change[0]<len(payload['fields']):
             raise ValidationError('A mapping change names a field the request does not contain; no proposal was adopted.')
+    used=[]
     def span(ref,start,end,sid,fid,label):
         if not 0<=ref<len(refs):raise ValidationError('Unknown source text reference.')
         owner,role,index=refs[ref]
@@ -141,6 +142,7 @@ def expand(payload,response):
             text=row.get('options',[])[index] if role==3 else row.get(ROLES[role],'')
         if not 0<=start<end<=len(text) or end-start>(MAX_MAPPING_LABEL if label else 200):
             raise ValidationError('Invalid Unicode source span; source text was not truncated.')
+        used.append([ref,start,end,'label' if label else 'option'])
         return text[start:end],text
     owners={}
     for change in body['x']:
@@ -156,7 +158,7 @@ def expand(payload,response):
         label,quoted=span(ref,start,end,sid,fid,True)
         return {'slot':payload['slots'][sid]['slot'],'kind':KINDS[kind],'label':label,'glyph':None if glyph==-1 else glyph,
                 'options':[span(*change[n:n+3],sid,fid,False)[0] for n in range(7,len(change),3)]},quoted
-    replacements={};additions=[];rejected=[];sources={'fields':{},'additions':[],'quoted':{}}
+    replacements={};additions=[];rejected=[];sources={'fields':{},'additions':[],'quoted':{},'refs':{}}
     def reject(number,change,fid,sid,reason):
         rejected.append({'change':number,'wire':None if change is None else list(change),
                          'type':'addition' if fid==-1 else 'replacement',
@@ -164,9 +166,11 @@ def expand(payload,response):
                          'slot':payload['slots'][sid]['slot'] if 0<=sid<len(payload['slots']) else '','reason':reason})
     for number,change in enumerate(body['x']):
         fid,sid=change[0],change[1]
+        used.clear()
         try:built,sources['quoted'][number]=target(change)
         except ValidationError as exc:
             reject(number,change,fid,sid,' '.join(exc.messages));continue
+        finally:sources['refs'][number]=[list(row) for row in used]
         if fid==-1:additions.append(built);sources['additions'].append(number)
         else:replacements[fid]=built;sources['fields'][payload['fields'][fid]['key']]=number
     for fid in body['f']['r']:

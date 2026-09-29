@@ -168,10 +168,10 @@ class RetainedLiveResponse(TestCase):
         self.assertEqual({v['slot']: v['verdict'] for v in review['verdicts']['slots']}, returned)
         # Every rejection is recorded in the stored proposal with its wire change and reason.
         slots = [row['slot'] for row in self.payload['slots']]
-        rejected = review['rejected_changes']
-        self.assertEqual([(r['change'], r['wire'], r['type'], r['key'], r['slot']) for r in rejected],
-                         [(0, [0, 3, 0, 3, 0, 79, -1], 'replacement', 'v3_1', slots[3]),
-                          (1, [1, 7, 2, 6, 0, 40, -1], 'replacement', 'v3_2', slots[7])])
+        rejected = sorted(review['rejected_changes'], key=lambda r: r['key'])
+        self.assertEqual([(r['id'], r['wire'], r['type'], r['key'], r['slot']) for r in rejected],
+                         [(mapping.change_id([0, 3, 0, 3, 0, 79, -1]), [0, 3, 0, 3, 0, 79, -1], 'replacement', 'v3_1', slots[3]),
+                          (mapping.change_id([1, 7, 2, 6, 0, 40, -1]), [1, 7, 2, 6, 0, 40, -1], 'replacement', 'v3_2', slots[7])])
         self.assertIn('Source text belongs to another destination.', rejected[0]['reason'])
         self.assertIn('Replacement target belongs to another field destination.', rejected[1]['reason'])
         # Each field is held by a KEYED unresolved record on its own destination (so 'I checked its mapped answer

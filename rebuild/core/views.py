@@ -598,6 +598,13 @@ def v3_save_corrections(request,t):
         if not (removed or renamed or kind_changed):
             messages.info(request,'Nothing changed, so no new mapping version was saved.')
             return redirect('template_detail',pk=t.pk)
+        # ⚠️ THE ONE AUTHORITY (word_v3.held_places): a corrected field - a changed kind or a new label - never becomes an
+        # answer on a held signing, initials, consent, declaration or attestation place.
+        held=v3_mapping.held_violations(latest,fields)
+        changed=set(kind_changed)|{row['key'] for row in renamed}
+        if held.keys()&changed:
+            raise ValidationError('These fields are on a signing, initials, consent, declaration or attestation place and cannot be '
+                                  'changed into an answer there: '+v3_mapping.held_labels(fields,held.keys()&changed)+' Nothing was saved.')
         version=v3_new_version(request,t,latest,fields,removed=removed,kind_changed=kind_changed,renamed=renamed)
     messages.success(request,f'Mapping version {version.number} saved with your corrections. Confirm it before creating documents; existing documents keep their original version.')
     return redirect('template_detail',pk=t.pk)
@@ -658,6 +665,12 @@ def v3_confirm(request,t):
         if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
         off_box=v3_mapping.checkboxes_off_box(latest.fields)
         if off_box:raise ValidationError('These checkbox fields point at a place that is not a box: '+field_list(off_box)+' Remove each one and add it again on its printed box or checkbox control, or as text.')
+        # ⚠️ THE ONE AUTHORITY: a version whose answerable field touches a held signing, initials, consent, declaration or
+        # attestation place is never confirmed, whoever made that field (the engine before this rule, a clinician, a model).
+        held=v3_mapping.held_violations(latest)
+        if held:raise ValidationError('These fields put an answer on a signing, initials, consent, declaration or attestation place: '
+                                      +v3_mapping.held_labels(latest.fields,held)+' Remove each one (or map the place as a signature '
+                                      'or initials area) before confirming this mapping.')
         if latest.confirmed:
             messages.info(request,'This mapping version was already confirmed.')
             return redirect('template_detail',pk=t.pk)
@@ -1091,6 +1104,7 @@ def save_answers(request,pk):
     if is_wm and any(request.POST.get('claim_reviewed_'+row['key'])=='on' for row in e.template_version.review_requirements):
         membership(request.user,e.department,roles=['owner','clinician'])
     answers={};review_errors=[];newly_accepted=[];withdrawn=[];newly_blank=[];withdrawn_blank=[];target_revision=e.revision+1
+    held_state=[None]   # the held-place report, read once and only when a v3 answer is given
     previous_answers=dict(e.answers)
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
     from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
@@ -1220,6 +1234,20 @@ def save_answers(request,pk):
             # finalization and export would refuse it later.
             try:value=v3_mapping.normalize(field,value)
             except ValidationError as exc:return document_refusal(request,e,error_message(exc)+' Nothing was saved.',400)
+            # ⚠️ THE ONE AUTHORITY, AS FILL WILL APPLY IT: no answer on a held signing, initials, consent, declaration or
+            # attestation place (like a write-protected area), and no value in a held column of a table.
+            if value.strip():
+                if held_state[0] is None:
+                    try:held_state[0]=(v3_mapping.held_violations(e.template_version),v3_mapping.held_columns(e.template_version))
+                    except ValidationError as exc:return document_refusal(request,e,error_message(exc),409)
+                violations,columns=held_state[0]
+                if key in violations:
+                    return document_refusal(request,e,'"'+v3_mapping.label_of(field)+'" is on a signing, initials, consent, declaration '
+                                            'or attestation place. It remains unchanged; review the original and complete it by hand. '
+                                            'Nothing was saved.',400)
+                if field.get('kind')=='table_rows' and v3_mapping.held_cells_answered(field,value,columns.get(key)):
+                    return document_refusal(request,e,'"'+v3_mapping.label_of(field)+'" has a signing, initials or attestation column '
+                                            'that stays unchanged; leave that column empty. Nothing was saved.',400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
         answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,
@@ -1468,12 +1496,23 @@ def finalize(request,pk):
                 # passed the fresh fields as the mapping and the two were equal by construction.
                 version=e.template_version
                 validate_identity(version.fields,e.answers,request.user)
+                # ⚠️ THE ONE AUTHORITY BEFORE ANY EXPORT: a mapping with an answerable field on a held signing, initials,
+                # consent, declaration or attestation place (stored before the rule, or made by hand or by a model) is not
+                # exported at all; the engine's fill refuses each such write again.
+                if is_v3 and (held:=v3_mapping.held_violations(version)):
+                    raise ValidationError('This form mapping puts an answer on a signing, initials, consent, declaration or attestation '
+                                          'place: '+v3_mapping.held_labels(version.fields,held)+' Nothing was finalized. Correct and '
+                                          'confirm the mapping, then start a new document from it.')
                 # A v3 answer is re-read from its text form (the same reader as saving) and converted per kind: an
                 # option label, a list of labels, a ticked box, table rows. The engine checks every anchor's
                 # fingerprint and refuses a stale one; its message is shown as it is.
                 answers=(v3_mapping.fill_answers(version.fields,e.answers) if is_v3
                          else {k:v['text'] for k,v in e.answers.items()})
-                fill_template(original,version.fields,answers,out)
+                # A legacy form's clinician-identity rows may carry the finalizer's own name (validate_identity above);
+                # every other legacy write into a held place is refused by the engine.
+                from .tab_review import clinician_identity
+                fill_template(original,version.fields,answers,out,
+                              identity_keys=None if is_v3 else [f['key'] for f in version.fields if clinician_identity(f)])
             out.chmod(0o600)
             # ⚠️ THE REVISION IS NOT RENUMBERED HERE, DELIBERATELY: the record keeps the revision its review is bound to.
             # The Word receipt's binding (`source_revision`) and each reviewed answer's `review_revision` name THIS

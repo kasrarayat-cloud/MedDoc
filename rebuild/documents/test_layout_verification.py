@@ -29,8 +29,9 @@ def tab_form(**kwargs):
     return TabColumnOwnership().form(**kwargs)
 
 
-def synthetic_verified(raw, mapping=None, answers=None):
-    """Mock only the external renderer in application contract tests."""
+def synthetic_verified(raw, mapping=None, answers=None, readings=None):
+    """Mock only the external renderer in application contract tests. (`readings`: the parent's syntax readings the
+    real verifier forwards to its isolated preparer; in-process the same pinned parser reads the same clauses.)"""
     prepared, actual, _ = source.prepare(raw, mapping=mapping, answers=answers)
     fields = prepared['fields']
     for field in fields:

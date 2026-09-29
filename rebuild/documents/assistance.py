@@ -33,49 +33,16 @@ def outline(data):
     return {'contract': word.CONTRACT, 'slots': rows}
 
 
-#: What the engine holds, in the order a place's reason is named when several apply.
-HOLDS = ('signing', 'consent', 'protected', 'authorship')
+#: What the engine holds, in the order a place's reason is named when several apply (word_v3.HELD_CODES).
+HOLDS = word.HELD_CODES
 
 
 def places(data):
-    """What the deterministic engine itself holds at each place of a blank original, for the model-assisted mapping
-    place rule (core.mapping_assistance). Nothing is written. Every reader here is the engine's own:
-
-      signing     every place a signature/initials area of the detection writes to, or a paragraph (each printed
-                  part alone, word.label_parts) or a table row label the engine's kind rule reads as
-                  signature/initials;
-      consent     a question box whose printed question or section is a signing/consent context
-                  (Detector.question_box_signing);
-      protected   every place fill refuses to write (word.protected_places: each write-protected area's anchor, the
-                  protected regions and the protected legacy text fields);
-      authorship  a printed patient-role section or an attestation answer cell (source_policy).
-
-    `held` maps a place to its first reason in HOLDS order; `anchored` lists every place inside a header/footer,
-    text box, drawing, object or positioned frame (word.floating_place)."""
-    package = word.open_package(data)
-    source = word.Detector(package, layout_proposal=True)
-    source.detect()
-    index = source.index
-    protected, regions, legacy = word.protected_places(package, source, index)
-    found = {code: set() for code in HOLDS}
-    for area in source.areas:
-        if area.kind in word.SIGNING_KINDS:
-            found['signing'].update(word.field_locations(word.area_to_field(0, area)))
-    for slot in index.slots:
-        if slot.kind == 'p' and word.signing_wording(source.ptext(slot.el)[0]):
-            found['signing'].add(slot.id)
-        cell = source.host_cell(slot) if slot.kind == 'tc' else None
-        if cell is not None and word.signing_wording(source.row_label(cell.parent, cell.info['row'], cell.info['col'])):
-            found['signing'].add(slot.id)
-        if slot.kind == 'tc' and source_policy.attestation_statement(source, slot):
-            found['authorship'].add(slot.id)
-    found['consent'] = source.signing_boxes | protected.signing_boxes
-    found['protected'] |= set(regions) | set(legacy)
-    found['authorship'] |= {root for root, role in source_policy.roles(source).items() if role}
-    held = {}
-    for code in HOLDS:
-        for identity in found[code]:
-            held.setdefault(identity, code)
-    anchored = sorted(slot.id for slot in index.slots if word.floating_place(slot))
-    return {'contract': word.CONTRACT, 'held': sorted([identity, code] for identity, code in held.items()),
-            'anchored': anchored}
+    """What the ONE authority holds at each place of a blank original (word_v3.held_places), for the model-assisted
+    mapping place rule, in this module's historical shape: `held` lists [place, first reason in HOLDS order] and
+    `anchored` every place inside a header/footer, text box, drawing, object or positioned frame (word.floating_place).
+    The signing, consent and authorship readers that used to live here are the authority's own now; nothing here reads
+    whether a cell is empty or whether the engine made an area. Nothing is written."""
+    report = word.held_report(data)
+    return {'contract': report['contract'], 'held': sorted([row['slot'], row['code']] for row in report['held']),
+            'anchored': report['anchored']}

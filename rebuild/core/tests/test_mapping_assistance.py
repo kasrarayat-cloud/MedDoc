@@ -525,8 +525,9 @@ class MappingAssistance(TestCase):
         self.assertIn(prior,result['fields'])
         self.assertTrue(any('Signature' in row['reason'] for row in result['review']['unresolved']))
         # The writer-level refusal is recorded in the stored proposal with its wire change.
-        self.assertEqual([(r['change'],r['wire'],r['type'],r['key'],r['check']) for r in result['review']['rejected_changes']],
-                         [(0,body['x'][0],'replacement',prior['key'],'source')])
+        # A change is named by its CONTENT (never its position in the response), so every order gives the same record.
+        self.assertEqual([(r['id'],r['wire'],r['type'],r['key'],r['check']) for r in result['review']['rejected_changes']],
+                         [(mapping.change_id(body['x'][0]),body['x'][0],'replacement',prior['key'],'source')])
         self.assertIn('Signature or initials areas cannot become generated answers.',result['review']['rejected_changes'][0]['reason'])
 
     def test_harmful_changes_are_never_adopted_beside_an_adopted_one(self):
@@ -554,7 +555,8 @@ class MappingAssistance(TestCase):
         self.assertIn(history,result['fields']);self.assertIn(signing,result['fields'])
         self.assertFalse(any(f['kind'] not in ('signature','initials') and mapping.v3_mapping.is_mapped(signature_slot,
                              mapping.v3_mapping.mapped_slots([f])) for f in result['fields']))
-        rejected={r['change']:r for r in review['rejected_changes']}
+        ids=[mapping.change_id(change) for change in body['x']]
+        rejected={ids.index(r['id']):r for r in review['rejected_changes']}
         self.assertEqual(sorted(rejected),[1,2,3])
         self.assertEqual((rejected[1]['check'],rejected[2]['check'],rejected[3]['check']),('source','wire','wire'))
         self.assertIn('Signature or initials areas cannot become generated answers.',rejected[1]['reason'])
@@ -587,12 +589,14 @@ class MappingAssistance(TestCase):
                 self.assertIn('Signature or initials areas cannot become generated answers.',
                               result['review']['rejected_changes'][0]['reason'])
                 self.assertTrue(any(row['slot']==signature_slot for row in result['review']['unresolved']))
-        # The label reader is the ENGINE's kind rule on each printed part (plus the product's clinician-signature rule):
-        # 'Initial assessment' is an initials label to the engine (its own inspect gives that line kind 'initials').
+        # The label reader is the ENGINE's kind rule on each printed part (plus the product's clinician-signature rule).
+        # The adjective 'initial' ('Initial assessment', 'Initial diagnosis') is an ordinary label: the pinned parser reads
+        # it as a noun's modifier (the U1/U2 over-hold is gone); 'Initial:' and 'Initial here' are still initials.
         for text,signing in (('Signature: ____________',True),('Initials: ______',True),('Signature ……',True),
                              ('Patient signature: ________',True),('Signed by (witness)',True),('Patient initials',True),
                              ('Initial:',True),('Initial: ______',True),('Initial ……',True),('Sign here',True),('Signature date',False),('Date of signature',False),
-                             ('Date signed',False),('Initial assessment',True),('Initial diagnosis',True),('Plan',False),
+                             ('Date signed',False),('Initial assessment',False),('Initial diagnosis',False),('Plan',False),
+                             ('Initial here',True),('Countersigned by: ______',True),('Consultant signature and date: ____',True),
                              ('Signature/Date',True),('Name of Participant\t\tDate\t\tSignature',True),('Name\t\tDate',False)):
             with self.subTest(text=text):
                 self.assertEqual(mapping.signing_label(text),signing)

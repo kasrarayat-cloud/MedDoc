@@ -34,7 +34,7 @@ def send(stream, value):
     stream.sendall(struct.pack('!I', len(payload)) + payload)
 
 
-def verify_document(data, mapping=None, answers=None):
+def verify_document(data, mapping=None, answers=None, readings=None):
     from .service import DocumentError
     try:
         from django.conf import settings
@@ -52,6 +52,9 @@ def verify_document(data, mapping=None, answers=None):
         if not path.is_absolute() or not stat.S_ISSOCK(meta.st_mode) or meta.st_uid != int(expected_uid):
             raise ValueError('Untrusted layout endpoint')
         request = {'source': base64.b64encode(data).decode(), 'mapping': mapping, 'answers': answers}
+        if readings is not None:
+            # The parent's syntax readings (word_v3.CANDIDATE clauses), bound by the receipt like the mapping.
+            request['readings'] = readings
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stream:
             stream.settimeout(100)
             stream.connect(str(path))
@@ -66,6 +69,8 @@ def verify_document(data, mapping=None, answers=None):
         for name, value in [('mapping', mapping), ('answers', answers)]:
             expected = hashlib.sha256(canonical(value)).hexdigest() if value is not None else ''
             if receipt[name + '_sha256'] != expected: raise ValueError('Wrong request receipt')
+        if readings is not None and receipt.get('readings_sha256') != hashlib.sha256(canonical(readings)).hexdigest():
+            raise ValueError('Wrong request receipt')
         output = base64.b64decode(response['document'], validate=True)
         if not 0 < len(output) <= 30 * 1024 * 1024 or hashlib.sha256(output).hexdigest() != receipt['document_sha256']:
             raise ValueError('Wrong output receipt')

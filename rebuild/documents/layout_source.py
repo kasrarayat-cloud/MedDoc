@@ -296,6 +296,9 @@ def prepare(data, *, mapping=None, answers=None):
     if not candidates or len(candidates) > MAX_CANDIDATES:
         w.fail("No bounded tab-column proposal is available.", "layout_unresolved")
     fields = w.mapped_fields(detector, areas)
+    # The layout-verified inspection is a NEW inspection too: the ONE authority write-protects any field it found on a
+    # held place, exactly as word_v3.inspect does (same detection kind, so the same held places as fill).
+    w.protect_held(package, fields, detector)
     descriptions = []
     for header, row, area in candidates:
         field = next((f for f in fields if f["locator"]["part"] == row.part

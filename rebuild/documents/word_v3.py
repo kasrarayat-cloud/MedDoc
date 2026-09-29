@@ -1275,8 +1275,155 @@ def many_evidence(texts, options):
                     scale = False
     return positive, unrepresented, bounded, scale
 
-SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b|\bsign(?:ed)? here\b", re.I)
-INITIALS = re.compile(r"\binitials?\b|\binitial (?:the )?box", re.I)
+# ─── syntax readings: the pinned parser's reading of a word whose signing sense depends on its grammatical role ──────
+#: A word is read through its CLAUSE (the printed text between label breaks and sentence punctuation), never alone:
+#: 'initial' is an initials instruction as the head of its clause ('Initial here', 'Initials', 'Nurse to initial') and an
+#: ordinary adjective as a noun's modifier ('Initial assessment'); 'sign' is a signing caption or instruction as a verb or
+#: as the whole caption ('Sign below', 'Sign:') and a clinical noun otherwise ('Sign of infection'); 'I'/'we' are a
+#: first-person subject as a pronoun ('I declare ...') and not as a numeral ('Type I'); a consent statement is an
+#: attestation when its clause embeds the consent under a governing verb ('Record that the patient consents ...').
+#: The parser (core.v3_syntax's pinned model) cannot run inside the isolated parser, so the trusted parent reads the
+#: clauses this module asks for and passes the readings in (documents/syntax_readings.py, service._run). A clause
+#: without a reading is read in the HOLDING direction: the word is a signing/first-person word and the consent is embedded.
+#: 'I'/'we' are candidates only before a word, a contraction or a comma ('I confirm', 'I'm', 'I, the undersigned'), never
+#: inside an abbreviation ('I/O', 'I.V.', 'I:E').
+_PRONOUN_NEXT = r"(?=\s+[A-Za-z]|['’](?:m|ve|d|ll|re)\b|\s*,)"
+CANDIDATE = re.compile(r"(?i:\binitial\b|\b(?:counter-?|co-?|under|re-)?sign\b)|\bI" + _PRONOUN_NEXT + r"|(?i:\bwe\b)" + _PRONOUN_NEXT)
+CONSENT = re.compile(r"\bconsent(?:s|ed|ing)?\b", re.I)
+CLAUSE_BREAK = re.compile("|".join((r"\t+", r"\x00+", SEGMENTED.pattern, DIGIT_RUN.pattern, UNDERSCORES.pattern,
+                                    DOTS.pattern, r"[.;:?!]+(?=\s|$)", r"[()\[\]{}<>|\n\r\u2028\u2029\u2022\u2610\u2612\u2611]+")))
+MAX_READING_CLAUSES = 4000
+MAX_CLAUSE_CHARS = 400
+#: {clause: {"s": [ordinals of CANDIDATE words with the signing/first-person sense], "c": consent embedded (bool)}}.
+#: None: no reading was supplied (an in-process caller): the local pinned parser is used when importable.
+READINGS = None
+_LOCAL = {}
+
+
+def use_readings(readings):
+    """Install the parent's readings for this request (the isolated worker); {} reads every clause as holding."""
+    global READINGS
+    if readings is not None and not isinstance(readings, dict):
+        fail("The syntax readings are invalid.", "invalid_mapping")
+    READINGS = readings
+
+
+def clause_key(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip(" :–—-_*\u2022").strip()
+
+
+def clauses_of(text: str):
+    """(start, end, key) for each clause of `text`: the pieces between label breaks and sentence punctuation."""
+    out, start = [], 0
+    text = text or ""
+    for m in list(CLAUSE_BREAK.finditer(text)) + [None]:
+        end = m.start() if m is not None else len(text)
+        key = clause_key(text[start:end])
+        if key:
+            out.append((start, end, key))
+        if m is not None:
+            start = m.end()
+    return out
+
+
+def reading_of(key: str):
+    """The reading of one clause, or None (read as holding)."""
+    if READINGS is not None:
+        reading = READINGS.get(key)
+    else:
+        if key not in _LOCAL:
+            if len(_LOCAL) > 20000:
+                _LOCAL.clear()               # a bounded in-process cache; a cleared clause is simply read again
+            _LOCAL[key] = None
+            if __package__ and len(key) <= MAX_CLAUSE_CHARS:
+                try:
+                    from .syntax_readings import read_clauses
+                    _LOCAL[key] = read_clauses([key]).get(key)
+                except Exception:          # the parser is unavailable here: read as holding
+                    _LOCAL[key] = None
+        reading = _LOCAL[key]
+    if not isinstance(reading, dict) or not isinstance(reading.get("s"), list):
+        return None
+    return reading
+
+
+def word_sense(text: str, offset: int) -> bool:
+    """Whether the CANDIDATE word at `offset` of `text` carries its signing / first-person sense."""
+    for start, end, key in clauses_of(text):
+        if start <= offset < end:
+            reading = reading_of(key)
+            if reading is None:
+                return True
+            ordinal = sum(1 for m in CANDIDATE.finditer(text[start:end]) if start + m.start() < offset)
+            return ordinal in reading["s"]
+    return True
+
+
+def embedded_consent(text: str) -> bool:
+    """A clause of `text` names the consent act (any inflection) under a governing verb (a clausal complement)."""
+    for _, _, key in clauses_of(text):
+        if CONSENT.search(key):
+            reading = reading_of(key)
+            if reading is None or reading.get("c") is True:
+                return True
+    return False
+
+
+def first_person(text: str) -> bool:
+    """A clause of `text` has a first-person pronoun ('I', 'we') the parser reads as a pronoun."""
+    return any(m.group(0).lower() in ("i", "we") and word_sense(text, m.start()) for m in CANDIDATE.finditer(text or ""))
+
+
+def reading_clauses(package) -> list:
+    """Every clause of this package's printed text that a reading can decide (CANDIDATE words, the consent act): what
+    the isolated parser asks the trusted parent to read before it classifies anything. Each printed text is offered
+    as printed and as the engine's labels read it (clean_label), so a reader meets the clause it was given a reading for."""
+    index = SlotIndex(package)
+    texts = []
+    for slot in index.slots:
+        if slot.kind in ("p", "glyphs"):
+            texts += [paragraph_text(slot.el)[0], text_of(slot.el), text_of(slot.el, own=False)]
+        elif slot.kind in ("tc", "txbx"):
+            texts.append(text_of(slot.el, own=False))
+        elif slot.kind == "sdt":
+            texts += [slot.info.get("alias") or "", slot.info.get("tag") or ""]
+        elif slot.kind == "ff":
+            texts += [slot.info.get("name") or ""] + list(slot.info.get("options") or [])
+    found = set()
+    for text in texts:
+        for variant in (text, clean_label(text, limit=None), re.sub(r"\s+", " ", text or "").strip()):
+            for _, _, key in clauses_of(variant):
+                if len(key) <= MAX_CLAUSE_CHARS and (CANDIDATE.search(key) or CONSENT.search(key)):
+                    found.add(key)
+    return sorted(found)[:MAX_READING_CLAUSES]
+
+
+class _SigningWords:
+    """A signing-wording reader with `search` (every caller keeps its `.search(text)`): the printed forms that are always
+    signing words (`fixed`, inflections included) or the ambiguous `word` in its signing sense (word_sense)."""
+
+    def __init__(self, fixed, word):
+        self.fixed, self.word = fixed, word
+
+    def search(self, text):
+        text = text or ""
+        found = self.fixed.search(text)
+        if found:
+            return found
+        for m in CANDIDATE.finditer(text):
+            if re.sub(r"^(?:counter-?|co-?|under|re-)", "", m.group(0).lower()) == self.word and word_sense(text, m.start()):
+                return m
+        return None
+
+
+#: 'signed' inside 'countersigned'/'co-signed'/'undersigned', 'signature' inside 'countersignature', 'signatory'.
+SIGNATURE = _SigningWords(re.compile(r"\b(?:counter-?|co-?|under|re-)?sign(?:atures?|ed|ing|atory|atories)\b|"
+                                     r"\bsign-?offs?\b|\bsign(?:ed)? here\b", re.I), "sign")
+#: 'Initials', 'initialled'/'initialed'/'initialling', 'initial (the) box'; the singular 'initial' by its reading.
+INITIALS = _SigningWords(re.compile(r"\binitials\b|\binitial(?:l?ed|l?ing)\b|\binitial (?:the )?box", re.I), "initial")
+#: One blank captioned for BOTH acts ('signature and date', 'sign & date', 'initial and date'): the signer's attestation.
+SIGN_AND_DATE = re.compile(r"\b(?:(?:counter-?|co-?)?sign\w*|initial\w*)\s*(?:and|&|\+|/)\s*dat\w*|"
+                           r"\bdat\w*\s*(?:and|&|\+|/)\s*(?:(?:counter-?|co-?)?sign\w*|initial\w*)", re.I)
 DATE_LABEL = re.compile(r"\b(?:date|dob|d\.o\.b|born)\b|mm/dd|dd/mm|yyyy|\bD[DT]\s*\((?:dictated|transcribed)\)", re.I)
 TIME_LABEL = re.compile(r"\btime\b|hh:mm|\(24.?h", re.I)
 LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|notes?|summary|history|findings|plan|narrative|reason)\b", re.I)
@@ -1286,9 +1433,12 @@ def kind_for_label(label: str) -> str:
     """The kind the engine gives ONE printed label (Detector.kind_for). A caption row holding several labels is read
     through `label_parts`, never as one joined label: there a date part would excuse its signature part."""
     label = label or ""
-    if SIGNATURE.search(label) and not DATE_LABEL.search(label):
+    # A date question about a signature ('Signature date', 'Date signed') stays a date; ONE blank captioned for both
+    # acts ('Consultant signature and date') is the signer's attestation, never a generated date.
+    dated = DATE_LABEL.search(label) and not SIGN_AND_DATE.search(label)
+    if SIGNATURE.search(label) and not dated:
         return "signature"
-    if INITIALS.search(label) and not DATE_LABEL.search(label):
+    if INITIALS.search(label) and not dated:
         return "initials"
     # A free-text destination asking for description keeps the whole
     # answer even when its printed question also mentions a date or time.
@@ -4792,7 +4942,8 @@ class Detector:
         if reading != text and re.search(
                 r"\b(?:(?:counter|under|co|re)[ -]?)?sign(?:s|ed|ing|off|offs)?\b", reading, re.I):
             return True
-        return SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
+        # Every inflection of the consent act ('consents', 'consented', 'consenting'), not the bare noun only.
+        return SIGNATURE.search(reading) or INITIALS.search(reading) or CONSENT.search(reading)
 
     def previous_question_source(self, question, raw, context):
         """Resolve only the immediately preceding, already owned question box.
@@ -5802,8 +5953,25 @@ def inspect(data: bytes) -> dict:
     detector = Detector(package)
     areas, notes = detector.detect()
     fields = mapped_fields(detector, areas)
+    protect_held(package, fields)
     return {"contract": CONTRACT, "fields": fields, "notes": notes,
             "layout_pending": len(detector.layout_candidates)}
+
+
+def protect_held(package, fields, source=None):
+    """NEW inspections only: a field the engine found on a place the authority holds (held_places) is kept visible but
+    write-protected, with the held reason as its review reason - the existing keys, never a new one. A stored mapping
+    is never rewritten: its fields are judged by the same authority at confirmation, generation, save and fill."""
+    if source is None:
+        source = Detector(package, layout_proposal=True)
+        source.detect()
+    held = held_places(package, source)
+    for field in fields:
+        found = held_violation(source.index, held, field)
+        if found:
+            field["write_protected"] = True
+            field["review_reason"] = HELD_REASONS[found[1].code]
+    return fields
 
 
 # ─── fill ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -6560,6 +6728,383 @@ def floating_place(slot) -> bool:
     return False
 
 
+# ─── the ONE structure-only authority over signing, initials, identity and attestation places ─────────────────────
+#: Every writer and reader of a contract v3 mapping consults `held_places` (fill, inspect, locate, and through the
+#: isolated parser the mapping confirmation, model adoption, manual edits, generation and review save). It reads the
+#: ORIGINAL's structure only - never whether a cell is empty, and never whether the engine happened to make an area:
+#:   signing      a paragraph's own printed part, a cell's column header or row label, a box's own printed guidance, a
+#:                content control's alias or tag, or a drawn box's header/label/instruction/section, read by the engine's
+#:                kind rule (kind_for_label) as a signature or initials label;
+#:   consent      a question box whose printed question or section is a signing/consent context (question_box_signing),
+#:                read before and whatever the box holds;
+#:   declaration  a first-person statement ('I declare ...', 'We confirm ...') in a paragraph, a row label or a question
+#:                box's question, and the heading of a block holding one;
+#:   attestation  a printed statement embedding the consent act under a governing verb ('Record that the patient
+#:                consents to proceed'): attestation-like, its author unresolved;
+#:   protected    everything fill already protects (protected_places) and a locked content control;
+#:   authorship   a printed patient-role section and an attestation answer cell (source_policy).
+#: A place is `held`; a field VIOLATES a held place when it is answerable there (held_violation). The codes are ordered by
+#: which is named first when several apply.
+HELD_CODES = ("signing", "consent", "protected", "authorship", "declaration", "attestation")
+HELD_REASONS = {
+    "signing": "A signature or initials place is completed by hand; it never takes a generated or model-proposed answer.",
+    "consent": "A signing or consent question box needs the clinician's own act; it never takes a generated answer.",
+    "declaration": "A first-person declaration is the signer's own statement; it is never answered from notes or by a model.",
+    "attestation": ("This printed statement records a consent or attestation whose author is not established; it is held "
+                    "for the clinician and never answered automatically."),
+    "protected": "This area is protected on the form and stays unchanged.",
+    "authorship": "A printed authorship or attestation area takes an answer only under its printed answer policy.",
+}
+#: The most printed words a box's own signing caption has ('Signature of the examining clinician'): a longer sentence is
+#: guidance that mentions signing, never the caption of a signing box.
+CAPTION_WORDS = 8
+#: Codes a field carrying the place's printed answer policy may still answer (source_policy governs those answers).
+POLICY_CODES = frozenset(("declaration", "attestation", "authorship"))
+
+
+@dataclass(frozen=True)
+class Held:
+    code: str
+    evidence: str
+    ranges: tuple = None           # None: the whole place; else ((start, end), ...) of the paragraph's printed text
+    codes: frozenset = frozenset()
+    #: Held only because its printed wording names a signing act while the place itself shows option boxes ('Consent
+    #: form signed? ☐ Yes ☐ No', a 'Signed' column of tick boxes): a box SELECTION there records a fact and is
+    #: allowed; any written answer is not.
+    selection: bool = False
+
+
+def _shown(text, limit=120):
+    text = re.sub(r"\s+", " ", (text or "").replace("\x00", "[field]")).strip()
+    return text if len(text) <= limit else text[:limit - 1] + "\u2026"
+
+
+def label_segments(text):
+    """(start, next_start, label) for each separately printed label of one paragraph's text (label_parts): the label
+    and the blank printed after it, up to where the next label starts."""
+    text = text or ""
+    out, start = [], 0
+    for m in list(LABEL_BREAK.finditer(text)) + [None]:
+        end = m.start() if m is not None else len(text)
+        after = m.end() if m is not None else len(text)
+        label = clean_label(text[start:end])
+        if label:
+            # A blank printed BEFORE the first label ('____ Signature') belongs to that label.
+            out.append((0 if not out else start, after, label))
+        start = after
+    return out
+
+
+def signing_label_kind(label) -> bool:
+    return kind_for_label(clean_label(label or "")) in SIGNING_KINDS or signing_wording(label or "")
+
+
+def statement_code(text):
+    """'declaration' for a first-person statement, 'attestation' for an embedded consent, else None."""
+    if not text or not text.strip():
+        return None
+    if first_person(text):
+        return "declaration"
+    if embedded_consent(text):
+        return "attestation"
+    return None
+
+
+def held_places(package, source=None, protected=None) -> dict:
+    """{slot id: Held} for one original package (see the comment above HELD_CODES). `source` is a detected
+    Detector(package, layout_proposal=True) when the caller already has one; `protected` is protected_places' result."""
+    if source is None:
+        source = Detector(package, layout_proposal=True)
+        source.detect()
+    index = source.index
+    if protected is None:
+        protected = protected_places(package, source, index)
+    _, protected_slots, legacy = protected
+    found = {}
+
+    def hold(slot_id, code, evidence, ranges=None, selection=False):
+        found.setdefault(slot_id, []).append((code, evidence, tuple(ranges) if ranges else None, selection))
+
+    def shows_boxes(text):
+        return BOX in text or CHECKED in text
+
+    def signing_text(slot_id, text, where):
+        segments = label_segments(text)
+        signing = [(a, b, label) for a, b, label in segments if kind_for_label(label) in SIGNING_KINDS]
+        if signing:
+            whole = len(signing) == len(segments)
+            hold(slot_id, "signing", '%s "%s"' % (where, _shown(signing[0][2])),
+                 None if whole else [(a, b) for a, b, _ in signing], selection=shows_boxes(text))
+        code = statement_code(text)
+        if code:
+            hold(slot_id, code, '%s "%s"' % (where, _shown(text)))
+
+    WPS = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+    for slot in index.slots:
+        if slot.kind == "p":
+            signing_text(slot.id, source.ptext(slot.el)[0], "printed")
+        elif slot.kind == "tc":
+            table, row, col = slot.parent, slot.info["row"], slot.info["col"]
+            boxes = shows_boxes(source.cell_objects(slot))
+            for header in dict.fromkeys([source.column_header(table, col, row)] + source.column_headers_all(table, col, row)):
+                if header and signing_label_kind(header):
+                    hold(slot.id, "signing", 'column header "%s"' % _shown(header), selection=boxes)
+                    break
+            label = source.row_label(table, row, col)
+            if label and signing_label_kind(label):
+                hold(slot.id, "signing", 'row label "%s"' % _shown(label), selection=boxes)
+            code = statement_code(label)
+            if code:
+                hold(slot.id, code, 'row label "%s"' % _shown(label))
+            # A first-person or attestation statement printed in a cell governs every answer area of its row, on either
+            # side of it ('☐ | I declare ...' as well as 'I declare ... | ☐').
+            own = source.cell_text(slot)
+            code = statement_code(own)
+            if code:
+                for cell in [c for c in table.children if c.kind == "tc" and c.info["row"] == row]:
+                    hold(cell.id, code, 'row statement "%s"' % _shown(own))
+            for p in own_paragraph_slots(slot):
+                segments = label_segments(source.ptext(p.el)[0])
+                # A box captioned by its own signing wording ('Signature of clinician', 'Initial here') is a signing box
+                # whatever else it holds; a sentence of guidance that merely mentions signing is not a caption.
+                if segments and all(kind_for_label(x) in SIGNING_KINDS and len(x.split()) <= CAPTION_WORDS
+                                    for _, _, x in segments):
+                    hold(slot.id, "signing", 'printed in the box "%s"' % _shown(segments[0][2]))
+                    break
+            if any(x.find("{%s}txbx" % WPS) is None for x in slot.el.iter("{%s}wsp" % WPS)):
+                before = table.el.getprevious()
+                instruction = source.text(before) if before is not None and before.tag == q("w:p") else ""
+                for text in (source.column_header(table, col, row), label, instruction, source.context_for(slot)):
+                    if text and (SIGNATURE.search(text) or INITIALS.search(text)):
+                        hold(slot.id, "signing", 'drawn box under "%s"' % _shown(text))
+                        break
+        elif slot.kind == "sdt":
+            for name in (slot.info.get("alias"), slot.info.get("tag")):
+                if name and signing_label_kind(name):
+                    hold(slot.id, "signing", 'content control "%s"' % _shown(name))
+            if slot.info.get("locked"):
+                hold(slot.id, "protected", "content control locked against editing")
+        elif slot.kind == "ff":
+            for name in (slot.info.get("name"), slot.info.get("help"), slot.info.get("status")):
+                if isinstance(name, str) and name and signing_label_kind(name):
+                    hold(slot.id, "signing", 'legacy field "%s"' % _shown(name))
+    # A declaration's own answer line: the paragraphs right after a held first-person or attestation paragraph that
+    # print only answer marks (blanks, boxes, printed option words) answer that declaration.
+    for slot in index.slots:
+        if slot.kind != "p":
+            continue
+        rows = [row for row in found.get(slot.id, []) if row[0] in ("declaration", "attestation") and row[2] is None]
+        if not rows:
+            continue
+        node, skipped = slot.el.getnext(), 0
+        while node is not None and node.tag == q("w:p") and skipped < 2:
+            following = index.by_el.get(id(node))
+            if following is None:
+                break
+            text = source.ptext(node)[0]
+            if not text.strip(" \t"):
+                skipped += 1
+                node = node.getnext()
+                continue
+            words = [option_text(x) for x in re.split("[%s%s]|%s" % (BOX, CHECKED, LABEL_BREAK.pattern), text)
+                     if x and option_text(x)]
+            if all(is_option_word(word) or response_word(word) for word in words) and \
+                    (BOX in text or CHECKED in text or LABEL_BREAK.search(text)):
+                hold(following.id, rows[0][0], "answer line of %s" % rows[0][1])
+            break
+    # A question box: the printed question and its section, each read alone, whatever the box holds.
+    for table in index.roots:
+        if table.kind != "tbl" or table.part != "word/document.xml":
+            continue
+        cells = [c for c in table.children if c.kind == "tc"]
+        if len(table_rows_of(table.el)) != 1 or len(cells) != 1:
+            continue
+        cell, question, raw = cells[0], None, ""
+        node, skipped = table.el.getprevious(), 0
+        while node is not None and node.tag == q("w:p"):
+            raw = re.sub(r"\s+", " ", source.text(node)).strip()
+            if raw:
+                question = index.by_el.get(id(node))
+                break
+            skipped += 1
+            if skipped > 2:
+                break
+            node = node.getprevious()
+        context = source.question_box_context(question)[0] if question is not None else source.heading_before(cell)
+        if (question is not None and source.question_box_signing(raw)) or source.question_box_signing(context):
+            hold(cell.id, "consent", 'question "%s"%s' % (_shown(raw), ' in "%s"' % _shown(context) if context else ""))
+        code = statement_code(raw) if question is not None else None
+        if code:
+            hold(cell.id, code, 'question "%s"' % _shown(raw))
+    for slot_id in protected_slots:
+        hold(slot_id, "protected", "protected on the form; fill never writes here")
+    for slot_id, reason in legacy.items():
+        hold(slot_id, "protected", reason)
+    for root_id, role in source_policy.roles(source).items():
+        if role:
+            hold(root_id, "authorship", 'printed role "%s"' % _shown(role.get("text")))
+    for slot in index.slots:
+        if slot.kind == "tc":
+            attested = source_policy.attestation_statement(source, slot)
+            if attested:
+                hold(slot.id, "authorship", 'attestation "%s"' % _shown(attested[1]))
+    # The heading of a block holding a first-person declaration belongs to that declaration.
+    heading, block = None, []
+
+    def close():
+        if heading is not None and any(row[0] == "declaration" for s in block for key, rows in found.items()
+                                       if key == s.id or key.startswith(s.id + "/") for row in rows):
+            hold(heading.id, "declaration", 'heading of a declaration "%s"' % _shown(source.text(heading.el)))
+    for root in [s for s in index.roots if s.part == "word/document.xml"]:
+        if root.kind == "p" and source.is_heading(root.el):
+            close()
+            heading, block = root, []
+        else:
+            block.append(root)
+    close()
+    held = {}
+    for slot_id, rows in found.items():
+        rows.sort(key=lambda row: (HELD_CODES.index(row[0]), row[1]))
+        code, evidence = rows[0][0], rows[0][1]
+        whole = any(row[2] is None for row in rows)
+        ranges = None if whole else tuple(sorted({r for row in rows for r in row[2]}))
+        held[slot_id] = Held(code, evidence, ranges, frozenset(row[0] for row in rows), all(row[3] for row in rows))
+    return held
+
+
+def _range_positions(index, where, location, field):
+    """The printed-text positions a field writes at inside the ranged paragraph `where`, or None when they cannot be
+    placed (then the whole paragraph counts)."""
+    paragraph = index.by_id.get(where)
+    if paragraph is None or paragraph.kind != "p":
+        return None
+    target = (field.get("locator") or {}).get("target") or {}
+    if location == where:
+        if target.get("type") == "span" and isinstance(target.get("start"), int) and isinstance(target.get("end"), int):
+            start, end = target["start"], target["end"]
+            return [(start, start if target.get("shape") == "after_label" else end)]
+        return None
+    slot = index.by_id.get(location)
+    if slot is None or slot.kind not in ("ff", "sdt"):
+        return None
+    for piece in paragraph_pieces(paragraph.el):
+        if piece.kind == "obj" and piece.node is slot.el:
+            return [(piece.start, piece.end)]
+    return None
+
+
+def _overlaps(position, ranges):
+    start, end = position
+    if start == end:
+        return any(a <= start <= b for a, b in ranges)
+    return any(start < b and a < end for a, b in ranges)
+
+
+def held_touches(index, held, field) -> list:
+    """[(slot id, Held)] of every held place `field` writes to, reads its anchor from, contains or lies inside."""
+    out = []
+    locations = field_locations(field)
+    for where in sorted(held):
+        entry = held[where]
+        for location in locations:
+            if location == where or location.startswith(where + "/"):
+                if entry.ranges is None:
+                    out.append((where, entry))
+                    break
+                positions = _range_positions(index, where, location, field)
+                if positions is None or any(_overlaps(p, entry.ranges) for p in positions):
+                    out.append((where, entry))
+                    break
+            elif where.startswith(location + "/"):
+                out.append((where, entry))
+                break
+    return out
+
+
+def answerable_field(field) -> bool:
+    return field.get("kind") not in SIGNING_KINDS and not field.get("write_protected")
+
+
+def held_violation(index, held, field):
+    """(slot id, Held) of the first held place where `field` would be an answer, or None. A signature/initials kind or
+    a write-protected field is never an answer; a field carrying its printed answer policy answers a place held only
+    for its printed authorship, attestation or declaration under that policy (source_policy)."""
+    if not answerable_field(field):
+        return None
+    policy = isinstance(field.get("answer_policy"), dict)
+    locator = field.get("locator") or {}
+    target = locator.get("target") or {}
+    selecting = field.get("kind") in ("checkbox", "choice", "multi_choice") and \
+        target.get("type") in ("checkboxes", "text_options", "paragraph_options")
+    # A table answer is judged column by column (held_table_columns): a held cell inside its table blocks only the
+    # values of that column ('Drug | Dose | Time | Signature' keeps its drug, dose and time); the table itself held, or
+    # anything holding it, is a violation of the whole field.
+    inside = "%s#%s/" % (locator.get("part"), target.get("table")) if target.get("type") == "table_rows" else None
+    for where, entry in held_touches(index, held, field):
+        if inside and where.startswith(inside):
+            continue
+        if policy and "authorship" in entry.codes and entry.codes <= POLICY_CODES:
+            continue
+        if selecting and entry.selection:
+            continue
+        return where, entry
+    return None
+
+
+def held_table_columns(index, held, field) -> list:
+    """Positions (in each answer row) of a table_rows field's columns holding a held cell: its answer writes nothing
+    there. A table the index cannot place blocks every column."""
+    locator = field.get("locator") or {}
+    target = locator.get("target") or {}
+    columns = list(target.get("columns") or [])
+    table = index.by_id.get("%s#%s" % (locator.get("part"), target.get("table")))
+    if table is None or table.kind != "tbl":
+        return list(range(len(columns)))
+    blocked = []
+    for position, column in enumerate(columns):
+        for row in target.get("rows") or []:
+            cell = next((c for c in table.children if c.kind == "tc" and c.info["row"] == row
+                         and c.info["col"] <= column < c.info["col"] + c.info["span"]), None)
+            if cell is None or any(where == cell.id or where.startswith(cell.id + "/") for where in held):
+                blocked.append(position)
+                break
+    return blocked
+
+
+def held_record(where, entry):
+    return {"slot": where, "code": entry.code, "evidence": entry.evidence, "reason": HELD_REASONS[entry.code],
+            "ranges": [list(r) for r in entry.ranges] if entry.ranges else None, "codes": sorted(entry.codes),
+            "selection": entry.selection}
+
+
+def held_report(data: bytes, fields=None) -> dict:
+    """The isolated parser's answer for the application: every held place, the anchored places, and which fields of
+    `fields` (a stored or proposed v3 mapping) violate one - bound to this original by the service's sha256."""
+    package = open_package(data)
+    source = Detector(package, layout_proposal=True)
+    source.detect()
+    held = held_places(package, source)
+    violations, columns = {}, {}
+    for field in fields or []:
+        if not isinstance(field, dict) or (field.get("locator") or {}).get("contract") != CONTRACT:
+            fail("The mapping is not a contract v3 mapping.", "invalid_mapping")
+        found = held_violation(source.index, held, field)
+        if found:
+            violations[str(field.get("key"))] = held_record(*found)
+        if field.get("kind") == "table_rows" and answerable_field(field):
+            blocked = held_table_columns(source.index, held, field)
+            if blocked:
+                columns[str(field.get("key"))] = blocked
+    return {"contract": CONTRACT, "held": [held_record(where, held[where]) for where in sorted(held)],
+            "anchored": sorted(slot.id for slot in source.index.slots if floating_place(slot)),
+            "violations": violations, "held_columns": columns}
+
+
+def held_refusal(where, entry, field):
+    return "%s \"%s\" is on a held place (%s; %s). Nothing was written." % (
+        HELD_REASONS[entry.code], _shown(field.get("label") or field.get("key") or "This field", 80), where, entry.evidence)
+
+
 def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> bytes:
     """Write answers into the original package. Every field's anchor is checked against its fingerprint before
     anything changes; signature and initials areas never take an automatic answer."""
@@ -6572,6 +7117,7 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         fail("This form's tab-column answers require layout verification before export.",
              "layout_verification_required")
     protected, protected_slots, legacy_protected = protected_places(package, source_detector, index)
+    held = held_places(package, source_detector, (protected, protected_slots, legacy_protected))
     ops = []                                 # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -6653,6 +7199,19 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             resolve(extra["part"], extra["slot"], extra["fingerprint"])
         for copy in target.get("copies", []):
             anchors.append(resolve(copy["part"], copy["slot"], copy["fingerprint"]))
+        # ⚠️ THE ONE AUTHORITY, ON EVERY WRITE (after the anchors are verified, so a stale mapping still refuses as a
+        # mismatch): a stored, manual, legacy-created or model-adopted field that answers a held signing, initials,
+        # consent, declaration or attestation place is refused here, whatever its label says.
+        violation = held_violation(source_detector.index, held, field)
+        if violation:
+            fail(held_refusal(violation[0], violation[1], field), "held_place")
+        if field.get("kind") == "table_rows" and isinstance(answer, list):
+            blocked = held_table_columns(source_detector.index, held, field)
+            if any(isinstance(row, list) and position < len(row) and str(row[position] or "").strip()
+                   for row in answer for position in blocked):
+                fail("A table column on a held signing, initials, consent, declaration or attestation place stays "
+                     "unchanged: a value was given for it in \"%s\"; nothing was written."
+                     % _shown(field.get("label") or "the table", 80), "held_place")
         kind = target["type"]
         for anchor in anchors:
             part = anchor.part
@@ -7471,4 +8030,15 @@ def locate(data: bytes, targets: list) -> list:
         field["origin"] = "manual"
         annotate_printed(detector.index, field)
         out.append(field)
+    # A located field follows the same printed authorship rule as the engine's own fields (source_policy.annotate), and
+    # the ONE authority refuses any answerable kind on a held place: a clinician's manual field and a model proposal
+    # are judged exactly as fill will judge them.
+    source_policy.annotate(detector, out)
+    source = Detector(package, layout_proposal=True)
+    source.detect()
+    held = held_places(package, source)
+    for field in out:
+        violation = held_violation(source.index, held, field)
+        if violation:
+            fail(held_refusal(violation[0], violation[1], field), "held_place")
     return out

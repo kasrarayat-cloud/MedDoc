@@ -64,6 +64,12 @@ def process_v3(workspace, request):
             return {"format": "docx", **assistance_outline(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "assistance_places":
             return {"format": "docx", **assistance_places(data), "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "held_places":
+            mapping = request.get("mapping")
+            if mapping is not None and not isinstance(mapping, list):
+                fail("The held-place mapping is invalid.", "invalid_mapping")
+            return {"format": "docx", **word_v3.held_report(data, mapping), "adapter": "word-v3",
+                    "sandbox": "landlock+seccomp"}
         if operation == "locate":
             return {"format": "docx", "fields": word_v3.locate(data, request.get("targets") or []),
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
@@ -672,12 +678,123 @@ def fill_docx(path, output, document, paragraphs, cells, fields, answers):
         document.save(output)
 
 
+#: The operations that read a Word original through word_v3's classifiers (the v3 contract, and the legacy fill's
+#: held-place check): each needs the pinned parser's clause readings, which the trusted parent supplies.
+V3_OPERATIONS = ("inspect", "outline", "locate", "assistance_outline", "assistance_places", "held_places",
+                 "effective_options", "effective_values", "layout_prepare")
+
+
+def readings_needed(workspace, request):
+    """None when the request carries its syntax readings (or needs none); else the clauses the parent must read first.
+    The layout preparer runs without the two-phase exchange: its missing readings are read as holding."""
+    readings = request.get("readings")
+    if readings is None and request.get("operation") != "layout_prepare":
+        needed = word_v3.reading_clauses(word_v3.open_package((workspace / "input.docx").read_bytes()))
+        if needed:
+            return needed
+    word_v3.use_readings(readings if readings is not None else {})
+    return None
+
+
+def legacy_held_check(path, paragraphs, cells, fields, answers, identity_keys=None):
+    """THE ONE AUTHORITY ON THE LEGACY WORD FILL (word_v3.held_places over the same original): no answer is written
+    into a held signing, initials, consent, declaration, attestation or protected place. Each legacy field is placed on
+    the v3 slot of the element it writes (a cell's w:tc, a placeholder's or a tab line's w:p, by its ordinal in its
+    part), a placeholder at its printed token.
+
+    The one exception is the product's clinician-identity row ('Electronically signed by | ____'): a key the trusted
+    caller lists in `identity_keys` (finalize: `tab_review.clinician_identity`, whose value `validate_identity` has just
+    required to be the finalizing clinician's own name), or a field the tab inspector itself gave the clinician-identity
+    policy, may write into a place held ONLY as a signing place. An original the authority cannot read refuses the
+    whole fill."""
+    written = [f for f in fields if answers.get(f["key"])]
+    if not written:
+        return
+    identity_keys = set(identity_keys or [])
+    try:
+        package = word_v3.open_package(path.read_bytes())
+        source = word_v3.Detector(package, layout_proposal=True)
+        source.detect()
+        held = word_v3.held_places(package, source)
+    except word_v3.V3Failure as exc:
+        fail("The form's signing and attestation places could not be verified, so nothing was written: " + str(exc),
+             "held_place")
+    index = source.index
+
+    def identity(field):
+        # The caller's validated identity rows, or the tab inspector's own clinician-identity policy (part of the
+        # structure validate_mapping has just compared with a fresh inspection).
+        return field["key"] in identity_keys or field.get("answer_policy") == "clinician_identity"
+
+    def slot_of(part, element, tag):
+        name = str(part.partname).lstrip("/")
+        mine = list(part.element.iter(qn(tag)))
+        theirs = list(package.tree(name).iter(word_v3.q(tag))) if name in package.names else []
+        if element not in mine or len(mine) != len(theirs):
+            return None
+        return index.by_el.get(id(theirs[mine.index(element)]))
+
+    def span_of(slot, token, before):
+        text = source.ptext(slot.el)[0]
+        start = -1
+        for _ in range(before + 1):
+            start = text.find(token, start + 1)
+            if start < 0:
+                return None
+        return {"type": "span", "start": start, "end": start + len(token)}
+
+    for field in written:
+        locator = field["locator"]
+        target = {"type": "whole"}
+        if "cell" in locator:
+            element, part = cells[locator["cell"]]
+            slot = slot_of(part, element, "w:tc")
+        elif "tab_form" in locator:
+            slot = None
+            for anchor in locator["tab_form"]["anchors"]:
+                part = next((p.part for p in paragraphs if str(p.part.partname).lstrip("/") == anchor["part"]), None)
+                local = [p for p in paragraphs if str(p.part.partname).lstrip("/") == anchor["part"]]
+                slot = slot_of(part, local[anchor["paragraph"]]._p, "w:p") if part is not None and \
+                    anchor["paragraph"] < len(local) else None
+                if slot is None:
+                    break
+                found = word_v3.held_violation(index, held, {"kind": "text", "locator": {
+                    "contract": word_v3.CONTRACT, "part": slot.part, "slot": slot.path, "target": target}})
+                if found and not (identity(field) and found[1].codes == frozenset(("signing",))):
+                    fail(word_v3.held_refusal(found[0], found[1], field), "held_place")
+            if slot is None:
+                fail("A tab answer line could not be placed on the original; nothing was written.", "held_place")
+            continue
+        else:
+            paragraph = paragraphs[locator["paragraph"]]
+            slot = slot_of(paragraph.part, paragraph._p, "w:p")
+            if slot is not None:
+                before = paragraph.text[:locator["start"]].count(locator["token"])
+                target = span_of(slot, locator["token"], before) or target
+        if slot is None:
+            fail("An answer area could not be placed on the original; nothing was written.", "held_place")
+        found = word_v3.held_violation(index, held, {"kind": "text", "locator": {
+            "contract": word_v3.CONTRACT, "part": slot.part, "slot": slot.path, "target": target}})
+        if found and not (identity(field) and found[1].codes == frozenset(("signing",))):
+            fail(word_v3.held_refusal(found[0], found[1], field), "held_place")
+
+
 def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "assistance_places", "effective_options", "effective_values", "layout_prepare")
-                          or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
+    v3 = fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in V3_OPERATIONS
+                            or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping")))
+    if fmt == "docx" and (v3 or request.get("operation") == "fill"):
+        try:
+            needed = readings_needed(workspace, request)
+        except word_v3.V3Failure as exc:
+            if v3:
+                raise DocumentFailure(str(exc), exc.code) from None
+            needed = None                      # the legacy fill's own check refuses below
+        if needed:
+            return {"readings_needed": needed}
+    if v3:
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):
         fail("Manual mapping needs a contract v3 Word form.", "unsupported_format")
@@ -731,6 +848,7 @@ def process(workspace, request):
             result["fields"] = fields
     validate_mapping(fields, request["mapping"], answers)
     if fmt == "docx":
+        legacy_held_check(path, paragraphs, cells, fields, answers, request.get("identity_keys"))
         fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)
     else:
         values = {field["key"]: answers.get(field["key"], "") for field in fields}

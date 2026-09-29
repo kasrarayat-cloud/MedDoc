@@ -385,7 +385,8 @@ class QuestionBoxes(unittest.TestCase):
         for phrase, accepted in (
             ('Please describe the changes since the initial report?', True),
             ('Please describe changes in the case of the initial report?', True),
-            ('Please notarize the initial report?', False),
+            # The pinned parser reads 'the initial report' as an adjective (word_v3.INITIALS); no signing word remains.
+            ('Please notarize the initial report?', True),
             ('Please describe the changes since the initial report, then initial here?', False),
             ('Please describe the initial report and provide initials?', False),
             ('Please describe the initial report and provide signature?', False),

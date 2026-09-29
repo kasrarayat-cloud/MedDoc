@@ -112,8 +112,11 @@ class PerChangeDegradation(SimpleTestCase):
         self.assertEqual(expanded['fields'][1]['target']['label'], 'Plan')
         self.assertEqual(len(expanded['additions']), 1)
         # Each adopted change also names the WHOLE printed text its label quotes (the place rule reads that wording).
-        self.assertEqual(expanded['sources'], {'fields': {'f1': 0}, 'additions': [4],
+        # ... and the text references each change quoted (label and option spans), for the dependence graph (D4).
+        self.assertEqual({k: v for k, v in expanded['sources'].items() if k != 'refs'}, {'fields': {'f1': 0}, 'additions': [4],
                                                'quoted': {0: body['slots'][1]['text'], 4: body['slots'][2]['text']}})
+        self.assertEqual(sorted(expanded['sources']['refs']), [0, 1, 2, 3, 4])
+        self.assertTrue(all(row[3] == 'label' for n in (0, 4) for row in expanded['sources']['refs'][n]))
         self.assertEqual([(r['change'], r['type'], r['key'], r['slot']) for r in expanded['rejected']],
                          [(n, 'addition', '', body['slots'][2]['slot']) for n in (1, 2, 3)])
         self.assertEqual([r['wire'] for r in expanded['rejected']], bad)

@@ -62,6 +62,67 @@ def export_refusal(template):
 
 GENERATION_EXPORT_REFUSAL = ("Generation is unavailable for this form's floating initials layout. "
                              "Nothing was sent or charged; the unchanged form and mapping remain available.")
+GENERATION_HELD_REFUSAL = ("This form's mapping puts an answer on a signing, initials, consent, declaration or attestation "
+                           "place: {labels} Nothing was sent or charged. Remove each of these fields (or map the place as a "
+                           "signature or initials area) and confirm the corrected mapping before generating.")
+HELD_UNVERIFIED = ("The original form's signing and attestation places could not be verified. Nothing was changed. "
+                   "Ask an administrator to check the original before trying again.")
+
+
+# ─── the ONE authority over signing, initials, identity and attestation places (documents.word_v3.held_places) ─────
+#: Bound to the original: the isolated parser's report is accepted only for this template's sha256 and contract, and is
+#: cached per (original sha256, mapping digest) inside this process - a pure function of the two.
+_HELD_CACHE = {}
+_HELD_CACHE_SIZE = 64
+
+
+def held_report(template, fields=None):
+    """The isolated parser's held-place report for `template`'s original and, when given, which of `fields` violate a
+    held place ({'held', 'anchored', 'violations', 'held_columns'}). ValidationError when it cannot be established."""
+    import hashlib, json
+    from documents import DocumentError
+    from documents.service import held_places
+    from .security import private_path
+    mapping = None if fields is None else list(fields)
+    key = (template.sha256, hashlib.sha256(json.dumps(mapping, sort_keys=True, separators=(',', ':'),
+                                                      ensure_ascii=True).encode()).hexdigest())
+    if key in _HELD_CACHE:
+        return _HELD_CACHE[key]
+    try:
+        report = held_places(private_path(template.original_path), mapping)
+    except (DocumentError, OSError, ValueError) as exc:
+        raise ValidationError(HELD_UNVERIFIED) from exc
+    if report.get('sha256') != template.sha256 or report.get('contract') != CONTRACT:
+        raise ValidationError(HELD_UNVERIFIED)
+    if len(_HELD_CACHE) >= _HELD_CACHE_SIZE:
+        _HELD_CACHE.pop(next(iter(_HELD_CACHE)))
+    _HELD_CACHE[key] = report
+    return report
+
+
+def held_violations(version, fields=None):
+    """{field key: held record} for every answerable field of this mapping (or of `fields`) on a held place."""
+    if not is_v3_version(version):
+        return {}
+    return held_report(version.template, version.fields if fields is None else fields)['violations']
+
+
+def held_columns(version, fields=None):
+    """{table_rows field key: [answer-row positions of held columns]}."""
+    if not is_v3_version(version):
+        return {}
+    return held_report(version.template, version.fields if fields is None else fields).get('held_columns') or {}
+
+
+def held_labels(fields, keys):
+    return ', '.join(label_of(f) for f in fields if f['key'] in keys) + '.'
+
+
+def held_cells_answered(field, text, blocked):
+    """A table answer's text puts a value in a held column."""
+    if not blocked or not str(text or '').strip():
+        return False
+    return any(position < len(row) and row[position].strip() for row in table_rows(field, text) for position in blocked)
 GENERATION_SOURCE_REFUSAL = ("The original form could not be verified for generation. Nothing was sent or charged. "
                             "Ask an administrator to check the original before trying again.")
 
@@ -88,6 +149,14 @@ def generation_refusal(version):
         return GENERATION_SOURCE_REFUSAL
     if FLOATING_INITIALS_REFUSAL in result.get('warnings', []):
         return GENERATION_EXPORT_REFUSAL
+    # ⚠️ THE ONE AUTHORITY: a stored (or legacy-created, manual, model-adopted) field answering a held signing,
+    # consent, declaration or attestation place is never asked - generation is refused until the mapping is corrected.
+    try:
+        violations = held_violations(version)
+    except ValidationError:
+        return GENERATION_SOURCE_REFUSAL
+    if violations:
+        return GENERATION_HELD_REFUSAL.format(labels=held_labels(version.fields, violations))
     return ''
 
 
@@ -233,6 +302,10 @@ def fill_answers(fields, answers):
         record = answers.get(field['key']) or {}
         text = normalize(field, record.get('text', ''))
         kind = field.get('kind')
+        if field.get('write_protected') or kind in SIGNING_KINDS:
+            # Nothing is ever written there (normalize refuses any text): a reviewed, write-protected checkbox - a
+            # declaration the ONE authority holds - is left exactly as printed, never exported unticked.
+            continue
         if kind == 'checkbox':
             if text:
                 out[field['key']] = True

@@ -343,14 +343,17 @@ class PlaceRule(SimpleTestCase):
         change = self.addition(payload, 'b/tbl[0]/tr[1]/tc[1]/p[0]', 'text', 'Clinic record', roles=(1,))
         result = mapping.validate_proposal(version, compiled, self.respond(payload, [change]))
         self.assertHeld(version, result, change, mapping.SIGNING_REASON)
-        # A protected REGION whose own field is answerable: printed text in a patient's statement box.
+        # A protected REGION: printed text in a patient's statement box. A NEW inspection write-protects the engine's
+        # own field there (the ONE authority); a mapping stored before that rule still carries it answerable, and a
+        # model change of it is held all the same.
         doc = Document(); doc.add_paragraph('Participant ID: __________')
         doc.add_paragraph('This section is for the patient to add any comments or concerns about their care')
         bordered_box(doc).cell(0, 0).text = 'Comments:'
         version = self.version('region', saved(doc))
-        compiled, payload = self.compile(version)
         prior = next(f for f in version.fields if f['label'] == 'Comments')
-        self.assertFalse(prior.get('write_protected'))
+        self.assertIs(prior.get('write_protected'), True)
+        prior.pop('write_protected'); prior.pop('review_reason', None)
+        compiled, payload = self.compile(version)
         change = self.replacement(payload, prior['key'], next(iter(v3_mapping.mapped_slots([prior]))), prior['kind'])
         result = mapping.validate_proposal(version, compiled,
                                            self.respond(payload, [change], replace=[self.field_id(payload, prior['key'])]))
@@ -500,11 +503,11 @@ class PlaceRule(SimpleTestCase):
         version = self.version('f5b', simple_form(), drop=('Plan',))
         compiled, payload = self.compile(version)
         change = self.addition(payload, 'b/tbl[0]/tr[0]/tc[1]', 'long_text', 'Plan')
-        real = mapping.assistance_places
-        for name, effect in (('another original', lambda path: {**real(path), 'sha256': '0' * 64}),
+        real = mapping.held_places
+        for name, effect in (('another original', lambda path, *rest: {**real(path, *rest), 'sha256': '0' * 64}),
                              ('unreadable', DocumentError('The isolated document processor failed.', 'parser_failed'))):
             with self.subTest(name):
-                with patch.object(mapping, 'assistance_places', side_effect=effect), self.assertRaises(Exception) as caught:
+                with patch.object(mapping, 'held_places', side_effect=effect), self.assertRaises(Exception) as caught:
                     mapping.validate_proposal(version, compiled, self.respond(payload, [change]))
                 self.assertIsInstance(caught.exception, mapping.Refusal)
 

@@ -176,7 +176,9 @@ class AssistancePlaces(unittest.TestCase):
         self.assertTrue(word.signing_wording('Name of Participant\t\tDate\t\tSignature'))
         self.assertFalse(word.signing_wording('Name of Participant\t\tDate'))
         self.assertEqual(held.get('word/document.xml#b/p[2]'), 'signing')
-        self.assertEqual(held.get('word/document.xml#b/p[1]'), 'signing')
+        # The band line prints no wording: it is held because fill protects it (the ONE authority reads what fill
+        # protects; it no longer asks whether the engine made a signing area there).
+        self.assertEqual(held.get('word/document.xml#b/p[1]'), 'protected')
         self.assertNotIn('word/document.xml#b/p[0]', held)            # 'Participant ID: ____' is an ordinary answer
         self.assertEqual(anchored, set())
 
