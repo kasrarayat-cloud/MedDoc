@@ -364,20 +364,24 @@ def parse_part(plan, ordinal, response):
     if any(b.get('type') == 'refusal' for b in blocks):
         raise ValidationError('Provider refused the request; no partial form is adopted.')
     content = ''.join(b['text'] for b in blocks if b.get('type') == 'text')
-    body=json.loads(content)
-    if (not isinstance(body,dict) or not isinstance(body.get('fields'),list)
-            or any(not isinstance(f,dict) or type(f.get('conflict')) is not bool for f in body['fields'])):
-        raise ValidationError('Provider answer conflicts must be explicit booleans.')
-    schema = BatchSelections
+    wanted = set(plan['parts'][ordinal - 1]['field_ids'])
     if plan['config'].get('ordinary_field_contract'):
+        # The keyed ordinary answer (v3_field_relations.parse): strict, converted to the internal selections.
         from . import v3_field_relations as ordinary
         ordinary.require_config(plan['config'])
-        schema = ordinary.FieldSelections
-    if plan['history_targets']:
-        from .v3_history_context import HistorySelections
-        schema = HistorySelections
-    result = schema.model_validate_json(content)
-    wanted = set(plan['parts'][ordinal - 1]['field_ids'])
+        if plan['history_targets']:
+            raise ValidationError('Ordinary relations require the current single complete-form contract.')
+        result = ordinary.parse(content, [f for f in plan['asked'] if f['key'] in wanted], plan['units'])
+    else:
+        body=json.loads(content)
+        if (not isinstance(body,dict) or not isinstance(body.get('fields'),list)
+                or any(not isinstance(f,dict) or type(f.get('conflict')) is not bool for f in body['fields'])):
+            raise ValidationError('Provider answer conflicts must be explicit booleans.')
+        schema = BatchSelections
+        if plan['history_targets']:
+            from .v3_history_context import HistorySelections
+            schema = HistorySelections
+        result = schema.model_validate_json(content)
     if len(result.fields) != len(wanted) or {f.key for f in result.fields} != wanted:
         raise ValidationError('A part has missing, duplicate or foreign answer keys.')
     g.unit_selections(plan['notes'], plan['asked'], result, context_labels=plan['context_labels'])

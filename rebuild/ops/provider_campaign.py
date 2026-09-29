@@ -34,11 +34,25 @@ What each piece guarantees, stated so a reader can see how it would fail:
   Campaign.admit()    Refuses before the request is built: a prerequisite stage not passed, a stage already passed or
                       failed (and not reopened), an attempt without an outcome, the stage or total limit in force, the
                       stage's request count; a reopened stage admits only a runner that contains the repair.
+  declared_amendment()
+                      A contract-identity amendment: TRACKED, COMMITTED and UNMODIFIED beside the declaration, naming its
+                      campaign, authority and exact declaration, and able to change ONE thing — the pricing version of the
+                      ordinary field-relations sends, and only to the contract identity bound to the SAME base price:
+                      contract_pricing_version(previous, old contract) must be the version it replaces and
+                      contract_pricing_version(previous, new contract) the version it states. It carries no limit, rate,
+                      model, profile, stage, credential or authorization line — matched by structure, wherever it stands
+                      in a line (AMENDMENT_FORBIDDEN); anything else it tries to say refuses.
+  Campaign.pricing_version()
+                      The version a send must be priced at: the declaration's, or — for the amended key only — the
+                      amendment's, after proving the version it replaces is the one the ledger's FIRST attempt pinned (so
+                      the base price is exactly the pinned one). Limits, rates, model, stages and authority stay the
+                      declaration's and the ledger's.
   Campaign.reopen()   The ONLY way a failed stage is admitted again: a committed, unmodified diagnosis naming the failed
                       attempts and the repair commit, a runner that is not a failed one and contains the repair, a
                       runner or engine file that differs from every failed attempt's recorded hashes, a repair commit
-                      that touches one, and money and a request left under the stage's OWN limits. Writes
-                      stage-<id>-reopened-<n>.json.
+                      that touches one, and money and a request left under the stage's OWN limits; for a stage resumed
+                      from its failure's record (the stage runner's), a remainder that record establishes (refused
+                      otherwise, before anything is written). Writes stage-<id>-reopened-<n>.json.
   load_credential()   The declared file only: absolute, no environment-file name (`.env`, `*.env`, `.env.*`,
                       `*.env.*`) anywhere in its path or its resolved path, no symbolic link at ANY component, one name
                       only (no hard link), a regular 0600 file owned by this account, exactly one non-empty line —
@@ -77,6 +91,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import zipfile
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -570,6 +585,116 @@ def declared(path, *, repository=None, out=None):
     return declaration
 
 
+# ── the contract-identity amendment ──────────────────────────────────────────────────────────────────────────────
+
+#: The ONE pricing key an amendment may change: the ordinary field-relations sends, whose pricing version is the base
+#: price (rates, model, request profile) bound to the relations contract's identity (core.generation.configuration).
+AMENDABLE_PRICING_KEY = 'ordinary_notes_field_relations'
+CONTRACT_NAME = re.compile(r'[a-z][a-z0-9.-]{0,79}')
+#: What an amendment may never state: every structured line of a declaration (limits, stages, transfers, provider,
+#: model, rates, request settings, pricing versions, credential, owner words, authorization) and of a stage decision.
+#: An amendment is not a new authority and changes no number. Matched by STRUCTURE, wherever it stands in a line: one
+#: of these names as a whole word followed by its colon (only punctuation or spaces between), or a pricing-version or
+#: stage-limit token as a whole word. Whatever precedes it — a list number, code, a quote, a tilde, a heading mark or a
+#: sentence — does not matter (refutation F3: a prefix LIST, `[ \t>*_#+|-]*`, let '1. total_limit_provider_usd: 400.00'
+#: through). AUTHORIZATION_LINE (a line that opens with authorization wording) still applies beside it.
+AMENDMENT_STATED_NAMES = ('total_limit_provider_usd', 'stage', 'unused_stage_budget_transfers', 'provider', 'model',
+                          'rates', 'thinking', 'effort', 'inference_geo', 'credential_file',
+                          'credential_file_requirements', 'owner_words', 'authorization', 'authorisation',
+                          'reopen_stage', 'failed_attempts', 'repair_commit')
+AMENDMENT_STATED_TOKENS = ('pricing_version', 'limit_provider_usd', 'max_requests')
+AMENDMENT_FORBIDDEN = re.compile(
+    r'(?<![A-Za-z0-9_])(?:(?:' + '|'.join(AMENDMENT_STATED_NAMES) + r')(?![A-Za-z0-9_])[^\w\n]*:'
+    r'|(?:' + '|'.join(AMENDMENT_STATED_TOKENS) + r')(?![A-Za-z0-9_]))', re.I)
+
+
+def contract_pricing_version(previous, contract):
+    """The ordinary field-relations pricing version for a base price and a contract identity — exactly
+    core.generation.ordinary_pricing_version (its tests assert the two agree; the runner also requires the
+    application's own version to equal the amended one before any send, so a drift refuses)."""
+    return 'configured-v1:' + hashlib.sha256(json.dumps({'previous': previous, 'ordinary_field_contract': contract},
+                                                        sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+@dataclasses.dataclass(frozen=True)
+class Amendment:
+    """A verified contract-identity amendment (declared_amendment): the ONE pricing version it replaces and the one it
+    states, both bound to the same base price."""
+    path: str
+    sha256: str
+    commit: str
+    commit_time: str
+    campaign: str
+    authority_id: str
+    declaration_sha256: str
+    pricing_key: str
+    pinned_pricing_version: str             # the version it replaces (the declaration's and the ledger's pinned one)
+    previous_pricing_version: str           # the base price both versions are bound to
+    previous_contract: str
+    contract: str
+    pricing_version: str                    # the version the amended sends must carry
+
+    def record(self):
+        return dataclasses.asdict(self)
+
+
+def declared_amendment(path, declaration, *, out=None):
+    """The committed, unmodified contract-identity amendment at `path`, verified against `declaration` (the pinned
+    ledger terms are checked by Campaign.pricing_version). Prints its commit and commit time to `out` (stderr)."""
+    out = sys.stderr if out is None else out
+    require(declaration.repository, 'The declaration names no checkout; an amendment cannot be verified.')
+    root = Path(declaration.repository).resolve()
+    require(path is not None, 'An amendment needs a path.')
+    refuse_env_path(path)
+    path = Path(path).resolve()
+    require(path.parent == root / 'docs' / 'foundation' / 'mutations' and path != Path(declaration.path).resolve(),
+            'The amendment must be its own file in this checkout\'s docs/foundation/mutations/.')
+    data, commit, commit_time, relative = committed_file(path, root, 'declaration amendment')
+    text = data.decode('utf-8')
+    # (what a reader SEES is checked: compatibility forms folded (a fullwidth colon is a colon) and invisible format
+    # characters removed (a zero-width space does not split a name) — refutation F3's class: decoration hiding a line)
+    seen = ''.join(ch for ch in unicodedata.normalize('NFKC', text) if unicodedata.category(ch) != 'Cf')
+    require(not AMENDMENT_FORBIDDEN.search(seen) and not AUTHORIZATION_LINE.search(seen),
+            'The amendment states a limit, stage, provider, model, rate, request setting, pricing version, credential '
+            'or authorization line; it may change only the field-relations contract identity.')
+    require(not REVOCATION.search(' '.join(seen.split())), 'The amendment carries a revocation.')
+
+    def one(name, pattern=r'(\S+)'):
+        return _one(text, rf'^{name}:[ \t]*{pattern}[ \t]*$', f'{name}:', 'amendment')
+    version = r'(configured-v1:[0-9a-f]{64})'
+    amendment = Amendment(
+        path=str(path), sha256=hashlib.sha256(data).hexdigest(), commit=commit, commit_time=commit_time,
+        campaign=one('campaign'), authority_id=one('authority_id'),
+        declaration_sha256=one('amends_declaration_sha256', r'([0-9a-f]{64})'),
+        pricing_key=one('amended_pricing_key', r'([a-z][a-z0-9_]*)'),
+        pinned_pricing_version=one('pinned_pricing_version', version),
+        previous_pricing_version=one('previous_pricing_version', version),
+        previous_contract=one('previous_ordinary_field_contract'), contract=one('ordinary_field_contract'),
+        pricing_version=one('amended_pricing_version', version))
+    require(amendment.campaign == declaration.campaign and amendment.authority_id == declaration.authority_id,
+            'The amendment names another campaign or authority.')
+    require(amendment.declaration_sha256 == declaration.sha256,
+            'The amendment amends another declaration than the one in force (its sha256 differs).')
+    require(amendment.pricing_key == AMENDABLE_PRICING_KEY,
+            f'An amendment may change only the {AMENDABLE_PRICING_KEY} pricing version.')
+    require(CONTRACT_NAME.fullmatch(amendment.previous_contract) and CONTRACT_NAME.fullmatch(amendment.contract)
+            and amendment.contract != amendment.previous_contract,
+            'The amendment does not change the contract identity to another well-formed one.')
+    require(amendment.pinned_pricing_version == declaration.pricing_version(amendment.pricing_key),
+            f'The amendment replaces {amendment.pinned_pricing_version}, not the declared '
+            f'{amendment.pricing_key} version.')
+    require(contract_pricing_version(amendment.previous_pricing_version, amendment.previous_contract)
+            == amendment.pinned_pricing_version,
+            'The amendment\'s base price and previous contract do not produce the version it replaces; the base price '
+            'is not the pinned one.')
+    require(contract_pricing_version(amendment.previous_pricing_version, amendment.contract) == amendment.pricing_version,
+            'The amendment\'s stated pricing version is not its base price bound to its new contract.')
+    print(f'amendment {relative}: committed {commit_time} in {commit}; sha256 {amendment.sha256}; '
+          f'{amendment.pricing_key} {amendment.pinned_pricing_version} -> {amendment.pricing_version} '
+          f'({amendment.previous_contract} -> {amendment.contract})', file=out)
+    return amendment
+
+
 # ── the ledger ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 ATTEMPT_FILE = re.compile(r'(\d{3})-attempt\.json')
@@ -857,12 +982,36 @@ def exposure(attempt, outcome, rates=None):
 class Campaign:
     """A declaration and the ledger that spends under it."""
 
-    def __init__(self, declaration, root, *, watched_files=()):
+    def __init__(self, declaration, root, *, watched_files=(), amendment=None):
         self.declaration = declaration
         self.root = Path(root)
         self.ledger = Ledger(self.root / 'ledger')
         #: The runner and engine files (repository-relative) a reopening must show were repaired (A2).
         self.watched_files = tuple(watched_files)
+        #: A verified contract-identity amendment (declared_amendment), or None.
+        self.amendment = amendment
+        if amendment is not None:
+            require(isinstance(amendment, Amendment) and amendment.campaign == declaration.campaign
+                    and amendment.authority_id == declaration.authority_id
+                    and amendment.declaration_sha256 == declaration.sha256,
+                    'The amendment does not amend this campaign\'s declaration.')
+
+    def pricing_version(self, key, rows=None):
+        """The pricing version a send priced under `key` must carry: the declaration's — or, for the ONE key an amendment
+        changes, the amendment's, once the version it replaces is proved to be the one the ledger's FIRST attempt pinned
+        (so its base price — rates, model, request profile — is exactly the pinned one) and the current declaration
+        still states the pinned terms."""
+        amendment = self.amendment
+        if amendment is None or key != amendment.pricing_key:
+            return self.declaration.pricing_version(key)
+        pinned = dict(self.require_pinned_terms(self.rows() if rows is None else rows).pricing_versions)
+        require(pinned.get(key) == amendment.pinned_pricing_version == self.declaration.pricing_version(key),
+                f'The amendment replaces {amendment.pinned_pricing_version}; the ledger\'s first attempt pinned '
+                f'{pinned.get(key)} for {key}.')
+        require(contract_pricing_version(amendment.previous_pricing_version, amendment.previous_contract) == pinned[key]
+                and contract_pricing_version(amendment.previous_pricing_version, amendment.contract)
+                == amendment.pricing_version, 'The amendment is not bound to the pinned base price.')
+        return amendment.pricing_version
 
     def rows(self):
         rows = self.ledger.rows()
@@ -987,13 +1136,17 @@ class Campaign:
                 and is_ancestor(self.declaration.repository, reopening['repair_commit'], runner_commit),
                 f'Stage {stage_id} was reopened for repair {reopening["repair_commit"]}; the runner does not contain it.')
 
-    def reopen(self, stage_id, diagnosis, *, runner_commit):
+    def reopen(self, stage_id, diagnosis, *, runner_commit, remainder=None):
         """Reopens a FAILED stage after offline repair — the only way one is admitted again. Requires, before anything is
         written: the campaign not stopped and the ledger reconciled; a diagnosis file TRACKED, COMMITTED and UNMODIFIED
         in the declaration's checkout (the declaration's own rules) that names this stage (`reopen_stage:`), exactly the
         attempts of this failure (`failed_attempts:`) and the repair commit (`repair_commit:`); a runner commit that is
         none of the stage's failed runners and contains the repair, which none of them contained; and money and a
-        request left under the stage's OWN limits in force (never another stage's). Writes, write-once,
+        request left under the stage's OWN limits in force (never another stage's). `remainder`, for a stage that
+        resumes from its failure's record (the stage runner's: sonnet5_qa.reopen passes it): a callable that establishes
+        what the reopened stage would send, refusing when nothing can be — called LAST, before anything is written, and
+        its result recorded as the reopening's `remainder`. A reopening that would leave the stage open with nothing it
+        could ever send (and no way to fail it again) is refused instead (refutation F2). Writes, write-once,
         stage-<id>-reopened-<n>.json and returns it."""
         declaration, ledger = self.declaration, self.ledger
         ledger._require_lock()
@@ -1074,6 +1227,7 @@ class Campaign:
         if in_force.max_requests is not None:
             require(len(here) < in_force.max_requests,
                     f'Stage {stage.id} has used all {in_force.max_requests} requests of its own.')
+        resumes = remainder() if remainder is not None else None          # (refuses when nothing can be sent)
         document = {
             'campaign': declaration.campaign, 'authority_id': declaration.authority_id,
             'declaration_sha256': declaration.sha256, 'declaration_commit': declaration.commit,
@@ -1083,7 +1237,8 @@ class Campaign:
             'changed_files': sorted(changed), 'repair_touches': touched,
             'stage_exposure': format(spent, 'f'), 'stage_limit': format(in_force.limit, 'f'),
             'stage_remaining': format(in_force.limit - spent, 'f'), 'stage_requests': len(here),
-            'max_requests': in_force.max_requests, 'limits': limits.record()}
+            'max_requests': in_force.max_requests, 'limits': limits.record(),
+            **({'remainder': resumes} if remainder is not None else {})}
         return ledger.write_reopen(stage.id, state['failures'], document)
 
 

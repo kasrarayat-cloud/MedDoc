@@ -38,10 +38,12 @@ class OrdinaryResponseProfile(SimpleTestCase):
             with self.assertRaises(NoProviderRequest): g.job_request_profile(changed)
 
     def test_capacity_boundary_is_exact_serialized_response_not_an_arbitrary_matrix_size(self):
-        fields = [field('q' + str(i), 'Question ' + str(i)) for i in range(75)]
+        # (60 fields: the keyed v2 body is larger per unit — "<id>": "independent" — so 75 x 10 no longer fits)
+        fields = [field('q' + str(i), 'Question ' + str(i)) for i in range(60)]
         notes = ' '.join('The patient reports symptom ' + str(i) + '.' for i in range(10))
         config = g.configuration(); units = g.source_units(notes, fields)[0]
         self.assertGreater(len(fields) * len(units), 256)
+        self.assertLess(r.response_bound(fields, units), 20000)
         fields[-1]['key'] += 'x' * (20000 - r.response_bound(fields, units))
         compiled = r.compile_request(notes, fields, config)
         self.assertEqual(compiled['response_byte_bound'], 20000)

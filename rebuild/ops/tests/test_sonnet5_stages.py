@@ -25,7 +25,15 @@ walk's own builder). What each test proves:
   · (refutation EXPORT-CHECK-DOES-NOT-READ) a defective writer that exports a mark other than the reviewed one, or fills
     a held field, stops the stage through the stage's own read-back although the frozen check passes it;
   · (refutation RAW-RESPONSE-LOST-200) a billed response the product cannot settle is retained as received (id,
-    request-id, served model, stop reason, usage) with the money at the bound, and a response not retained stops.
+    request-id, served model, stop reason, usage) with the money at the bound, and a response not retained stops;
+  · (relations contract v2) the relations sends answer with the KEYED body (the frozen reference_answer's list body,
+    translated here in test code — app_path_steps.py is frozen); they run only under a contract-identity amendment
+    (in memory here: its committed-file rules are proved in test_provider_campaign), at its pricing version and at a
+    maximum recomputed by the same compiler; without it they refuse before anything is created;
+  · (REMAINDER) a stage reopened after the live failure's shape sends ONLY the six relations sends that failure did not
+    make, never one already made — and, since N02:field_relations stopped it and is never sent again, is decided FAILED
+    naming that stop (refutation F1: a remainder completes the evidence, never the pass); a stage whose earlier failure
+    stopped before any attempt passes on its remainder.
 """
 import dataclasses
 import io
@@ -72,6 +80,30 @@ else:
     from ops import sonnet5_stages as st
     from .test_provider_campaign import NoEnvOpened, limits_record, terms_record
     from .test_sonnet5_qa import SONNET_5
+
+    from core.tests.test_v3_field_relations import keyed
+    from .test_provider_campaign import RELATIONS_BASE, RELATIONS_V1, RELATIONS_V2
+    UNSENT = ['notes:N03:field_relations', 'notes:N10:field_relations', 'notes:N13:field_relations',
+              'notes:N14:field_relations', 'notes:N15:field_relations', 'notes:N16:field_relations']
+
+    def test_amendment(declaration):
+        """The contract-identity amendment the lead would commit, IN MEMORY (declared_amendment's file rules are proved
+        in test_provider_campaign.AmendmentTests; the campaign still proves it against the pinned terms)."""
+        return pc.Amendment(path='(in-memory test amendment)', sha256='0' * 64, commit='0' * 40, commit_time='',
+                            campaign=declaration.campaign, authority_id=declaration.authority_id,
+                            declaration_sha256=declaration.sha256, pricing_key=pc.AMENDABLE_PRICING_KEY,
+                            pinned_pricing_version=RELATIONS_V1, previous_pricing_version=RELATIONS_BASE,
+                            previous_contract='ordinary-field-relations-v1', contract='ordinary-field-relations-v2',
+                            pricing_version=RELATIONS_V2)
+
+    def wire_answer(notes, fields, payload, selection):
+        """The provider body for `selection` against the request actually sent: the frozen reference_answer, and on the
+        relations path its list body translated into the keyed v2 wire (test code only)."""
+        answer, units = st.steps.reference_answer(notes, fields, payload, selection)
+        if 'catalogue' in payload:
+            asked, offered = st.steps.source_units(notes, fields)
+            return keyed(answer, asked, offered), units
+        return answer, units
 
     STAGE_SETTINGS = {
         'mapping': dict(SONNET_5, QUILLMD_WORD_ENGINE='v3', QUILLMD_MAPPING_ASSISTANCE=True,
@@ -120,7 +152,7 @@ else:
             cls.declared = pc.declared(REAL_DECLARATION, repository=REPOSITORY, out=io.StringIO())
             cls.inputs = st.frozen_inputs()
 
-        def fresh_campaign(self, **changes):
+        def fresh_campaign(self, amended=True, **changes):
             """A new temporary campaign root (its own state directory and provider configuration directory) whose
             ledger holds the passed model_check — the live ledger's shape."""
             self.root = Path(tempfile.mkdtemp(prefix='sonnet5-stage-test-'))
@@ -130,7 +162,9 @@ else:
             os.chmod(credential, 0o600)
             self.credential = credential
             self.declaration = dataclasses.replace(self.declared, credential_file=str(credential), **changes)
-            self.campaign = pc.Campaign(self.declaration, self.root, watched_files=sq.WATCHED_FILES)
+            self.amendment = test_amendment(self.declaration) if amended else None
+            self.campaign = pc.Campaign(self.declaration, self.root, watched_files=sq.WATCHED_FILES,
+                                        amendment=self.amendment)
             self.addCleanup(self.campaign.ledger.release)
             self.pass_model_check()
             state = pc.private_directory(self.root / 'qa-state')
@@ -220,7 +254,7 @@ else:
                                    for q in payload['questions']]}
             else:
                 selection = {}
-            answer, units = st.steps.reference_answer(encounter.notes, fields, payload, selection)
+            answer, units = wire_answer(encounter.notes, fields, payload, selection)
             if units is not None:
                 self.assertEqual(units['sent'], units['expected'])
             return answer
@@ -370,11 +404,19 @@ else:
             classes = {}
             for (attempt, outcome), send in zip(rows, plan):
                 with self.subTest(send=send.id):
+                    relations = send.path == 'field_relations'
                     self.assertEqual(outcome['class'], 'completed')
-                    self.assertEqual(attempt['pricing_version'], self.declaration.pricing_version(send.pricing_key))
                     case = next(c for c in self.inputs['cases']['cases'] if c['id'] == send.case)
-                    self.assertEqual(Decimal(attempt['maximum_cost']),
-                                     Decimal(case['cost_bound_usd'][send.path]['provider_cost_max']))
+                    frozen = Decimal(case['cost_bound_usd'][send.path]['provider_cost_max'])
+                    self.assertEqual(attempt['amendment'], self.amendment.record())
+                    if relations:
+                        # (the amended version; a maximum the same compiler recomputed for the keyed request)
+                        self.assertEqual(attempt['pricing_version'], RELATIONS_V2)
+                        self.assertGreater(Decimal(attempt['maximum_cost']), frozen)
+                    else:
+                        self.assertEqual(attempt['pricing_version'], self.declaration.pricing_version(send.pricing_key))
+                        self.assertEqual(Decimal(attempt['maximum_cost']), frozen)
+                    self.assertEqual(attempt['terms'], terms_record(self.declaration))     # (the pinned terms, unchanged)
                     evidence = self.root / 'evidence' / f'{attempt["number"]:03d}'
                     for name in ('raw-selection.json', 'answers-adopted.json', 'answers-reviewed.json', 'replay.json',
                                  'export.docx', 'export.json', 'classification.json', 'manifest.json',
@@ -406,7 +448,7 @@ else:
             def answer(payload):
                 from core.models import Encounter
                 encounter = Encounter.objects.latest('created_at')
-                return st.steps.reference_answer(encounter.notes, encounter.template_version.fields, payload,
+                return wire_answer(encounter.notes, encounter.template_version.fields, payload,
                                                  exposure['selection'])[0]
             self.answers['notes:N13:default'] = answer
             with self.only('notes:N13:default', 'notes:N16:default'):
@@ -426,7 +468,7 @@ else:
             def answer(payload):
                 from core.models import Encounter
                 encounter = Encounter.objects.latest('created_at')
-                return st.steps.reference_answer(encounter.notes, encounter.template_version.fields, payload,
+                return wire_answer(encounter.notes, encounter.template_version.fields, payload,
                                                  veto['selection'])[0]
             self.answers['notes:N13:field_relations'] = answer
             with self.only('notes:N13:field_relations', 'notes:N14:field_relations'):
@@ -447,7 +489,7 @@ else:
             def answer(payload):
                 from core.models import Encounter
                 encounter = Encounter.objects.latest('created_at')
-                return st.steps.reference_answer(encounter.notes, encounter.template_version.fields, payload,
+                return wire_answer(encounter.notes, encounter.template_version.fields, payload,
                                                  selection)[0]
             return answer
 
@@ -713,6 +755,156 @@ else:
         def test_the_guard_is_on(self):
             network_guard.positive_control(self)
 
+    class NotesRemainderTests(StageTestCase):
+        """REMAINDER, end to end: the live failure's shape (15 sends made, the six relations sends not), reopened for a
+        repair this checkout contains, sends ONLY those six — under the amendment — and never one already made."""
+        STAGE = 'ordinary_notes'
+
+        def head(self):
+            import subprocess
+            done = subprocess.run(['git', '-C', str(REPOSITORY), 'rev-parse', 'HEAD'], capture_output=True, text=True)
+            self.assertEqual(done.returncode, 0)
+            return done.stdout.strip()
+
+        def failed_and_reopened(self, not_sent=UNSENT, stopper='notes:N02:field_relations'):
+            """Attempts 2..: the plan's sends minus `not_sent`, each completed, with the per-send rows Run.finish writes
+            (`stopper`, if made, stopped the stage — the live shape: attempt 17 there); failure 1 lists `not_sent`;
+            reopening 1 names this checkout's HEAD as the repair."""
+            from .test_provider_campaign import attempt, limits_record, usage
+            plan = [s.id for s in st.plan_sends('ordinary_notes', self.inputs)]
+            made = [send for send in plan if send not in not_sent]
+            ledger = self.campaign.ledger
+            ledger.acquire()
+            d = self.declaration
+            for number, send in enumerate(made, 2):
+                record = attempt(number, 'ordinary_notes', '0.2332', campaign=d.campaign, authority=d.authority_id,
+                                 limits=limits_record(d), terms=terms_record(d))
+                record['send'] = {'id': send}
+                ledger.write_attempt(record)
+                ledger.write_outcome(number, {'class': 'completed', 'usage': usage(input_tokens=2000, output_tokens=300)})
+            rows = [{'send': {'id': send}, 'attempt': number, 'stops_stage': send == stopper,
+                     'recorded_as': 'contract' if send == stopper else None} for number, send in enumerate(made, 2)]
+            ledger.write_stage('ordinary_notes', 'failed', {'reasons': ['synthetic'], 'summary': {
+                'plan': plan, 'not_sent': list(not_sent), 'sends': rows}})
+            head = self.head()
+            ledger.write_reopen('ordinary_notes', 1, {'ledger_attempts': len(ledger.rows()), 'repair_commit': head,
+                                                      'runner_commit': head})
+            ledger.release()
+            return len(made) + 1, head
+
+        def test_a_reopened_stage_sends_only_what_its_failure_did_not_send_and_cannot_pass(self):
+            # the live shape: N02:field_relations stopped the stage and is never sent again, so the six complete the
+            # stage's evidence and the stage is decided FAILED, naming that stop — never passed (refutation F1)
+            before, head = self.failed_and_reopened()
+            result = st.run_stage(self.campaign, self.STAGE, secret=SYNTHETIC_KEY, provenance={'runner_commit': head},
+                                  database_prefix='test_quillmd_qa_')
+            self.assertEqual(result['verdict'], 'FAIL', result['reasons'])
+            self.assertEqual(result['reasons'], [result['reasons'][0]])
+            self.assertIn('cannot pass', result['reasons'][0])
+            self.assertIn('notes:N02:field_relations', result['reasons'][0])
+            self.assertEqual([s['send'] for s in self.sent], UNSENT)
+            self.assert_every_send_was_durable_and_captured_first()
+            rows = self.campaign.ledger.rows()
+            made = [a['send']['id'] for a, _ in rows[1:before]]
+            new = rows[before:]
+            self.assertEqual([a['send']['id'] for a, _ in new], UNSENT)
+            self.assertFalse(set(made) & set(UNSENT))                              # (nothing made is ever sent again)
+            self.assertEqual(len(made) + len(UNSENT), 21)
+            for attempt, outcome in new:
+                with self.subTest(send=attempt['send']['id']):
+                    self.assertEqual((outcome['class'], attempt['pricing_version'], attempt['amendment']),
+                                     ('completed', RELATIONS_V2, self.amendment.record()))
+                    self.assertEqual(attempt['runner_commit'], head)
+            self.assertIsNone(self.campaign.ledger.stage_record('ordinary_notes', 'passed'))
+            failed = self.campaign.ledger.stage_record('ordinary_notes', 'failed')
+            self.assertEqual(failed['number'], 2)
+            self.assertEqual((failed['summary']['plan'], failed['summary']['not_sent']), (UNSENT, []))
+            self.assertEqual([r['stops_stage'] for r in failed['summary']['sends']], [False] * 6)
+            self.assertEqual([(e['send'], e['attempt']) for e in failed['summary']['earlier_stops']],
+                             [('notes:N02:field_relations', before)])            # (the last one made)
+            self.assertEqual(failed['summary']['remainder']['sends'], UNSENT)
+            self.assertEqual(failed['summary']['remainder']['failure'], 1)
+            self.assertEqual(failed['summary']['amendment'], self.amendment.record())
+            self.assertFalse(failed['summary']['frozen_walk']['valid'])          # (refutation F2-FROZEN-WALK)
+            with self.assertRaises(pc.Refused) as caught:                           # (nothing is left to send)
+                st.pending_sends(self.campaign, self.STAGE, st.plan_sends(self.STAGE, self.inputs))
+            self.assertIn('no remainder', str(caught.exception))
+
+        def test_a_remainder_after_a_stop_before_any_attempt_passes_the_stage(self):
+            # nothing was ever sent for N02:field_relations (it stopped before its attempt was written): it is in the
+            # remainder, and seven clean sends complete the plan with every send made once — a pass that was earned
+            relations = ['notes:N02:field_relations'] + UNSENT
+            before, head = self.failed_and_reopened(not_sent=relations)
+            result = st.run_stage(self.campaign, self.STAGE, secret=SYNTHETIC_KEY, provenance={'runner_commit': head},
+                                  database_prefix='test_quillmd_qa_')
+            self.assertEqual(result['verdict'], 'PASS', result['reasons'])
+            self.assertEqual([s['send'] for s in self.sent], relations)
+            passed = self.campaign.ledger.stage_record('ordinary_notes', 'passed')
+            self.assertEqual((passed['summary']['plan'], passed['summary']['earlier_stops']), (relations, []))
+            made = sorted(a['send']['id'] for a, _ in self.campaign.ledger.rows() if a['stage'] == 'ordinary_notes')
+            self.assertEqual(made, sorted(s.id for s in st.plan_sends(self.STAGE, self.inputs)))
+
+        def test_without_the_amendment_the_remainder_refuses_before_anything(self):
+            from core.models import Job, Template
+            self.fresh_campaign(amended=False)
+            before, head = self.failed_and_reopened()
+            with self.assertRaises(pc.Refused) as caught:
+                st.run_stage(self.campaign, self.STAGE, secret=SYNTHETIC_KEY, provenance={'runner_commit': head},
+                             database_prefix='test_quillmd_qa_')
+            self.assertIn('not the declared ordinary_notes_field_relations', str(caught.exception))
+            self.assertEqual((self.sent, len(self.campaign.ledger.rows()), Job.objects.count(),
+                              Template.objects.count()), ([], before, 0, 0))
+
+        def test_a_job_maximum_that_is_not_the_amended_plans_is_refused_before_its_attempt(self):
+            # the plan's recomputed maximum (the one fitted to the limits left) differs from the job's own by $0.000001:
+            # the job is cancelled unsent before its attempt is written
+            from core.models import Job, Reservation
+            before, head = self.failed_and_reopened()
+            real = st.price_sends
+
+            def drifted(*args, **kwargs):
+                return {k: {**v, 'maximum_cost': v['maximum_cost'] + Decimal('0.000001') if v['amended']
+                            else v['maximum_cost']} for k, v in real(*args, **kwargs).items()}
+            with patch.object(st, 'price_sends', side_effect=drifted):
+                result = st.run_stage(self.campaign, self.STAGE, secret=SYNTHETIC_KEY,
+                                      provenance={'runner_commit': head}, database_prefix='test_quillmd_qa_')
+            self.assertEqual(result['verdict'], 'FAIL')
+            self.assertEqual(self.sent, [])
+            self.assertEqual(len(self.campaign.ledger.rows()), before)
+            failed = self.campaign.ledger.stage_record('ordinary_notes', 'failed')
+            self.assertTrue(any("is not the amended plan's" in reason for reason in failed['reasons']), failed['reasons'])
+            self.assertEqual(failed['summary']['not_sent'], UNSENT)
+            self.assertEqual(Job.objects.get(kind='generation').state, 'cancelled')
+            self.assertFalse(Reservation.objects.filter(state='held').exists())
+
+        def test_a_relations_quote_priced_at_another_version_is_refused_before_its_attempt(self):
+            # after the plan was priced, the application prices the relations quote at another version: refused before
+            # Generate — nothing queued, nothing sent
+            from core import generation
+            from core.models import Job
+            before, head = self.failed_and_reopened()
+            real_price, real_configuration, tweaked = st.price_sends, generation.configuration, []
+
+            def priced_then_tweaked(*args, **kwargs):
+                priced = real_price(*args, **kwargs)
+                tweaked.append(True)
+                return priced
+
+            def configuration(fields=None):
+                config = real_configuration(fields)
+                return ({**config, 'pricing_version': 'configured-v1:' + 'e' * 64}
+                        if tweaked and config.get('ordinary_field_contract') else config)
+            with patch.object(st, 'price_sends', side_effect=priced_then_tweaked), \
+                    patch.object(generation, 'configuration', side_effect=configuration):
+                result = st.run_stage(self.campaign, self.STAGE, secret=SYNTHETIC_KEY,
+                                      provenance={'runner_commit': head}, database_prefix='test_quillmd_qa_')
+            self.assertEqual(result['verdict'], 'FAIL')
+            failed = self.campaign.ledger.stage_record('ordinary_notes', 'failed')
+            self.assertTrue(any('not the amended ordinary_notes_field_relations version' in reason
+                                for reason in failed['reasons']), failed['reasons'])
+            self.assertEqual((self.sent, len(self.campaign.ledger.rows())), ([], before))
+            self.assertFalse(Job.objects.filter(state='queued').exists())
+
     class StagePlanTests(StageTestCase):
         STAGE = 'mapping'
 
@@ -722,7 +914,8 @@ else:
                     with self.subTest(stage=stage), override_settings(**STAGE_SETTINGS[stage]), \
                             patch.dict(os.environ, st.STAGE_FLAGS[stage]):
                         scratch = pc.private_directory(self.root / 'tmp' / f'plan-{stage}')
-                        report = st.plan_report(stage, self.declaration, self.root, scratch)
+                        report = st.plan_report(stage, self.declaration, self.root, scratch,
+                                                self.amendment if stage == 'ordinary_notes' else None)
                         self.assertEqual([row['id'] for row in report['order']],
                                          [s.id for s in st.plan_sends(stage, self.inputs)])
                         self.assertEqual(report['sends'], count)

@@ -1,6 +1,8 @@
 """The stage runner's pure parts (ops/sonnet5_stages.py), offline, without a database: the fixed plans, the mapping
-unsafe rules, the notes field classes, the relations-path stop rule, the provider-selection reader and the offline
-`plan` command. The end-to-end sends are in test_sonnet5_stages.py (QA server)."""
+unsafe rules, the notes field classes, the relations-path stop rule, the provider-selection reader, the offline
+`plan` command (checked against the live ledger's OWN failure record), the remainder, the stage pass rule across runs
+(a remainder never passes over an earlier stop) and the interruption path (an ordinary exception leaves the failure,
+with what it did not send, to the stage decision). The end-to-end sends are in test_sonnet5_stages.py (QA server)."""
 import json
 import os
 import subprocess
@@ -9,6 +11,7 @@ import unittest
 import unittest.mock
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 from ops import provider_campaign as pc
 from ops import sonnet5_stages as st
@@ -311,10 +314,50 @@ class PlanCommandTests(unittest.TestCase):
         self.assertEqual(done.returncode, 0, done.stderr[-3000:])
         return json.loads(done.stdout)
 
+    @staticmethod
+    def ledger_decision(stage):
+        """The live ledger's own record of `stage`, read straight from its files (never through the code under test):
+        (the latest failure's summary or None, [(attempt number, send id) of the stage's attempts])."""
+        ledger = pc.LIVE_ROOT / 'ledger'
+
+        def number(path):
+            tail = path.stem.rsplit('-', 1)[-1]
+            return int(tail) if tail.isdigit() else 1
+        failures = sorted(ledger.glob(f'stage-{stage}-failed*.json'), key=number)
+        passed = (ledger / f'stage-{stage}-passed.json').exists()
+        latest = json.loads(failures[-1].read_text()) if failures and not passed else None
+        attempts = [json.loads(p.read_text()) for p in sorted(ledger.glob('[0-9][0-9][0-9]-attempt.json'))]
+        return (latest or {}).get('summary'), [(a['number'], (a.get('send') or {}).get('id')) for a in attempts
+                                               if a.get('stage') == stage]
+
     def test_plan_prints_every_send_its_bound_and_the_worst_case_against_the_limits(self):
-        for stage, count in (('mapping', 10), ('ordinary_notes', 21)):
+        # (the live ledger, read-only: a stage whose latest decision is a failure plans only that failure's unsent
+        # sends; one never failed plans all of them). The expected sends come from the LEDGER'S OWN failure record,
+        # read from its files here — never from the report, which would only compare the plan with itself (refutation
+        # F4-PLAN-CLI-TEST-TAUTOLOGICAL).
+        for stage, count in (('mapping', 10),):
             with self.subTest(stage=stage):
                 report = self.plan(stage)
+                full = [s.id for s in st.plan_sends(stage, st.frozen_inputs())]
+                summary, attempts = self.ledger_decision(stage)
+                if summary is not None:
+                    expected = [send for send in full if send in summary['not_sent']]
+                    self.assertEqual(expected, summary['not_sent'])              # (the record lists them in plan order)
+                    count = len(expected)
+                    self.assertIsNotNone(report['remainder'])
+                    self.assertEqual([row['id'] for row in report['order']], expected)
+                    self.assertEqual(report['remainder']['sends'], expected)
+                    self.assertEqual(report['remainder']['already_made'], sorted({send for _, send in attempts}))
+                    # a send that stopped the stage is never sent again, so the stage can never pass (refutation F1):
+                    # every stopping row the record carries is reported, and then the plan says the stage cannot pass
+                    stopped = {(row['attempt'], row['send']['id']) for row in summary['sends']
+                               if row.get('stops_stage') and row.get('attempt')}
+                    self.assertLessEqual(stopped, {(e['attempt'], e['send']) for e in report['earlier_stops']})
+                    self.assertEqual(report['can_pass'], not report['earlier_stops'])
+                    if stopped:
+                        self.assertFalse(report['can_pass'])
+                else:
+                    self.assertIsNone(report['remainder'])
                 self.assertEqual((report['stage'], report['sends'], len(report['order'])), (stage, count, count))
                 self.assertTrue(all(row['pricing_version_is_declared'] for row in report['order']))
                 bounds = [Decimal(row['bound_x1_1']) for row in report['order']]
@@ -326,7 +369,28 @@ class PlanCommandTests(unittest.TestCase):
                                  and Decimal(report['stage_worst_case']) <= Decimal(report['total_remaining']))
                 self.assertEqual((report['credential_read'], report['network'], report['database']),
                                  (False, 'none', 'none'))
-        self.assertEqual(Decimal(self.plan('ordinary_notes')['order'][0]['maximum_cost']), Decimal('0.116794'))
+
+    def test_without_an_amendment_the_notes_plan_refuses_at_the_field_relations_version(self):
+        # the repaired relations contract (v2) no longer prices at the declared v1 field-relations version: whether the
+        # plan is the whole stage or the remainder of its failure, the first relations send refuses (nothing planned)
+        done = subprocess.run([sys.executable, '-B', 'ops/sonnet5_qa.py', 'plan', '--stage', 'ordinary_notes'],
+                              cwd=REPOSITORY / 'rebuild', capture_output=True, text=True, timeout=900,
+                              env={'PATH': '/usr/bin:/bin', 'TMPDIR': '/tmp', 'HOME': '/tmp', 'LANG': 'C.UTF-8',
+                                   'PYTHONDONTWRITEBYTECODE': '1'})
+        self.assertEqual(done.returncode, 2, done.stderr[-3000:])
+        self.assertIn('field_relations: the application prices', done.stderr)
+        self.assertIn('not the declared ordinary_notes_field_relations', done.stderr)
+
+    def test_an_amendment_is_for_the_notes_stage_and_the_plan_and_run_commands_only(self):
+        env = {'PATH': '/usr/bin:/bin', 'TMPDIR': '/tmp', 'HOME': '/tmp', 'LANG': 'C.UTF-8', 'PYTHONDONTWRITEBYTECODE': '1'}
+        for argv, fragment in ((['plan', '--stage', 'mapping', '--amendment', '/nonexistent.md'], 'ordinary_notes stage only'),
+                               (['plan', '--amendment', '/nonexistent.md'], 'ordinary_notes stage only'),
+                               (['status', '--amendment', '/nonexistent.md'], 'Only plan and run')):
+            with self.subTest(argv=argv):
+                done = subprocess.run([sys.executable, '-B', 'ops/sonnet5_qa.py', *argv], cwd=REPOSITORY / 'rebuild',
+                                      capture_output=True, text=True, timeout=300, env=env)
+                self.assertEqual(done.returncode, 2, done.stderr[-2000:])
+                self.assertIn(fragment, done.stderr)
 
     def test_an_unknown_stage_is_refused(self):
         done = subprocess.run([sys.executable, '-B', 'ops/sonnet5_qa.py', 'plan', '--stage', 'holdout'],
@@ -613,6 +677,401 @@ class RawSelectionTests(unittest.TestCase):
         for message in ({'content': []}, {'content': [{'type': 'text', 'text': '{}'}, {'type': 'text', 'text': '{}'}]}):
             with self.subTest(message=message), self.assertRaises(pc.Refused):
                 st.raw_selection(message, [], '', 'default')
+
+    def test_the_keyed_relations_answer_reads_into_the_replays_unchanged_shape(self):
+        # (N13's frozen form and notes; the keyed wire the repaired contract returns, members in any order)
+        inputs = st.frozen_inputs()
+        case = next(c for c in inputs['cases']['cases'] if c['id'] == 'N13')
+        fields = inputs['cases']['forms'][case['form']]['fields']
+        asked, units = st.steps.source_units(case['notes'], fields)
+        first, other = asked[0]['key'], asked[1]['key']
+        ids = [u['id'] for u in units]
+        body = {'fields': {other: {'unit_ids': [], 'conflict': True, 'context': {str(i): 'independent' for i in ids}},
+                           first: {'unit_ids': [ids[0]], 'conflict': False,
+                                   'context': {**{str(i): 'independent' for i in reversed(ids[1:])},
+                                               str(ids[0]): 'answer', str(ids[1]): 'contrary'}}}}
+        message = {'content': [{'type': 'text', 'text': json.dumps(body)}]}
+        selection = st.raw_selection(message, fields, case['notes'], 'field_relations')
+        self.assertEqual(set(selection), {first, other})
+        self.assertEqual(selection[first], {'unit_ids': [ids[0]], 'conflict': False, 'options': [],
+                                            'relations': {units[1]['quote']: 'contrary'}})
+        self.assertEqual(selection[other], {'unit_ids': [], 'conflict': True, 'options': [], 'relations': {}})
+        # (the frozen replay's own reader of this shape: offline_replay adopt(), unchanged)
+        for bad in ({'fields': [{'key': first, 'unit_ids': [], 'conflict': False, 'option_ids': [], 'context': []}]},
+                    {'fields': {first: body['fields'][first]}}):
+            with self.subTest(bad=bad), self.assertRaises(pc.Refused):
+                st.raw_selection({'content': [{'type': 'text', 'text': json.dumps(bad)}]}, fields, case['notes'],
+                                 'field_relations')
+        default = {'fields': [{'key': first, 'unit_ids': [ids[0]], 'conflict': False}]}
+        self.assertEqual(st.raw_selection({'content': [{'type': 'text', 'text': json.dumps(default)}]}, fields,
+                                          case['notes'], 'default'),
+                         {first: {'unit_ids': [ids[0]], 'conflict': False}})
+
+
+class PendingSendsTests(unittest.TestCase):
+    """REMAINDER: once a stage has failed (and until it passes) it sends ONLY what its latest failure recorded as not
+    sent; a send with an attempt is never sent again; a failure that cannot say what it did not send refuses."""
+
+    @classmethod
+    def setUpClass(cls):
+        import io
+        from .test_provider_campaign import REAL_DECLARATION
+        cls.inputs = st.frozen_inputs()
+        cls.declaration = pc.declared(REAL_DECLARATION, repository=REPOSITORY, out=io.StringIO())
+
+    def campaign(self, **kwargs):
+        from .test_sonnet5_amendment_plan import live_shape
+        return pc.Campaign(self.declaration, live_shape(self, self.declaration, **kwargs))
+
+    def pending(self, campaign, stage='ordinary_notes'):
+        return st.pending_sends(campaign, stage, st.plan_sends(stage, self.inputs))
+
+    def test_the_live_failures_remainder_is_its_six_unsent_relations_sends(self):
+        from .test_sonnet5_amendment_plan import UNSENT
+        for reopened in (False, True):
+            with self.subTest(reopened=reopened):
+                sends, remainder = self.pending(self.campaign(reopened=reopened))
+                self.assertEqual([s.id for s in sends], UNSENT)
+                self.assertEqual({s.path for s in sends}, {'field_relations'})
+                self.assertEqual([s.index for s in sends], [16, 17, 18, 19, 20, 21])      # (their places in the plan)
+                self.assertEqual(remainder['sends'], UNSENT)
+                self.assertEqual(len(remainder['already_made']), 15)
+                self.assertIn('notes:N02:field_relations', remainder['already_made'])
+                self.assertFalse(set(UNSENT) & set(remainder['already_made']))
+
+    def test_a_stage_that_never_failed_or_has_passed_plans_everything(self):
+        from .test_provider_campaign import scratch
+        fresh = pc.Campaign(self.declaration, scratch(self))
+        sends, remainder = self.pending(fresh)
+        self.assertEqual((len(sends), remainder), (21, None))
+        campaign = self.campaign(reopened=True)
+        campaign.ledger.acquire()
+        campaign.ledger.write_stage('ordinary_notes', 'passed', {'summary': {}})
+        campaign.ledger.release()
+        self.assertEqual(len(self.pending(campaign)[0]), 21)                  # (admission refuses a passed stage anyway)
+
+    def test_a_send_with_an_attempt_is_never_sent_again(self):
+        from .test_sonnet5_amendment_plan import UNSENT
+        campaign = self.campaign(not_sent=UNSENT + ['notes:N02:field_relations'],
+                                 extra_attempted=['notes:N02:field_relations'])
+        with self.assertRaises(pc.Refused) as caught:
+            self.pending(campaign)
+        self.assertIn('notes:N02:field_relations already has an attempt', str(caught.exception))
+
+    def edited_failure(self, edit):
+        from .test_sonnet5_amendment_plan import live_shape
+        root = live_shape(self, self.declaration)
+        path = root / 'ledger' / 'stage-ordinary_notes-failed-1.json'
+        record = json.loads(path.read_text())
+        edit(record)
+        os.chmod(path, 0o600)
+        path.unlink()
+        pc.write_new(path, record)
+        return pc.Campaign(self.declaration, root)
+
+    def test_a_failure_that_cannot_say_what_it_did_not_send_refuses(self):
+        cases = {
+            'no summary (a settled interruption)': (lambda r: r.pop('summary'), 'no readable list'),
+            'no not_sent': (lambda r: r['summary'].pop('not_sent'), 'no readable list'),
+            'nothing unsent': (lambda r: r['summary'].update(not_sent=[]), 'no remainder'),
+            'an unknown send': (lambda r: r['summary']['not_sent'].append('notes:N99:default'), 'does not have'),
+            'a send listed twice': (lambda r: r['summary']['not_sent'].append(r['summary']['not_sent'][0]), 'does not have'),
+            'a planned send dropped': (lambda r: r['summary']['not_sent'].pop(), 'neither made nor lists'),
+        }
+        for name, (edit, fragment) in cases.items():
+            with self.subTest(name=name), self.assertRaises(pc.Refused) as caught:
+                self.pending(self.edited_failure(edit))
+            self.assertIn(fragment, str(caught.exception))
+
+    def test_an_attempt_that_records_no_send_refuses(self):
+        campaign = self.campaign()
+        path = campaign.ledger.dir / '005-attempt.json'
+        record = json.loads(path.read_text()); record.pop('send')
+        path.unlink(); pc.write_new(path, record)
+        with self.assertRaises(pc.Refused) as caught:
+            self.pending(campaign)
+        self.assertIn('records no send', str(caught.exception))
+
+    def test_a_mapping_encounter_never_runs_without_its_forms_mapping_send(self):
+        from .test_provider_campaign import attempt, limits_record, scratch, terms_record, usage
+        plan = [s.id for s in st.plan_sends('mapping', self.inputs)]
+        for made, expected in ((['mapping:f1-guidance-confirmation'], plan[1:]),              # (the live mapping failure)
+                               (plan[:7], None)):                                              # (f6a mapped, its encounter not)
+            with self.subTest(made=len(made)):
+                campaign = pc.Campaign(self.declaration, scratch(self))
+                ledger = campaign.ledger
+                ledger.acquire()
+                d = self.declaration
+                ledger.write_attempt(attempt(1, campaign=d.campaign, authority=d.authority_id, limits=limits_record(d),
+                                             terms=terms_record(d)))
+                ledger.write_outcome(1, {'class': 'completed', 'usage': usage()})
+                ledger.write_stage('model_check', 'passed', {'attempt': 1})
+                for number, send in enumerate(made, 2):
+                    record = attempt(number, 'mapping', campaign=d.campaign, authority=d.authority_id,
+                                     limits=limits_record(d), terms=terms_record(d))
+                    record['send'] = {'id': send}
+                    ledger.write_attempt(record)
+                    ledger.write_outcome(number, {'class': 'completed', 'usage': usage()})
+                ledger.write_stage('mapping', 'failed', {'reasons': ['synthetic'], 'summary': {
+                    'plan': plan, 'not_sent': [s for s in plan if s not in made], 'sends': []}})
+                ledger.release()
+                if expected is None:
+                    with self.assertRaises(pc.Refused) as caught:
+                        self.pending(campaign, 'mapping')
+                    self.assertIn('needs its form', str(caught.exception))
+                else:
+                    self.assertEqual([s.id for s in self.pending(campaign, 'mapping')[0]], expected)
+
+
+class StagePassTests(unittest.TestCase):
+    """REMAINDER, refutations F1 and F1-REMAINDER-FALSE-PASS: a remainder completes a stage's EVIDENCE, never its pass.
+    The stage passes only when no attempt of any of its runs stopped it or ended with no decision recording how
+    (sonnet5_stages.earlier_stops). A send that stopped the stage is never sent again, so after one the stage can never
+    pass: a clean remainder is decided `failed`, naming the earlier stop, with nothing left unsent. Only a stage whose
+    earlier failure stopped BEFORE an attempt (nothing was sent for it) can still pass on its remainder. The remainder
+    itself — what is sent — is unchanged: exactly the latest failure's not_sent. Synthetic ledgers in temporary
+    directories; nothing real is read or written (the live-ledger test only reads)."""
+
+    SECRET = 'sk-ant-api03-SYNTHETIC-OFFLINE-PASS-TEST-000000000000000000000000000000000000-PPPPPPPP'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.inputs = st.frozen_inputs()
+        cls.plan = [s.id for s in st.plan_sends('ordinary_notes', cls.inputs)]
+
+    def setUp(self):
+        from .test_provider_campaign import declaration, scratch
+        self.root = scratch(self)
+        self.declaration = declaration()
+        self.campaign = pc.Campaign(self.declaration, self.root)
+        self.ledger = self.campaign.ledger
+        self.ledger.acquire()
+        self.addCleanup(self.ledger.release)
+        self.write('model_check')
+        self.ledger.write_stage('model_check', 'passed', {'attempt': 1})
+
+    def write(self, stage, send=None, outcome='completed', job_state='succeeded'):
+        from .test_provider_campaign import attempt, limits_record, usage
+        number = len(self.ledger.rows()) + 1
+        record = attempt(number, stage, '0.2332', limits=limits_record(self.declaration))
+        if send:
+            record['send'] = {'id': send}
+        self.ledger.write_attempt(record)
+        self.ledger.write_outcome(number, {'class': outcome, 'job_state': job_state,
+                                           **({'usage': usage()} if outcome == 'completed' else {})})
+        return number
+
+    @staticmethod
+    def row(send, number, stops=False, recorded_as=None):
+        """A per-send record as Run.finish writes it into the stage summary."""
+        return {'send': {'id': send}, 'attempt': number, 'stops_stage': stops, 'recorded_as': recorded_as,
+                'findings': [{'code': 'validator_failure', 'why': 'synthetic'}] if stops else []}
+
+    def record_failure(self, plan, rows, not_sent, reasons=('synthetic stop',)):
+        self.ledger.write_stage('ordinary_notes', 'failed', {'reasons': list(reasons), 'summary': {
+            'plan': plan, 'sends': rows, 'not_sent': not_sent}})
+
+    def reopen(self):
+        number = self.ledger.stage_state('ordinary_notes')['failures']
+        self.ledger.write_reopen('ordinary_notes', number, {'ledger_attempts': len(self.ledger.rows()),
+                                                           'repair_commit': '1' * 40})
+
+    def first_run(self, made, stopper=None, recorded_as='contract', rows_for=None):
+        """Attempts for `made` (`stopper`, if made, stopped the stage), failure 1 listing every other planned send as not
+        sent, then reopening 1. `rows_for`: the sends the failure records a per-send row for (default: all made)."""
+        rows = []
+        for send in made:
+            number = self.write('ordinary_notes', send)
+            if rows_for is None or send in rows_for:
+                rows.append(self.row(send, number, send == stopper, recorded_as if send == stopper else None))
+        self.record_failure(self.plan, rows, [s for s in self.plan if s not in made])
+        self.reopen()
+
+    def run_of(self, records):
+        return SimpleNamespace(ledger=self.ledger, stage='ordinary_notes', sends=records, veto_evidence=[],
+                               inputs={'freeze': {'manifest_sha256': 'synthetic'}}, root=self.root, secret=self.SECRET,
+                               declaration=SimpleNamespace(credential_file=str(self.root / 'no-credential')))
+
+    def pending(self):
+        return st.pending_sends(self.campaign, 'ordinary_notes', st.plan_sends('ordinary_notes', self.inputs))
+
+    def clean_remainder(self):
+        """The remainder, every send made once and clean, then the stage decision."""
+        sends, remainder = self.pending()
+        records = [self.row(send.id, self.write('ordinary_notes', send.id)) for send in sends]
+        return [s.id for s in sends], st.decide_stage(self.run_of(records), sends, [], [], {'remainder': remainder})
+
+    def assert_cannot_pass(self, result, stoppers):
+        self.assertEqual(result['verdict'], 'FAIL')
+        state = self.ledger.stage_state('ordinary_notes')
+        self.assertEqual(state['state'], 'failed')
+        self.assertIsNone(state['passed'])
+        failure = state['failed'][-1]
+        self.assertEqual(failure['summary']['not_sent'], [])
+        self.assertEqual([e['send'] for e in failure['summary']['earlier_stops']], stoppers)
+        self.assertTrue(any('cannot pass' in reason and all(s in reason for s in stoppers)
+                            for reason in failure['reasons']), failure['reasons'])
+        # nothing is left to send: a further reopening has no remainder, and admission refuses the failed stage
+        with self.assertRaises(pc.Refused) as caught:
+            self.pending()
+        self.assertIn('no remainder', str(caught.exception))
+        with self.assertRaises(pc.Refused):
+            self.campaign.admit('ordinary_notes', '0.01', runner_commit='2' * 40)
+
+    def test_a_clean_remainder_after_the_live_stop_is_failed_never_passed(self):
+        # the live shape: 14 default sends and N02:field_relations made, N02:field_relations stopped the stage
+        from .test_sonnet5_amendment_plan import UNSENT
+        self.first_run([s for s in self.plan if s not in UNSENT], stopper='notes:N02:field_relations')
+        sent, result = self.clean_remainder()
+        self.assertEqual(sent, UNSENT)                                # (the remainder is unchanged: the six)
+        self.assert_cannot_pass(result, ['notes:N02:field_relations'])
+
+    def test_an_unsafe_default_stop_is_never_passed_over(self):
+        # refutation F1 scenario B: N05:default stops as UNSAFE; the remainder is everything after it, never N05 itself
+        made = self.plan[:self.plan.index('notes:N05:default') + 1]
+        self.first_run(made, stopper='notes:N05:default', recorded_as='unsafe')
+        sent, result = self.clean_remainder()
+        self.assertEqual(sent, self.plan[len(made):])
+        self.assert_cannot_pass(result, ['notes:N05:default'])
+
+    def test_a_shrinking_remainder_never_passes(self):
+        # refutation F1-REMAINDER-FALSE-PASS (3): each remainder run's first send stops it; the last one runs clean
+        from .test_sonnet5_amendment_plan import UNSENT
+        self.first_run([s for s in self.plan if s not in UNSENT], stopper='notes:N02:field_relations')
+        stoppers = ['notes:N02:field_relations']
+        while True:
+            sends, remainder = self.pending()
+            if len(sends) == 1:
+                break
+            first = sends[0].id
+            number = self.write('ordinary_notes', first, job_state='failed')
+            st.decide_stage(self.run_of([self.row(first, number, True, 'contract')]), sends,
+                            [f'{first}: synthetic stop'], [s.id for s in sends[1:]], {'remainder': remainder})
+            stoppers.append(first)
+            self.reopen()
+        self.assertEqual(len(stoppers), 6)
+        sent, result = self.clean_remainder()
+        self.assertEqual(sent, ['notes:N16:field_relations'])
+        self.assert_cannot_pass(result, stoppers)
+
+    def test_a_not_sent_outcome_that_stopped_the_stage_is_never_passed_over(self):
+        # refutation F1-REMAINDER-FALSE-PASS (4): an attempt that ended not_sent (no request) and stopped the stage
+        from .test_sonnet5_amendment_plan import UNSENT
+        self.first_run([s for s in self.plan if s not in UNSENT], stopper='notes:N02:field_relations')
+        sends, remainder = self.pending()
+        number = self.write('ordinary_notes', sends[0].id, outcome='not_sent', job_state='failed')
+        st.decide_stage(self.run_of([self.row(sends[0].id, number, True, 'contract')]), sends,
+                        [f'{sends[0].id}: ended not_sent'], [s.id for s in sends[1:]], {'remainder': remainder})
+        self.reopen()
+        sent, result = self.clean_remainder()
+        self.assertNotIn(sends[0].id, sent)                           # (it has an attempt: never sent again)
+        self.assert_cannot_pass(result, ['notes:N02:field_relations', sends[0].id])
+
+    def test_an_earlier_attempt_no_decision_records_blocks_the_pass(self):
+        # an earlier attempt whose run recorded no per-send row (an interrupted or settled run) cannot be shown clean
+        defaults = [s for s in self.plan if s.endswith(':default')]
+        self.first_run(defaults, rows_for=defaults[1:])
+        sent, result = self.clean_remainder()
+        self.assertEqual(sent, [s for s in self.plan if s.endswith(':field_relations')])
+        self.assert_cannot_pass(result, [defaults[0]])
+        failure = self.ledger.stage_state('ordinary_notes')['failed'][-1]
+        self.assertIn('no decision of the stage records how it ended', failure['summary']['earlier_stops'][0]['why'])
+
+    def test_a_row_that_names_another_send_or_names_an_attempt_twice_is_not_clean(self):
+        # an attempt is clean only when exactly one row names it, for the send the attempt records, not stopping
+        defaults = [s for s in self.plan if s.endswith(':default')]
+        numbers = [self.write('ordinary_notes', send) for send in defaults]
+        rows = [self.row(send, number) for send, number in zip(defaults, numbers)]
+        rows[0] = self.row(defaults[1], numbers[0])                    # (attempt 2's row names another send)
+        rows.append(self.row(defaults[2], numbers[2]))                 # (attempt 4 named twice)
+        self.record_failure(self.plan, rows, [s for s in self.plan if s not in defaults])
+        self.reopen()
+        _, result = self.clean_remainder()
+        self.assert_cannot_pass(result, [defaults[0], defaults[2]])
+        whys = [e['why'] for e in self.ledger.stage_state('ordinary_notes')['failed'][-1]['summary']['earlier_stops']]
+        self.assertEqual(whys, ['its decision records it for another send',
+                                'more than one decision of the stage records it'])
+
+    def test_a_stop_before_any_attempt_still_lets_the_remainder_pass(self):
+        # nothing was sent for the stopping send (stopped before its attempt was written): it is in the remainder, and
+        # a remainder that runs clean completes the whole plan, each send made once — a pass that was earned
+        defaults = [s for s in self.plan if s.endswith(':default')]
+        self.first_run(defaults)
+        sent, result = self.clean_remainder()
+        self.assertEqual(sent, [s for s in self.plan if s.endswith(':field_relations')])
+        self.assertEqual(result['verdict'], 'PASS', result['reasons'])
+        state = self.ledger.stage_state('ordinary_notes')
+        self.assertEqual(state['state'], 'passed')
+        self.assertEqual(state['passed']['summary']['earlier_stops'], [])
+        made = [a['send']['id'] for a, _ in self.ledger.rows() if a['stage'] == 'ordinary_notes']
+        self.assertEqual(sorted(made), sorted(self.plan))              # (every planned send exactly once)
+
+    def test_the_live_ledgers_earlier_stops_are_its_two_recorded_stops(self):
+        # the live ledger, read-only (the stage functions read it; nothing is written, no lock is taken)
+        ledger = pc.Ledger(pc.LIVE_ROOT / 'ledger')
+        if not ledger.dir.is_dir():
+            self.skipTest('no live ledger on this host')
+        stops = {stage: [(e['send'], e['attempt']) for e in st.earlier_stops(ledger, stage)]
+                 for stage in ('mapping', 'ordinary_notes')}
+        self.assertEqual(stops, {'mapping': [('mapping:f1-guidance-confirmation', 2)],
+                                 'ordinary_notes': [('notes:N02:field_relations', 17)]})
+
+
+class InterruptionTests(unittest.TestCase):
+    """Refutation F2: an ordinary exception inside a send, after its attempt was written, no longer fails the stage on
+    the spot (which left a failure that recorded nothing it did not send, so a reopening had no remainder and the stage
+    stuck open): the attempt gets its outcome, and the stage decision records the failure WITH the sends not made. An
+    interruption that ends the process still fails the stage at once (it cannot be decided later)."""
+
+    def setUp(self):
+        from .test_provider_campaign import attempt, declaration, limits_record, scratch, usage
+        self.inputs = st.frozen_inputs()
+        self.plan = st.plan_sends('ordinary_notes', self.inputs)
+        self.root = scratch(self)
+        self.campaign = pc.Campaign(declaration(), self.root)
+        self.ledger = self.campaign.ledger
+        self.ledger.acquire()
+        self.addCleanup(self.ledger.release)
+        self.ledger.write_attempt(attempt(1, limits=limits_record(declaration())))
+        self.ledger.write_outcome(1, {'class': 'completed', 'usage': usage()})
+        self.ledger.write_stage('model_check', 'passed', {'attempt': 1})
+        record = attempt(2, 'ordinary_notes', '0.2332', limits=limits_record(declaration()))
+        record['send'] = self.plan[0].record()
+        self.ledger.write_attempt(record)                          # (in flight: no outcome yet)
+        self.attempt = record
+        self.run = SimpleNamespace(ledger=self.ledger, stage='ordinary_notes', sends=[], veto_evidence=[],
+                                   inputs={'freeze': {'manifest_sha256': 'synthetic'}}, root=self.root,
+                                   secret=StagePassTests.SECRET,
+                                   declaration=SimpleNamespace(credential_file=str(self.root / 'no-credential')))
+
+    def test_an_ordinary_exception_leaves_the_decision_and_its_remainder_to_the_stage(self):
+        record, stops = st.Run.interrupted(self.run, self.plan[0], self.attempt, self.root,
+                                           pc.Refused('The frozen replay refused or failed (1)'))
+        self.assertTrue(stops)
+        self.assertEqual(self.ledger.rows()[1][1]['class'], 'uncertain')          # (the outcome is recorded)
+        self.assertEqual(self.ledger.stage_state('ordinary_notes')['state'], 'open')   # (not failed on the spot)
+        not_sent = [s.id for s in self.plan[1:]]
+        result = st.decide_stage(self.run, self.plan, ['notes:N01:default: interrupted'], not_sent, {})
+        self.assertEqual(result['verdict'], 'FAIL')
+        failure = self.ledger.stage_state('ordinary_notes')['failed'][-1]
+        self.assertEqual((failure['summary']['not_sent'], failure['summary']['sends'][0]['recorded_as']),
+                         (not_sent, 'interrupted'))
+        self.ledger.write_reopen('ordinary_notes', 1, {'ledger_attempts': 2, 'repair_commit': '1' * 40})
+        sends, remainder = st.pending_sends(self.campaign, 'ordinary_notes', self.plan)
+        self.assertEqual([s.id for s in sends], not_sent)                    # (the stage can go on, once repaired)
+        self.assertEqual(remainder['already_made'], [self.plan[0].id])
+
+    def test_an_interruption_that_ends_the_process_still_fails_the_stage_at_once(self):
+        with self.assertRaises(KeyboardInterrupt):
+            st.Run.interrupted(self.run, self.plan[0], self.attempt, self.root, KeyboardInterrupt())
+        state = self.ledger.stage_state('ordinary_notes')
+        self.assertEqual(state['state'], 'failed')
+        self.assertNotIn('summary', state['failed'][-1])
+        # (that failure cannot say what it did not send: a reopening is refused for it — test_provider_campaign
+        # ReopenTests — rather than leaving the stage open with nothing it could send)
+        with self.assertRaises(pc.Refused) as caught:
+            st.pending_sends(self.campaign, 'ordinary_notes', self.plan)
+        self.assertIn('no readable list', str(caught.exception))
 
 
 if __name__ == '__main__':
