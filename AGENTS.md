@@ -1148,6 +1148,21 @@ Use `shred -u -n 3 -z`, not `rm`. Root-owned artifacts need the documented
 root-via-docker path; a silent "Permission denied" from `shred` leaves the file
 exactly where it was.
 
+**AND SHRED ONLY WHAT YOU RECORDED, NEVER A SWEEP (2026-09-29).** A whole-tree
+`find … | xargs bash scripts/reap-session-scratch.sh` over a session scratchpad
+shredded 30 files other agents had written, and a second sweep shredded 6,537
+more, its own logs included. Every path was inside the sandbox, but the sandbox
+belongs to one uid shared by every agent, so "inside" does not mean "mine".
+**Record each disposable file when you create it** with
+`bash scripts/scratch-ledger.sh record --agent <session id> <ledger> <file>...`
+(`--retain` for evidence). Keep the ledger in a private directory OUTSIDE
+`/tmp/claude-<uid>/`. **Close out with
+`bash scripts/reap-recorded-scratch.sh <ledger>`.** It shreds only recorded,
+unchanged, unshared, unopened and unretained files, and logs every decision.
+**Subagents use only that door.** `reap-session-scratch.sh` refuses more than 16
+paths, or a `find`/`xargs` driver, unless `REAP_SESSION_BULK_DECLARATION` says why.
+Full account: canon 123's 2026-09-29 amendment.
+
 **Shred, then CHECK EXIT CODES, then escalate the failures — and only then
 remove the directory.** Unlinking before the failures are resolved converts a
 recoverable "Permission denied" into a permanent one: the file is gone, so it

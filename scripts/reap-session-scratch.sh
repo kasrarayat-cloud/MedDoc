@@ -41,6 +41,35 @@ command -v shred >/dev/null 2>&1 || {
 
 [ "$#" -gt 0 ] || { echo "usage: reap-session-scratch.sh <file>..."; exit 1; }
 
+# ⚠️ AND IT REFUSES TO BE DRIVEN BY A WHOLE-TREE SWEEP — 2026-09-29, twice.
+#
+#   find <whole session scratchpad> -type f | xargs bash scripts/reap-session-scratch.sh
+#       -> a subagent shredded 30 files OTHER agents had written
+#   find … -print0 | xargs -0 -n 200 bash scripts/reap-session-scratch.sh   (three passes)
+#       -> the lead shredded 6,537 files, including the cleanup's own lists and logs
+#
+# Every path was inside the sandbox, untracked and not a symlink escape, so every
+# refusal below passed — correctly. None of them is OWNERSHIP: the sandbox is one
+# uid's, shared by every agent in it. So a call naming more than
+# REAP_SESSION_BULK_BOUND paths, or driven by a find/xargs/parallel ancestor, is
+# REFUSED unless REAP_SESSION_BULK_DECLARATION says why (12+ chars of prose,
+# echoed to stderr — the DECLARE_CANCELLATION check, sourced not copied).
+#
+# ⚠️ SUBAGENTS DO NOT USE THIS DOOR FOR CLOSE-OUT. Record each disposable file
+# when you create it (`bash scripts/scratch-ledger.sh record …`) and reap only the
+# ledger (`bash scripts/reap-recorded-scratch.sh <ledger>`), which shreds nothing
+# it did not record and nothing that changed since.
+REAP_SESSION_BULK_BOUND=16
+_reap_here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || _reap_here=""
+if [ -z "$_reap_here" ] || [ ! -r "$_reap_here/lib/sweep-guard.sh" ]; then
+  echo "🔴 reap: CANNOT TELL — scripts/lib/sweep-guard.sh is missing, so a sweep cannot be"
+  echo "   told from a deliberate call. Refusing."
+  exit 1
+fi
+# shellcheck source=lib/sweep-guard.sh
+. "$_reap_here/lib/sweep-guard.sh"
+sweep_guard "reap-session-scratch" "$#" "$REAP_SESSION_BULK_BOUND" REAP_SESSION_BULK_DECLARATION || exit 1
+
 # Walk up from a path to the sandbox root looking for a repository marker. A
 # `.git` FILE (a worktree) counts as much as a `.git` DIRECTORY: the whole point
 # is that the marker survives the worktree registration it points at.

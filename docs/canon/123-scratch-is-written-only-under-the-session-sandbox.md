@@ -58,3 +58,28 @@ version was available at that instant and never again.**
 
 The sibling entries are about detecting the artifact. This one is about not
 manufacturing it.
+
+## ⚠️ AMENDED 2026-09-29 — INSIDE THE SANDBOX IS NOT "MINE": RECORD IT WHEN YOU MAKE IT
+
+The measurement above — *11,490 files in one sweep, zero failures* — is kept,
+because it is exactly the shape that failed twice on 2026-09-29. A subagent ran
+`find <whole session scratchpad> -type f | xargs bash scripts/reap-session-scratch.sh`
+and shredded **30 files other agents had written**; the lead later swept the
+same scratchpad with `find … | xargs -0 -n 200 …` in three passes and shredded
+**6,537**, the cleanup's own lists and logs included. Zero failures is what a
+sweep reports when every per-path check passes, and none of those checks is
+OWNERSHIP: the sandbox belongs to one uid and is shared by every agent in it.
+
+So the write-time rule has a second half, answered at the same instant:
+**record the file as yours when you create it, and reap only what you recorded.**
+
+    bash scripts/scratch-ledger.sh record --agent <session id> [--retain] <ledger> <file>...
+    bash scripts/reap-recorded-scratch.sh [--retained <manifest>]... <ledger>
+
+The ledger and the reaper's log live OUTSIDE the sandbox in a private
+directory. The reaper takes only recorded entries and refuses any that changed
+path, inode, content, owner or link count, is retained, is tracked by git, or
+is held by a live process. It never walks a directory. `reap-session-scratch.sh`
+now refuses more than 16 paths in one call, or a `find`/`xargs` driver, unless
+`REAP_SESSION_BULK_DECLARATION` says why. **Subagents close out with the
+recorded reaper, never with a sweep.**
