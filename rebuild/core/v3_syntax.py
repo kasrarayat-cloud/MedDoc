@@ -110,13 +110,19 @@ def docs(texts):
     return out
 
 
-def _complete(doc, subject_span=None):
+def _complete(doc, subject_span=None, allowed=frozenset()):
     if len(doc) > MAX_TOKENS or len(list(doc.sents)) != 1:
         return False
     sentence = next(iter(doc.sents))
     root = sentence.root
     if root.pos_ not in ('VERB', 'AUX'):
         return False
+    # 2026-09-30: an adverbial clause of the ROOT whose marker starts at a character offset in `allowed` (the caller's
+    # proof that it states the destination's own printed time) is set aside, subtree and all; nothing else is.
+    ignored = {t.i for clause in root.children if clause.dep_ == 'advcl'
+               and any(c.dep_ == 'mark' and c.idx in allowed for c in clause.children)
+               for t in clause.subtree}
+    doc = [token for token in doc if token.i not in ignored]
     # Only a simple declarative clause gets this additional syntax allowance.
     # Quoted/embedded, relative, conditional, passive and infinitival clauses
     # need a separately qualified source relation, not inferred actor/scope.
@@ -149,7 +155,7 @@ def _complete(doc, subject_span=None):
     return bool(words and words[-1].pos_ not in ('CCONJ', 'SCONJ', 'ADP', 'DET', 'AUX', 'PART'))
 
 
-def complete_ids(units, *, subject_spans=None):
+def complete_ids(units, *, subject_spans=None, allowed=None):
     """Syntax proof for at most 64 bounded source units in their original order.
 
     A missing model, excess unit, long text or parser error yields no new allowance.
@@ -172,7 +178,8 @@ def complete_ids(units, *, subject_spans=None):
                 if subject_spans is not None and unit['id'] not in subject_spans:
                     continue
                 span = None if subject_spans is None else subject_spans[unit['id']]
-                if _complete(doc, span) or _bare_patient_clause(unit['quote'], span):
+                if (_complete(doc, span, (allowed or {}).get(unit['id'], frozenset()))
+                        or _bare_patient_clause(unit['quote'], span)):
                     result.add(unit['id'])
             return result
     except (ValueError, TypeError, RuntimeError, OSError, KeyError, importlib.metadata.PackageNotFoundError):

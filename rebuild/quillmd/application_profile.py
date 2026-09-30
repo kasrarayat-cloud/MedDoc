@@ -211,3 +211,21 @@ def stripe_live_problems(env, *, allowed_hosts, secret_key, webhook_secret, app_
     if origin:
         problems.append(f'QUILLMD_APP_BASE_URL {origin} (Checkout returns the payer there)')
     return problems
+
+
+#: The one model the ordinary field-relations contract is qualified for (core.generation.SONNET_5).
+FIELD_RELATIONS_MODEL = 'claude-sonnet-5'
+
+
+def field_relations(env):
+    """QUILLMD_V3_FIELD_RELATIONS: whether new ordinary-note generations run the field-relations v2 contract.
+
+    Set, it decides exactly as before: '1' is on and any other value is off. Unset, it is on exactly when this
+    deployment sends LIVE requests to claude-sonnet-5 on anthropic, spelled exactly (the settings defaults, fixture
+    mode and gpt-4.1-mini, keep it off): the installed claude-sonnet-4-6 path, every other model and fixture mode keep
+    the default contract. Read from the same environment every other AI_* setting is read from."""
+    value = env.get('QUILLMD_V3_FIELD_RELATIONS')
+    if value is not None:
+        return value == '1'
+    return (env.get('QUILLMD_AI_MODE', 'fixture') == 'live' and env.get('QUILLMD_AI_PROVIDER', 'anthropic') == 'anthropic'
+            and env.get('QUILLMD_AI_MODEL', 'gpt-4.1-mini') == FIELD_RELATIONS_MODEL)

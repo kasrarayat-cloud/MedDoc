@@ -261,7 +261,11 @@ class NotesUsefulness(SimpleTestCase):
                  'Plan', 'Plan is to start varenicline 1 mg twice daily.')):
             with self.subTest(notes=notes):
                 self.assertHeld(notes, label, [quote])
-        self.assertFalse(hasattr(g, 'v3_field_qualifier'))
+        # 2026-09-30: `g.v3_field_qualifier` exists again, read ONLY by the ordinary field-relations reader (its
+        # unresolved-subject check and its self-reference, `v3_field_relations.read`), where the model's per-unit
+        # relations say what is independent. The default path above still reads the form title as a qualifier.
+        self.assertNotIn('v3_field_qualifier', g.v3_field_subjects.__code__.co_names)
+        self.assertNotIn('v3_field_qualifier', g.v3_scope_selection.__code__.co_names)
 
     def test_a_qualifier_still_holds(self):
         for label, context, notes in (('Allergies', 'Family history', 'No known drug allergies.'),               # A1

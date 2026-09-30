@@ -955,12 +955,18 @@ def opposed_ids(selected, reading):
         return {unit['id'] for unit in selected}
 
 
+#: The completed elicitation frame (`_elicited_report`): the patient's own report of what was asked, with the
+#: corroborating clinical actor. Also read by `generation.v3_preceding_reading` (2026-09-30): such a unit is the
+#: patient's report, so a person inside the reported clause is not another person's statement for the relation floors.
+ELICITED_FRAME = re.compile(r'When (?:asked|questioned) (?P<topic>[^,;:.!?]+), (?:the )?patient '
+    r'(?:said|reported|stated) [^;]+; (?P<actor>staff|the (?:clinical )?(?:supervisor|clinician|nurse|doctor)) '
+    r'(?:also )?(?:confirm|confirmed|report|reported|observe|observed) [^;]+\.', re.I)
+
+
 def _elicited_report(text, doc, destination, question):
     # A completed elicitation, not a future/conditional response. The entire
     # reported clause and corroborating actor are retained, never patientized.
-    match = re.fullmatch(r'When (?:asked|questioned) (?P<topic>[^,;:.!?]+), (?:the )?patient '
-        r'(?:said|reported|stated) [^;]+; (?P<actor>staff|the (?:clinical )?(?:supervisor|clinician|nurse|doctor)) '
-        r'(?:also )?(?:confirm|confirmed|report|reported|observe|observed) [^;]+\.', text, re.I)
+    match = ELICITED_FRAME.fullmatch(text)
     if not match or not _base(doc): return False
     if not re.search(r'\b(?:response|reply|said|reported)\b', question, re.I): return False
     topic = re.search(r'\babout\s+(.+)$', match['topic'], re.I)
@@ -1008,6 +1014,10 @@ def complete_ids(field, units, reading):
                     result.add(u['id'])
                 elif _elicited_report(u['quote'], doc, destination, str(field.get('label') or '')):
                     result.add(u['id'])
+                    # Recorded for this question only: the relation floors (`generation.v3_relation_causes`) do not
+                    # read the reported clause's own subject as another person's statement here.
+                    from .generation import question_key
+                    reading.setdefault('_literal_elicited', set()).add((question_key(field.get('label')), u['id']))
             return result
     except (ValueError, TypeError, RuntimeError, OSError, KeyError):
         return set()

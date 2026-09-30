@@ -36,6 +36,13 @@ name is read like any other person unless the deterministic age grammar (`AGE_PA
 on 0350b4ea: 'A 45-year-old man presents with cough.' and 'Mrs Jones presents with chest pain.' are HELD (an over-hold;
 debaefd9 supported them only because it had no actor reader at all).
 
+⚠️ 2026-09-30, THE ONE PLACE THIS READING RELEASES: the ordinary field-relations contract (the Sonnet 5 ordinary-notes
+contract) reads a UNIQUE resolution to the patient as positive patient evidence (`generation.v3_actor_patients`, read by
+`v3_field_relations.read`): an explicit-patient statement, a personal pronoun whose antecedent is the patient, or a
+thing/subjectless/topic statement, with no other person named anywhere earlier or in the unit, and no hedge,
+hypothetical, ended habit, unsettled or scope word. There, the model's per-unit relations say what else is independent,
+and `generation.v3_relation_causes` keeps this module's holds for the unit. The default path reads it exactly as before.
+
 STATED RESIDUALS (none of them releases anything): a sentence whose subject is the EXPLICIT patient and that names
 another person only as an object or beneficiary ('The patient takes warfarin for her husband.') is not held by this
 reader; a person noun outside the lexicon and a given name without a title read as things when they stand alone ('The
@@ -114,6 +121,29 @@ MAX_UNITS = 400
 STEM_SUFFIXES = tuple(sorted(('ations', 'ation', 'itions', 'ition', 'ions', 'ion', 'ings', 'ing', 'ities', 'ity',
                               'ically', 'ical', 'ics', 'ic', 'ies', 'ied', 'ers', 'er', 'ors', 'or', 'ally', 'al', 'ly',
                               'ed', 'es', 's', 'y', 'e', 'ive', 'ous', 'ness', 'ment', 'ments'), key=len, reverse=True))
+
+
+# ─── 2026-09-30: readings for the ordinary field-relations contract (`generation.v3_actor_patients`,
+# `generation.v3_relation_causes`). Like everything above, each only ever HOLDS: a word below may keep a unit from
+# counting as the patient's, or make it hold another unit; none of them makes anything an answer.
+#: Words that hedge the statement they are in ('The patient possibly has right knee pain.').
+HEDGES = frozenset(('possible possibly probable probably likely unlikely maybe perhaps suspect suspected query queried '
+                    'questionable presumed presumably apparent apparently seemingly uncertain unclear unsure '
+                    'unconfirmed potential potentially').split())
+#: Modal auxiliaries that make a statement hypothetical ('She may take ibuprofen.'); 'will' and 'can' do not.
+HEDGE_MODALS = frozenset(('may', 'might', 'could', 'would', 'should'))
+#: Words that date a statement to the past ('... last year.', '... two years ago.', 'in childhood').
+PAST_TIME_WORDS = frozenset(('ago', 'yesterday', 'last', 'previous', 'previously', 'prior', 'earlier', 'formerly',
+                             'former', 'childhood'))
+#: Words that end a habit ('formerly', 'an ex-smoker'); 'used to' is read from the parse.
+FORMER_WORDS = frozenset(('formerly', 'previously', 'former', 'ex'))
+#: Dependents of a clause head that complete it (an object, complement, prepositional phrase or further clause).
+COMPLEMENT_DEPS = frozenset(('dobj', 'obj', 'iobj', 'dative', 'attr', 'acomp', 'oprd', 'xcomp', 'ccomp', 'prep',
+                             'agent', 'conj', 'advcl', 'pcomp', 'prt'))
+#: Verbs too general to name a topic ('takes', 'has', 'reports'): never a comparison key of a claim.
+LIGHT_VERBS = frozenset(('be', 'have', 'take', 'get', 'do', 'make', 'use', 'go', 'come', 'see', 'say', 'report',
+                         'state', 'tell', 'feel', 'give', 'keep', 'need', 'want'))
+_YEAR = re.compile(r'(?:19|20)[0-9]{2}')
 
 
 def _fold(text):
@@ -270,6 +300,121 @@ def _core_lemmas(root):
     return {_lemma(token) for token in core if token.pos_ in CONTENT and _lemma(token) != 'patient'}
 
 
+def _claim_lemmas(root):
+    """What a clause claims, for comparing it with another statement's claim or negation: its head (a verb included,
+    unless a light verb), its core arguments, open complements and prepositional objects, and theirs one step down
+    ('The patient is subject to MAPPA.' claims subject, MAPPA; 'He smoked heavily.' claims smoke). Used only to HOLD."""
+    heads = [root] + [child for child in root.children if child.dep_ == 'conj' and child.pos_ in ('VERB', 'AUX')]
+    core = []
+    for head in heads:
+        core.append(head)
+        for child in head.children:
+            if child.dep_ in CORE_DEPS or child.dep_ == 'xcomp':
+                core.append(child)
+            elif child.dep_ == 'prep':
+                core.extend(grand for grand in child.children if grand.dep_ == 'pobj')
+    for token in list(core):
+        if token.dep_ in ('acomp', 'attr', 'xcomp', 'dobj', 'oprd'):
+            for child in token.children:
+                if child.dep_ == 'prep':
+                    core.extend(grand for grand in child.children if grand.dep_ == 'pobj')
+                elif child.dep_ in ('dobj', 'xcomp'):
+                    core.append(child)
+    for token in list(core):
+        core.extend(conj for conj in token.children if conj.dep_ == 'conj')
+    return {_lemma(token) for token in core
+            if (token.pos_ in CONTENT or (token.pos_ == 'VERB' and _lemma(token) not in LIGHT_VERBS))
+            and _lemma(token) != 'patient'}
+
+
+def _tense(clause):
+    """'past' or 'present' by the clause's finite verb or auxiliary (parser morphology), None when it has none (a
+    verbless or noun-read statement: 'The patient smokes.' parses as a noun phrase)."""
+    for token in [clause] + [child for child in clause.children if child.dep_ in ('aux', 'auxpass')]:
+        if 'Fin' in token.morph.get('VerbForm'):
+            tense = token.morph.get('Tense')
+            if tense:
+                return 'past' if 'Past' in tense else 'present'
+    return None
+
+
+def _complement(token):
+    """The content words completing a predicate: its object's and its prepositional objects' whole phrases ('tender
+    over the lateral epicondyle' -> lateral, epicondyle; 'on diazepam or methadone' -> diazepam, methadone), and
+    whether that complement coordinates alternatives (a conjunction inside it)."""
+    words, coordinated = set(), False
+    for child in token.children:
+        phrases = [child] if child.dep_ in ('dobj', 'obj', 'attr', 'oprd') else (
+            [grand for grand in child.children if grand.dep_ == 'pobj'] if child.dep_ in ('prep', 'agent') else [])
+        for phrase in phrases:
+            for t in phrase.subtree:
+                if t.pos_ in CONTENT and _lemma(t) != 'patient':
+                    words.add(_lemma(t))
+                coordinated = coordinated or t.dep_ == 'conj'
+    return frozenset(words), coordinated
+
+
+def _predicates(root):
+    """What a statement asserts or denies, one record per predicate: (head keys, negated, tense, complement keys,
+    coordinated). A copula's predicates are its adjectival or nominal complements and its prepositional phrases (the
+    preposition is the head: 'is on methadone', 'is off methadone'); any other clause's is its head word (a verb, or the
+    noun of a noun-read statement). Negation is the clause's or the predicate's own 'not'/'never' or a 'no' determiner; a
+    conjunct joined by 'but' or 'yet' does not inherit it ('not psychotic but suicidal' asserts suicidal). Used only to
+    HOLD (`generation.v3_relation_causes`)."""
+    clauses = [root] + [child for child in root.children if child.dep_ == 'conj' and child.pos_ in ('VERB', 'AUX')]
+    records = []
+    for clause in clauses:
+        negated = any(child.dep_ == 'neg' or (child.dep_ == 'det' and _fold(child.text) == 'no')
+                      for child in clause.children)
+        tense = _tense(clause)
+        extra = frozenset()
+        if _lemma(clause) == 'be':
+            items = [(child, _lemma(child)) for child in clause.children if child.dep_ in ('acomp', 'attr')]
+            preps = [child for child in clause.children if child.dep_ == 'prep']
+            if items:
+                # 'is tender over the lateral epicondyle': the copula's prepositional phrase completes its complement.
+                extra = frozenset(_lemma(t) for prep in preps for grand in prep.children if grand.dep_ == 'pobj'
+                                  for t in grand.subtree if t.pos_ in CONTENT and _lemma(t) != 'patient')
+            else:
+                items = [(child, _fold(child.text)) for child in preps]
+        else:
+            items = [(clause, _lemma(clause))]
+        for token, head in items:
+            if token.dep_ == 'prep':
+                words = {_lemma(t) for grand in token.children if grand.dep_ == 'pobj' for t in grand.subtree
+                         if t.pos_ in CONTENT and _lemma(t) != 'patient'}
+                coordinated = any(t.dep_ == 'conj' for grand in token.children for t in grand.subtree)
+                records.append((frozenset({head}), negated, tense, frozenset(words), coordinated))
+                continue
+            own = negated or any(child.dep_ == 'neg' or (child.dep_ == 'det' and _fold(child.text) == 'no')
+                                 for child in token.children if token is not clause)
+            chain = [(token, own)]
+            contrast = any(child.dep_ == 'cc' and _fold(child.text) in ('but', 'yet') for child in token.children)
+            for conj in (child for child in token.children if child.dep_ == 'conj'):
+                chain.append((conj, any(child.dep_ == 'neg' for child in conj.children) or (own and not contrast)))
+            for item, item_negated in chain:
+                complement, coordinated = _complement(item)
+                records.append((keys({_lemma(item)}), item_negated, tense, complement | extra, coordinated))
+    return tuple(records)
+
+
+#: Words a complete statement never ends on (read with the parser's own tag: 'The patient is subject to the.').
+DANGLING_WORDS = frozenset('the a an to of and or but with for in on at by from into than as nor'.split())
+
+
+def _dangling(words):
+    """Whether a statement stops on a function word (by its tag or its spelling): it is not complete. Only HOLDS."""
+    last = next((t for t in reversed(words) if not t.is_punct and not t.is_space), None)
+    return last is None or last.pos_ in ('CCONJ', 'SCONJ', 'ADP', 'DET', 'AUX', 'PART') or _fold(last.text) in DANGLING_WORDS
+
+def _negated_fragment(root):
+    """A verbless statement denying what it names ('No MAPPA involvement.', 'No known drug allergies.'): the keys of
+    every content word in it; empty otherwise. Used only to HOLD."""
+    if root.pos_ in ('VERB', 'AUX') or not any(child.dep_ == 'neg' or (child.dep_ == 'det' and _fold(child.text) == 'no')
+                                               for child in root.children):
+        return frozenset()
+    return keys({_lemma(t) for t in root.subtree if t.pos_ in CONTENT and _lemma(t) != 'patient'})
+
 def _content(doc):
     return {_lemma(token) for token in doc if token.pos_ in ('NOUN', 'PROPN', 'ADJ', 'VERB') and not token.is_stop
             and _lemma(token) != 'patient' and token.is_alpha}
@@ -297,7 +442,10 @@ def _unread(note_unread=True, quote=''):
             'other': person, 'mentions_other': person, 'content': frozenset(),
             'core': frozenset(), 'nominal': frozenset(), 'keys': frozenset(), 'core_keys': frozenset(),
             'gender': None, 'pronoun_genders': frozenset(), 'embedded': frozenset(), 'cues': frozenset(),
-            'past': True, 'bounded': (0,), 'age': False, 'standalone': False, 'patient_past': True}
+            'past': True, 'bounded': (0,), 'age': False, 'standalone': False, 'patient_past': True,
+            'hedged': True, 'habitual': True, 'past_time': True, 'dependent': False, 'claim_keys': frozenset(),
+            'negated_keys': frozenset(), 'main_patient': False, 'predicates': (), 'patient_object': False,
+            'dangling': True, 'nominal_keys': frozenset(), 'main_lemma': None, 'finite_past': True}
 
 
 def read(units, groups, *, colon, parsed, subjects, explicit, ages):
@@ -423,6 +571,27 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
         points_back = any(token.pos_ in ('PRON', 'DET') and _fold(token.text) in NEUTER
                           and (token.pos_ == 'PRON' or token.dep_ == 'nsubj') for token in words)
         nominal = {_lemma(token) for token in doc if token.pos_ in CONTENT and _lemma(token) != 'patient'}
+        # 2026-09-30 (hold-only; `generation.v3_actor_patients`, `generation.v3_relation_causes`): a hedge or a
+        # hypothetical modal in the statement; a habit that ended ('used to', 'formerly'); a word dating it to the past;
+        # whether it DEPENDS on what came before it (it points back, opens with a connective, has no content word, or
+        # is a clause with no complement whose subject is absent or a personal pronoun: 'Stopped last month.', 'She quit
+        # last month.'); what it claims and what it negates; whether its main subject is the explicit patient.
+        hedged = (any(_lemma(t) in HEDGES or _fold(t.text) in HEDGES or (t.tag_ == 'MD' and _fold(t.text) in HEDGE_MODALS)
+                      for t in words) or unit['quote'].rstrip().endswith('?'))
+        habitual = (any(_lemma(t) == 'use' and any(c.dep_ == 'xcomp' and any(a.dep_ == 'aux' and _fold(a.text) == 'to'
+                                                                            for a in c.children) for c in t.children)
+                        for t in words)
+                    or any(_fold(t.text) in FORMER_WORDS for t in words))
+        past_time = any(_fold(t.text) in PAST_TIME_WORDS or (t.pos_ == 'NUM' and _YEAR.fullmatch(t.text)) for t in words)
+        root_subjects = [c for c in root.children if c.dep_ in ('nsubj', 'nsubjpass', 'expl', 'csubj', 'csubjpass')]
+        complete_clause = any(c.dep_ in COMPLEMENT_DEPS for c in root.children)
+        dependent = not colon.get(uid) and not age and bool(
+            connective or points_back
+            or not any(t.pos_ in ('NOUN', 'PROPN', 'VERB', 'ADJ', 'NUM') for t in words)
+            or (root.pos_ in ('VERB', 'AUX') and not complete_clause
+                and (not root_subjects or (main is not None and _personal(main)))))
+        claim = (_claim_lemmas(root) if not colon.get(uid) else
+                 {_lemma(t) for t in words if t.pos_ in CONTENT or (t.pos_ == 'VERB' and _lemma(t) not in LIGHT_VERBS)})
         info[uid] = {'readable': True, 'kind': kind, 'other': other, 'mentions_other': mentions_other,
                      'content': frozenset(content), 'core': frozenset(core), 'nominal': frozenset(nominal),
                      'keys': keys(content | nominal), 'core_keys': keys(core),
@@ -433,7 +602,19 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
                                     and not points_back),
                      'patient_past': kind == 'patient' and _past(root),
                      'bounded': tuple(token.idx for token in words if token.dep_ in ('mark', 'advmod')
-                                      and _fold(token.text) in BOUNDING_MARKERS and token.head.dep_ == 'advcl')}
+                                      and _fold(token.text) in BOUNDING_MARKERS and token.head.dep_ == 'advcl'),
+                     'hedged': hedged, 'habitual': habitual, 'past_time': past_time, 'dependent': dependent,
+                     'claim_keys': keys(claim - {'patient'}),
+                     'predicates': () if colon.get(uid) else _predicates(root),
+                     'negated_keys': frozenset() if colon.get(uid) else _negated_fragment(root),
+                     'patient_object': any(this_patient(t) and t.dep_ in ('dobj', 'obj', 'pobj', 'iobj', 'dative')
+                                           for t in words),
+                     'dangling': _dangling(words),
+                     'nominal_keys': keys(nominal),
+                     'main_lemma': _lemma(main) if main is not None else None,
+                     'finite_past': not colon.get(uid) and _tense(root) == 'past',
+                     'main_patient': bool(main is not None and main.pos_ in ('NOUN', 'PROPN') and this_patient(main)
+                                          and not any(c.dep_ in ('poss', 'compound', 'amod', 'appos') for c in main.children))}
     # The patient's gender is the NOTE's, read before any unit is resolved (X2: a cue after the pronoun counts too).
     cues, gender_cause = set(), None
     for unit in units:

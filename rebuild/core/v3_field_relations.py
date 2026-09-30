@@ -306,6 +306,22 @@ def records(notes, catalogue, context, units, selections, model):
     return result
 
 
+def _parser_complete(field, ordered, reading, actor_ids):
+    """Ids of selected units with patient evidence (an explicit-patient sentence, or `actor_ids`) that lack the finite
+    verb list but are one complete declarative clause by the pinned parser (`v3_syntax.complete_ids`), with a bounding
+    clause that states this destination's own printed time set aside. Never a labelled value."""
+    from . import v3_syntax
+    candidates, allowed = [], {}
+    for u in ordered:
+        if (':' in u['quote'] or g.FINITE_STATEMENT_V3.search(u['quote'])
+                or not (reading['patients'].get(u['id']) or u['id'] in actor_ids)):
+            continue
+        candidates.append(u)
+        allowed[u['id']] = frozenset(at for at in reading['actors'][u['id']]['bounded']
+                                     if g.v3_bound_by_destination(field, u, at))
+    return v3_syntax.complete_ids(candidates, allowed=allowed) if candidates else set()
+
+
 def read(reading, label, evidence, record, *, text=None, field_key=None):
     """One revalidation on generation, review, save and finalization."""
     empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False, 'syntax_ids': set()}
@@ -362,21 +378,46 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         policy_patient = isinstance(field.get('answer_policy'), dict)
         from .v3_literal_facts import complete_ids
         literal_ids = complete_ids(field, ordered, reading)
+        # 2026-09-30: the actor reader's unique resolution to the patient is positive patient evidence too
+        # (`g.v3_actor_patients`: an explicit-patient statement, a pronoun whose antecedent is the patient, or a thing or
+        # subjectless statement with no other person anywhere before it, and no hedge, hypothetical, ended habit or
+        # scope word), when every bounding clause in it states this destination's own printed time.
+        actors = reading.get('actor_patients', frozenset())
+        # For Examination, Assessment and Medications (the destinations the source-subject reader knows), a thing,
+        # subjectless or topic statement is this field's only when it names it ('On examination there is ...'): 'The
+        # lesion was excised under local anesthesia and closed with sutures.' is not an examination (N06, I1).
+        key = g.question_key(label)
+        actor_ids = {u['id'] for u in ordered if u['id'] in actors
+                     and all(g.v3_bound_by_destination(field, u, at) for at in reading['actors'][u['id']]['bounded'])
+                     and (key not in g.CLINICAL_SUBJECT_FIELDS
+                          or reading['actors'][u['id']]['kind'] in ('patient', 'pronoun')
+                          or reading.get('own_subjects', {}).get(u['id']) == key)}
+        patient_units = frozenset(actors)
         # Existing patient/foreign actor, shape and exact-labelled-source guards
         # remain prerequisites, regardless of the model's context declarations.
         for u in ordered:
             own = reading['parsed'][u['id']]
-            predicate_patient = predicate_polarity(field, u) is not None
+            predicate_patient = predicate_polarity(field, u, patient_units) is not None
             temporal_patient = bool(destination_temporal_scopes(field)
                                     and explicit_patient_report(u['quote']))
-            if ((own and own[0] != g.question_key(label)) or u['id'] in reading['unresolved_subjects']
+            # A form's title is not this field's qualifier (`g.v3_field_qualifier`): a subject left unresolved only
+            # because of the title ('Neurological examination is normal.' under 'Clinic visit record') is resolved.
+            unresolved = u['id'] in reading['unresolved_subjects'] and u['id'] not in reading.get('title_resolved', ())
+            if ((own and own[0] != g.question_key(label)) or unresolved
                     or (not own and not reading['patients'].get(u['id'])
                         and not policy_patient
                         and not predicate_patient and not temporal_patient
                         and u['id'] not in reading['syntax_complete']
                         and u['id'] not in reading['actor_relations']['units']
-                        and u['id'] not in literal_ids)
+                        and u['id'] not in literal_ids and u['id'] not in actor_ids)
                     or g.v3_shape_holds(u['quote'], own[1] if own else u['quote'])): return refused
+        # A statement with this evidence may be complete by the pinned parser rather than the finite-verb list ('She
+        # attends the clinic every week.', 'The patient sees zigzag lines before the headache begins.': its clause
+        # stating the destination's own time is set aside), and a complete negative declaration of this field's own
+        # topic ('No known drug allergies.') under the form's title is one. Every other guard still applies.
+        literal_ids = set(literal_ids) | _parser_complete(field, ordered, reading, actor_ids)
+        literal_ids |= {u['id'] for u in ordered if g.question_key(label) == 'allergies'
+                        and u['id'] in reading.get('title_declarations', ())}
         values = [reading['parsed'][u['id']][1] if reading['parsed'][u['id']] else u['quote'] for u in ordered]
         answer = '\n'.join(values)
         choices = options(field); selected_options = set(item.option_ids)
@@ -386,7 +427,8 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
                     or field.get('kind') != 'multi_choice' and len(selected_options) > 1
                     or any(g.named_option([c['text'] for c in choices], o['text']) is None for o in choices)
                     or any(r == 'qualifier' for r in item.context)): return refused
-            if option_warnings(field, units, ordered, [o['text'] for o in choices if o['id'] in selected_options]): return refused
+            if option_warnings(field, units, ordered, [o['text'] for o in choices if o['id'] in selected_options],
+                               patient_units): return refused
             if field.get('kind') == 'checkbox':
                 from .v3_mapping import CHECKED
                 answer = CHECKED if selected_options else ''
@@ -399,6 +441,23 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         self_reference = bool(chosen and related == chosen and len(group) == 1
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
                     and reading['patients'].get(u['id']) for u in ordered))
+        # 2026-09-30: the coupling is this answer naming its OWN question and nothing else ('No known drug allergies.'
+        # for Allergies, inside a block the form's title left unowned): no other unit names the question, no block owns
+        # it, and every selected unit is the patient's by either reader. A qualified field ('Allergies' under 'Family
+        # history') is never one.
+        view = reading.get('relation_view') or {}
+        self_reference = self_reference or bool(
+            chosen and related and len(group) == 1
+            and g.v3_field_qualifier(field, reading.get('form_title')) in ('', key)
+            and not view.get('owned', {}).get(key)
+            and view.get('mentions', {}).get(key, set()) <= chosen
+            and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
+                    and (reading['patients'].get(u['id']) or u['id'] in actor_ids) for u in ordered)
+            # and no other coupled unit continues this answer (shares a noun or adjective with it: 'The patient reports
+            # knee pain.' / 'The patient reports that the pain is worse on stairs.' for 'Knee pain')
+            and not any(reading['actors'][other]['nominal_keys']
+                        & frozenset().union(*(reading['actors'][u['id']]['nominal_keys'] for u in ordered))
+                        for other in related - chosen))
         return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference, 'syntax_ids': literal_ids}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused

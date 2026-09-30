@@ -216,15 +216,22 @@ _UNCERTAIN_PREDICATE = re.compile(r'\b(?:not|no|never|sometimes|usually|occasion
                                  r'but|and|or|if|may|might|could|would|will|stopped|ceased|quit|denied|denies|without)\b', re.I)
 
 
-def predicate_polarity(field, unit):
+_PERSONAL_SUBJECT = re.compile(r'^(?:he|she)\s+', re.I)
+
+
+def predicate_polarity(field, unit, patient_units=frozenset()):
     """A small exact current-predicate reader; unknown is not a negative.
 
     Match the original question's words to the complete explicit patient clause,
     allowing regular inflections (smoker/smoke, pain/pains). No lexical overlap
     with a neighbouring topic or a qualified tail establishes an answer.
+    2026-09-30: a unit in `patient_units` (the actor reader resolved its subject uniquely to the patient,
+    `generation.v3_actor_patients`) may open with 'He' or 'She' in place of 'The patient' ('She is a nonsmoker.').
     """
     from . import generation as g
     quote = unicodedata.normalize('NFKC', unit['quote']).strip()
+    if unit.get('id') in patient_units and _PERSONAL_SUBJECT.match(quote):
+        quote = _PERSONAL_SUBJECT.sub('The patient ', quote, count=1)
     own = g.tab_source_value(quote, g.recognized_labels([field]))
     if own and own[0] == g.question_key(field['label']):
         literal = g.without_closing_stop(own[1]).casefold()
@@ -254,7 +261,7 @@ def predicate_polarity(field, unit):
     return not negative
 
 
-def option_warnings(field, all_units, selected, option_texts):
+def option_warnings(field, all_units, selected, option_texts, patient_units=frozenset()):
     """A binary option needs matching explicit source polarity, never model assent.
 
     Other option vocabularies still require qualification by the model contract.
@@ -265,14 +272,14 @@ def option_warnings(field, all_units, selected, option_texts):
     from . import generation as g
     labels = [g.without_closing_stop(o).casefold() for o in printed_options(field)]
     if field.get('kind') == 'checkbox' and selected:
-        if any(predicate_polarity(field, unit) is not True for unit in selected): return list(selected)
-        return [unit for unit in all_units if predicate_polarity(field, unit) is False]
+        if any(predicate_polarity(field, unit, patient_units) is not True for unit in selected): return list(selected)
+        return [unit for unit in all_units if predicate_polarity(field, unit, patient_units) is False]
     pairs = ({'yes', 'no'}, {'true', 'false'}, {'present', 'absent'})
     if len(labels) != 2 or set(labels) not in pairs or not selected: return []
     chosen = [g.without_closing_stop(o).casefold() for o in option_texts]
     if len(chosen) != 1 or chosen[0] not in labels: return list(selected)
     expected = chosen[0] in ('yes', 'true', 'present')
-    if any(predicate_polarity(field, unit) is not expected for unit in selected): return list(selected)
-    if any((value := predicate_polarity(field, unit)) is not None and value is not expected for unit in all_units):
+    if any(predicate_polarity(field, unit, patient_units) is not expected for unit in selected): return list(selected)
+    if any((value := predicate_polarity(field, unit, patient_units)) is not None and value is not expected for unit in all_units):
         return list(selected)
     return []
