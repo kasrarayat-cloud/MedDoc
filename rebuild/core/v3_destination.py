@@ -226,7 +226,8 @@ def predicate_polarity(field, unit, patient_units=frozenset()):
     allowing regular inflections (smoker/smoke, pain/pains). No lexical overlap
     with a neighbouring topic or a qualified tail establishes an answer.
     2026-09-30: a unit in `patient_units` (the actor reader resolved its subject uniquely to the patient,
-    `generation.v3_actor_patients`) may open with 'He' or 'She' in place of 'The patient' ('She is a nonsmoker.').
+    `generation.v3_actor_evidence`, closed since refutation round 1) may open with 'He' or 'She' in place of 'The
+    patient' ('She is a nonsmoker.').
     """
     from . import generation as g
     quote = unicodedata.normalize('NFKC', unit['quote']).strip()

@@ -37,16 +37,22 @@ on 0350b4ea: 'A 45-year-old man presents with cough.' and 'Mrs Jones presents wi
 debaefd9 supported them only because it had no actor reader at all).
 
 ⚠️ 2026-09-30, THE ONE PLACE THIS READING RELEASES: the ordinary field-relations contract (the Sonnet 5 ordinary-notes
-contract) reads a UNIQUE resolution to the patient as positive patient evidence (`generation.v3_actor_patients`, read by
-`v3_field_relations.read`): an explicit-patient statement, a personal pronoun whose antecedent is the patient, or a
-thing/subjectless/topic statement, with no other person named anywhere earlier or in the unit, and no hedge,
-hypothetical, unsettled or scope word. There, the model's per-unit relations say what else is independent,
-and `generation.v3_relation_causes` keeps this module's holds for the unit. The default path reads it exactly as before.
+contract) reads a resolution to the patient as positive patient evidence (`generation.v3_actor_candidates`,
+`generation.v3_actor_evidence`, read by `v3_field_relations.read`) - and since refutation round 1 only a CLOSED one
+(`_closed_reading`): one settled clause, and for a pronoun or a thing nothing earlier in the note (or in itself) that
+could be somebody else, read by structure rather than by the absence of a listed danger. There, the model's per-unit
+relations say what else is independent, and `generation.v3_relation_causes` keeps this module's holds for the unit.
+The default path reads it exactly as before (its run reads an age opener with its article as another person; the
+relation path's run, `relation_units`, reads it as the patient).
 
-STATED RESIDUALS (none of them releases anything): a sentence whose subject is the EXPLICIT patient and that names
-another person only as an object or beneficiary ('The patient takes warfarin for her husband.') is not held by this
-reader; a person noun outside the lexicon and a given name without a title read as things when they stand alone ('The
-sherpa takes warfarin.', 'Jane is subject to a CTO.').
+STATED RESIDUALS (none of them releases anything on the default path): a sentence whose subject is the EXPLICIT patient
+and that names another person only as an object or beneficiary ('The patient takes warfarin for her husband.') is not
+held by this reader; a person noun outside the lexicon and a given name without a title read as things when they stand
+alone ('The sherpa takes warfarin.', 'Jane is subject to a CTO.'). On the relation path the closed reading withholds
+the evidence of both (a thing must name its question or the complaint; a capitalized name or an unlisted subject
+leaves every later pronoun unresolved); its own residual is a given name written in lower case without a determiner as
+the object of a verb ('She visits jane daily. She takes warfarin.'), which the pinned tagger reads as a common noun, like
+a medicine ('takes lisinopril'), and English subject continuity reads as the patient.
 """
 import re
 import unicodedata
@@ -123,7 +129,7 @@ STEM_SUFFIXES = tuple(sorted(('ations', 'ation', 'itions', 'ition', 'ions', 'ion
                               'ed', 'es', 's', 'y', 'e', 'ive', 'ous', 'ness', 'ment', 'ments'), key=len, reverse=True))
 
 
-# ─── 2026-09-30: readings for the ordinary field-relations contract (`generation.v3_actor_patients`,
+# ─── 2026-09-30: readings for the ordinary field-relations contract (`generation.v3_actor_candidates`,
 # `generation.v3_relation_causes`). Like everything above, each only ever HOLDS: a word below may keep a unit from
 # counting as the patient's, or make it hold another unit; none of them makes anything an answer.
 #: Words that hedge the statement they are in ('The patient possibly has right knee pain.').
@@ -144,6 +150,56 @@ COMPLEMENT_DEPS = frozenset(('dobj', 'obj', 'iobj', 'dative', 'attr', 'acomp', '
 LIGHT_VERBS = frozenset(('be', 'have', 'take', 'get', 'do', 'make', 'use', 'go', 'come', 'see', 'say', 'report',
                          'state', 'tell', 'feel', 'give', 'keep', 'need', 'want'))
 _YEAR = re.compile(r'(?:19|20)[0-9]{2}')
+
+# ─── 2026-09-30, refutation round 1: the CLOSED reading of the ordinary field-relations contract ───────────────────
+# The relation path's NEW patient evidence (a pronoun, a thing, an article opener, a statement carrying a word the
+# UNSETTLED list names) is POSITIVE: `generation.v3_actor_candidates` gives it only where the structure read below
+# establishes it, never because a list of dangers found nothing in the sentence. A given name, a person noun outside
+# `PERSON_NOUNS`, a seeming verb, a condition word outside `BOUNDING_MARKERS` all read as NOTHING to such a list, and
+# each one was measured releasing another person's statement, an intention or a condition (round 1: L1:F1-F6). So each
+# list below names what is SAFE, and whatever it does not name withholds the evidence: an over-hold costs a retype, a
+# miss costs a wrong record. None of it is read by the default path.
+#: Adverbs a settled statement may carry. Anything else ('apparently', 'reportedly', 'previously', 'no longer', 'now',
+#: 'before' in 'has taken methadone before') withholds the evidence.
+SETTLED_ADVERBS = frozenset(('ago', 'currently', 'daily', 'twice', 'weekly', 'monthly', 'nightly', 'annually', 'also',
+                             'very', 'mildly', 'moderately', 'severely', 'slightly', 'markedly'))
+#: Dosing idioms an 'as' clause may state ('She takes ibuprofen as needed.'): with a before/after clause stating the
+#: destination's own printed time (decided per destination), the only adverbial clause a settled statement may carry.
+DOSING_CLAUSES = frozenset(('needed', 'required', 'directed', 'prescribed'))
+#: Dependencies a settled statement never has: a clausal complement ('is going to be placed', 'appears to be allergic',
+#: 'Provided her INR is stable, ...'), a relative clause, and the parser's unattached or loose relations.
+UNSETTLED_DEPS = frozenset(('xcomp', 'ccomp', 'csubj', 'csubjpass', 'parataxis', 'relcl', 'dep', 'intj', 'meta',
+                            'preconj'))
+#: The only modals a settled statement may carry, and only for a Plan ('She will follow up in six weeks.').
+FUTURE_MODALS = frozenset(('will', 'shall'))
+#: Prepositions of place, part and source: an object after one is not a candidate for whom a pronoun stands for
+#: ('pain in her right knee', 'tenderness over the lateral epicondyle', 'removal of the sutures').
+LOCATIVE_PREPS = frozenset(('in', 'on', 'over', 'at', 'under', 'around', 'near', 'above', 'below', 'behind', 'across',
+                            'along', 'within', 'through', 'into', 'onto', 'of', 'from', 'beside', 'between', 'inside',
+                            'outside'))
+#: Words that bound a statement in time as a preposition or an adverb ('took warfarin before her move', 'has taken
+#: methadone before'). Only a presentation opener's own time ('... for three weeks after a fall') and a before/after
+#: CLAUSE stating the destination's printed time (decided per destination) are settled.
+TEMPORAL_WORDS = frozenset(('before', 'after', 'since', 'until', 'till', 'prior', 'during', 'following'))
+#: Capitalized words that are dates, not names.
+CALENDAR_WORDS = frozenset(('january february march april may june july august september october november december '
+                            'monday tuesday wednesday thursday friday saturday sunday').split())
+#: Words by which a statement denies, ends or changes what it names (besides a 'not'/'no' dependency and a 'non-' or
+#: 'ex-' word). HOLD-ONLY (`generation.v3_relation_causes`, SAME TOPIC, POLARITY): a statement carrying one and
+#: sharing a word with a pronoun or thing answer holds it, whichever way round.
+POLARITY_WORDS = frozenset(('no', 'not', 'never', 'none', 'nothing', 'nil', 'without', 'nkda', 'deny', 'denies',
+                            'denied', 'stop', 'stopped', 'quit', 'cease', 'ceased', 'discontinue', 'discontinued',
+                            'withdraw', 'withdrawn', 'switch', 'switched', 'former', 'formerly', 'previously', 'anymore',
+                            'longer', 'negative', 'absent', 'resolved', 'ex', 'error', 'wrong', 'incorrect', 'ignore',
+                            'disregard', 'unconfirmed', 'amended', 'amendment', 'correction', 'corrected'))
+#: Verbs by which a statement ends what it names ('Methadone was stopped.'): HOLD-ONLY, read against a labelled answer's
+#: value (`generation.v3_relation_causes`, L2:R2-6).
+CESSATION_VERBS = frozenset(('stop', 'discontinue', 'cease', 'withdraw', 'quit', 'halt', 'suspend'))
+#: Verbs presenting the patient's complaint and the prepositions introducing it ('presents with cough', 'seen for
+#: headaches', 'complains of pain'). A noun there without 'the', 'this', 'that' or a possessive is the complaint.
+PRESENTATION_VERBS = {'present': ('with', 'for'), 'see': ('for',), 'complain': ('of',)}
+#: 'Community Treatment Order (CTO)': capitalized words spelled out by the initialism after them name an institution.
+_INITIALISM = re.compile(r"((?:[A-Z][A-Za-z]*[ -]){1,7}[A-Z][A-Za-z]*) \(([A-Z]{2,})\)")
 
 
 def _fold(text):
@@ -443,6 +499,141 @@ _PERSON_WORDS = re.compile(r'(?<![^\W_])(?:' + '|'.join(sorted(PERSON_NOUNS | CA
                            + r"|(?:great|grand|step|god|half|foster)[^\W\d_]+)(?:'s|s)?(?![^\W_])", re.I)
 
 
+def _under_denial(token):
+    """Whether a coordination sits inside what a statement denies: under a word with a 'not'/'no' dependent, or inside
+    the object of 'deny' ('She denies visual changes, nausea, or weakness.'; 'is not on diazepam or methadone')."""
+    node = token
+    while True:
+        if any(child.dep_ == 'neg' or (child.dep_ == 'det' and _fold(child.text) == 'no') for child in node.children):
+            return True
+        if node.dep_ in ('dobj', 'xcomp', 'ccomp') and _lemma(node.head) == 'deny':
+            return True
+        if node.head.i == node.i:
+            return False
+        node = node.head
+
+
+def _name_token(token, institutions):
+    """A capitalized proper noun that may name a person ('Jane', 'Tom Brown', 'Maria'): the tagger's PROPN, spelled
+    with a capital and then a small letter, not a date word and not inside an institution spelled out by its initialism
+    ('a Community Treatment Order (CTO)'). The pinned tagger also tags 'lisinopril', 'zigzag' and 'MRI' PROPN; lower-case
+    and all-capital spellings are not read as names here."""
+    text = token.text
+    return (token.pos_ == 'PROPN' and len(text) > 1 and text[0].isupper() and text[1].islower()
+            and _fold(text) not in CALENDAR_WORDS and not any(low <= token.idx < high for low, high in institutions))
+
+
+def _closed_reading(unit, doc, root, words, main, subjects_tok, age, presented):
+    """The CLOSED reading of one parsed unit (2026-09-30, refutation round 1; see `SETTLED_ADVERBS` and what follows it).
+    Read only by the ordinary field-relations contract (`generation.v3_actor_candidates`, `v3_actor_evidence`,
+    `v3_relation_causes`); none of it releases anything by itself.
+
+      'closed': one settled clause - no clausal complement or relative clause (`UNSETTLED_DEPS`), no adverbial clause
+          but a dosing 'as needed' or a before/after clause of the root (decided per destination), no subordinating
+          word outside those, no modal but 'will'/'shall', no adverb outside `SETTLED_ADVERBS`, no infinitival 'to', no
+          'or' outside a denial, no complex preposition ('in the event of a relapse', 'for removal of'), and no
+          temporal preposition or adverb (`TEMPORAL_WORDS`) except a presentation opener's own time;
+      'bound_markers': offsets of the before/after markers of the root's adverbial clauses;
+      'future': a 'will'/'shall' modal (decided per destination);
+      'refs': who else a later pronoun or thing may stand for - (kind, keys) for a capitalized name ('name'), a singular
+          noun subject ('subject'), a singular object of 'with' or 'by' ('companion'), and a singular noun with 'the',
+          'this', 'that' or a possessive outside a place or part phrase ('definite'); never the patient, the presented
+          age noun or a personal pronoun (form words, time words and the complaint are set aside by the caller);
+      'subject_keys': the main subject's head noun's keys; 'complaint_keys': the keys of a presentation's complaint
+          ('seen for headaches', 'presents with right knee pain'), a noun there with no article, demonstrative or
+          possessive (the presentation's own complaint nouns are never 'refs');
+      'polar': a word that denies, ends or changes what the statement names (`POLARITY_WORDS`, a 'not'/'no'
+          dependency, a 'non-'/'ex-' word); 'coordinated': two verbs of one clause ('has hypertension and takes
+          lisinopril'); 'fragment': no subject and no expletive; 'no_denial_keys': the head noun's keys of a verbless
+          'No ...' denial ('No known drug allergies.');
+      'ceased_keys': what a cessation verb stops ('Methadone was stopped.', 'She stopped the methadone.');
+          'topic_denial_keys': the modifiers of what a negated clause denies having when nothing more specific follows
+          it ('She has never had an allergic reaction.': allergic). Both only HOLD a labelled answer (L2:R2-6)."""
+    marks = [t for t in words if t.dep_ == 'mark']
+    bound_markers = {t.i for t in marks if _fold(t.text) in ('before', 'after') and t.head.dep_ == 'advcl'
+                     and t.head.head.i == root.i}
+    dosing = {t.i for t in words if t.dep_ == 'advcl' and _fold(t.text) in DOSING_CLAUSES and t.head.i == root.i
+              and [(_fold(c.text), c.dep_) for c in t.children] == [('as', 'mark')]}
+    presentation = age or (main is not None and this_patient(main) and _lemma(root) in PRESENTATION_VERBS)
+    loose_or = any(t.dep_ == 'cc' and _fold(t.text) in ('or', 'nor') and not _under_denial(t.head) for t in words)
+    complex_prep = any(t.dep_ == 'prep' and _fold(t.text) != 'of'
+                       and any(g.dep_ == 'pobj' and any(c.dep_ == 'prep' and _fold(c.text) == 'of' for c in g.children)
+                               for g in t.children) for t in words)
+    temporal = any(_fold(t.text) in TEMPORAL_WORDS and t.i not in bound_markers for t in words) and not presentation
+    closed = not (
+        any(t.dep_ in UNSETTLED_DEPS for t in words)
+        or any(t.dep_ == 'advcl' and t.i not in dosing and not any(c.i in bound_markers for c in t.children)
+               for t in words)
+        or any(t.i not in bound_markers and t.head.i not in dosing for t in marks)
+        or any(t.tag_ == 'MD' and _fold(t.text) not in FUTURE_MODALS for t in words)
+        or any(t.dep_ == 'advmod' and _fold(t.text) not in SETTLED_ADVERBS for t in words)
+        or any(t.tag_ == 'TO' and t.dep_ == 'aux' for t in words)
+        or loose_or or complex_prep or temporal)
+    institutions = [(m.start(1), m.end(1)) for m in _INITIALISM.finditer(unit['quote'])
+                    if ''.join(w[0] for w in re.split(r'[ -]', m.group(1)) if w).upper() == m.group(2)]
+    # The presentation's complaint ('seen for headaches', 'presents with right knee pain', 'presents with a rash'): its
+    # nouns are this unit's complaint, not somebody a pronoun may stand for. Only a BARE one (no article, demonstrative
+    # or possessive) is the complaint a later thing may name ('The headaches started ...'): 'presents with an au pair'
+    # and then 'The au pair reports a cough.' must not read the au pair as the complaint.
+    complaint, complaint_tokens = set(), set()
+    for verb in words:
+        allowed = PRESENTATION_VERBS.get(_lemma(verb)) if verb.pos_ in ('VERB', 'AUX') else None
+        if not allowed or not presentation:
+            continue
+        for prep in verb.children:
+            if prep.dep_ != 'prep' or _fold(prep.text) not in allowed:
+                continue
+            for obj in (g for g in prep.children if g.dep_ == 'pobj'):
+                for t in obj.subtree:
+                    if (t.pos_ in ('NOUN', 'PROPN') and not names_person(t) and not names_carer(t)
+                            and not _name_token(t, institutions)):
+                        complaint_tokens.add(t.i)
+                        if not any(c.dep_ in ('det', 'poss') for c in t.children):
+                            complaint.add(_lemma(t))
+    refs = []
+    for t in words:
+        if (t.i in presented or t.i in complaint_tokens or t.pos_ not in ('NOUN', 'PROPN') or this_patient(t)
+                or t.is_stop or not t.text[:1].isalpha()):
+            continue
+        key = keys({_lemma(t), _fold(t.text)})
+        if _name_token(t, institutions):
+            refs.append(('name', key))
+            continue
+        if 'Plur' in t.morph.get('Number') or not key:
+            continue
+        if t.dep_ in ('nsubj', 'nsubjpass') or (t.dep_ == 'conj' and t.head.dep_ in ('nsubj', 'nsubjpass')):
+            refs.append(('subject', key))
+        elif t.dep_ == 'pobj' and _fold(t.head.text) in ('with', 'by'):
+            refs.append(('companion', key))
+        elif (any((c.dep_ == 'det' and _fold(c.text) in ('the', 'this', 'that')) or c.dep_ == 'poss' for c in t.children)
+              and not (t.dep_ == 'pobj' and _fold(t.head.text) in LOCATIVE_PREPS)):
+            refs.append(('definite', key))
+    polar = any(t.dep_ == 'neg' or (t.dep_ == 'det' and _fold(t.text) == 'no')
+                or _fold(t.text) in POLARITY_WORDS or _lemma(t) in POLARITY_WORDS
+                or (_fold(t.text).startswith('non') and len(t.text) >= 6 and _fold(t.text) not in ('none', 'nonsense'))
+                or _fold(t.text).startswith('ex-') for t in words)
+    # The subject's HEAD only: 'The clinic cleaner attends every week.' names a cleaner, not the clinic.
+    subject_keys = keys({_lemma(main)}) if main is not None else frozenset()
+    return {'closed': closed, 'bound_markers': frozenset(t.idx for t in doc if t.i in bound_markers),
+            'future': any(t.tag_ == 'MD' and _fold(t.text) in FUTURE_MODALS for t in words),
+            'refs': tuple(refs),
+            'subject_keys': subject_keys, 'complaint_keys': keys(complaint), 'polar': polar,
+            'coordinated': any(child.dep_ == 'conj' and child.pos_ in ('VERB', 'AUX') for child in root.children),
+            'fragment': main is None and not any(t.dep_ == 'expl' for t in doc),
+            'ceased_keys': (keys({_lemma(t) for c in root.children if c.dep_ in ('nsubj', 'nsubjpass', 'dobj')
+                                  for t in c.subtree if t.pos_ in CONTENT})
+                            if _lemma(root) in CESSATION_VERBS else frozenset()),
+            'topic_denial_keys': (keys({_lemma(m) for c in root.children if c.dep_ in ('dobj', 'attr')
+                                        and not any(g.dep_ == 'prep' for g in c.children)
+                                        for m in c.children if m.dep_ in ('amod', 'compound')})
+                                  if any(c.dep_ == 'neg' for c in root.children) else frozenset()),
+            # a verbless 'No ...' denial ('No known drug allergies.'): its head noun's keys, which may name a question
+            'no_denial_keys': (keys({_lemma(root)} | {_lemma(c) for c in root.children if c.dep_ == 'compound'})
+                               if main is None and root.pos_ in ('NOUN', 'PROPN')
+                               and any(c.dep_ == 'det' and _fold(c.text) == 'no' for c in root.children)
+                               else frozenset())}
+
+
 def _unread(note_unread=True, quote=''):
     """An unread unit. In an unread NOTE (more units than `MAX_UNITS`, or no verified parser) it holds whatever it
     says (fail closed, RR4-1). A single line the parser does not read (over `v3_syntax.MAX_CHARACTERS` or
@@ -456,24 +647,32 @@ def _unread(note_unread=True, quote=''):
             'past': True, 'bounded': (0,), 'age': False, 'standalone': False, 'patient_past': True,
             'hedged': True, 'habitual': True, 'past_time': True, 'dependent': False, 'claim_keys': frozenset(),
             'negated_keys': frozenset(), 'main_patient': False, 'predicates': (),
-            'dangling': True, 'nominal_keys': frozenset(), 'main_lemma': None, 'finite_past': True}
+            'dangling': True, 'nominal_keys': frozenset(), 'main_lemma': None, 'finite_past': True,
+            # the closed reading (`_closed_reading`): an unread unit is never settled, and it is a fragment
+            'closed': False, 'bound_markers': frozenset(), 'future': False,
+            'refs': (('unread', frozenset()),), 'subject_keys': frozenset(), 'complaint_keys': frozenset(),
+            'polar': True, 'coordinated': False, 'fragment': True, 'no_denial_keys': frozenset(),
+            'ceased_keys': frozenset(), 'topic_denial_keys': frozenset()}
 
 
-def read(units, groups, *, colon, parsed, subjects, explicit, ages):
+def read(units, groups, *, colon, parsed, subjects, explicit, ages, relation_ages=frozenset()):
     """Per-unit and note-wide actor reading. `explicit`: unit ids whose text opens with an explicit patient subject by
     the deterministic source grammar (`EXPLICIT_PATIENT_SUBJECT`, the age presentation `ages`). `groups` (paragraphs)
     is accepted for the caller's signature and NOT used: the run is the note's. Returns {'units': {id: info},
-    'resolved': {id: state}, 'gender': the note's patient gender (None, 'Masc', 'Fem' or 'conflict')}."""
+    'resolved': {id: state}, 'gender': the note's patient gender (None, 'Masc', 'Fem' or 'conflict')}, and the same
+    three for the ordinary field-relations contract ('relation_units', 'relation_resolved', 'relation_gender'), where the
+    units in `relation_ages` (an age opener with its article, 'A 45-year-old man presents with cough.') present the
+    patient too. Without such a unit they are the very same objects; the parse is shared either way (2026-09-30,
+    L3:R3-4: the default path keeps reading that opener's noun as another person, exactly as on 43fcf214)."""
     from . import v3_syntax
     texts = [unit['quote'] for unit in units]
     parsed_docs = v3_syntax.docs(texts) if len(units) <= MAX_UNITS else None
-    info = {}
-    for index, unit in enumerate(units):
+
+    def unit_info(index, unit, explicit, ages):
         uid = unit['id']
         doc = parsed_docs[index] if parsed_docs is not None else None
         if doc is None or len(list(doc.sents)) == 0:
-            info[uid] = _unread(parsed_docs is None, unit['quote'])
-            continue
+            return _unread(parsed_docs is None, unit['quote'])
         root = next(iter(doc.sents)).root
         # A labelled line's LABEL is its question's name ('Urine dipstick: nitrites -', 'Mother: ...'), not who it is
         # about: only the value's words are read for persons.
@@ -582,7 +781,7 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
         points_back = any(token.pos_ in ('PRON', 'DET') and _fold(token.text) in NEUTER
                           and (token.pos_ == 'PRON' or token.dep_ == 'nsubj') for token in words)
         nominal = {_lemma(token) for token in doc if token.pos_ in CONTENT and _lemma(token) != 'patient'}
-        # 2026-09-30 (hold-only; `generation.v3_actor_patients`, `generation.v3_relation_causes`): a hedge or a
+        # 2026-09-30 (hold-only; `generation.v3_actor_candidates`, `generation.v3_relation_causes`): a hedge or a
         # hypothetical modal in the statement; a habit that ended ('used to', 'formerly'); a word dating it to the past;
         # whether it DEPENDS on what came before it (it points back, opens with a connective, has no content word, or
         # is a clause with no complement whose subject is absent or a personal pronoun: 'Stopped last month.', 'She quit
@@ -603,7 +802,7 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
                 and (not root_subjects or (main is not None and _personal(main)))))
         claim = (_claim_lemmas(root) if not colon.get(uid) else
                  {_lemma(t) for t in words if t.pos_ in CONTENT or (t.pos_ == 'VERB' and _lemma(t) not in LIGHT_VERBS)})
-        info[uid] = {'readable': True, 'kind': kind, 'other': other, 'mentions_other': mentions_other,
+        found = {'readable': True, 'kind': kind, 'other': other, 'mentions_other': mentions_other,
                      'content': frozenset(content), 'core': frozenset(core), 'nominal': frozenset(nominal),
                      'keys': keys(content | nominal), 'core_keys': keys(core),
                      'gender': gender, 'pronoun_genders': pronoun_genders,
@@ -624,7 +823,24 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
                      'finite_past': not colon.get(uid) and _tense(root) == 'past',
                      'main_patient': bool(main is not None and main.pos_ in ('NOUN', 'PROPN') and this_patient(main)
                                           and not any(c.dep_ in ('poss', 'compound', 'amod', 'appos') for c in main.children))}
-    # The patient's gender is the NOTE's, read before any unit is resolved (X2: a cue after the pronoun counts too).
+        found.update(_closed_reading(unit, doc, root, words, main, subjects_tok, age, presented))
+        return found
+
+    info = {unit['id']: unit_info(index, unit, explicit, ages) for index, unit in enumerate(units)}
+    resolved, note_gender = _resolve(units, info)
+    extra = frozenset(relation_ages) - frozenset(ages)
+    if not extra:
+        return {'units': info, 'resolved': resolved, 'gender': note_gender,
+                'relation_units': info, 'relation_resolved': resolved, 'relation_gender': note_gender}
+    relation_info = {unit['id']: (unit_info(index, unit, frozenset(explicit) | extra, frozenset(ages) | extra)
+                                  if unit['id'] in extra else info[unit['id']]) for index, unit in enumerate(units)}
+    relation_resolved, relation_gender = _resolve(units, relation_info)
+    return {'units': info, 'resolved': resolved, 'gender': note_gender,
+            'relation_units': relation_info, 'relation_resolved': relation_resolved, 'relation_gender': relation_gender}
+
+
+def _resolve(units, info):
+    """The note's one actor run over `info` (see the module docstring): {id: state} and the note's patient gender."""
     cues, gender_cause = set(), None
     for unit in units:
         found = info[unit['id']]['cues']
@@ -727,4 +943,4 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
         if named_other and not other_ever:
             other_ever, other_ever_cause = True, unit
         resolved[uid] = {**state, 'actor': actor, 'self_other': self_other, 'hold_cause': blame or state['cause']}
-    return {'units': info, 'resolved': resolved, 'gender': note_gender}
+    return resolved, note_gender

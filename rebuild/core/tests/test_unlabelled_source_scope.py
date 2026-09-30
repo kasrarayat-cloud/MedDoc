@@ -260,9 +260,15 @@ class TheVersionGateIsTestedAtTheVersionThatWillBeQueued(TestCase):
         self.assertIn(self.SENTENCE, self.instruction_for('extractive-v6-source-scope-attestation'))
 
     def test_the_version_sitting_in_the_queue_today_does_not(self):
-        from core.generation import PREVIOUS_PROMPT_VERSION
-        self.assertEqual(PREVIOUS_PROMPT_VERSION, 'extractive-v5-tab-independent-sections')
-        self.assertNotIn(self.SENTENCE, self.instruction_for(PREVIOUS_PROMPT_VERSION))
+        # 2026-09-30 (L3:R3-1): v7 added the printed question context, so the version sitting in the queue is now v6,
+        # which carries this sentence exactly as it was sent under v6; v5 still does not.
+        from core.generation import PREVIOUS_PROMPT_VERSION, V5_PROMPT_VERSION, CURRENT_PROMPT_VERSION
+        self.assertEqual(PREVIOUS_PROMPT_VERSION, 'extractive-v6-source-scope-attestation')
+        self.assertEqual(V5_PROMPT_VERSION, 'extractive-v5-tab-independent-sections')
+        self.assertNotIn(self.SENTENCE, self.instruction_for(V5_PROMPT_VERSION))
+        for version in (PREVIOUS_PROMPT_VERSION, CURRENT_PROMPT_VERSION):
+            with self.subTest(version=version):
+                self.assertIn(self.SENTENCE, self.instruction_for(version))
 
     def test_no_older_version_receives_it_either(self):
         for version in ('extractive-v4-tab-evidence-units', 'extractive-v3-old'):

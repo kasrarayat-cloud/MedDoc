@@ -9,6 +9,7 @@ input it holds with every other unit called 'independent' (the model missing the
 leave useful.
 """
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -180,10 +181,16 @@ class FirstDecisions(Settled, SimpleTestCase):
         fields = clinic_form()
         answers = offered(N01, fields, N01_PICKS, choices=NO)
         self.assert_filled(N01, fields, answers, {
-            'v3_1': U[1], 'v3_2': U[2] + '\n' + U[3], 'v3_4': U[4], 'v3_5': U[5], 'v3_6': 'No', 'v3_7': U[7],
+            'v3_1': U[1], 'v3_2': U[2] + '\n' + U[3], 'v3_4': U[4], 'v3_6': 'No',
             'v3_8': 'tension-type headache.', 'v3_9': 'to start amitriptyline 10 mg at night.\n' + U[10]})
         for key in ('v3_3', 'v3_10', 'v3_11'):
             self.assertEqual(answers[key]['status'], 'missing')
+        # CHANGED PIN (refutation round 1, L2:R2-4 / L2:R2-5): 'No known drug allergies.' and 'Neurological examination
+        # is normal.' stay held as on 43fcf214. Each summary is contradicted by any finding on its topic ('She had
+        # anaphylaxis to penicillin.', 'There is reduced power in the left arm.'), which only meaning tells; the form-title
+        # route that released them is withdrawn. They are the remaining false holds of this note.
+        for key in ('v3_5', 'v3_7'):
+            self.assertEqual(answers[key]['status'], 'conflict')
 
     def test_a_pronoun_the_actor_reader_resolves_uniquely_to_the_patient_is_the_patient(self):
         # v3_field_relations.py:379 demanded positive patient evidence: 'She takes ibuprofen as needed.' had none.
@@ -219,11 +226,17 @@ class FirstDecisions(Settled, SimpleTestCase):
         # headache wakes the patient at night.' was held (a surviving mutant of a39a905e's patient-object exclusion).
         fields = clinic_form()
         for key, statement in (('v3_2', 'The headache wakes the patient at night.'),
-                               ('v3_2', 'The headache wakes her at night.'),
-                               ('v3_5', 'Penicillin gives the patient a rash.'), ('v3_5', 'Penicillin gives her a rash.')):
+                               ('v3_2', 'The headache wakes her at night.')):
             notes = U[1] + ' ' + statement
             with self.subTest(notes=notes):
                 self.assert_filled(notes, fields, offered(notes, fields, {key: [statement]}), {key: statement})
+        # CHANGED PIN (refutation round 1, L1:F2): a thing is the patient's only when it names the question or the
+        # presented complaint ('seen for headaches' / 'The headache ...'); 'Penicillin' is neither, so it stays held
+        # like 'The babysitter has chickenpox.' (the same shape, measured leaking).
+        for key, statement in (('v3_5', 'Penicillin gives the patient a rash.'), ('v3_5', 'Penicillin gives her a rash.')):
+            notes = U[1] + ' ' + statement
+            with self.subTest(notes=notes):
+                self.assert_held(notes, fields, {key: [statement]}, key)
         attendance = order_form()
         for statement in ('The clinic sees the patient every week.', 'The clinic sees her every week.'):
             notes = 'The patient was reviewed today. ' + statement
@@ -237,13 +250,16 @@ class FirstDecisions(Settled, SimpleTestCase):
             with self.subTest(notes=notes):
                 self.assert_held(notes, fields, {key: [statement]}, key)
 
-    def test_a_form_title_is_not_a_field_qualifier(self):
-        # :372 read 'Neurological examination is normal.' as an unresolved subject because the Examination field's
-        # context is the form's title; 'No known drug allergies.' was self-coupled for the same reason.
+    def test_the_form_title_route_stays_withdrawn(self):
+        # CHANGED PIN (refutation round 1, L2:R2-4 / L2:R2-5): :372 reads 'Neurological examination is normal.' as an
+        # unresolved subject because the Examination field's context is the form's title, and 'No known drug allergies.'
+        # is self-coupled for the same reason. The first implementation released both; each is a summary any finding on
+        # its topic contradicts by meaning alone, so both stay held as on 43fcf214 (remaining false holds, stated).
         fields = clinic_form()
         notes = U[1] + ' ' + U[5] + ' ' + U[7]
-        answers = offered(notes, fields, {'v3_5': [U[5]], 'v3_7': [U[7]]})
-        self.assert_filled(notes, fields, answers, {'v3_5': U[5], 'v3_7': U[7]})
+        for key, selected in (('v3_5', U[5]), ('v3_7', U[7])):
+            with self.subTest(key=key):
+                self.assert_held(notes, fields, {key: [selected]}, key)
         # A context that qualifies the field keeps the hold (adverse A1, A2, A4).
         for key, context, selected in (('v3_7', 'Cardiovascular examination', U[7]),
                                        ('v3_5', 'Family history', U[5]),
@@ -256,13 +272,12 @@ class FirstDecisions(Settled, SimpleTestCase):
         self.assert_held(notes, fields, {'v3_5': [U[5]]}, 'v3_5')
         notes = U[1] + ' She has a penicillin allergy. Allergies: latex.'
         self.assert_held(notes, fields, {'v3_5': ['She has a penicillin allergy.']}, 'v3_5')
-        # Another unit naming the question keeps it coupled; alone, the answer names only its own question; and a
-        # qualified field is never self-referenced.
+        # Another unit naming the question keeps it coupled; alone too (CHANGED PIN, L2:R2-4: the wider self-reference
+        # is withdrawn, the answer naming its own question stays coupled as on 43fcf214); and a qualified field.
         notes = U[1] + ' She has a penicillin allergy. Referral to the allergy clinic is planned.'
         self.assert_held(notes, fields, {'v3_5': ['She has a penicillin allergy.']}, 'v3_5')
         notes = U[1] + ' She has a penicillin allergy.'
-        self.assert_filled(notes, fields, offered(notes, fields, {'v3_5': ['She has a penicillin allergy.']}),
-                           {'v3_5': 'She has a penicillin allergy.'})
+        self.assert_held(notes, fields, {'v3_5': ['She has a penicillin allergy.']}, 'v3_5')
         self.assert_held(notes, clinic_form(v3_5='Family history'), {'v3_5': ['She has a penicillin allergy.']}, 'v3_5')
         # An answer that does not name its question is never its self-reference; nor is one only the literal reader
         # admits for a field the source-subject reader knows ('medication' is not the Medications subject).
@@ -296,13 +311,16 @@ class FirstDecisions(Settled, SimpleTestCase):
             with self.subTest(notes=notes):
                 self.assert_held(notes, fields, {'v3_6': [statement]}, 'v3_6', choices=NO)
 
-    def test_an_age_opener_with_an_article_presents_the_patient_on_both_paths(self):
+    def test_an_age_opener_with_an_article_presents_the_patient_on_the_relations_path(self):
         fields = clinic_form()
         notes = 'A 45-year-old man presents with cough.'
         self.assert_filled(notes, fields, offered(notes, fields, {'v3_1': [notes]}), {'v3_1': notes})
+        # CHANGED PIN (refutation round 1, L3:R3-4): the default path reads this opener exactly as 43fcf214 did - its
+        # noun is another person and the note is held ('A 35-year-old woman presents for her father. Allergies:
+        # penicillin.' was filled on the default path by the first implementation).
         with override_settings(**DEFAULT):
-            self.assertEqual(run(notes, {'Chief complaint': [notes]}, fields=fields)['Chief complaint']['status'], 'supported')
-            # N04 opened with 'A ': the whole note was held (0 of 9); the five answers the bare opener fills return.
+            self.assertEqual(run(notes, {'Chief complaint': [notes]}, fields=fields)['Chief complaint']['status'], 'conflict')
+            # N04 opened with 'A ': the whole note stays held on the default path (0 of 9, as on 43fcf214).
             n04 = ('A 45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension '
                    'and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small '
                    'effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an '
@@ -312,7 +330,7 @@ class FirstDecisions(Settled, SimpleTestCase):
                      'Assessment': ['Assessment is a probable medial meniscus tear.'],
                      'Plan': ['Plan is an MRI of the right knee and physiotherapy referral.']}
             out = run(n04, picks, fields=fields)
-            self.assertEqual({k: out[k]['status'] for k in picks}, {k: 'supported' for k in picks})
+            self.assertEqual({k: out[k]['status'] for k in picks}, {k: 'conflict' for k in picks})
         # An appositive or relative clause naming another person keeps the hold (RR9).
         for notes in ("A 70-year-old woman, the patient's mother, presents with chest pain.",
                       "A 45-year-old man, the patient's husband, presents with cough.",
@@ -517,10 +535,12 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         for notes in ('The patient had right knee pain last year.', 'The patient used to have right knee pain.'):
             with self.subTest(notes=notes):
                 self.assert_held(notes, right, {'v3_1': [notes]}, 'v3_1')
-        # A perfect with a date is current ('has been ... since 2019'), and a plan in the present perfect is a plan.
+        # CHANGED PIN (refutation round 1, L3:R3-2): a perfect bounded by a time preposition or adverb ('since 2019',
+        # 'before', 'in the past') gets no closed evidence; 'since' is settled only in a presentation opener, so this
+        # stays held as on 43fcf214 ('has taken methadone before' / 'has been on warfarin in the past' were released).
         meds = [v3('v3_1', 'Medications', 'long_text')]
         notes = 'The patient has been on warfarin since 2019.'
-        self.assert_filled(notes, meds, offered(notes, meds, {'v3_1': [notes]}), {'v3_1': notes})
+        self.assert_held(notes, meds, {'v3_1': [notes]}, 'v3_1')
         smoker = [v3('v3_1', 'Smoker', 'choice', '', ['Yes', 'No'])]
         self.assert_held('The patient used to smoke.', smoker, {'v3_1': ['The patient used to smoke.']}, 'v3_1',
                          choices={'v3_1': ['v3_1:0']})
@@ -539,7 +559,7 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
                 (order_form()[0]['label'], 'The patient used to be subject to a community treatment order.', True),
                 (order_form()[0]['label'], 'The patient is subject to a community treatment order.', False),
                 ('Current medication', 'The patient was started on warfarin.', True),
-                ('Current medication', 'The patient has been on warfarin since 2019.', False)):
+                ('Current medication', 'The patient has been on warfarin since 2019.', True)):
             asked = [v3('v3_1', label, 'long_text')]
             with self.subTest(label=label, notes=notes):
                 if held:
@@ -635,3 +655,283 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
                                                   'Plan is suture removal in ten days.']}, 'v3_9')
         self.assert_filled(notes, fields, offered(notes, fields, {'v3_9': ['Plan is suture removal in ten days.']}),
                            {'v3_9': 'suture removal in ten days.'})
+
+
+# ─── 5. refutation round 1 (2026-09-30): every confirmed finding's exact inputs ────────────────────────────────────
+#: The refuters' adverse inputs (and a few of the same classes they did not send), each with the adverse pick and every
+#: other unit called 'independent': the model missing the problem. 43fcf214 held every one of them on this path.
+REFUTED = json.loads((Path(__file__).with_name('fixtures') / 'notes_relations_refuted_20260930.json').read_text())
+
+
+def refuted_form(spec):
+    if spec == 'clinic':
+        return clinic_form()
+    if spec == 'order':
+        return order_form()
+    return [v3(key, label, kind, context) for key, label, kind, context in spec]
+
+
+OPENER = 'This is a 30-year-old female seen for headaches.'
+
+
+@override_settings(**RELATIONS)
+class RefutationRound1(Settled, SimpleTestCase):
+    """The new evidence of this path is POSITIVE and CLOSED: a pronoun, a thing, an article opener or an explicit
+    statement with a settled word counts as the patient's only when the note's structure establishes it, never because
+    a list of dangers found nothing (a given name, a person noun outside the lexicon, a seeming verb, a condition word
+    outside the marker list all read as nothing to such a list)."""
+    def assert_refuted_held(self, finding):
+        for case in REFUTED[finding]:
+            with self.subTest(case=case['id']):
+                self.assert_held(case['notes'], refuted_form(case['form']), case['picks'], case['key'],
+                                 choices=case.get('choices'))
+
+    def test_l1_f1_a_named_or_unlisted_person_before_a_pronoun_leaves_it_unresolved(self):
+        self.assert_refuted_held('L1:F1')
+
+    def test_l1_f2_a_name_or_unlisted_person_noun_is_never_a_thing_of_the_patients(self):
+        self.assert_refuted_held('L1:F2')
+
+    def test_l1_f3_intent_seeming_alternatives_and_prepositional_times_give_no_patient_evidence(self):
+        self.assert_refuted_held('L1:F3')
+        # Controls: a prepositional 'to', a list under a denial, a dosing 'as needed'.
+        order = order_form()
+        cto = 'The patient is subject to a community treatment order.'
+        self.assert_filled(cto, order, offered(cto, order, {'v3_1': [cto]}), {'v3_1': cto})
+        fields = clinic_form()
+        for key, statement in (('v3_4', 'She takes ibuprofen as needed.'),
+                               ('v3_2', 'She denies visual changes, nausea, or weakness.')):
+            notes = OPENER + ' ' + statement
+            with self.subTest(statement=statement):
+                self.assert_filled(notes, fields, offered(notes, fields, {key: [statement]}), {key: statement})
+
+    def test_l1_f4_a_present_tense_question_asks_what_is_so_now(self):
+        self.assert_refuted_held('L1:F4')
+
+    def test_l1_f5_a_condition_outside_the_marker_list_gives_no_patient_evidence(self):
+        self.assert_refuted_held('L1:F5')
+
+    def test_l1_f6_a_past_examination_or_a_dated_presentation_is_not_current(self):
+        self.assert_refuted_held('L1:F6')
+        fields = clinic_form()
+        notes = ('The patient was seen for removal of a skin lesion on the left forearm. Plan is suture removal in ten '
+                 'days.')
+        cc = notes.split(' Plan')[0]
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_1': [cc]}), {'v3_1': cc})
+
+    def test_l2_r2_1_a_nonsmoker_answer_beside_a_smoking_statement_is_held(self):
+        self.assert_refuted_held('L2:R2-1')
+
+    def test_l2_r2_2_a_later_cessation_or_denial_of_the_same_topic_holds(self):
+        self.assert_refuted_held('L2:R2-2')
+        fields = clinic_form()
+        notes = OPENER + ' She takes warfarin. She plays tennis.'
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_4': ['She takes warfarin.']}),
+                           {'v3_4': 'She takes warfarin.'})
+
+    def test_l2_r2_3_a_retraction_fragment_or_an_unprinted_label_holds_a_pronoun_answer(self):
+        self.assert_refuted_held('L2:R2-3')
+        # A printed question's labelled line places itself.
+        fields = clinic_form()
+        notes = OPENER + ' She takes warfarin. Allergies: none known.'
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_4': ['She takes warfarin.']}),
+                           {'v3_4': 'She takes warfarin.'})
+
+    def test_l2_r2_4_a_verbless_or_self_named_allergy_denial_stays_held(self):
+        self.assert_refuted_held('L2:R2-4')
+
+    def test_l2_r2_5_a_normal_examination_resolved_only_by_the_form_title_stays_held(self):
+        self.assert_refuted_held('L2:R2-5')
+
+    def test_l2_r2_6_a_labelled_value_stopped_later_is_held(self):
+        self.assert_refuted_held('L2:R2-6')
+
+    def test_the_closure_reads_every_kind_of_other_reference(self):
+        """The same class as L1:F1/F2 in the positions the refuters did not send: each reference kind of
+        `v3_actors._closed_reading` has an input only it holds."""
+        fields = clinic_form()
+        opener = 'This is a 40-year-old female seen for review.'
+        for notes, key, selected, choices in (
+                ('The patient visits Jane weekly. She takes warfarin.', 'v3_4', 'She takes warfarin.', None),   # a name
+                ('The patient presents with cough. The cook has asthma. She uses an inhaler.', 'v3_4',
+                 'She uses an inhaler.', None),                                                         # a subject
+                ('The patient attends with sam. She is a smoker.', 'v3_6', 'She is a smoker.', YES),      # a companion
+                (opener + ' She takes warfarin for Mary.', 'v3_4', 'She takes warfarin for Mary.', None),  # its own name
+                (opener + ' According to the pharmacy, she takes warfarin.', 'v3_4',
+                 'According to the pharmacy, she takes warfarin.', None),                    # its own definite noun
+                (opener + ' They take warfarin.', 'v3_4', 'They take warfarin.', None),      # no singular gender
+                # an explicit statement the closed reading admits (a settled 'or', 'to') naming someone else
+                ('The patient denies smoking or drinking with Jane.', 'v3_2',
+                 'The patient denies smoking or drinking with Jane.', None),
+                ('The patient is allergic to penicillin like Jane.', 'v3_5',
+                 'The patient is allergic to penicillin like Jane.', None)):
+            with self.subTest(notes=notes):
+                self.assert_held(notes, fields, {key: [selected]}, key, choices=choices)
+        # Only a BARE complaint is one a later thing may name, and a subject is its head noun, not a compound of it.
+        for notes, key, selected in (
+                ('A 12-year-old boy presents with an au pair. The au pair reports a cough.', 'v3_2',
+                 'The au pair reports a cough.'),
+                ('A 12-year-old boy presents with an au pair. The au pair reports a cough. He takes salbutamol.', 'v3_4',
+                 'He takes salbutamol.')):
+            with self.subTest(notes=notes):
+                self.assert_held(notes, fields, {key: [selected]}, key)
+        order = order_form()
+        notes = 'The patient is subject to a community treatment order. The clinic cleaner attends every week.'
+        self.assert_held(notes, order, {'v3_2': ['The clinic cleaner attends every week.']}, 'v3_2')
+        # The presentation's own complaint, whatever its article, is nobody a later pronoun stands for.
+        for notes in ('The patient presents with a rash. She takes cetirizine.',
+                      'A 40-year-old woman presents with a rash. She takes cetirizine.'):
+            with self.subTest(notes=notes):
+                self.assert_filled(notes, fields, offered(notes, fields, {'v3_4': ['She takes cetirizine.']}),
+                                   {'v3_4': 'She takes cetirizine.'})
+        # The complaint names no Examination, Assessment or Medications answer (N06, I1: history is not examination).
+        notes = 'The patient presents with knee pain. The knee pain is worse on stairs.'
+        self.assert_held(notes, fields, {'v3_7': ['The knee pain is worse on stairs.']}, 'v3_7')
+        # An institution spelled out by its initialism is not a name, even on a form that does not print it.
+        notes = 'The patient is subject to a Community Treatment Order (CTO). She takes warfarin.'
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_4': ['She takes warfarin.']}),
+                           {'v3_4': 'She takes warfarin.'})
+        # A thing answer naming the complaint after somebody else, or naming somebody in itself.
+        for notes, selected in (('The patient presents with cough. Tom Brown had a stroke. The cough is worse at night.',
+                                 'The cough is worse at night.'),
+                                ('The patient presents with cough. The cough is worse with the au pair.',
+                                 'The cough is worse with the au pair.')):
+            with self.subTest(notes=notes):
+                self.assert_held(notes, fields, {'v3_2': [selected]}, 'v3_2')
+        notes = 'The patient presents with cough. The cough is worse at night.'
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_2': ['The cough is worse at night.']}),
+                           {'v3_2': 'The cough is worse at night.'})
+        # The presented complaint named again with 'the' is not somebody else.
+        notes = 'The patient presents with knee pain. The pain started after a fall. She takes ibuprofen.'
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_4': ['She takes ibuprofen.']}),
+                           {'v3_4': 'She takes ibuprofen.'})
+
+    def test_the_closed_clause_reads_what_is_settled(self):
+        fields = clinic_form()
+        opener = 'This is a 40-year-old female seen for review.'
+        for key, statement in (('v3_4', 'She reportedly takes warfarin.'),        # an adverb outside the settled list
+                               ('v3_4', 'She will take warfarin.'),               # 'will' outside a Plan
+                               ('v3_4', 'She took warfarin.'),                    # a simple past, current-state question
+                               ('v3_4', 'She takes warfarin unless her INR is high.'),
+                               ('v3_4', 'She takes warfarin, if tolerated.'),
+                               ('v3_3', 'She thinks she has asthma.'),                # a clausal complement
+                               ('v3_4', 'Feeling unwell, she takes paracetamol.'),    # an adverbial clause, unmarked
+                               ('v3_4', 'She can have paracetamol.'),                 # a modal other than will/shall
+                               ('v3_4', 'She must be on warfarin.'),
+                               ('v3_4', 'She has an appointment to start warfarin.')):  # an infinitive inside a noun
+            notes = opener + ' ' + statement
+            with self.subTest(statement=statement):
+                self.assert_held(notes, fields, {key: [statement]}, key)
+        for key, statement in (('v3_9', 'She will return in two weeks.'), ('v3_4', 'She takes ibuprofen as required.')):
+            notes = opener + ' ' + statement
+            with self.subTest(statement=statement):
+                self.assert_filled(notes, fields, offered(notes, fields, {key: [statement]}), {key: statement})
+
+    def test_the_same_topic_floor_reads_a_change_in_any_words(self):
+        fields = clinic_form()
+        opener = 'This is a 40-year-old female seen for review.'
+        for later in ('Warfarin was withheld.', 'Her warfarin was paused.',
+                      'The patient came off warfarin last month.',
+                      'Addendum: all medicines were stopped.'):           # a label the form does not print
+            notes = opener + ' She takes warfarin. ' + later
+            with self.subTest(later=later):
+                self.assert_held(notes, fields, {'v3_4': ['She takes warfarin.']}, 'v3_4')
+        # An explicit answer beside a pronoun of the other polarity naming the question (the word overlaps hold it).
+        notes = 'The patient presents with cough. The patient is a nonsmoker. She is a smoker.'
+        self.assert_held(notes, fields, {'v3_6': ['The patient is a nonsmoker.']}, 'v3_6', choices=NO)
+        for notes in (opener + ' She takes warfarin. She is a nonsmoker.',
+                      opener + ' She takes warfarin. Allergies: none known. Smoker: No.'):
+            with self.subTest(notes=notes):
+                self.assert_filled(notes, fields, offered(notes, fields, {'v3_4': ['She takes warfarin.']}),
+                                   {'v3_4': 'She takes warfarin.'})
+
+    def test_l3_r3_2_a_perfect_dated_to_the_past_is_not_current(self):
+        self.assert_refuted_held('L3:R3-2')
+
+    def test_l3_r3_3_one_statement_of_two_specific_questions_is_held_when_picked_once(self):
+        self.assert_refuted_held('L3:R3-3')
+        fields = clinic_form()
+        notes = '45-year-old man presents with right knee pain. He takes lisinopril 10 mg daily.'
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_4': ['He takes lisinopril 10 mg daily.']}),
+                           {'v3_4': 'He takes lisinopril 10 mg daily.'})
+
+    def test_l3_r3_4_the_default_path_keeps_the_candidates_opener_grammar(self):
+        fields = clinic_form()
+        with override_settings(**DEFAULT):
+            for notes, label, selected in (
+                    ('A 35-year-old woman presents for her father. Allergies: penicillin.', 'Allergies',
+                     'Allergies: penicillin.'),
+                    ('A 35-year-old woman presents with her mother. Medications: warfarin.', 'Medications',
+                     'Medications: warfarin.'),
+                    ('A 35-year-old woman presents with cough. Allergies: penicillin.', 'Allergies',
+                     'Allergies: penicillin.')):
+                with self.subTest(notes=notes):
+                    self.assertEqual(run(notes, {label: [selected]}, fields=fields)[label]['status'], 'conflict')
+        # The relations path reads the article opener as the patient, with the presentation's own time.
+        for notes in ('A 45-year-old man presents with cough.',
+                      'A 45-year-old man presents with right knee pain for three weeks after a fall.'):
+            with self.subTest(notes=notes):
+                self.assert_filled(notes, fields, offered(notes, fields, {'v3_1': [notes]}), {'v3_1': notes})
+
+    def test_l3_r3_5_a_stored_relations_draft_survives_a_model_string_rollback(self):
+        fields = clinic_form()
+        notes = OPENER + ' She takes ibuprofen as needed.'
+        answers = offered(notes, fields, {'v3_1': [OPENER], 'v3_4': ['She takes ibuprofen as needed.']})
+        stored = {k: answers[k] for k in ('v3_1', 'v3_4')}
+        self.assertEqual({k: v['status'] for k, v in stored.items()}, {'v3_1': 'supported', 'v3_4': 'supported'})
+        live46 = {'QUILLMD_AI_MODE': 'live', 'QUILLMD_AI_PROVIDER': 'anthropic', 'QUILLMD_AI_MODEL': 'claude-sonnet-4-6'}
+        # New generations follow the model string; stored relation records are honoured unless explicitly switched off.
+        self.assertFalse(profile.field_relations(live46))
+        self.assertTrue(profile.field_relations_records(live46))
+        self.assertFalse(profile.field_relations_records({**live46, 'QUILLMD_V3_FIELD_RELATIONS': '0'}))
+        with override_settings(V3_FIELD_RELATIONS=False, V3_FIELD_RELATIONS_RECORDS=True, AI_MODEL='claude-sonnet-4-6'):
+            self.assertEqual(g.governed_decisions(notes, fields, stored), [])
+            governance = g.governance_for(notes, fields)
+            for key, value in stored.items():
+                f = next(x for x in fields if x['key'] == key)
+                self.assertEqual(g.as_currently_governed(governance, notes, {**f, **value})['status'], 'supported')
+        # The explicit kill switch still refuses them.
+        with override_settings(V3_FIELD_RELATIONS=False, V3_FIELD_RELATIONS_RECORDS=False):
+            self.assertEqual(sorted(g.governed_decisions(notes, fields, stored)), ['Chief complaint', 'Medications'])
+
+
+class RequestVersion(SimpleTestCase):
+    """L3:R3-1: the default request's printed question context is a prompt change, so it has its own prompt version:
+    a job quoted before it (v6), or quoted without the complete-sentence evidence contract, is sent what it was quoted
+    for, byte for byte."""
+    def captured_for(self, fields, notes, version, natural=True):
+        captured = {}
+
+        def create(**kwargs):
+            captured['payload'] = json.loads(kwargs['messages'][0]['content'])
+            captured['system'] = kwargs['system']
+            raise RuntimeError('stop before any request')
+        client = MagicMock(); client.messages.create.side_effect = create
+        config = {**g.configuration(), 'mode': 'live', 'provider': 'anthropic', 'model': 'claude-sonnet-4-6',
+                  'input_rate': '2', 'output_rate': '10', 'cached_rate': '0.2', 'prompt_version': version,
+                  'request_profile': g.request_profile('anthropic', 'claude-sonnet-4-6', 'disabled', 'medium', '')}
+        if not natural:
+            config.pop('v3_evidence_contract', None)
+        with patch('anthropic.Anthropic', return_value=client), self.assertRaises(RuntimeError):
+            g.generate(notes, fields, config)
+        return captured
+
+    @override_settings(**DEFAULT)
+    def test_l3_r3_1_question_context_is_sent_only_under_its_own_prompt_version(self):
+        self.assertEqual(g.CURRENT_PROMPT_VERSION, 'extractive-v7-question-context')
+        self.assertEqual(g.PREVIOUS_PROMPT_VERSION, 'extractive-v6-source-scope-attestation')
+        self.assertEqual(g.configuration(repeated_other())['prompt_version'], g.CURRENT_PROMPT_VERSION)
+        fields, notes = repeated_other(), 'The patient describes the pain as a tight band around her head.'
+        current = self.captured_for(fields, notes, g.CURRENT_PROMPT_VERSION)
+        self.assertEqual([q.get('context') for q in current['payload']['questions']], [f['context'] for f in fields])
+        self.assertIn('printed context', current['system'])
+        for version, natural in ((g.PREVIOUS_PROMPT_VERSION, True), (g.CURRENT_PROMPT_VERSION, False),
+                                 (g.PREVIOUS_PROMPT_VERSION, False)):
+            with self.subTest(version=version, natural=natural):
+                sent = self.captured_for(fields, notes, version, natural)
+                self.assertFalse(any('context' in q for q in sent['payload']['questions']))
+                self.assertNotIn('printed context', sent['system'])
+        # v6 and v7 send the same instructions but for that sentence; the attestation and independent-section
+        # sentences stay with the versions that introduced them.
+        v6 = self.captured_for(fields, notes, g.PREVIOUS_PROMPT_VERSION)
+        self.assertEqual(current['system'].replace(v6['system'], '', 1).strip().startswith('A question may carry'), True)

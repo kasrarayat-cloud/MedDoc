@@ -1,0 +1,1850 @@
+{
+ "L1:F1": [
+  {
+   "id": "F1a",
+   "form": "clinic",
+   "notes": "The patient presents with cough. Tom Brown had a stroke. He is a smoker.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "He is a smoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "F1b1",
+   "form": "clinic",
+   "notes": "The patient lives with Jane. Jane had a stroke. She is a smoker.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a smoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "F1b2",
+   "form": "clinic",
+   "notes": "The patient lives with Tom. Tom had a stroke. He is a nonsmoker.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "He is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "F1c",
+   "form": "clinic",
+   "notes": "The patient attends with the au pair. The au pair was admitted with anaphylaxis. She is allergic to peanuts.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "She is allergic to peanuts."
+    ]
+   }
+  },
+  {
+   "id": "F1d",
+   "form": "clinic",
+   "notes": "The patient lives with Tom. Tom had a heart attack at 55. He takes rosuvastatin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "He takes rosuvastatin."
+    ]
+   }
+  },
+  {
+   "id": "F1d-blank",
+   "form": "clinic",
+   "notes": "The patient lives with Tom.\n\nTom had a heart attack at 55.\n\nHe takes rosuvastatin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "He takes rosuvastatin."
+    ]
+   }
+  },
+  {
+   "id": "F1e",
+   "form": "order",
+   "notes": "The patient lives with Jane. Jane has migraines. She attends the clinic every week.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "She attends the clinic every week."
+    ]
+   }
+  },
+  {
+   "id": "F1f",
+   "form": "clinic",
+   "notes": "The patient lives with Jane. Jane has dementia. She takes donepezil.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes donepezil."
+    ]
+   }
+  },
+  {
+   "id": "F1g",
+   "form": "clinic",
+   "notes": "The patient presents with cough. Jane, the au pair, had a stroke. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F1x-object-au-pair",
+   "form": "clinic",
+   "notes": "The patient attends with the au pair. She is allergic to peanuts.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "She is allergic to peanuts."
+    ]
+   }
+  },
+  {
+   "id": "F1x-object-jane",
+   "form": "clinic",
+   "notes": "The patient lives with Jane. She is a smoker.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a smoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "F1x-lowercase-name",
+   "form": "clinic",
+   "notes": "The patient presents with cough. jane had a stroke. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F1x-babysitter-object",
+   "form": "clinic",
+   "notes": "The patient cares for the babysitter. He takes rosuvastatin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "He takes rosuvastatin."
+    ]
+   }
+  },
+  {
+   "id": "F1x-nkda-after-name",
+   "form": "clinic",
+   "notes": "The patient lives with Jane. Jane had a stroke. She has no known drug allergies.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "She has no known drug allergies."
+    ]
+   }
+  }
+ ],
+ "L1:F2": [
+  {
+   "id": "F2a",
+   "form": "order",
+   "notes": "The patient lives with Jane. Jane is subject to a community treatment order.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "Jane is subject to a community treatment order."
+    ]
+   }
+  },
+  {
+   "id": "F2b",
+   "form": "order",
+   "notes": "The patient lives with Tom. Tom attends the clinic every week.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "Tom attends the clinic every week."
+    ]
+   }
+  },
+  {
+   "id": "F2c",
+   "form": "clinic",
+   "notes": "The patient lives with the babysitter. The babysitter will start chemotherapy next week. Chemotherapy is planned.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "Chemotherapy is planned."
+    ]
+   }
+  },
+  {
+   "id": "F2d",
+   "form": "clinic",
+   "notes": "The patient lives with Jane. Jane fell at home. On examination she has a bruise on the left hip.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "On examination she has a bruise on the left hip."
+    ]
+   }
+  },
+  {
+   "id": "F2e",
+   "form": "clinic",
+   "notes": "The patient lives with Jane. Jane has dementia.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "Jane has dementia."
+    ]
+   }
+  },
+  {
+   "id": "F2f1",
+   "form": "clinic",
+   "notes": "The babysitter has chickenpox.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The babysitter has chickenpox."
+    ]
+   }
+  },
+  {
+   "id": "F2f2",
+   "form": "clinic",
+   "notes": "The cleaner is allergic to latex.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "The cleaner is allergic to latex."
+    ]
+   }
+  },
+  {
+   "id": "F2x-sherpa",
+   "form": "clinic",
+   "notes": "The sherpa is allergic to latex.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "The sherpa is allergic to latex."
+    ]
+   }
+  },
+  {
+   "id": "F2x-au-pair-thing",
+   "form": "clinic",
+   "notes": "The patient lives with the au pair. The au pair has asthma. Asthma is well controlled.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "Asthma is well controlled."
+    ]
+   }
+  },
+  {
+   "id": "F2x-name-subject-hpi",
+   "form": "clinic",
+   "notes": "The patient presents with cough. Jane has had a cough for three weeks.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "Jane has had a cough for three weeks."
+    ]
+   }
+  }
+ ],
+ "L1:F3": [
+  {
+   "id": "F3cto0",
+   "form": "order",
+   "notes": "The patient is going to be placed on a community treatment order.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient is going to be placed on a community treatment order."
+    ]
+   }
+  },
+  {
+   "id": "F3cto1",
+   "form": "order",
+   "notes": "The patient is expected to be placed on a community treatment order.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient is expected to be placed on a community treatment order."
+    ]
+   }
+  },
+  {
+   "id": "F3cto2",
+   "form": "order",
+   "notes": "The patient appears to be subject to a community treatment order.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient appears to be subject to a community treatment order."
+    ]
+   }
+  },
+  {
+   "id": "F3cto3",
+   "form": "order",
+   "notes": "The tribunal is going to place the patient on a community treatment order.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The tribunal is going to place the patient on a community treatment order."
+    ]
+   }
+  },
+  {
+   "id": "F3al0",
+   "form": "clinic",
+   "notes": "The patient appears to be allergic to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "The patient appears to be allergic to penicillin."
+    ]
+   }
+  },
+  {
+   "id": "F3al1",
+   "form": "clinic",
+   "notes": "The patient seems to be allergic to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "The patient seems to be allergic to penicillin."
+    ]
+   }
+  },
+  {
+   "id": "F3al2",
+   "form": "clinic",
+   "notes": "The patient claims to be allergic to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "The patient claims to be allergic to penicillin."
+    ]
+   }
+  },
+  {
+   "id": "F3al3",
+   "form": "clinic",
+   "notes": "The patient was allergic to latex before her desensitisation.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "The patient was allergic to latex before her desensitisation."
+    ]
+   }
+  },
+  {
+   "id": "F3al4",
+   "form": "clinic",
+   "notes": "The patient is apparently allergic to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "The patient is apparently allergic to penicillin."
+    ]
+   }
+  },
+  {
+   "id": "F3med0",
+   "form": "clinic",
+   "notes": "The patient is going to start warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "The patient is going to start warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3med1",
+   "form": "clinic",
+   "notes": "The patient plans to start warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "The patient plans to start warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3med2",
+   "form": "clinic",
+   "notes": "The patient is due to start warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "The patient is due to start warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3med3",
+   "form": "clinic",
+   "notes": "The patient was advised to take warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "The patient was advised to take warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3med4",
+   "form": "clinic",
+   "notes": "The patient is supposed to take warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "The patient is supposed to take warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3med5",
+   "form": "clinic",
+   "notes": "The patient is thought to be on warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "The patient is thought to be on warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3med6",
+   "form": "clinic",
+   "notes": "The patient takes warfarin or apixaban.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "The patient takes warfarin or apixaban."
+    ]
+   }
+  },
+  {
+   "id": "F3med7",
+   "form": "clinic",
+   "notes": "The patient took warfarin before her move to Leeds.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "The patient took warfarin before her move to Leeds."
+    ]
+   }
+  },
+  {
+   "id": "F3att0",
+   "form": "order",
+   "notes": "The patient is going to attend the clinic every week.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "The patient is going to attend the clinic every week."
+    ]
+   }
+  },
+  {
+   "id": "F3att1",
+   "form": "order",
+   "notes": "The patient plans to attend the clinic every week.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "The patient plans to attend the clinic every week."
+    ]
+   }
+  },
+  {
+   "id": "F3att2",
+   "form": "order",
+   "notes": "The patient is said to attend the clinic every week.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "The patient is said to attend the clinic every week."
+    ]
+   }
+  },
+  {
+   "id": "F3pro0",
+   "form": "clinic",
+   "notes": "This is a 40-year-old female seen for review. She appears to be allergic to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "She appears to be allergic to penicillin."
+    ]
+   }
+  },
+  {
+   "id": "F3pro1",
+   "form": "clinic",
+   "notes": "This is a 40-year-old female seen for review. She is going to start warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She is going to start warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3pro2",
+   "form": "clinic",
+   "notes": "This is a 40-year-old female seen for review. She plans to start warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She plans to start warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3pro3",
+   "form": "clinic",
+   "notes": "This is a 40-year-old female seen for review. She takes warfarin or apixaban.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin or apixaban."
+    ]
+   }
+  }
+ ],
+ "L1:F4": [
+  {
+   "id": "F4a",
+   "form": [
+    [
+     "v3_1",
+     "Is the patient subject to a community treatment order?",
+     "long_text",
+     "Medication review"
+    ],
+    [
+     "v3_2",
+     "Plan",
+     "long_text",
+     "Medication review"
+    ]
+   ],
+   "notes": "The tribunal placed the patient on a community treatment order last year.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The tribunal placed the patient on a community treatment order last year."
+    ]
+   }
+  },
+  {
+   "id": "F4b",
+   "form": [
+    [
+     "v3_1",
+     "Is the patient on a community treatment order?",
+     "long_text",
+     "Medication review"
+    ],
+    [
+     "v3_2",
+     "Plan",
+     "long_text",
+     "Medication review"
+    ]
+   ],
+   "notes": "The patient used to be on a community treatment order.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient used to be on a community treatment order."
+    ]
+   }
+  },
+  {
+   "id": "F4c",
+   "form": [
+    [
+     "v3_1",
+     "Is the patient allergic to penicillin?",
+     "long_text",
+     "Medication review"
+    ],
+    [
+     "v3_2",
+     "Plan",
+     "long_text",
+     "Medication review"
+    ]
+   ],
+   "notes": "The patient was allergic to penicillin in 2015.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient was allergic to penicillin in 2015."
+    ]
+   }
+  },
+  {
+   "id": "F4d-comp1",
+   "form": [
+    [
+     "v3_1",
+     "Is the patient on warfarin?",
+     "long_text",
+     "Medication review"
+    ],
+    [
+     "v3_2",
+     "Plan",
+     "long_text",
+     "Medication review"
+    ]
+   ],
+   "notes": "The patient was on warfarin last year.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient was on warfarin last year."
+    ]
+   }
+  },
+  {
+   "id": "F4d-comp2",
+   "form": [
+    [
+     "v3_1",
+     "Does the patient take warfarin?",
+     "long_text",
+     "Medication review"
+    ],
+    [
+     "v3_2",
+     "Plan",
+     "long_text",
+     "Medication review"
+    ]
+   ],
+   "notes": "The patient took warfarin in 2019.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient took warfarin in 2019."
+    ]
+   }
+  }
+ ],
+ "L1:F5": [
+  {
+   "id": "F5cto0",
+   "form": "order",
+   "notes": "In the event of a relapse, the patient is subject to a community treatment order.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "In the event of a relapse, the patient is subject to a community treatment order."
+    ]
+   }
+  },
+  {
+   "id": "F5cto1",
+   "form": "order",
+   "notes": "The patient is subject to a community treatment order in the event of a relapse.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient is subject to a community treatment order in the event of a relapse."
+    ]
+   }
+  },
+  {
+   "id": "F5cto2",
+   "form": "order",
+   "notes": "The patient is subject to a community treatment order while in hospital.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient is subject to a community treatment order while in hospital."
+    ]
+   }
+  },
+  {
+   "id": "F5med0",
+   "form": "clinic",
+   "notes": "This is a 40-year-old female seen for review. In the event of a relapse, she takes ibuprofen.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "In the event of a relapse, she takes ibuprofen."
+    ]
+   }
+  },
+  {
+   "id": "F5med1",
+   "form": "clinic",
+   "notes": "This is a 40-year-old female seen for review. As long as her INR is stable, she takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "As long as her INR is stable, she takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F5med2",
+   "form": "clinic",
+   "notes": "This is a 40-year-old female seen for review. Provided her INR is stable, she takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "Provided her INR is stable, she takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F5med3",
+   "form": "clinic",
+   "notes": "This is a 40-year-old female seen for review. While her INR is stable, she takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "While her INR is stable, she takes warfarin."
+    ]
+   }
+  }
+ ],
+ "L1:F6": [
+  {
+   "id": "F6a",
+   "form": "clinic",
+   "notes": "The patient attended the emergency department last month. Neurological examination was normal.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Neurological examination was normal."
+    ]
+   }
+  },
+  {
+   "id": "F6b",
+   "form": "clinic",
+   "notes": "An 80-year-old woman was seen for a fall in 2019. She now presents with confusion.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "An 80-year-old woman was seen for a fall in 2019."
+    ]
+   }
+  },
+  {
+   "id": "F6b-sib",
+   "form": "clinic",
+   "notes": "This is an 80-year-old woman seen for a fall in 2019. She now presents with confusion.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "This is an 80-year-old woman seen for a fall in 2019."
+    ]
+   }
+  }
+ ],
+ "L2:R2-1": [
+  {
+   "id": "R21a",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. She smokes ten cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21-N01",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks. She smokes ten cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_1": [
+     "This is a 30-year-old female seen for headaches."
+    ],
+    "v3_2": [
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness."
+    ],
+    "v3_4": [
+     "She takes ibuprofen as needed."
+    ],
+    "v3_5": [
+     "No known drug allergies."
+    ],
+    "v3_6": [
+     "She is a nonsmoker."
+    ],
+    "v3_7": [
+     "Neurological examination is normal."
+    ],
+    "v3_8": [
+     "Assessment is tension-type headache."
+    ],
+    "v3_9": [
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21-N01social",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks.\n\nSocial: she smokes ten cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_1": [
+     "This is a 30-year-old female seen for headaches."
+    ],
+    "v3_2": [
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness."
+    ],
+    "v3_4": [
+     "She takes ibuprofen as needed."
+    ],
+    "v3_5": [
+     "No known drug allergies."
+    ],
+    "v3_6": [
+     "She is a nonsmoker."
+    ],
+    "v3_7": [
+     "Neurological examination is normal."
+    ],
+    "v3_8": [
+     "Assessment is tension-type headache."
+    ],
+    "v3_9": [
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21c0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. She smokes a pack a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21c1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. Smokes 20 cigarettes daily.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21c2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. She has a 20 pack-year smoking history.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21c3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. She has smoked for 20 years.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21c4",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. She smokes roll-ups.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21c5",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. Social history: smokes 20 a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21c6",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. SH: smokes 20 cigarettes daily.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21c7",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. Tobacco: 20 cigarettes daily.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21blank",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker.\n\nShe smokes ten cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21man",
+   "form": "clinic",
+   "notes": "A 45-year-old man presents with cough. He is a nonsmoker. He smokes ten cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "He is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21x-label",
+   "form": "clinic",
+   "notes": "The patient presents with headaches. Smoker: No. The patient smokes ten cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "Smoker: No."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R21x-label-she",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Smoker: No. She smokes ten cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "Smoker: No."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  }
+ ],
+ "L2:R2-2": [
+  {
+   "id": "R22-1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. She has not smoked in years.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R22-2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. She no longer smokes.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R22-3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. She is not on warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R22s0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. She has not smoked for ten years.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R22s1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. She does not smoke at present.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R22s2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. She has not smoked for a decade.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R22s3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. She has not smoked since her pregnancy.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R22w0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. She has not taken warfarin for months.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R22w1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. She does not take warfarin at present.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  }
+ ],
+ "L2:R2-3": [
+  {
+   "id": "R23w0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Entered in error.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R23w1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Wrong patient.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R23w2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Warfarin entry made in error.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R23w3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Please ignore the warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R23w4",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Update: warfarin was switched to apixaban last week.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R23w5",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Not warfarin but apixaban.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R23w6",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Unconfirmed by pharmacy.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R23w7",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Awaiting confirmation from her GP.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R23k0",
+   "form": "clinic",
+   "notes": "A 45-year-old man presents with left knee pain. Right knee, not left.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A 45-year-old man presents with left knee pain."
+    ]
+   }
+  },
+  {
+   "id": "R23k1",
+   "form": "clinic",
+   "notes": "A 45-year-old man presents with left knee pain. Should read right knee.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A 45-year-old man presents with left knee pain."
+    ]
+   }
+  },
+  {
+   "id": "R23k2",
+   "form": "clinic",
+   "notes": "A 45-year-old man presents with left knee pain. Amendment: the pain is in the right knee.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A 45-year-old man presents with left knee pain."
+    ]
+   }
+  }
+ ],
+ "L2:R2-4": [
+  {
+   "id": "R24a0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. No known drug allergies. She had anaphylaxis to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "No known drug allergies."
+    ]
+   }
+  },
+  {
+   "id": "R24a1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. No known drug allergies. Penicillin gives her a rash.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "No known drug allergies."
+    ]
+   }
+  },
+  {
+   "id": "R24a2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. No known drug allergies. She develops hives with penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "No known drug allergies."
+    ]
+   }
+  },
+  {
+   "id": "R24a3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. No known drug allergies. Penicillin causes swelling of her lips.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "No known drug allergies."
+    ]
+   }
+  },
+  {
+   "id": "R24a4",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. No known drug allergies. She carries an EpiPen for a penicillin reaction.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "No known drug allergies."
+    ]
+   }
+  },
+  {
+   "id": "R24a5",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. No known drug allergies. The patient had anaphylaxis to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "No known drug allergies."
+    ]
+   }
+  },
+  {
+   "id": "R24-N01ana",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks. She had anaphylaxis to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_1": [
+     "This is a 30-year-old female seen for headaches."
+    ],
+    "v3_2": [
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness."
+    ],
+    "v3_4": [
+     "She takes ibuprofen as needed."
+    ],
+    "v3_5": [
+     "No known drug allergies."
+    ],
+    "v3_6": [
+     "She is a nonsmoker."
+    ],
+    "v3_7": [
+     "Neurological examination is normal."
+    ],
+    "v3_8": [
+     "Assessment is tension-type headache."
+    ],
+    "v3_9": [
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R24-N01cod",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks. She reacts badly to codeine.",
+   "key": "v3_5",
+   "picks": {
+    "v3_1": [
+     "This is a 30-year-old female seen for headaches."
+    ],
+    "v3_2": [
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness."
+    ],
+    "v3_4": [
+     "She takes ibuprofen as needed."
+    ],
+    "v3_5": [
+     "No known drug allergies."
+    ],
+    "v3_6": [
+     "She is a nonsmoker."
+    ],
+    "v3_7": [
+     "Neurological examination is normal."
+    ],
+    "v3_8": [
+     "Assessment is tension-type headache."
+    ],
+    "v3_9": [
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R24-untitled",
+   "form": [
+    [
+     "v3_1",
+     "Chief complaint",
+     "text",
+     ""
+    ],
+    [
+     "v3_2",
+     "Allergies",
+     "text",
+     ""
+    ],
+    [
+     "v3_3",
+     "Plan",
+     "long_text",
+     ""
+    ]
+   ],
+   "notes": "The patient presents with headaches. No known drug allergies. She had anaphylaxis to penicillin.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "No known drug allergies."
+    ]
+   }
+  },
+  {
+   "id": "R24x-explicit",
+   "form": "clinic",
+   "notes": "The patient presents with headaches. The patient has no known drug allergies. The patient had anaphylaxis to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "The patient has no known drug allergies."
+    ]
+   }
+  }
+ ],
+ "L2:R2-5": [
+  {
+   "id": "R25n0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks. There is reduced power in the left arm.",
+   "key": "v3_7",
+   "picks": {
+    "v3_1": [
+     "This is a 30-year-old female seen for headaches."
+    ],
+    "v3_2": [
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness."
+    ],
+    "v3_4": [
+     "She takes ibuprofen as needed."
+    ],
+    "v3_5": [
+     "No known drug allergies."
+    ],
+    "v3_6": [
+     "She is a nonsmoker."
+    ],
+    "v3_7": [
+     "Neurological examination is normal."
+    ],
+    "v3_8": [
+     "Assessment is tension-type headache."
+    ],
+    "v3_9": [
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R25n1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks. Fundoscopy shows papilloedema.",
+   "key": "v3_7",
+   "picks": {
+    "v3_1": [
+     "This is a 30-year-old female seen for headaches."
+    ],
+    "v3_2": [
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness."
+    ],
+    "v3_4": [
+     "She takes ibuprofen as needed."
+    ],
+    "v3_5": [
+     "No known drug allergies."
+    ],
+    "v3_6": [
+     "She is a nonsmoker."
+    ],
+    "v3_7": [
+     "Neurological examination is normal."
+    ],
+    "v3_8": [
+     "Assessment is tension-type headache."
+    ],
+    "v3_9": [
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R25n2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago and are worse in the morning. She denies visual changes, nausea, or weakness. She takes ibuprofen as needed. No known drug allergies. She is a nonsmoker. Neurological examination is normal. Assessment is tension-type headache. Plan is to start amitriptyline 10 mg at night. She will follow up in six weeks. She has left arm weakness.",
+   "key": "v3_7",
+   "picks": {
+    "v3_1": [
+     "This is a 30-year-old female seen for headaches."
+    ],
+    "v3_2": [
+     "The headaches started two months ago and are worse in the morning.",
+     "She denies visual changes, nausea, or weakness."
+    ],
+    "v3_4": [
+     "She takes ibuprofen as needed."
+    ],
+    "v3_5": [
+     "No known drug allergies."
+    ],
+    "v3_6": [
+     "She is a nonsmoker."
+    ],
+    "v3_7": [
+     "Neurological examination is normal."
+    ],
+    "v3_8": [
+     "Assessment is tension-type headache."
+    ],
+    "v3_9": [
+     "Plan is to start amitriptyline 10 mg at night.",
+     "She will follow up in six weeks."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R25u0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Neurological examination is normal. There is reduced power in the left arm.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Neurological examination is normal."
+    ]
+   }
+  },
+  {
+   "id": "R25u1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Neurological examination is normal. Fundoscopy shows papilloedema.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Neurological examination is normal."
+    ]
+   }
+  },
+  {
+   "id": "R25u2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Neurological examination is normal. She has a left facial droop.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Neurological examination is normal."
+    ]
+   }
+  },
+  {
+   "id": "R25u3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Neurological examination is normal. Reflexes are brisk on the left.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Neurological examination is normal."
+    ]
+   }
+  }
+ ],
+ "L2:R2-6": [
+  {
+   "id": "R26-1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Allergies: penicillin. She has never had an allergic reaction.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "Allergies: penicillin."
+    ]
+   }
+  },
+  {
+   "id": "R26-3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Medications: methadone. Methadone was stopped.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "Medications: methadone."
+    ]
+   }
+  }
+ ],
+ "L3:R3-2": [
+  {
+   "id": "R32med0",
+   "form": [
+    [
+     "v3_1",
+     "Current medication",
+     "long_text",
+     "Community care review"
+    ],
+    [
+     "v3_2",
+     "Clinic attendance",
+     "long_text",
+     "Community care review"
+    ]
+   ],
+   "notes": "The patient has been on warfarin in the past.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient has been on warfarin in the past."
+    ]
+   }
+  },
+  {
+   "id": "R32med1",
+   "form": [
+    [
+     "v3_1",
+     "Current medication",
+     "long_text",
+     "Community care review"
+    ],
+    [
+     "v3_2",
+     "Clinic attendance",
+     "long_text",
+     "Community care review"
+    ]
+   ],
+   "notes": "The patient has taken methadone before.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient has taken methadone before."
+    ]
+   }
+  },
+  {
+   "id": "R32med2",
+   "form": [
+    [
+     "v3_1",
+     "Current medication",
+     "long_text",
+     "Community care review"
+    ],
+    [
+     "v3_2",
+     "Clinic attendance",
+     "long_text",
+     "Community care review"
+    ]
+   ],
+   "notes": "The patient has used diazepam in the past.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient has used diazepam in the past."
+    ]
+   }
+  },
+  {
+   "id": "R32cto0",
+   "form": "order",
+   "notes": "The patient has been subject to a community treatment order in the past.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient has been subject to a community treatment order in the past."
+    ]
+   }
+  },
+  {
+   "id": "R32cto1",
+   "form": "order",
+   "notes": "The patient has been on a community treatment order before.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient has been on a community treatment order before."
+    ]
+   }
+  },
+  {
+   "id": "R32cto2",
+   "form": "order",
+   "notes": "The patient has had a community treatment order in the past.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The patient has had a community treatment order in the past."
+    ]
+   }
+  },
+  {
+   "id": "R32r111",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She has taken warfarin in the past.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She has taken warfarin in the past."
+    ]
+   }
+  }
+ ],
+ "L3:R3-3": [
+  {
+   "id": "R33-pmh-alone",
+   "form": "clinic",
+   "notes": "45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an MRI of the right knee and physiotherapy referral.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "He has hypertension and takes lisinopril 10 mg daily."
+    ]
+   }
+  },
+  {
+   "id": "R33-med-alone",
+   "form": "clinic",
+   "notes": "45-year-old man presents with right knee pain for three weeks after a fall. He has hypertension and takes lisinopril 10 mg daily. Allergies: penicillin. Smoker: No. On examination there is a small effusion and medial joint line tenderness. Assessment is a probable medial meniscus tear. Plan is an MRI of the right knee and physiotherapy referral.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "He has hypertension and takes lisinopril 10 mg daily."
+    ]
+   }
+  }
+ ]
+}

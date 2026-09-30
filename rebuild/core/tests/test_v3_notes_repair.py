@@ -422,9 +422,8 @@ class ReplaySetFindings(RepairTestCase):
         """⚠️ Round 3: F2-set2 WITHDRAWN (RR9: an appositive naming the presented person as the patient's relative was
         released). Only the deterministic age grammar (`AGE_PATIENT_PRESENTATION`) presents the patient; these shapes are
         held again, as on 0350b4ea (an over-hold: debaefd9 supported them only because it had no actor reader)."""
-        # 2026-09-30: the deterministic grammar takes the opener's article ('A 45-year-old man presents with cough.' is
-        # supported below; the whole of N04 opened with 'A ' was held, 0 of 9). Every other shape here stays held.
-        for notes, label in (('Mrs Jones presents with chest pain.', 'Chief complaint'),
+        for notes, label in (('A 45-year-old man presents with cough.', 'Chief complaint'),
+                             ('Mrs Jones presents with chest pain.', 'Chief complaint'),
                              ('This is a 60-year-old woman here for follow up of her diabetes.', 'Chief complaint'),
                              ('This is a 60-year-old woman here for follow up of her diabetes.', 'History of present illness'),
                              ('Pleasant 70-year-old gentleman seen for review of his COPD.', 'Chief complaint'),
@@ -432,10 +431,8 @@ class ReplaySetFindings(RepairTestCase):
                              ("A 70-year-old woman, the patient's mother, presents with chest pain.", 'Chief complaint'),
                              ('A 12-year-old boy presents with his mother, who has chest pain.', 'Chief complaint')):
             self.assertHeld(notes, {label: [notes]})
-        # The deterministic grammar still presents the patient, with or without its article ...
+        # The deterministic grammar still presents the patient ...
         self.assertSupported('45-year-old man presents with cough.', {'Chief complaint': ['45-year-old man presents with cough.']})
-        self.assertSupported('A 45-year-old man presents with cough.',
-                             {'Chief complaint': ['A 45-year-old man presents with cough.']})
         # ... unless a relative clause gives another person something (RR9).
         self.assertHeld('12-year-old boy presents with his mother, who has chest pain.',
                         {'Chief complaint': ['12-year-old boy presents with his mother, who has chest pain.']})

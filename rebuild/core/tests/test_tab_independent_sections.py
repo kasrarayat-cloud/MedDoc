@@ -51,7 +51,9 @@ class IndependentSectionPromptTests(SimpleTestCase):
         fails HERE, and the repair is to bump the version and re-pin, deliberately.
         """
         _, sent, config = self.mocked_generation()
-        self.assertEqual(config['prompt_version'], 'extractive-v6-source-scope-attestation')
+        # Re-pinned deliberately (2026-09-30, L3:R3-1): v7 adds only the printed question context, which this form's
+        # questions do not carry, so the text sent is byte for byte v6's.
+        self.assertEqual(config['prompt_version'], 'extractive-v7-question-context')
         self.assertEqual(hashlib.sha256(sent['system'].encode()).hexdigest(),
                          '476768227326ce344dfe791dbbef0545da87ddd31ed037cf14aa308a78a16358')
 

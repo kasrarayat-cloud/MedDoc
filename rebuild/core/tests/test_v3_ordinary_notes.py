@@ -290,8 +290,17 @@ class OneGovernanceReader(SimpleTestCase):
 
     def test_generation_reads_the_same_governance_the_page_reads(self):
         asked, context, _ = g.v3_generation_fields(self.fields)
+
+        def without_catalogue(governance):
+            # 2026-09-30 (L3:R3-5): stored relation drafts are honoured unless explicitly switched off, so the page's
+            # reading carries the form's full catalogue for their binding check; generation sets its own catalogue
+            # (`validate_tab_selections`). It is the relation reader's input alone, so it is compared apart.
+            reading = {k: v for k, v in governance[11]['preceding'].items() if k != 'catalogue'}
+            return governance[:11] + ({**governance[11], 'preceding': reading},) + governance[12:]
         for notes in GOVERNED_NOTES:
-            self.assertEqual(g.governance_for(notes, asked, context), g.governance_for(notes, self.fields), notes)
+            self.assertEqual(without_catalogue(g.governance_for(notes, asked, context)),
+                             without_catalogue(g.governance_for(notes, self.fields)), notes)
+            self.assertEqual(g.governance_for(notes, self.fields)[11]['preceding']['catalogue'], self.fields)
 
 
 class ScopeInOrdinarySentences(SimpleTestCase):

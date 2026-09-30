@@ -69,6 +69,12 @@ def enabled():
     return bool(getattr(settings, 'V3_FIELD_RELATIONS', False))
 
 
+def records_enabled():
+    """Whether stored relation records are read (`read`): `settings.V3_FIELD_RELATIONS_RECORDS`, which a model-string
+    rollback leaves on and an explicit QUILLMD_V3_FIELD_RELATIONS other than '1' turns off (L3:R3-5)."""
+    return bool(getattr(settings, 'V3_FIELD_RELATIONS_RECORDS', enabled()))
+
+
 def require_config(config):
     if not enabled() or config.get('ordinary_field_contract') != CONTRACT:
         raise ValidationError('Ordinary field interpretation is disabled or its quote has changed.')
@@ -317,7 +323,7 @@ def _parser_complete(field, ordered, reading, actor_ids):
                 or not (reading['patients'].get(u['id']) or u['id'] in actor_ids)):
             continue
         candidates.append(u)
-        allowed[u['id']] = frozenset(at for at in reading['actors'][u['id']]['bounded']
+        allowed[u['id']] = frozenset(at for at in reading['relation_actors'][u['id']]['bounded']
                                      if g.v3_bound_by_destination(field, u, at))
     return v3_syntax.complete_ids(candidates, allowed=allowed) if candidates else set()
 
@@ -327,7 +333,7 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
     empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False, 'syntax_ids': set()}
     if record is None: return empty
     units = reading['units']; refused = {**empty, 'warnings': units or [reading['source']]}
-    if not enabled() or not isinstance(record, str) or len(record) > 50000: return refused
+    if not records_enabled() or not isinstance(record, str) or len(record) > 50000: return refused
     try:
         value = signing.loads(record, salt=SALT)
         if not isinstance(value, dict) or set(value) != {'contract', 'binding', 'model', 'key', 'competitors', 'competing_output', 'selection'}:
@@ -378,21 +384,14 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         policy_patient = isinstance(field.get('answer_policy'), dict)
         from .v3_literal_facts import complete_ids
         literal_ids = complete_ids(field, ordered, reading)
-        # 2026-09-30: the actor reader's unique resolution to the patient is positive patient evidence too
-        # (`g.v3_actor_patients`: an explicit-patient statement, a pronoun whose antecedent is the patient, or a thing or
-        # subjectless statement with no other person anywhere before it, and no hedge, hypothetical, unsettled or scope
-        # word). A bounding clause in it holds the answer later (`g.v3_relation_causes`, BOUNDED) unless it states this
-        # destination's own printed time.
-        actors = reading.get('actor_patients', frozenset())
-        # For Examination, Assessment and Medications (the destinations the source-subject reader knows), a thing,
-        # subjectless or topic statement is this field's only when it names it ('On examination there is ...'): 'The
-        # lesion was excised under local anesthesia and closed with sutures.' is not an examination (N06, I1).
-        key = g.question_key(label)
-        actor_ids = {u['id'] for u in ordered if u['id'] in actors
-                     and (key not in g.CLINICAL_SUBJECT_FIELDS
-                          or reading['actors'][u['id']]['kind'] in ('patient', 'pronoun')
-                          or reading.get('own_subjects', {}).get(u['id']) == key)}
-        patient_units = frozenset(actors)
+        # 2026-09-30 (closed since refutation round 1): the relation path's CLOSED actor evidence
+        # (`g.v3_actor_candidates`, `g.v3_actor_evidence`): an explicit-patient statement, an article opener, a he/she
+        # statement, or a thing naming this field or the presented complaint, read as one settled clause, and for a
+        # pronoun or a thing with nothing before it that could be someone else. Evidence by structure, never by the
+        # absence of a listed danger. The floors a unit proven only this way gets are `g.v3_relation_causes`'s.
+        actor_ids = {u['id'] for u in ordered if g.v3_actor_evidence(reading, field, u)}
+        patient_units = frozenset(actor_ids)
+        base_ids = set()
         # Existing patient/foreign actor, shape and exact-labelled-source guards
         # remain prerequisites, regardless of the model's context declarations.
         for u in ordered:
@@ -400,10 +399,13 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             predicate_patient = predicate_polarity(field, u, patient_units) is not None
             temporal_patient = bool(destination_temporal_scopes(field)
                                     and explicit_patient_report(u['quote']))
-            # A form's title is not this field's qualifier (`g.v3_field_qualifier`): a subject left unresolved only
-            # because of the title ('Neurological examination is normal.' under 'Clinic visit record') is resolved.
-            unresolved = u['id'] in reading['unresolved_subjects'] and u['id'] not in reading.get('title_resolved', ())
-            if ((own and own[0] != g.question_key(label)) or unresolved
+            base = bool(own or reading['patients'].get(u['id']) or policy_patient
+                        or predicate_polarity(field, u) is not None or temporal_patient
+                        or u['id'] in reading['syntax_complete'] or u['id'] in reading['actor_relations']['units']
+                        or u['id'] in literal_ids)
+            if base:
+                base_ids.add(u['id'])
+            if ((own and own[0] != g.question_key(label)) or u['id'] in reading['unresolved_subjects']
                     or (not own and not reading['patients'].get(u['id'])
                         and not policy_patient
                         and not predicate_patient and not temporal_patient
@@ -413,11 +415,10 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
                     or g.v3_shape_holds(u['quote'], own[1] if own else u['quote'])): return refused
         # A statement with this evidence may be complete by the pinned parser rather than the finite-verb list ('She
         # attends the clinic every week.', 'The patient sees zigzag lines before the headache begins.': its clause
-        # stating the destination's own time is set aside), and a complete negative declaration of this field's own
-        # topic ('No known drug allergies.') under the form's title is one. Every other guard still applies.
+        # stating the destination's own time is set aside). Every other guard still applies.
         literal_ids = set(literal_ids) | _parser_complete(field, ordered, reading, actor_ids)
-        literal_ids |= {u['id'] for u in ordered if g.question_key(label) == 'allergies'
-                        and u['id'] in reading.get('title_declarations', ())}
+        # The units proven ONLY by the closed actor evidence carry its extra floors (`g.v3_relation_causes`).
+        actor_only = {u['id'] for u in ordered if u['id'] in actor_ids and u['id'] not in base_ids}
         values = [reading['parsed'][u['id']][1] if reading['parsed'][u['id']] else u['quote'] for u in ordered]
         answer = '\n'.join(values)
         choices = options(field); selected_options = set(item.option_ids)
@@ -441,23 +442,11 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         self_reference = bool(chosen and related == chosen and len(group) == 1
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
                     and reading['patients'].get(u['id']) for u in ordered))
-        # 2026-09-30: the coupling is this answer naming its OWN question and nothing else ('No known drug allergies.'
-        # for Allergies, inside a block the form's title left unowned): no other unit names the question, and every
-        # selected unit is the patient's by either reader. A qualified field ('Allergies' under 'Family history') is
-        # never one. (A block the question owns always continues the answer: its label is a shared word, below.)
-        view = reading.get('relation_view') or {}
-        self_reference = self_reference or bool(
-            chosen and related and len(group) == 1
-            and g.v3_field_qualifier(field, reading.get('form_title')) in ('', key)
-            and view.get('mentions', {}).get(key, set()) <= chosen
-            and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
-                    and (reading['patients'].get(u['id']) or u['id'] in actor_ids) for u in ordered)
-            # and no other coupled unit continues this answer (shares a noun or adjective with it: 'The patient reports
-            # knee pain.' / 'The patient reports that the pain is worse on stairs.' for 'Knee pain')
-            and not any(reading['actors'][other]['nominal_keys']
-                        & frozenset().union(*(reading['actors'][u['id']]['nominal_keys'] for u in ordered))
-                        for other in related - chosen))
-        return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference, 'syntax_ids': literal_ids}
+        # (Refutation round 1, L2:R2-4: the first implementation's wider self-reference - an answer naming its own
+        # question, read as the patient's by either reader - released 'The patient has no known drug allergies.' beside
+        # 'The patient had anaphylaxis to penicillin.'. It is withdrawn: the coupling holds as on 43fcf214.)
+        return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference,
+                'syntax_ids': literal_ids, 'actor_ids': actor_ids, 'actor_only': actor_only}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused
 

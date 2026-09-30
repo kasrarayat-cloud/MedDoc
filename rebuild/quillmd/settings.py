@@ -134,6 +134,8 @@ V3_GENERATION_BATCHES=os.getenv('QUILLMD_V3_GENERATION_BATCHES','0')=='1'
 # The field-relations v2 contract is the ordinary-notes contract of a live claude-sonnet-5 deployment: unset, it is on
 # exactly for live anthropic claude-sonnet-5 (application_profile.field_relations); set, it decides as before.
 V3_FIELD_RELATIONS=_profile.field_relations(os.environ)
+# Stored relation drafts are honoured unless the variable is set to something other than '1' (L3:R3-5).
+V3_FIELD_RELATIONS_RECORDS=_profile.field_relations_records(os.environ)
 # Retained provider-shaped narrative responses, keyed by the sha256 of the notes. Read ONLY in fixture mode, never live.
 AI_REPLAY_DIR=os.getenv('QUILLMD_AI_REPLAY_DIR','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')

@@ -229,3 +229,13 @@ def field_relations(env):
         return value == '1'
     return (env.get('QUILLMD_AI_MODE', 'fixture') == 'live' and env.get('QUILLMD_AI_PROVIDER', 'anthropic') == 'anthropic'
             and env.get('QUILLMD_AI_MODEL', 'gpt-4.1-mini') == FIELD_RELATIONS_MODEL)
+
+
+def field_relations_records(env):
+    """Whether STORED field-relations drafts are still honoured by the page, save and finalization (refutation round 1,
+    L3:R3-5). Separate from `field_relations`, which decides only what NEW generations send: with the variable unset,
+    rolling the model string back from claude-sonnet-5 turns new relation generations off, and must not turn the drafts
+    they already made into held answers (their signed records are validated by the same code either way). An explicit
+    QUILLMD_V3_FIELD_RELATIONS decides both, so '0' (any value but '1') stays the kill switch for stored records too."""
+    value = env.get('QUILLMD_V3_FIELD_RELATIONS')
+    return True if value is None else value == '1'
