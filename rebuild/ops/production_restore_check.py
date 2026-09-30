@@ -13,7 +13,10 @@ restore-check (backup_restore.py) already requires of a synthetic restore:
 - every file the database references (backup_restore.FILE_QUERIES) exists under the restored
   volume's files/ as a regular file inside it and, where the database records a sha256, has exactly
   those bytes. State files are write-once, so a volume snapshot taken AT OR AFTER the database's
-  restore point must contain every referenced file; a missing one means the pairing is wrong.
+  restore point must contain every referenced file; a missing one means the pairing is wrong;
+- given the hold ids of the independently verified journal (core.restore_admission passes them), every
+  journaled hold is in the restored database, or is recorded as replayed onto a target absent from it: a
+  restore older than a hold fails until the quarantined replay has imported it.
 
 It prints counts only: no row content, no file path, no identifier. The drill instance and volume
 names are fixed patterns (quillmd-production-drill-<YYYYMMDD>t<HHMM>, /mnt/quillmd-drill-<same>),
@@ -54,6 +57,8 @@ for _path,_hash in [('input_path',None),('result_path','result_sha256'),
     PRESERVATION_FILES.append(('archived_'+_path,
         "SELECT prior_record->>'"+_path+"',"+_expected+" FROM core_preservedrecord WHERE COALESCE(prior_record->>'"+_path+"','')<>''"))
 FILE_QUERIES=backup.FILE_QUERIES+PRESERVATION_FILES
+HOLDS = 'SELECT id::text FROM core_retentionhold'
+ABSENT_HOLD_TARGETS = "SELECT record_id::text FROM core_retentionholdreplay WHERE event='hold' AND outcome='target_absent'"
 
 
 class CheckError(RuntimeError):
@@ -86,8 +91,11 @@ def _file_sha256(path):
     return digest.hexdigest()
 
 
-def check(query, state_root, expected_triggers):
-    """Run every check through `query(sql) -> rows`; return a counts-only report."""
+def check(query, state_root, expected_triggers, *, journal_holds=None, files_root=None):
+    """Run every check through `query(sql) -> rows`; return a counts-only report.
+
+    `journal_holds`, when given, is the hold ids of the verified independent journal: each must be here or recorded as
+    replayed onto an absent target. `files_root` defaults to <state_root>/files."""
     triggers = query(TRIGGERS)
     trigger_report = integrity_contract.assess(triggers, query(integrity_contract.CONTEXT), expected_triggers)
     invariants = {name: query(statement)[0][0] for name, statement in backup.INVARIANTS.items()}
@@ -98,7 +106,7 @@ def check(query, state_root, expected_triggers):
             previous = references.get(relative, '')
             require(not (previous and expected and previous != expected), 'conflicting_file_hashes')
             references[relative] = expected or previous
-    files_root = Path(state_root) / 'files'
+    files_root = Path(files_root) if files_root is not None else Path(state_root) / 'files'
     missing = mismatched = 0
     for relative, expected in sorted(references.items()):
         path = files_root / relative
@@ -121,7 +129,14 @@ def check(query, state_root, expected_triggers):
                   'passed': missing == 0 and mismatched == 0},
         'tables': len(tables), 'rows': rows,
     }
-    report['passed'] = all(report[name]['passed'] for name in ('triggers', 'invariants', 'files'))
+    sections = ('triggers', 'invariants', 'files')
+    if journal_holds is not None:
+        journaled = set(journal_holds)
+        present = {row[0] for row in query(HOLDS)} | {row[0] for row in query(ABSENT_HOLD_TARGETS)}
+        missing = len(journaled - present)
+        report['holds'] = {'journaled': len(journaled), 'missing': missing, 'passed': missing == 0}
+        sections += ('holds',)
+    report['passed'] = all(report[name]['passed'] for name in sections)
     return report
 
 

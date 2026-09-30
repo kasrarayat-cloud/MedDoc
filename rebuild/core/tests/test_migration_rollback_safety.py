@@ -331,6 +331,8 @@ class ARefusedRollbackKeepsTheConfirmationGate(TransactionTestCase):
         # names that and the supported target, so an operator reading a refusal after `zero` knows MFA was dropped.
         self.assertIn('zero also unapplies otp_totp before 0031, which drops every TOTP enrollment', message)
         self.assertIn('the supported rollback target is core 0018', message)
+        # Since 0032 the refusal comes from the leaf, before anything is reversed, and says so.
+        self.assertIn('neither 0032 nor 0031 was reversed', message)
         # The previous release's draft on that mapping is refused exactly as at the leaf.
         with self.assertRaisesMessage(DatabaseError, GATE), transaction.atomic():
             release_encounter(unconfirmed, self.patient, self.user)

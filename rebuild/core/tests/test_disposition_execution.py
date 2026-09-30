@@ -420,7 +420,7 @@ class ExecutionAdministration(ExecutionFixture, TestCase):
         row, instruction = self.approved(); x.execute(self.admin, instruction.pk, self.genesis)
         checkpoint = self.checkpoint(j.verified()); self.login(self.admin)
         with override_settings(RESTORE_QUARANTINE=True, RESTORE_INSTANCE_ID=str(uuid.uuid4()), DISPOSITION_ENABLED=False):
-            page = self.client.get(self.url); self.assertContains(page, 'Restore admission unavailable.')
+            page = self.client.get(self.url); self.assertContains(page, 'Replay does not admit this target.')
             self.assertNotContains(page, 'Delete approved empty draft'); self.artifact('execution-replay.html', page)
             self.assertEqual(self.post('execute', instruction=instruction.pk).status_code, 400)
             self.assertEqual(self.post('replay', checkpoint=json.dumps(checkpoint), confirmed='on').status_code, 302)
@@ -453,7 +453,11 @@ class ExecutionConcurrency(ExecutionFixture, TransactionTestCase):
         with ThreadPoolExecutor(2) as pool:
             first = pool.submit(writer); self.assertTrue(entered.wait(5)); second = pool.submit(execution)
             time.sleep(.1); self.assertFalse(second.done()); release.set(); first.result(5); second.result(5)
-        self.assertTrue(m.Encounter.objects.filter(pk=row.pk).exists()); self.assertEqual(j.verified(), [])
+        # No disposition instruction was journaled. The winning hold itself is, before its row committed (1a).
+        entries = j.verified()
+        self.assertTrue(m.Encounter.objects.filter(pk=row.pk).exists()); self.assertEqual(j.instruction_entries(entries), [])
+        self.assertEqual([e['body']['hold']['id'] for e in entries],
+                         [str(pk) for pk in m.RetentionHold.objects.filter(encounter_id=row.pk).values_list('pk', flat=True)])
         self.assertFalse(m.DispositionCompletion.objects.exists())
 
     def test_committed_hold_wins_before_waiting_disposition(self): self.competing_commits_first('hold')

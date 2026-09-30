@@ -1,12 +1,13 @@
 """Bounded review proposals. Nothing in this module grants destruction authority."""
 import hashlib
 import json
+import os
 import uuid
 from pathlib import Path
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ValidationError, PermissionDenied
-from django.db import transaction
+from django.db import DatabaseError, connection, transaction
 from django.db.models import Q
 from . import models as m, retention
 from .security import audit
@@ -14,7 +15,8 @@ from .disposition_catalog import EDGES, COLUMNS
 
 VERSION = 'disposition-review-v1'
 LIMIT = 2000
-PREPARATION = {'DispositionRequest','DispositionPlan','DispositionReview','RestorePreparation'}
+# Restore administration records carry no patient, document or file reference: RestoreAdmission names an instance.
+PREPARATION = {'DispositionRequest','DispositionPlan','DispositionReview','RestorePreparation','RestoreAdmission'}
 
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),default=str).encode()).hexdigest()
@@ -114,6 +116,7 @@ def graph(request):
     if tombstones:blockers.add('disposed_target')
     holds=collect('RetentionHold',m.RetentionHold.objects.filter(Q(scope='global')|Q(organization_id=dept.organization_id)|Q(department_id=dept.pk)|Q(patient_id__in=patient_ids)|Q(encounter_id__in=eids)))
     releases=collect('RetentionHoldRelease',m.RetentionHoldRelease.objects.filter(hold_id__in=[v['id'] for v in holds]))
+    collect('RetentionHoldReplay',m.RetentionHoldReplay.objects.filter(hold_id__in=[v['id'] for v in holds]))
     if holds:blockers.add('historical_preservation')
     if any(v['id'] not in {x['hold_id'] for x in releases} for v in holds):blockers.add('active_hold')
     source_ids=[v['id'] for values in rows.values() for v in values]
@@ -185,7 +188,59 @@ def review(actor,plan_id,expected_digest,decision,evidence):
     audit(actor,'disposition.reviewed',row.pk,department=plan.request.department,decision=decision)
     return row
 
-def quarantined():return bool(getattr(settings,'RESTORE_QUARANTINE',False))
+_ADMITTED=set()
+_ACCOUNTED={}
+
+def quarantined():
+    """Quarantine lifts only against a RestoreAdmission record for the selected restore instance, and only while this
+    database still accounts for everything the independent journal preserves.
+
+    QUILLMD_RESTORE_QUARANTINE=1 always quarantines. With it off, a configured QUILLMD_RESTORE_INSTANCE_ID still
+    quarantines until core.restore_admission has recorded that instance's admission; an unreadable id or database is
+    quarantined. Nothing in a restored database marks it as restored, so the operator keeps the instance id configured
+    (cutover plan). A found record is cached: admission records are append-only."""
+    if getattr(settings,'RESTORE_QUARANTINE',False):return True
+    instance=getattr(settings,'RESTORE_INSTANCE_ID','')
+    if not instance:return False
+    return not restore_admitted(instance)
+
+def restore_admitted(instance):
+    try:key=str(uuid.UUID(str(instance)))
+    except (ValueError,TypeError,AttributeError):return False
+    if key not in _ADMITTED:
+        try:found=m.RestoreAdmission.objects.filter(instance_id=key).exists()
+        except DatabaseError:return False
+        if not found:return False
+        _ADMITTED.add(key)
+    return journal_accounted(key)
+
+def journal_accounted(key):
+    """Admission is not a one-time latch: the journal can grow after it (another host's hold, a release, a hold whose
+    commit failed here). The admitted target serves only while every journaled hold and release is in this database
+    or recorded by a replay marker (retention.unaccounted_journal_records); otherwise it is quarantined again until the
+    replay, which runs while quarantined, imports it. A missing, unconfigured or unverifiable journal is quarantined.
+
+    Re-checked whenever the journal file changes (it is append-only; any change of identity, size or time re-reads
+    it). A hold being committed on this host is journaled first, under the preservation lock: outside a transaction
+    the check waits for that lock before it believes a hold is missing, so a concurrent request is not quarantined by
+    this host's own hold. Inside a transaction it does not wait (it could invert the global lock order) and answers
+    quarantined until the hold commits."""
+    path=getattr(settings,'DISPOSITION_JOURNAL_PATH','')
+    if not path:return False
+    try:meta=os.stat(path)
+    except OSError:return False
+    identity=(key,str(path),meta.st_dev,meta.st_ino,meta.st_size,meta.st_mtime_ns)
+    if _ACCOUNTED.get(key)==identity:return True
+    try:
+        missing=retention.unaccounted_journal_records()
+        if missing and not connection.in_atomic_block:
+            with transaction.atomic():
+                retention.lock_preservation()
+                missing=retention.unaccounted_journal_records()
+    except (ValidationError,DatabaseError):return False
+    if missing:return False
+    _ACCOUNTED[key]=identity
+    return True
 
 def require_processing():
     if quarantined():raise ValidationError('This restored target is quarantined; processing is unavailable.')
@@ -202,7 +257,7 @@ def prepare_restore(actor,instance_id,backup_sha256):
     if not all(target.values()):raise ValidationError('The restore target is incomplete.')
     report={'contract':'restore-preparation-v1','target':target,'backup_sha256':backup_sha256,
             'quarantined':True,'admission_available':False,'journal_freshness_verified':False,
-            'blockers':['independent_journal_unverified','instruction_replay_not_implemented','admission_unavailable']}
+            'blockers':['independent_journal_unverified','journal_replay_pending','restore_admission_pending']}
     row=m.RestorePreparation.objects.create(instance_id=instance,target=target,backup_sha256=backup_sha256,
         report=report,report_sha256=digest(report),created_by=actor)
     audit(actor,'disposition.restore_prepared',row.pk)

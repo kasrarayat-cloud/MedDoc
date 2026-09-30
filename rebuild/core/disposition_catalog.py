@@ -424,3 +424,17 @@ COLUMNS.update({'DispositionApproval': [['created_at', 'DateTimeField'],
                           ['instruction_id', 'UUIDField'],
                           ['journal_entry', 'JSONField'],
                           ['target_id', 'UUIDField']]})
+
+# RESTORE REPLAY CATALOG: exact additive 0032 shape. Replay markers keep scalar hold identities (the journaled target may
+# be absent from an older backup) and are collected with the holds they name. RestoreAdmission is restore
+# administration with no patient, document or file reference (disposition.PREPARATION), like RestorePreparation.
+EDGES.update({'RetentionHoldReplay': [['created_by', 'core.user']]})
+COLUMNS.update({'RetentionHoldReplay': [['created_at', 'DateTimeField'],
+                         ['created_by', 'ForeignKey'],
+                         ['entry_sha256', 'CharField'],
+                         ['event', 'CharField'],
+                         ['hold_id', 'UUIDField'],
+                         ['id', 'UUIDField'],
+                         ['journal_entry', 'JSONField'],
+                         ['outcome', 'CharField'],
+                         ['record_id', 'UUIDField']]})

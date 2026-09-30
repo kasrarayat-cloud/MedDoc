@@ -33,7 +33,7 @@ def require_access(target_id, *, own_instruction=None):
     if m.DispositionTombstone.objects.filter(target_id=target).exists():
         raise ValidationError('This document has a disposition instruction and is unavailable.')
     if getattr(settings, 'DISPOSITION_JOURNAL_PATH', ''):
-        for entry in journal.verified():
+        for entry in journal.instruction_entries(journal.verified()):
             instruction = entry['body']['instruction']
             if instruction['target_id'] == target and instruction['id'] != str(own_instruction):
                 raise ValidationError('This document has a durable disposition instruction and is unavailable.')
@@ -115,6 +115,8 @@ def eligible(encounter, admission, *, own_instruction=None):
     if (m.Job.objects.filter(encounter=encounter).exists() or m.GenerationBatch.objects.filter(encounter=encounter).exists()
             or m.CodeSuggestion.objects.filter(encounter=encounter).exists()
             or retention.scoped_holds(encounter_id=encounter.pk).exists()
+            # A journaled hold whose database commit failed is as binding as a committed one.
+            or retention.journal_hold_ids(encounter_id=encounter.pk)
             or m.PreservedRecord.objects.filter(Q(source_id=encounter.pk) |
                                                Q(prior_record__encounter_id=str(encounter.pk))).exists()
             or m.AuditEvent.objects.filter(target=str(encounter.pk)).exclude(action__in=['encounter.create', 'encounter.view']).exists()):
@@ -211,17 +213,28 @@ def execute(actor, instruction_id, checkpoint_envelope):
 
 @transaction.atomic
 def replay(actor, checkpoint_envelope):
-    """Import durable suppression only. Conflicting restored content is preserved."""
+    """Import durable suppression and preservation only. Conflicting restored content is preserved.
+
+    Tombstones for every journaled instruction; every journaled hold, and each release only after its hold
+    (retention.replay_journal_holds). Admission is a separate, recorded step (core.restore_admission)."""
     retention.custodian(actor)
     if not d.quarantined(): raise ValidationError('Journal replay requires a quarantined restored target.')
     p.identity(getattr(settings, 'RESTORE_INSTANCE_ID', ''))
     entries = journal.verified(checkpoint_envelope)
-    # Lock all present source rows before preservation, matching clinical writers.
-    targets = [e['body']['instruction']['target_id'] for e in entries]
-    list(m.Encounter.objects.select_for_update().filter(pk__in=targets).order_by('pk'))
+    instructions = journal.instruction_entries(entries)
+    records = journal.retention_records(entries)
+    # Lock all present source rows before preservation, matching clinical writers and the global lock order
+    # (retention.py): organizations, departments and patients a hold names, then documents; then the preservation lock.
+    targets = [e['body']['instruction']['target_id'] for e in instructions]
+    named = {scope: [r['hold']['target_id'] for r in records.values() if r['hold']['scope'] == scope]
+             for scope in ('organization', 'department', 'patient', 'encounter')}
+    for model, scope in ((m.Organization, 'organization'), (m.Department, 'department'), (m.Patient, 'patient')):
+        list(model.objects.select_for_update(no_key=True).filter(pk__in=named[scope]).order_by('pk'))
+    list(m.Encounter.objects.select_for_update().filter(pk__in=targets + named['encounter']).order_by('pk'))
     retention.lock_preservation()
-    for entry in entries: _import_tombstone(entry)
+    for entry in instructions: _import_tombstone(entry)
+    holds = retention.replay_journal_holds(actor, records)
     audit(actor, 'disposition.journal_replayed', settings.RESTORE_INSTANCE_ID, entries=len(entries),
-          journal_sha256=p.digest(entries[-1]) if entries else p.ZERO)
-    return {'tombstones': len(entries), 'clinical_rows_deleted': 0, 'restore_admission_available': False,
+          journal_sha256=p.digest(entries[-1]) if entries else p.ZERO, holds=holds['holds'], releases=holds['releases'])
+    return {'tombstones': len(instructions), **holds, 'clinical_rows_deleted': 0, 'restore_admission_available': False,
             'external_copy_deletion': False}
