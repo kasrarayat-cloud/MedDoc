@@ -506,6 +506,19 @@ class LateReceiptAgainstATypedAmount(Console, PolicyFixture, TestCase):
                                                    target=str(job.pk)).exists())
         self.assertEqual(self.money(), before)
 
+    def test_another_jobs_late_receipt_does_not_license_this_one(self):
+        """The late-receipt licence is per job (RF-B): a provider.receipt_late event for a different job leaves this job's
+        conflicting amount refused."""
+        other, _, _ = self.held('other-job-late', late=True)
+        self.assertTrue(AuditEvent.objects.filter(action='provider.receipt_late', target=str(other.pk)).exists())
+        job, typed, receipt = self.held('this-job-not-late', late=False)
+        before = self.money()
+        self.assertEqual(self.resolve(job).status_code, 400)
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'reconciliation')
+        self.assertEqual(PlatformCost.objects.get(job=job, kind='absorbed_failure').amount, Decimal('0.05'))
+        self.assertEqual(self.money(), before)
+
 
 class TheLockKey(TestCase):
     databases = set()

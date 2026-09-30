@@ -515,6 +515,13 @@ operational alerts do not use Resend in production (SNS).
   `Restart=on-failure` retries it, so a skipped step delays the new worker rather than doubling it
   — unless the old host vanished without closing its database connection, which holds the lock
   until the server notices. EC2 auto-recover covers hardware failure without a rebuild.
+- **Database session timeouts are 0 for the runtime role.** The worker refuses to start, and
+  `configuration_status` exits non-zero, while `lock_timeout`, `statement_timeout`, `idle_session_timeout` or
+  `idle_in_transaction_session_timeout` is non-zero for its session or as the role/database login default
+  (an adoption holds its transaction open while the output is adopted, so any of them can end a paid-for
+  generation). A managed database whose parameter group sets one of them needs, once per role, e.g.
+  `ALTER ROLE <runtime role> SET idle_in_transaction_session_timeout = 0` (and the same for the other three),
+  then `manage.py configuration_status` showing all four at 0 before the worker unit is started.
 - **Rebuild drill** before go-live and after any change to the bootstrap: time it (RTO), record the
   receipt hashes, and confirm the launcher proofs on the new host.
 - **Patching.** Security updates install daily through unattended-upgrades without automatic reboot;
