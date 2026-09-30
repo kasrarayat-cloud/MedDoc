@@ -520,10 +520,15 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         smoker = [v3('v3_1', 'Smoker', 'choice', '', ['Yes', 'No'])]
         self.assert_held('The patient used to smoke.', smoker, {'v3_1': ['The patient used to smoke.']}, 'v3_1',
                          choices={'v3_1': ['v3_1:0']})
-        # A noun-phrase question carries no tense of its own.
+        # A noun-phrase question carries no tense of its own; one opening as a tensed question asks about the past too.
         pain = [v3('v3_1', 'Right knee pain?', 'text')]
         notes = 'The patient had right knee pain last year.'
         self.assert_held(notes, pain, {'v3_1': [notes]}, 'v3_1')
+        for label, notes in (('Did the patient have right knee pain?', 'The patient had right knee pain last year.'),
+                             ('Was the patient admitted?', 'The patient was admitted last month.')):
+            asked = [v3('v3_1', label, 'text')]
+            with self.subTest(label=label):
+                self.assert_filled(notes, asked, offered(notes, asked, {'v3_1': [notes]}), {'v3_1': notes})
         # A history field and a question about a past event keep a dated past statement.
         fields = clinic_form()
         notes = U[1] + ' ' + U[2]
