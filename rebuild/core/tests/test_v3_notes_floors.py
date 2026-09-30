@@ -695,6 +695,10 @@ class FloorCost(Floors, SimpleTestCase):
             cases.append((notes, fields, picks, choices))
         cases.append((' '.join(TAKES[:6]) + ' The patient does not take warfarin. Medication: aspirin. '
                       'The patient takes no insulin.', one('Medications'), {'f': TAKES[:6]}, None))
+        # a copular denial names what it denies having only as a modifier ('an allergic reaction'): no predicate of it
+        # carries that word, so only the topic-denial key reaches the labelled answer (43fcf214 adopts 'penicillin.')
+        cases.append(('Allergies: penicillin.\nThe rash was not an allergic reaction.', one('Allergies', 'text'),
+                      {'f': ['Allergies: penicillin.']}, None))
         every = lambda reading, uid: {u['id'] for u in reading['units']}
         # (the signed record carries its signing time, and nothing the floors decide)
         answers = lambda *args, **kwargs: {key: {k: v for k, v in value.items() if k != 'ordinary_relation'}
