@@ -6127,22 +6127,32 @@ def _role_reading(package):
             low, high = segment(slot.parent.id, inner[0], inner[1], key)
             roles.append(_role(cls, source, slot.parent.id, low, high, reason))
 
+    def home(field):
+        # (the paragraph a field writes in, [start, end) there): a span's own offsets, or an inline content control's or
+        # legacy field's offsets in its paragraph; (anchor, None, None) for anything else.
+        pid = _place_id(field["locator"]["part"], field["locator"]["slot"])
+        slot = index.by_id.get(pid)
+        if slot is not None and slot.kind in ("sdt", "ff") and slot.parent is not None and slot.parent.kind == "p":
+            inner = reader.inline(slot.parent.id, pid)
+            if inner is not None:
+                return slot.parent.id, inner[0], inner[1]
+        if (field["locator"]["target"] or {}).get("type") == "span":
+            return _extent(reader, field)[0]
+        return pid, None, None
+
     def captioned(area, field):
-        # The area prints its OWN caption: 'Label:' on its line right before its blank (after the engine area before
-        # it), or a caption paragraph ending with a colon that the engine read its label from.
-        target = field["locator"]["target"]
-        if target.get("type") == "span":
-            pid, start, _ = _extent(reader, field)[0]
-            pslot = index.by_id.get(pid)
-            if start is None or pslot is None or pslot.kind != "p":
-                return False
+        # The area prints its OWN caption: 'Label:' on its line right before its blank or control (after the engine
+        # area before it), or a caption paragraph ending with a colon that the engine read its label from.
+        pid, start, _ = home(field)
+        pslot = index.by_id.get(pid)
+        if start is not None and pslot is not None and pslot.kind == "p":
             low = max([b for (a, b), key in occupied.get(pid, []) if key != field["key"] and b <= start], default=0)
             return _caption_text(reader.text(pslot)[0][low:start])
         return area.label_slot is not None and _caption_text(reader.text(area.label_slot)[0])
 
     by_paragraph = {}
     for area, field in zip(areas, engine):
-        by_paragraph.setdefault(_place_id(field["locator"]["part"], field["locator"]["slot"]), []).append((area, field))
+        by_paragraph.setdefault(home(field)[0], []).append((area, field))
 
     def writing_areas(pslot):
         # The answerable engine areas of a paragraph that print no caption of their own (a writing line's blank).
@@ -6248,7 +6258,7 @@ def _role_reading(package):
         for line in governed:
             owned = writing_areas(line)
             for _, field in owned:
-                pid, start, end = _extent(reader, field)[0]
+                pid, start, end = home(field)
                 low, high = segment(pid, start, end, field["key"]) if start is not None else (None, None)
                 roles.append(_role(ROLE_SIGNING, "signing_line", pid, low, high, signing))
             if not owned:

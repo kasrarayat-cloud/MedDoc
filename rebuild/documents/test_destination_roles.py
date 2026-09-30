@@ -762,7 +762,9 @@ class SignatureJoinedToADate(unittest.TestCase):
     PLACES = ('Signature, date', 'Signature - date', 'Signature – date', 'Signature, date/time',
               'Print name, sign and date', 'Patient to sign and date', 'Patient signature, date', 'Signed by (name, date)',
               'Electronically signed by (name, date)', 'Signature with date', 'Signature (participant, dd/mm/yyyy)',
-              'Signed (mother, DOB)', 'Initials, date', 'Date, signature')
+              'Signed (mother, DOB)', 'Initials, date', 'Date, signature',
+              # a date question JOINED to a second signing place is still that place (the pair is read first)
+              'Date signed, signature', 'Time signed - initials', 'Date signed with signature')
     DATES = ('Signature date', 'Date of signature', 'Date signed', 'Date consent signed', 'Time signed',
              'Signature date/time', 'Signature (date)', 'Date and time signed')
 
@@ -874,6 +876,24 @@ class CaptionOwnsItsWritingLine(unittest.TestCase):
                 self.assertEqual(refusal(blob, engine, line['key'], answer_for(line)), 'protected_signing_area')
                 if name != 'a date after the line':    # there an added field lands after 'Date:', the date's own place
                     self.assertEqual(located(blob, BODY + slot, label='Consultant signature')[1], 'destination_role')
+
+    def test_rr1_06_an_inline_control_on_the_captions_line_is_the_captions(self):
+        """The writing place under the caption is a content control named only by its alias ('Answer'), not a line."""
+        doc = Document(); doc.add_heading('Consultant review', level=2); doc.add_paragraph('Consultant signature:')
+        inline_control(doc.add_paragraph(), alias='Answer'); doc.add_paragraph('Plan: ______')
+        blob = data(doc)
+        engine = w.inspect(blob)['fields']
+        control = next(f for f in engine if f['locator']['slot'] == 'b/p[2]/sdt[0]')
+        self.assertEqual(control['kind'], 'text')
+        self.assertIn(control['key'], w.destination_roles(blob, engine)['violations'])
+        self.assertEqual(refusal(blob, engine, control['key']), 'protected_signing_area')
+        # Its own caption on the line keeps the control answerable.
+        doc = Document(); doc.add_heading('Consultant review', level=2); doc.add_paragraph('Consultant signature:')
+        p = doc.add_paragraph('Printed name: '); inline_control(p, alias='Printed name'); doc.add_paragraph('Plan: ______')
+        blob = data(doc)
+        engine = w.inspect(blob)['fields']
+        control = next(f for f in engine if f['locator']['slot'] == 'b/p[2]/sdt[0]')
+        self.assertNotIn(control['key'], w.destination_roles(blob, engine)['violations'])
 
     def test_rr1_06_the_captioned_date_on_the_line_keeps_its_answer(self):
         blob = captioned_lines('Consultant signature:', '____________________    Date: ______')
