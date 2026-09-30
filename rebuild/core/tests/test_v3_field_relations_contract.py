@@ -511,10 +511,12 @@ class ClaimedUnitsCompete(SimpleTestCase):
                 ('slot 1 claims it as a qualifier, slot 2 selects',
                  {'d1': self.entry([], 'qualifier'), 'd2': self.entry([1], 'answer')},
                  {'d1': ('conflict', ''), 'd2': ('conflict', '')}),
-                # parity with the consistent double selection, which the numbered rule resolves in form order: the
-                # earlier slot's selection stands and the later slot is held, whether the later slot selects or claims
-                ('both select (the unchanged rule)', {'d1': self.entry([1], 'answer'), 'd2': self.entry([1], 'answer')},
-                 {'d1': ('supported', notes), 'd2': ('conflict', '')}),
+                # a statement SELECTED by two questions holds both: the ordinary-note tightening's
+                # one-statement-two-questions guard (integrated with fix/v1-notes-usefulness 1d22d0a5) is stricter than
+                # the form-order numbered rule this branch was written against, and the stricter hold wins
+                ('both select (two-question guard)', {'d1': self.entry([1], 'answer'), 'd2': self.entry([1], 'answer')},
+                 {'d1': ('conflict', ''), 'd2': ('conflict', '')}),
+                # an unselected claim is not a second selection: the earlier slot's selection stands, the later is held
                 ('slot 1 selects, slot 2 claims', {'d1': self.entry([1], 'answer'), 'd2': self.entry([], 'answer')},
                  {'d1': ('supported', notes), 'd2': ('conflict', '')}),
                 ('control: slot 1 calls it independent', {'d1': self.entry([], 'independent'),
