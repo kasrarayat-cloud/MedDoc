@@ -1644,7 +1644,8 @@ class CaseVerdictTests(unittest.TestCase):
     #: (Part C) the mapping grader's outcomes and the notes/encounter field classes that never stop by themselves
     SAFE_OUTCOMES = OUTCOMES + ('right', 'held_safe', 'wrong', 'missed', 'false_field_held', 'supported_correct',
                                 'held_correct', 'over_held', 'usefulness_loss', 'recorded_not_asserted',
-                                'supported_incomplete', 'clinician_correction', 'held_unadjudicated')
+                                'supported_incomplete', 'clinician_correction', 'held_unadjudicated',
+                                'model_relation_disagreement')
     #: (Part C) the outcomes that ARE unsafe output, and the finding each carries
     IMPLIED = {'unsupported_accepted': 'adopted_without_source_support', 'wrong_side_adopted': 'wrong_side',
                'wrong_denial_adopted': 'wrong_denial', 'contradiction_adopted': 'contradiction_adopted',

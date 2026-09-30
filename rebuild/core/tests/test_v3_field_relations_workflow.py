@@ -245,6 +245,135 @@ class OrdinaryRelationWorkflow(V3Fixture, TestCase):
                 version, target = forms[key]
                 self.assert_worker_holds(version, target, selected, selected + ' ' + other)
 
+    def generate_with(self, version, notes, text):
+        """A new encounter generated through the quote, enqueue and the worker, the provider patched to return `text`
+        (a keyed answer) exactly once."""
+        self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+        encounter = Encounter.objects.latest('created_at')
+        quote = self.client.get(f'/encounters/{encounter.pk}/').context['usage_quote']
+        with patch('anthropic.Anthropic') as provider:
+            provider.return_value.messages.create.side_effect = lambda **wire: sdk_response(json.loads(text))
+            self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/',
+                                              {'usage_quote': quote}).status_code, 302)
+            self.assertTrue(run_one())
+            self.assertEqual(provider.return_value.messages.create.call_count, 1)
+        encounter.refresh_from_db()
+        return encounter, Job.objects.get(encounter=encounter)
+
+    def test_a_reported_contradiction_holds_its_fields_through_the_worker_review_finalize_and_export(self):
+        # Live attempt 020 (N13): the model returned both fields with conflict true and their selected statements
+        # marked contrary. The job failed as a platform failure; it must succeed with each field HELD, the review
+        # save (no clinical edit: held fields left blank, reviewed) and finalization must complete, and the export
+        # must fill nothing from the contradicted statements.
+        from .test_v3_field_relations_contract import ATTEMPT_020_TEXT, frozen_case
+        notes, frozen_fields = frozen_case('N13')
+        source = ordinary_input_form(Path(self.directory.name) / 'n13-shape.docx',
+                                     [f['label'] for f in frozen_fields])
+        template, version = self.uploaded(data=source, name='Synthetic N13 shape'); self.confirm(template, version)
+        keys = [f['key'] for f in version.fields]
+        self.assertEqual([g.question_key(f['label']) for f in version.fields],
+                         [g.question_key(f['label']) for f in frozen_fields])
+        text = ATTEMPT_020_TEXT.replace('"v3_1"', json.dumps(keys[0])).replace('"v3_2"', json.dumps(keys[1]))
+        asked, context, _ = g.v3_generation_fields(version.fields)
+        self.assertEqual([u['quote'] for u in g.source_units(notes, asked, context_labels=context)[0]],
+                         ['The patient is suicidal.', 'Suicidal ideation: none.', 'The patient is on methadone.',
+                          'The patient is not on diazepam or methadone.'])
+        encounter, job = self.generate_with(version, notes, text)
+        self.assertEqual(job.state, 'succeeded', job.error)                    # (before: failed, 'disagree')
+        # SETTLED AND CHARGED, not failed and absorbed (refutation of dfde4fc8, F5: "the reservation is not held" is true
+        # of both — the failed job's usage was settled too, and absorbed). A succeeded job carries exactly one usage
+        # debit equal to its charge, and no absorption.
+        from core.models import LedgerEntry
+        self.assertEqual(Reservation.objects.get(job=job).state, 'settled')
+        usage = Usage.objects.get(job=job)
+        self.assertGreater(usage.charged_cost, 0)
+        self.assertEqual([(e.kind, e.amount) for e in LedgerEntry.objects.filter(job=job)],
+                         [('usage', -usage.charged_cost)])
+        self.assertEqual({k: (v['status'], v['text']) for k, v in encounter.answers.items()},
+                         {keys[0]: ('conflict', ''), keys[1]: ('conflict', '')})
+        self.assertTrue(all(v.get('ordinary_relation') for v in encounter.answers.values()))
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual({row['key']: row['status'] for row in page.context['answer_rows']},
+                         {keys[0]: 'conflict', keys[1]: 'conflict'})
+        payload = {'revision': encounter.revision}
+        for key in keys:
+            payload.update({'answer_' + key: '', 'reviewed_' + key: 'on', 'blank_' + key: 'on'})
+        for requirement in version.review_requirements:
+            payload['requirement_' + requirement['key']] = 'on'
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/', payload).status_code, 302)
+        encounter.refresh_from_db()
+        self.assertEqual({k: v.get('text', '') for k, v in encounter.answers.items()}, {keys[0]: '', keys[1]: ''})
+        self.assertNotIn('supported', {v['status'] for v in encounter.answers.values()})
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/finalize/',
+            {'revision': encounter.revision, 'reviewed': 'on'}).status_code, 302)
+        encounter.refresh_from_db(); self.assertEqual(encounter.status, 'finalized')
+        response = self.client.get(f'/encounters/{encounter.pk}/export/')
+        self.assertEqual(response.status_code, 200)
+        exported = b''.join(response.streaming_content)
+        slots = w.SlotIndex(w.open_package(exported))
+        for f in version.fields:
+            written = w.text_of(slots.by_id[f['locator']['part'] + '#' + f['locator']['slot']].el)
+            for statement in ('suicidal.', 'none.', 'methadone'):
+                self.assertNotIn(statement, written)
+
+    def test_a_selection_the_model_calls_independent_is_held_and_its_record_refused_on_every_reader(self):
+        # The same disagreement with conflict FALSE: nothing but the record's disagreement holds the field. A stored
+        # `supported` copy that keeps that record is held on the page and refused by a stale save and finalization.
+        source = ordinary_input_form(Path(self.directory.name) / 'disagreement.docx', ['Allergies', 'Activity'])
+        template, version = self.uploaded(data=source, name='Synthetic disagreement'); self.confirm(template, version)
+        allergies, activity = (next(f['key'] for f in version.fields if g.question_key(f['label']) == g.question_key(name))
+                               for name in ('Allergies', 'Activity'))
+        first, second = 'The patient is not allergic to penicillin.', 'The patient walks every day.'
+        notes = first + '\n\n' + second
+        body = relation_wire(notes, version.fields, {allergies: [first], activity: [second]},
+                             overrides={(allergies, first): 'independent'})
+        encounter, job = self.generate_with(version, notes, json.dumps(body))
+        self.assertEqual(job.state, 'succeeded', job.error)
+        self.assertEqual((encounter.answers[allergies]['status'], encounter.answers[allergies]['text']), ('conflict', ''))
+        self.assertEqual((encounter.answers[activity]['status'], encounter.answers[activity]['text']), ('supported', second))
+        held = encounter.answers[allergies]
+        forged = {**{k: v for k, v in held.items() if k != 'held_candidate'}, 'status': 'supported', 'text': first,
+                  'reviewed': True, 'evidence': [{'quote': first, 'start': 0, 'end': len(first)}]}
+        # Activity is reviewed too, so NOTHING but the Allergies record can refuse finalization (refutation of
+        # dfde4fc8, F4: Activity was left unreviewed, so the first finalization was refused for that unrelated field
+        # and passed with the disagreement check removed).
+        encounter.answers = {**encounter.answers, allergies: forged,
+                             activity: {**encounter.answers[activity], 'reviewed': True}}
+        encounter.save()
+        self.assertContains(self.client.get(f'/encounters/{encounter.pk}/'), 'data-held-candidate')
+        from django.contrib.messages import get_messages
+        governed = ('These answers were read from lines that a heading or a sentence in the notes may change, and '
+                    'still need your decision: Allergies.')
+        for save in (False, True):
+            with self.subTest(stale_save=save):
+                if save:
+                    # A stale page (opened before the field was shown held: no `held_shown_` marker) re-posts the
+                    # pre-filled text. That is not the clinician's decision: the save is accepted as an edit of nothing,
+                    # the answer stays the forged `supported` copy WITH its record, and finalization still refuses it.
+                    revision = encounter.revision
+                    response = self.client.post(f'/encounters/{encounter.pk}/save/', {'revision': revision,
+                        'answer_' + allergies: first, 'reviewed_' + allergies: 'on',
+                        'answer_' + activity: second, 'reviewed_' + activity: 'on'})
+                    self.assertEqual(response.status_code, 302)
+                    self.assertIn('Edits saved. Review every answer before finalizing.',
+                                  [str(m.message) for m in get_messages(response.wsgi_request)])
+                    encounter.refresh_from_db()
+                    self.assertEqual(encounter.revision, revision + 1)
+                    stored = encounter.answers[allergies]
+                    self.assertEqual((stored['status'], stored['text'], stored.get('reviewed')), ('supported', first, True))
+                    self.assertEqual(stored['ordinary_relation'], forged['ordinary_relation'])
+                    self.assertEqual(g.governed_decisions(notes, version.fields, encounter.answers), ['Allergies'])
+                response = self.client.post(f'/encounters/{encounter.pk}/finalize/',
+                                            {'revision': encounter.revision, 'reviewed': 'on'})
+                self.assertEqual(response.status_code, 302)
+                said = [str(m.message) for m in get_messages(response.wsgi_request)]
+                self.assertTrue(any(message.startswith(governed) for message in said), said)
+                self.assertFalse(any('Not yet reviewed' in message for message in said), said)
+                encounter.refresh_from_db()
+                self.assertNotEqual(encounter.status, 'finalized')
+                self.assertFalse(encounter.export_path)
+
     def test_forced_historical_wrong_side_cannot_pass_review_or_stale_save_or_finalize(self):
         source = ordinary_input_form(Path(self.directory.name) / 'wrong-side.docx', ['Right knee'])
         template, version = self.uploaded(data=source, name='Historical side guard'); self.confirm(template, version)

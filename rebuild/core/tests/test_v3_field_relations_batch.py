@@ -93,6 +93,71 @@ class OrdinaryBatchContract(SimpleTestCase):
                 b.assemble(plan, [raw] + [reply(plan, n) for n in range(2, len(plan['parts']) + 1)])
 
 
+    def test_a_part_whose_answer_disagrees_with_its_selection_holds_that_field_only(self):
+        # The batch path assembles through the same records()/read() as the single request: a disagreement is that
+        # field's conflict (live attempt 020's shape, and an answer relation on a unit the field did not select), the
+        # complete form is still assembled once, and every other field reads as it does without the disagreement.
+        encounter = sample(notes=NOTE); plan = b.plan_for(encounter, g.configuration())
+        self.assertGreater(len(plan['parts']), 1)
+        first, later = plan['asked'][0]['key'], plan['parts'][1]['field_ids'][0]
+        clean, _ = b.assemble(plan, [reply(plan, n) for n in range(1, len(plan['parts']) + 1)])
+        self.assertEqual((clean[first]['status'], clean[first]['text']), ('supported', NOTE))
+
+        def edited(ordinal, key, edit):
+            raw = reply(plan, ordinal); body = json.loads(raw['content'][0]['text'])
+            edit(body['fields'][key]); raw['content'][0]['text'] = json.dumps(body)
+            return raw
+        for name, ordinal, key, edit in (
+                ('the selected unit marked contrary, conflict true', 1, first,
+                 lambda f: (f['context'].update({'1': 'contrary'}), f.update(conflict=True))),
+                ('the selected unit marked independent', 1, first, lambda f: f['context'].update({'1': 'independent'})),
+                ('an answer relation and nothing selected, in another part', 2, later,
+                 lambda f: f['context'].update({'1': 'answer'}))):
+            with self.subTest(name=name):
+                responses = [edited(n, key, edit) if n == ordinal else reply(plan, n)
+                             for n in range(1, len(plan['parts']) + 1)]
+                answers, _ = b.assemble(plan, responses)
+                self.assertEqual((answers[key]['status'], answers[key]['text']), ('conflict', ''))
+                self.assertEqual({k: (v['status'], v['text']) for k, v in answers.items() if k != key},
+                                 {k: (v['status'], v['text']) for k, v in clean.items() if k != key})
+
+    def test_a_competing_question_in_another_part_that_claims_the_statement_holds_the_one_that_selected_it(self):
+        # (refutation of dfde4fc8, F1, on the batch path: the later part's repeated 'Other:' calls the one statement its
+        # answer and selects nothing; the first part's 'Other:' selected it. Both are held, as when both select it.)
+        encounter = sample(notes=NOTE); fields = encounter.template_version.fields
+        fields[0]['label'] = fields[-1]['label'] = 'Other:'
+        fields[0]['context'] = 'Headache sensation'; fields[-1]['context'] = 'Headache prodrome'
+        encounter.template_version.generation_constraints = manifest(fields)
+        plan = b.plan_for(encounter, g.configuration())
+        first, last = fields[0]['key'], fields[-1]['key']
+        part_of = {k: n for n, p in enumerate(plan['parts'], 1) for k in p['field_ids']}
+        self.assertNotEqual(part_of[first], part_of[last])
+
+        def responses(edit):
+            out = []
+            for n in range(1, len(plan['parts']) + 1):
+                raw = reply(plan, n)
+                if n == part_of[last]:
+                    body = json.loads(raw['content'][0]['text']); edit(body['fields'][last])
+                    raw['content'][0]['text'] = json.dumps(body)
+                out.append(raw)
+            return out
+        clean, _ = b.assemble(plan, responses(lambda f: None))
+        self.assertEqual((clean[first]['status'], clean[first]['text']), ('supported', NOTE))
+        for name, edit in (('an answer relation, nothing selected', lambda f: f['context'].update({'1': 'answer'})),
+                           ('a qualifier relation, nothing selected', lambda f: f['context'].update({'1': 'qualifier'})),
+                           ('the consistent selection', lambda f: (f['context'].update({'1': 'answer'}),
+                                                                   f.update(unit_ids=[1])))):
+            with self.subTest(name=name):
+                answers, _ = b.assemble(plan, responses(edit))
+                self.assertEqual({k: (answers[k]['status'], answers[k]['text']) for k in (first, last)},
+                                 {first: ('conflict', ''), last: ('conflict', '')})
+                self.assertEqual({k: (v['status'], v['text']) for k, v in answers.items() if k not in (first, last)},
+                                 {k: (v['status'], v['text']) for k, v in clean.items() if k not in (first, last)})
+        answers, _ = b.assemble(plan, responses(lambda f: f['context'].update({'1': 'contrary'})))
+        self.assertEqual((answers[first]['status'], answers[first]['text']), ('supported', NOTE))   # (not a claim)
+
+
 @override_settings(**ORDINARY)
 class OrdinaryBatchWorkflow(BatchFixture, TestCase):
     def setUp(self):

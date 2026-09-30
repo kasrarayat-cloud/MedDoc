@@ -214,13 +214,18 @@ class StrictParser(SimpleTestCase):
             with self.subTest(name=name), self.assertRaises(ValidationError):
                 adopted(notes, fields, body)
 
-    def test_answers_that_parse_but_disagree_with_their_selection_are_refused_by_records(self):
-        for name, edit in (('an answer relation on an unselected unit',
-                            lambda b: b['fields']['v3_3']['context'].update({'1': 'answer'})),
-                           ('a selected unit marked independent',
-                            lambda b: b['fields']['v3_1']['context'].update({'1': 'independent'}))):
-            with self.subTest(name=name), self.assertRaisesMessage(ValidationError, 'disagree'):
-                adopted(N02_NOTES, self.fields, self.edited(edit))
+    def test_answers_that_parse_but_disagree_with_their_selection_hold_that_field_only(self):
+        # (was: refused by records() for the WHOLE response, which failed the job — live attempt 020. A disagreement
+        # is the model's own statement about ONE field, not malformed output: that field is held, nothing else moves.)
+        good = adopted(N02_NOTES, self.fields, self.text)
+        for name, key, edit in (('an answer relation on an unselected unit', 'v3_3',
+                                 lambda b: b['fields']['v3_3']['context'].update({'1': 'answer'})),
+                                ('a selected unit marked independent', 'v3_1',
+                                 lambda b: b['fields']['v3_1']['context'].update({'1': 'independent'}))):
+            with self.subTest(name=name):
+                got = adopted(N02_NOTES, self.fields, self.edited(edit))
+                self.assertEqual(got[key], ('conflict', ''))
+                self.assertEqual({k: v for k, v in got.items() if k != key}, {k: v for k, v in good.items() if k != key})
 
     def test_a_veto_on_another_unit_holds_the_answer(self):
         for relation in ('contrary', 'unresolved'):
@@ -241,6 +246,282 @@ class StrictParser(SimpleTestCase):
             r.parse(json.dumps(internal), asked, units)
         self.assertEqual(json.loads(json.dumps(keyed(internal, asked, units)))['fields']['v3_3']['context'],
                          {'1': 'independent', '2': 'independent'})
+
+
+#: The text block of live attempt 020's retained provider response (case N13 on the field-relations path), verbatim:
+#: .runtime/v1-sonnet5-campaign/evidence/020/provider-response.body, sha256 4bedab2b5487cb67…c451b6 in that attempt's
+#: evidence manifest. Each field has conflict true and its SELECTED units marked 'contrary': the model reporting that
+#: the statements it selected contradict each other. records() refused the whole response, so the job failed.
+ATTEMPT_020_TEXT = ('{"fields":{"v3_1":{"unit_ids":[1,2],"conflict":true,"context":{"1":"contrary","2":"contrary",'
+                    '"3":"independent","4":"independent"}},"v3_2":{"unit_ids":[3,4],"conflict":true,"context":{"1":'
+                    '"independent","2":"independent","3":"contrary","4":"contrary"}}}}')
+
+
+def frozen_case(case_id):
+    """(notes, form fields) of one frozen ordinary-notes case, read from the frozen diagnostics (never changed here)."""
+    from pathlib import Path
+    notes = Path(__file__).resolve().parents[3] / 'docs' / 'rebuild' / 'v1' / 'sonnet5-campaign' / 'diagnostics' / 'notes'
+    cases = json.loads((notes / 'cases.json').read_text())
+    case = next(c for c in cases['cases'] if c['id'] == case_id)
+    return case['notes'], cases['forms'][case['form']]['fields']
+
+
+#: Three fields each adopted from its own paragraph when the answer agrees with its selection (the clean control).
+CLEAN_NOTES = 'The patient is not allergic to penicillin.\n\nThe patient walks every day.\n\nThe patient does not smoke.'
+
+
+def clean_fields():
+    return [field('allergies', 'Allergies'), field('activity', 'Activity'),
+            field('smoking', 'Smoker', 'choice', ['Yes', 'No'])]
+
+
+CLEAN_PICKS = {'allergies': ['The patient is not allergic to penicillin.'], 'activity': ['The patient walks every day.'],
+               'smoking': ['The patient does not smoke.']}
+
+
+@override_settings(**RELATIONS)
+class DisagreementHolds(SimpleTestCase):
+    """A field whose selection disagrees with its own relations (a selected unit that is not answer/qualifier, or an
+    answer unit that is not selected) is HELD as that field's conflict and never adopted, while every other field is
+    read exactly as before and structural output still refuses the whole response. Generation adoption, the page, save
+    and finalization agree because every one of them reads the stored record with v3_field_relations.read()."""
+
+    def clean(self):
+        fields = clean_fields()
+        wire = relation_wire(CLEAN_NOTES, fields, CLEAN_PICKS, choices={'smoking': ['smoking:1']})
+        return fields, wire
+
+    def units(self, notes, fields):
+        asked, context, _ = g.v3_generation_fields(fields)
+        return g.source_units(notes, asked, context_labels=context)[0]
+
+    def test_the_retained_live_attempt_020_holds_both_fields_and_the_job_succeeds(self):
+        notes, fields = frozen_case('N13')
+        answers = r.validated(raw_result(notes, fields, ATTEMPT_020_TEXT))        # (before: ValidationError 'disagree')
+        self.assertEqual({k: (v['status'], v['text']) for k, v in answers.items()},
+                         {'v3_1': ('conflict', ''), 'v3_2': ('conflict', '')})
+        units = self.units(notes, fields)
+        wire = json.loads(ATTEMPT_020_TEXT)['fields']
+        for key, answer in answers.items():
+            with self.subTest(key=key):
+                # the record keeps the model's own selection, verbatim; nothing about it was rewritten
+                stored = signing.loads(answer['ordinary_relation'], salt=r.SALT)['selection']
+                self.assertEqual(stored, {'key': key, 'unit_ids': wire[key]['unit_ids'], 'conflict': True,
+                                          'option_ids': [],
+                                          'context': [wire[key]['context'][str(u['id'])] for u in units]})
+                # a forged `supported` copy that keeps this record is held on the page, save and finalize reader
+                chosen = [u for u in units if u['id'] in wire[key]['unit_ids']]
+                forged = {**answer, 'status': 'supported', 'text': '\n'.join(u['quote'] for u in chosen),
+                          'evidence': [{k: u[k] for k in ('quote', 'start', 'end')} for u in chosen]}
+                forged.pop('held_candidate', None)
+                label = next(f['label'] for f in fields if f['key'] == key)
+                self.assertIn(label, g.governed_decisions(notes, fields, {**answers, key: forged}))
+
+    def disagreements(self, key, unit, other):
+        """(name, edit of the keyed wire) — every way ONE field's selection can disagree with its relations. `unit` is
+        the field's selected unit ID, `other` a unit it did not select."""
+        u, o = str(unit), str(other)
+
+        def put(**changes):
+            def edit(body):
+                entry = body['fields'][key]
+                for name, value in changes.items():
+                    if name == 'context':
+                        entry['context'].update(value)
+                    else:
+                        entry[name] = value
+            return edit
+        return [('the selected unit marked contrary, conflict true (attempt 020)', put(context={u: 'contrary'}, conflict=True)),
+                ('the selected unit marked contrary, conflict false', put(context={u: 'contrary'})),
+                ('the selected unit marked unresolved', put(context={u: 'unresolved'})),
+                ('the selected unit marked independent', put(context={u: 'independent'})),
+                ('an answer relation on a unit it did not select', put(context={o: 'answer'})),
+                ('an answer relation and nothing selected', put(unit_ids=[], context={u: 'answer'},
+                                                                **({'option_ids': []} if key == 'smoking' else {})))]
+
+    def test_one_disagreeing_field_is_held_and_every_other_field_reads_as_before(self):
+        fields, wire = self.clean()
+        good = adopted(CLEAN_NOTES, fields, wire)
+        self.assertEqual(good, {'allergies': ('supported', 'The patient is not allergic to penicillin.'),
+                                'activity': ('supported', 'The patient walks every day.'),
+                                'smoking': ('supported', 'No')})
+        units = {u['quote']: u['id'] for u in self.units(CLEAN_NOTES, fields)}
+        for key in ('allergies', 'activity', 'smoking'):
+            unit = units[CLEAN_PICKS[key][0]]
+            other = next(i for i in units.values() if i != unit)
+            for name, edit in self.disagreements(key, unit, other):
+                with self.subTest(field=key, disagreement=name):
+                    body = copy.deepcopy(wire); edit(body)
+                    got = adopted(CLEAN_NOTES, fields, body)
+                    self.assertEqual(got[key], ('conflict', ''))
+                    self.assertEqual({k: v for k, v in got.items() if k != key},
+                                     {k: v for k, v in good.items() if k != key})
+
+    def test_the_held_record_is_the_models_selection_and_no_reader_adopts_it(self):
+        fields, wire = self.clean()
+        units = self.units(CLEAN_NOTES, fields)
+        chosen = units[0]
+        body = copy.deepcopy(wire)
+        body['fields']['allergies']['context']['1'] = 'independent'       # (a selected unit the model calls independent)
+        answers = r.validated(raw_result(CLEAN_NOTES, fields, json.dumps(body)))
+        held = answers['allergies']
+        self.assertEqual((held['status'], held['text']), ('conflict', ''))
+        record = signing.loads(held['ordinary_relation'], salt=r.SALT)
+        self.assertEqual(record['selection'], {'key': 'allergies', 'unit_ids': [1], 'conflict': False, 'option_ids': [],
+                                               'context': ['independent', 'independent', 'independent']})
+        evidence = [{k: chosen[k] for k in ('quote', 'start', 'end')}]
+        reading = g.governance_for(CLEAN_NOTES, fields)[11]['preceding']
+        read = r.read(reading, 'Allergies', evidence, held['ordinary_relation'], text=chosen['quote'], field_key='allergies')
+        self.assertFalse(read['valid'])
+        self.assertTrue(read['warnings'])
+        # the same stored answer, forged `supported` with that record, is governed (page, save and finalization); the
+        # agreeing record of the same selection is not (the control that the refusal is the disagreement)
+        forged = {**held, 'status': 'supported', 'text': chosen['quote'], 'evidence': evidence}
+        forged.pop('held_candidate', None)
+        self.assertEqual(g.governed_decisions(CLEAN_NOTES, fields, {**answers, 'allergies': forged}), ['Allergies'])
+        clean = r.validated(raw_result(CLEAN_NOTES, fields, json.dumps(wire)))
+        self.assertEqual(clean['allergies']['status'], 'supported')
+        self.assertEqual(g.governed_decisions(CLEAN_NOTES, fields, clean), [])
+        self.assertEqual(g.governed_decisions(CLEAN_NOTES, fields, {**answers, 'allergies': clean['allergies']}), [])
+
+    def test_structural_output_still_refuses_the_whole_response(self):
+        fields, wire = self.clean()
+        asked, context, _ = g.v3_generation_fields(fields)
+        units = self.units(CLEAN_NOTES, fields)
+        internal = r.parse(json.dumps(wire), asked, units).model_dump()
+        for name, edit in (('a missing field', lambda b: b['fields'].pop()),
+                           ('a duplicate field', lambda b: b['fields'].append(copy.deepcopy(b['fields'][0]))),
+                           ('an unknown field', lambda b: b['fields'][0].update(key='elsewhere')),
+                           ('a short context', lambda b: b['fields'][0]['context'].pop()),
+                           ('a long context', lambda b: b['fields'][0]['context'].append('independent')),
+                           ('an unknown unit', lambda b: b['fields'][0].update(unit_ids=[9])),
+                           ('a repeated unit', lambda b: b['fields'][0].update(unit_ids=[1, 1])),
+                           ('another field\'s option', lambda b: b['fields'][0].update(option_ids=['smoking:1'])),
+                           ('a repeated option', lambda b: b['fields'][2].update(option_ids=['smoking:1'] * 2))):
+            body = copy.deepcopy(internal); edit(body)
+            with self.subTest(name=name), self.assertRaises((ValueError, ValidationError)):
+                r.records(CLEAN_NOTES, fields, context, units, r.FieldSelections.model_validate(body), g.SONNET_5)
+        # and the keyed parser's controls (StrictParser.malformed) still refuse before any record: a disagreement in
+        # one field never excuses a malformed other field
+        body = copy.deepcopy(wire)
+        body['fields']['allergies']['context']['1'] = 'contrary'
+        body['fields']['activity']['unit_ids'] = [9]
+        with self.assertRaises(ValidationError) as caught:
+            r.validated(raw_result(CLEAN_NOTES, fields, json.dumps(body)))
+        self.assertIn(r.MALFORMED, caught.exception.messages[0])
+
+
+@override_settings(**RELATIONS)
+class ClaimedUnitsCompete(SimpleTestCase):
+    """A field's CLAIM on a statement is every unit it selected plus every unit its relations call its answer or a
+    qualifier (v3_field_relations.claimed). What competes between two repeated questions, or two numbered slots, is the
+    claim: a field that calls a statement its answer without selecting it (a disagreement, held since dfde4fc8) claims
+    it exactly as if it had selected it, so the field that DID select it is held as it is when both select it.
+    (Refutation of dfde4fc8, F1 and F2: the competitor exclusion and the numbered-slot hold read unit_ids only, so the
+    selecting field was adopted beside the claim; 691e27d0 had refused the whole response.)"""
+    NOTES = 'The patient reports flashing zigzag lines.'
+
+    @staticmethod
+    def entry(unit_ids, relation, conflict=False):
+        return {'unit_ids': unit_ids, 'conflict': conflict, 'context': {'1': relation}}
+
+    def respond(self, fields, notes, entries):
+        answers = r.validated(raw_result(notes, fields, json.dumps({'fields': entries})))
+        return answers, {k: (v['status'], v['text']) for k, v in answers.items()}
+
+    def forged_is_governed(self, notes, fields, answers, key):
+        """A forged `supported` copy of `key` that keeps its stored record: governed on the page, save and finalize."""
+        asked, context, _ = g.v3_generation_fields(fields)
+        units = g.source_units(notes, asked, context_labels=context)[0]
+        selection = signing.loads(answers[key]['ordinary_relation'], salt=r.SALT)['selection']
+        chosen = [u for u in units if u['id'] in selection['unit_ids']]
+        forged = {**answers[key], 'status': 'supported', 'text': '\n'.join(u['quote'] for u in chosen),
+                  'evidence': [{k: u[k] for k in ('quote', 'start', 'end')} for u in chosen]}
+        forged.pop('held_candidate', None)
+        label = next(f['label'] for f in fields if f['key'] == key)
+        return label in g.governed_decisions(notes, fields, {**answers, key: forged})
+
+    def test_claimed_is_the_selection_plus_every_answer_and_qualifier_relation(self):
+        units = [{'id': i} for i in (1, 2, 3, 4, 5)]
+        item = r.FieldSelection(key='f', unit_ids=[4, 2], conflict=False, option_ids=[],
+                                context=['answer', 'contrary', 'qualifier', 'independent', 'unresolved'])
+        self.assertEqual(r.claimed(item, units), [1, 2, 3, 4])      # (source order; a veto is not a claim)
+        clean = r.FieldSelection(key='f', unit_ids=[2], conflict=False, option_ids=[],
+                                 context=['independent', 'answer', 'independent', 'independent', 'contrary'])
+        self.assertEqual(r.claimed(clean, units), [2])              # (an agreeing answer: the claim IS the selection)
+
+    def test_a_repeated_question_that_claims_what_another_selected_holds_both(self):
+        # refute-1:F1 input, verbatim: sensation selects unit 1; prodrome calls unit 1 its answer and selects nothing.
+        from .test_v3_field_relations import repeated
+        fields = repeated()
+        for name, entries in (
+                ('the sibling claims it as an answer (refute-1:F1)',
+                 {'sensation': self.entry([1], 'answer'), 'prodrome': self.entry([], 'answer')}),
+                ('the other direction', {'sensation': self.entry([], 'answer'), 'prodrome': self.entry([1], 'answer')}),
+                ('the sibling claims it as a qualifier',
+                 {'sensation': self.entry([1], 'answer'), 'prodrome': self.entry([], 'qualifier')}),
+                ('the sibling claims it with conflict true',
+                 {'sensation': self.entry([1], 'answer'), 'prodrome': self.entry([], 'answer', conflict=True)}),
+                ('the consistent double selection (the rule the claim now follows)',
+                 {'sensation': self.entry([1], 'answer'), 'prodrome': self.entry([1], 'answer')})):
+            with self.subTest(name=name):
+                answers, got = self.respond(fields, self.NOTES, entries)
+                self.assertEqual(got, {'sensation': ('conflict', ''), 'prodrome': ('conflict', '')})
+                # every record carries every competitor's CLAIM, and a forged supported copy of the question that
+                # selected the statement (keeping its record) is governed on the page, save and finalize reader
+                for key in ('sensation', 'prodrome'):
+                    stored = signing.loads(answers[key]['ordinary_relation'], salt=r.SALT)
+                    self.assertEqual(stored['competing_output'], {'sensation': [1], 'prodrome': [1]})
+                    if entries[key]['unit_ids']:
+                        self.assertTrue(self.forged_is_governed(self.NOTES, fields, answers, key))
+        # controls: a sibling that does NOT claim the statement leaves the selecting question adopted (no false hold)
+        for relation in ('independent', 'contrary', 'unresolved'):
+            with self.subTest(sibling=relation):
+                answers, got = self.respond(fields, self.NOTES, {'sensation': self.entry([1], 'answer'),
+                                                                 'prodrome': self.entry([], relation)})
+                self.assertEqual(got['sensation'], ('supported', self.NOTES))
+                self.assertEqual(g.governed_decisions(self.NOTES, fields, answers), [])
+
+    def test_two_comments_questions_one_claiming_what_the_other_selected_hold_both(self):
+        # refute-2:F2 input, verbatim: two 'Comments:' questions under Diet and Exercise.
+        first, second = field('v3_1', 'Comments:'), field('v3_2', 'Comments:')
+        first['context'] = 'Diet > What does the patient eat?'
+        second['context'] = 'Exercise > What exercise does the patient do?'
+        fields = [first, second]
+        notes = 'The patient eats vegetables every day.\n\nThe patient swims twice a week.'
+        claim = {'unit_ids': [], 'conflict': False, 'context': {'1': 'independent', '2': 'answer'}}
+        chosen = {'unit_ids': [2], 'conflict': False, 'context': {'1': 'independent', '2': 'answer'}}
+        answers, got = self.respond(fields, notes, {'v3_1': chosen, 'v3_2': claim})
+        self.assertEqual(got, {'v3_1': ('conflict', ''), 'v3_2': ('conflict', '')})  # (was: v3_1 supported, swims)
+        self.assertTrue(self.forged_is_governed(notes, fields, answers, 'v3_1'))
+        # control: the sibling calls the statement independent -> the selecting question is adopted
+        answers, got = self.respond(fields, notes, {'v3_1': chosen, 'v3_2': {**claim, 'context': {'1': 'independent',
+                                                                                             '2': 'independent'}}})
+        self.assertEqual(got['v3_1'], ('supported', 'The patient swims twice a week.'))
+
+    def test_a_numbered_slot_that_claims_what_another_slot_selected_holds_the_selecting_slot(self):
+        # refute-1:F2 input, verbatim: 'Diagnosis - 1' calls the statement its answer and selects nothing,
+        # 'Diagnosis - 2' selects it. The numbered-slot rule now reads the claim, as it reads a selection.
+        fields = [field('d1', 'Diagnosis - 1'), field('d2', 'Diagnosis - 2')]
+        notes = 'The patient has type 2 diabetes.'
+        for name, entries, expected in (
+                ('slot 1 claims, slot 2 selects (refute-1:F2)',
+                 {'d1': self.entry([], 'answer'), 'd2': self.entry([1], 'answer')},
+                 {'d1': ('conflict', ''), 'd2': ('conflict', '')}),
+                ('slot 1 claims it as a qualifier, slot 2 selects',
+                 {'d1': self.entry([], 'qualifier'), 'd2': self.entry([1], 'answer')},
+                 {'d1': ('conflict', ''), 'd2': ('conflict', '')}),
+                # parity with the consistent double selection, which the numbered rule resolves in form order: the
+                # earlier slot's selection stands and the later slot is held, whether the later slot selects or claims
+                ('both select (the unchanged rule)', {'d1': self.entry([1], 'answer'), 'd2': self.entry([1], 'answer')},
+                 {'d1': ('supported', notes), 'd2': ('conflict', '')}),
+                ('slot 1 selects, slot 2 claims', {'d1': self.entry([1], 'answer'), 'd2': self.entry([], 'answer')},
+                 {'d1': ('supported', notes), 'd2': ('conflict', '')}),
+                ('control: slot 1 calls it independent', {'d1': self.entry([], 'independent'),
+                                                          'd2': self.entry([1], 'answer')},
+                 {'d1': ('missing', ''), 'd2': ('supported', notes)})):
+            with self.subTest(name=name):
+                self.assertEqual(self.respond(fields, notes, entries)[1], expected)
 
 
 @override_settings(**RELATIONS)

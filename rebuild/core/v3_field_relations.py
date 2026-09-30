@@ -254,7 +254,35 @@ def maximum_cost(notes, fields, config, context_labels=(), requirements=()):
     return amount.quantize(g.COST_QUANTUM, rounding=ROUND_CEILING)
 
 
+def disagrees(item, units):
+    """Whether ONE field's selection disagrees with its own relations: a selected unit whose relation is not answer or
+    qualifier, or an answer unit that is not selected. That is the model's statement about this field (live attempt
+    020: both statements selected and marked contrary, the model reporting that they contradict each other), not
+    malformed output, so it holds this field only: `records` keeps the model's selection as returned and `read` —
+    generation, the page, save and finalization — refuses a disagreeing record, so the field is never adopted."""
+    selected = set(item.unit_ids)
+    return any(relation == 'answer' and u['id'] not in selected or
+               u['id'] in selected and relation not in ('answer', 'qualifier')
+               for u, relation in zip(units, item.context))
+
+
+def claimed(item, units):
+    """ONE field's CLAIM on the source, in source order: every unit it selected plus every unit its relations call its
+    answer or a qualifier. What competes between repeated questions (`competing_output`, `read`) and numbered slots
+    (generation's numbered-slot hold) is the claim, not only the selection: a field that calls a statement its answer
+    without selecting it (a disagreement, held by `read`) claims it exactly as if it had selected it, so the field that
+    did select it is held as it is when both select it (refutation of dfde4fc8, F1/F2). For an agreeing field — every
+    answer selected, every selected unit an answer or qualifier, no qualifier left out — the claim IS the selection."""
+    selected = set(item.unit_ids)
+    return [u['id'] for u, relation in zip(units, item.context)
+            if u['id'] in selected or relation in ('answer', 'qualifier')]
+
+
 def records(notes, catalogue, context, units, selections, model):
+    """One signed record per field. Structure (every field once, a context per unit, known unit and option IDs, none
+    repeated) refuses the WHOLE response; a field whose selection disagrees with its relations (`disagrees`) is
+    recorded as returned and held by `read`, never adopted, and no other field changes. `competing_output` carries
+    every competing repeated question's CLAIM (`claimed`), its own included, never only its selection."""
     if not enabled() or model != g.SONNET_5:
         raise ValidationError('Ordinary interpretation provenance is unavailable.')
     asked = g.v3_generation_fields(catalogue)[0]
@@ -268,14 +296,10 @@ def records(notes, catalogue, context, units, selections, model):
                 or not set(item.unit_ids) <= known or len(item.option_ids) != len(set(item.option_ids))
                 or not set(item.option_ids) <= allowed):
             raise ValidationError('Ordinary relations must cover the exact source and original options.')
-        selected = set(item.unit_ids)
-        if any(relation == 'answer' and u['id'] not in selected or
-               u['id'] in selected and relation not in ('answer', 'qualifier')
-               for u, relation in zip(units, item.context)):
-            raise ValidationError('Ordinary relations disagree with their complete source selection.')
+        # (a disagreement is NOT refused here: refusing it failed the whole job, a live contract stop; `read` holds it.)
         payload = {'contract': CONTRACT, 'binding': binding(notes, catalogue, context), 'model': model,
                    'key': item.key, 'competitors': competitors(catalogue, field),
-                   'competing_output': {key: all_selections[key].unit_ids for key in competitors(catalogue, field)
+                   'competing_output': {key: claimed(all_selections[key], units) for key in competitors(catalogue, field)
                                         if key in all_selections},
                    'selection': item.model_dump()}
         result[item.key] = signing.dumps(payload, salt=SALT, compress=True)
@@ -306,18 +330,23 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
                 or len(item.unit_ids) != len(chosen) or not chosen <= known.keys()): return refused
         competing = value['competing_output']
         asked_keys = {f['key'] for f in reading['fields']}
+        # Every competitor's CLAIM (`claimed`), this field's own included and bound to its own selection and relations:
+        # a statement claimed by this field and by a competing repeated question holds this field, whichever of the
+        # two only called it an answer or qualifier without selecting it.
+        own = claimed(item, units)
         if (not isinstance(competing, dict) or set(competing) != set(group) & asked_keys
-                or competing.get(item.key) != item.unit_ids
+                or competing.get(item.key) != own
                 or any(not isinstance(ids, list) or any(type(i) is not int for i in ids)
                        or len(ids) != len(set(ids)) or not set(ids) <= known.keys() for ids in competing.values())
-                or any(chosen.intersection(ids) for key, ids in competing.items() if key != item.key)):
+                or any(set(own).intersection(ids) for key, ids in competing.items() if key != item.key)):
             return refused
         ordered = [u for u in units if u['id'] in chosen]
         expected = [{k: u[k] for k in ('quote', 'start', 'end')} for u in ordered]
         if evidence != expected: return refused
-        if (item.conflict or any(relation in ('contrary', 'unresolved') or
-                (relation in ('answer', 'qualifier') and u['id'] not in chosen)
-                or (u['id'] in chosen and relation not in ('answer', 'qualifier'))
+        # A reported conflict, a veto on any unit, a qualifier left unselected, or a selection that disagrees with its
+        # relations (`disagrees`: the one predicate records() no longer refuses) holds the field on every reader.
+        if (item.conflict or disagrees(item, units) or any(relation in ('contrary', 'unresolved')
+                or (relation == 'qualifier' and u['id'] not in chosen)
                 for u, relation in zip(units, item.context))): return refused
         if len(group) > 1:
             contexts = [g.question_key(f.get('context') or '') for f in catalogue if f['key'] in group]

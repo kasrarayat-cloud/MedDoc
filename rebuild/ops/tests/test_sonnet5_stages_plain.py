@@ -242,6 +242,43 @@ class NotesFieldOutcomeTests(unittest.TestCase):
         self.assertEqual((verdict['stops_stage'], verdict['unsafe']), (False, []))
         self.assertEqual(verdict['usefulness'], {'held_correct': 1, 'held_unadjudicated': 1})
 
+    def test_a_hold_caused_by_the_models_own_relation_disagreement_is_attributed_to_the_model(self):
+        # Refutation of dfde4fc8, F3: a field the served path held because the MODEL's selection disagrees with its own
+        # relations was graded over_held / application_over_hold whenever the frozen replay (which cannot carry a
+        # selected unit's relation) matched an acceptable entry. It is the model's contradiction, caught.
+        exp = expectation(forbidden=[{'units': ['B.'], 'conflict': False, 'app_should': 'not_supported'}], texts=['A.'])
+        blank = {'status': 'left_blank', 'text': ''}
+        for status in ('held', 'missing', 'conflict'):
+            held = {'status': status, 'text': ''}
+            for matched, index, verdict in (('acceptable', 0, 'as_desired'), ('unlisted', None, 'adjudicate_by_hand')):
+                with self.subTest(status=status, matched=matched):
+                    outcome, details = st.notes_field_outcome(exp, self.FIELD, held, blank,
+                                                              {'matched': matched, 'index': index, 'verdict': verdict},
+                                                              model_disagrees=True)
+                    self.assertEqual((outcome, details['attribution'], details['model_relations_disagree']),
+                                     ('model_relation_disagreement', 'model_relation_disagreement', True))
+                    # (without the disagreement the same hold is still what it was)
+                    outcome, details = st.notes_field_outcome(exp, self.FIELD, held, blank,
+                                                              {'matched': matched, 'index': index, 'verdict': verdict})
+                    self.assertEqual(outcome, {'acceptable': 'over_held', 'unlisted': 'held_unadjudicated'}[matched])
+                    self.assertFalse(details['model_relations_disagree'])
+            # a FORBIDDEN selection held is already the model's error: unchanged
+            outcome, details = st.notes_field_outcome(exp, self.FIELD, held, blank,
+                                                      {'matched': 'forbidden', 'index': 0, 'verdict': 'caught'},
+                                                      model_disagrees=True)
+            self.assertEqual((outcome, details['attribution']), ('held_correct', 'model_error_caught'))
+        # where the field must not be supported, a hold is right whatever the model said; an adoption is still unsafe
+        self.assertEqual(st.notes_field_outcome(expectation(desired='held'), self.FIELD, {'status': 'held', 'text': ''},
+                                                None, {'matched': 'unlisted', 'index': None},
+                                                model_disagrees=True)[0], 'held_correct')
+        self.assertEqual(st.notes_field_outcome(expectation(desired='held'), self.FIELD,
+                                                {'status': 'supported', 'text': 'x'}, None,
+                                                {'matched': 'unlisted', 'index': None}, model_disagrees=True)[0],
+                         'unsupported_accepted')
+        # the new outcome is usefulness evidence: never unsafe, never a stop
+        verdict = pc.classify_case({'v3_1': 'model_relation_disagreement', 'v3_2': 'supported_correct'}, [])
+        self.assertEqual((verdict['verdict'], verdict['stops_stage'], verdict['unsafe']), ('usefulness', False, []))
+
     def test_a_never_item_is_unsafe(self):
         exp = expectation('DENIAL', never=['Yes'], texts=['No'])
         self.assertEqual(self.outcome(exp, {'status': 'supported', 'text': 'Yes.'}), 'wrong_denial_adopted')
@@ -707,6 +744,48 @@ class RawSelectionTests(unittest.TestCase):
                                           case['notes'], 'default'),
                          {first: {'unit_ids': [ids[0]], 'conflict': False}})
 
+    def test_an_answer_relation_left_unselected_is_carried_and_a_disagreement_is_named(self):
+        # Refutation of dfde4fc8, F3. The frozen replay rebuilds every SELECTED unit as 'answer' and every other unit
+        # from `relations` (default independent), so an unselected unit's relation is the one thing it can use: an
+        # 'answer' there used to be dropped (the replay then read an agreeing field the served path held). A selected
+        # unit's own relation cannot reach the replay at all; relation_disagreements names the fields whose selection
+        # disagrees with their relations, from the model's own answer, so the judge attributes that hold to the model.
+        inputs = st.frozen_inputs()
+        case = next(c for c in inputs['cases']['cases'] if c['id'] == 'N13')
+        fields = inputs['cases']['forms'][case['form']]['fields']
+        asked, units = st.steps.source_units(case['notes'], fields)
+        first, other = asked[0]['key'], asked[1]['key']
+        ids = [u['id'] for u in units]
+
+        def message(first_entry, other_entry=None):
+            body = {'fields': {first: first_entry, other: other_entry or {
+                'unit_ids': [], 'conflict': False, 'context': {str(i): 'independent' for i in ids}}}}
+            return {'content': [{'type': 'text', 'text': json.dumps(body)}]}
+        agreeing = {'unit_ids': [ids[0]], 'conflict': False,
+                    'context': {**{str(i): 'independent' for i in ids}, str(ids[0]): 'answer', str(ids[1]): 'contrary'}}
+        unselected_answer = {**agreeing, 'context': {**agreeing['context'], str(ids[2]): 'answer'}}
+        selected_independent = {**agreeing, 'context': {**agreeing['context'], str(ids[0]): 'independent'}}
+        selected_qualifier = {**agreeing, 'context': {**agreeing['context'], str(ids[0]): 'qualifier'}}
+        cases = ((agreeing, {units[1]['quote']: 'contrary'}, set()),
+                 (unselected_answer, {units[1]['quote']: 'contrary', units[2]['quote']: 'answer'}, {first}),
+                 (selected_independent, {units[1]['quote']: 'contrary'}, {first}),
+                 (selected_qualifier, {units[1]['quote']: 'contrary'}, set()))           # (a qualifier agrees)
+        for entry, relations, disagreeing in cases:
+            with self.subTest(context=entry['context']):
+                self.assertEqual(st.raw_selection(message(entry), fields, case['notes'], 'field_relations')[first],
+                                 {'unit_ids': [ids[0]], 'conflict': False, 'options': [], 'relations': relations})
+                self.assertEqual(st.relation_disagreements(message(entry), fields, case['notes'], 'field_relations'),
+                                 disagreeing)
+        self.assertEqual(st.relation_disagreements(message(unselected_answer, selected_independent), fields,
+                                                   case['notes'], 'field_relations'), {first, other})
+        # (the default path returns no relations, so it can name no disagreement; a malformed answer is refused)
+        default = {'content': [{'type': 'text', 'text': json.dumps({'fields': [{'key': first, 'unit_ids': [ids[0]],
+                                                                                  'conflict': False}]})}]}
+        self.assertEqual(st.relation_disagreements(default, fields, case['notes'], 'default'), set())
+        with self.assertRaises(pc.Refused):
+            st.relation_disagreements({'content': [{'type': 'text', 'text': '{"fields": {}}'}]}, fields, case['notes'],
+                                      'field_relations')
+
 
 class PendingSendsTests(unittest.TestCase):
     """REMAINDER: once a stage has failed (and until it passes) it sends ONLY what its latest failure recorded as not
@@ -1006,15 +1085,29 @@ class StagePassTests(unittest.TestCase):
         made = [a['send']['id'] for a, _ in self.ledger.rows() if a['stage'] == 'ordinary_notes']
         self.assertEqual(sorted(made), sorted(self.plan))              # (every planned send exactly once)
 
-    def test_the_live_ledgers_earlier_stops_are_its_two_recorded_stops(self):
-        # the live ledger, read-only (the stage functions read it; nothing is written, no lock is taken)
+    def test_the_live_ledgers_earlier_stops_are_the_stops_its_failures_record(self):
+        # The live ledger, read-only (the stage functions read it; nothing is written, no lock is taken). The expected
+        # stops are read from the ledger's OWN stage-failure files, not hard-coded (refutation of dfde4fc8, F7: a later
+        # recorded stop — attempt 20 — failed a test that named only attempt 17): every per-send row a failure records
+        # as stopping the stage, and every attempt of the stage that no row names. The stops already recorded when this
+        # test was written can never disappear from the ledger (it only appends).
         ledger = pc.Ledger(pc.LIVE_ROOT / 'ledger')
         if not ledger.dir.is_dir():
             self.skipTest('no live ledger on this host')
-        stops = {stage: [(e['send'], e['attempt']) for e in st.earlier_stops(ledger, stage)]
-                 for stage in ('mapping', 'ordinary_notes')}
-        self.assertEqual(stops, {'mapping': [('mapping:f1-guidance-confirmation', 2)],
-                                 'ordinary_notes': [('notes:N02:field_relations', 17)]})
+        for stage, recorded_before in (('mapping', [('mapping:f1-guidance-confirmation', 2)]),
+                                       ('ordinary_notes', [('notes:N02:field_relations', 17),
+                                                           ('notes:N13:field_relations', 20)])):
+            with self.subTest(stage=stage):
+                rows = {}
+                for path in sorted(ledger.dir.glob(f'stage-{stage}-failed-*.json')):
+                    for row in (json.loads(path.read_text()).get('summary') or {}).get('sends') or []:
+                        rows.setdefault(row['attempt'], []).append(row)
+                attempts = sorted((json.loads(path.read_text()) for path in ledger.dir.glob('[0-9][0-9][0-9]-attempt.json')),
+                                  key=lambda a: a['number'])
+                expected = [(a['send']['id'], a['number']) for a in attempts if a.get('stage') == stage
+                            and (len(rows.get(a['number'], [])) != 1 or rows[a['number']][0]['stops_stage'] is not False)]
+                self.assertTrue(set(recorded_before) <= set(expected), expected)
+                self.assertEqual([(e['send'], e['attempt']) for e in st.earlier_stops(ledger, stage)], expected)
 
 
 class InterruptionTests(unittest.TestCase):

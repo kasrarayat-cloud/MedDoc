@@ -40,7 +40,9 @@ as an outcome, and reconciled; nothing is ever re-sent.
                    subprocess) and each field classified (notes_field_outcome, then provider_campaign.classify_case) by
                    the frozen README's scoring: a held ACCEPTABLE selection where the field is desired supported is an
                    application over-hold, a held FORBIDDEN one is a model error the application caught (held_correct),
-                   and a held UNLISTED one is never auto-scored (held_unadjudicated).
+                   and a held UNLISTED one is never auto-scored (held_unadjudicated); a field the application held
+                   because the MODEL's own selection disagrees with its own relations (relation_disagreements, read
+                   from the provider message) is the model's contradiction caught (model_relation_disagreement).
                    An unsafe adoption on the DEFAULT path stops the stage; on the relations path (paused, default-off)
                    it is recorded as veto evidence and does not stop it (it runs last, so nothing is skipped).
 
@@ -308,13 +310,16 @@ def never_violations(never, adopted, field):
     return hits, prose
 
 
-def notes_field_outcome(expectation, field, adopted, reviewed, replayed):
+def notes_field_outcome(expectation, field, adopted, reviewed, replayed, *, model_disagrees=False):
     """One field's outcome class on the path it was sent, from the LIVE adoption (`adopted`: the validator's decision),
     the review save (`reviewed`), the frozen expectation and the frozen replay's matched entry (`replayed`: its row for
     this field). Returns (outcome, details). Unsafe outcomes: unsupported_accepted, wrong_side_adopted,
     wrong_denial_adopted, contradiction_adopted. A hold where the field is desired supported is attributed by the matched
     entry (README scoring steps 2 and 4): acceptable -> over_held, forbidden -> held_correct (a model error caught),
-    unlisted -> held_unadjudicated (adjudicated by hand, never auto-scored)."""
+    unlisted -> held_unadjudicated (adjudicated by hand, never auto-scored) — unless the MODEL's own selection for this
+    field disagrees with its own relations (`model_disagrees`, from `relation_disagreements`): the served path holds that
+    field on its record, and the hold is the model's contradiction caught, never an application over-hold
+    (model_relation_disagreement; refutation of dfde4fc8, F3). A forbidden selection keeps its own attribution."""
     ae = expectation['app_adoption_expectation']
     matched, index = (replayed or {}).get('matched', 'unlisted'), (replayed or {}).get('index')
     entry = expectation['raw_model_expectation'][matched][index] if matched in ('acceptable', 'forbidden') else {}
@@ -328,7 +333,8 @@ def notes_field_outcome(expectation, field, adopted, reviewed, replayed):
     texts = texts_of(entry) if own else texts_of(ae)
     violations, prose = never_violations(ae.get('never', []), adopted, field)
     details = {'matched': matched, 'index': index, 'desired': desired, 'replay_verdict': (replayed or {}).get('verdict'),
-               'never_violated': violations, 'never_not_machine_checked': prose}
+               'never_violated': violations, 'never_not_machine_checked': prose,
+               'model_relations_disagree': bool(model_disagrees)}
     unsafe = NOTES_UNSAFE_BY_CLASS.get(expectation['class'], 'unsupported_accepted')
     if adopted.get('status') == 'supported':
         if violations or (matched == 'forbidden'):
@@ -351,6 +357,8 @@ def notes_field_outcome(expectation, field, adopted, reviewed, replayed):
         outcome, details['attribution'] = {'acceptable': ('over_held', 'application_over_hold'),
                                            'forbidden': ('held_correct', 'model_error_caught')}.get(
                                                matched, ('held_unadjudicated', 'adjudicate_by_hand'))
+        if model_disagrees and matched != 'forbidden':
+            outcome, details['attribution'] = 'model_relation_disagreement', 'model_relation_disagreement'
     elif desired == 'usefulness_loss':
         outcome = 'usefulness_loss'
     else:
@@ -1207,14 +1215,17 @@ class Run:
     def judge_notes(self, case):
         def judge(send, version, outcomes, exported, original, *, raw, reviewed, evidence):
             selection = raw_selection(raw, version.fields, case['notes'], send.path)
-            pc.write_new(evidence / 'raw-selection.json', {'path': send.path, 'selection': selection})
+            disagreeing = relation_disagreements(raw, version.fields, case['notes'], send.path)
+            pc.write_new(evidence / 'raw-selection.json', {'path': send.path, 'selection': selection,
+                                                           'relation_disagreements': sorted(disagreeing)})
             replayed = self.replay(case['id'], send.path, selection, evidence)
             rows = replayed['responses'][case['id']][send.path]
             fields, details = {}, {}
             by_key = {f['key']: f for f in version.fields}
             for key, expectation in case['fields'].items():
                 outcome, detail = notes_field_outcome(expectation, by_key[key], outcomes.get(key, {}),
-                                                      (reviewed or {}).get(key), rows.get(key))
+                                                      (reviewed or {}).get(key), rows.get(key),
+                                                      model_disagrees=key in disagreeing)
                 fields[key], details[key] = outcome, detail
                 if rows.get(key) and (rows[key]['status'], rows[key]['text']) != (outcomes.get(key, {}).get('status'),
                                                                                    outcomes.get(key, {}).get('text')):
@@ -1404,14 +1415,38 @@ def raw_selection(message, fields, notes, path):
             chosen = {'unit_ids': list(row.unit_ids), 'conflict': bool(row.conflict)}
             options = {o['id']: o['text'] for o in rel.options(by_key[row.key])}
             chosen['options'] = [options[i] for i in row.option_ids if i in options]
+            # Every UNSELECTED unit's relation but the replay's default ('independent'), 'answer' included: the frozen
+            # replay rebuilds a selected unit as 'answer' and any other from `relations`, so an unselected answer it is
+            # not given reads as an agreeing field the served path held (refutation of dfde4fc8, F3). A SELECTED unit's
+            # own relation cannot reach the replay at all; `relation_disagreements` names those fields for the judge.
             chosen['relations'] = {u['quote']: c for u, c in zip(units, row.context)
-                                   if u['id'] not in chosen['unit_ids'] and c not in ('answer', 'independent')}
+                                   if u['id'] not in chosen['unit_ids'] and c != 'independent'}
             selection[row.key] = chosen
         return selection
     body = json.loads(texts[0])
     for row in body.get('fields') or []:
         selection[row.get('key')] = {'unit_ids': list(row.get('unit_ids') or []), 'conflict': bool(row.get('conflict'))}
     return selection
+
+
+def relation_disagreements(message, fields, notes, path):
+    """The fields whose OWN selection disagrees with their own relations in the model's keyed answer (the engine's one
+    predicate, v3_field_relations.disagrees: a selected unit that is not answer/qualifier, or an answer unit left
+    unselected), read from the provider's message with the engine's strict parser — never from the adopted answers.
+    The served path holds such a field on its record; that hold is the MODEL's contradiction, which the frozen replay
+    cannot always see (it rebuilds every selected unit as 'answer'). Nothing on the default path carries relations."""
+    if path != 'field_relations':
+        return set()
+    from django.core.exceptions import ValidationError
+    from core import v3_field_relations as rel
+    texts = [block.get('text') for block in (message or {}).get('content') or [] if block.get('type') == 'text']
+    require(len(texts) == 1, 'The provider message does not carry exactly one text block.')
+    asked, units = steps.source_units(notes, fields)
+    try:
+        parsed = rel.parse(texts[0], asked, units)
+    except ValidationError as error:
+        raise Refused('The relations answer cannot be read: ' + '; '.join(error.messages)) from None
+    return {row.key for row in parsed.fields if rel.disagrees(row, units)}
 
 
 def clinician_view(page):
