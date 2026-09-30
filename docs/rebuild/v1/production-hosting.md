@@ -506,8 +506,10 @@ operational alerts do not use Resend in production (SNS).
   snapshot), run `bootstrap-host.sh --existing-state-volume` with the recorded release artifact,
   confirm the fixed identity number owns the volume. **Then stop every QuillMD unit on the old
   instance, worker first** (or confirm the instance is stopped), and confirm with `manage.py
-  configuration_status` on the new host that the single-worker lock reads "not held". Only then start the units on the
-  new host, re-point the target group, and terminate the old instance. Two workers against one
+  configuration_status` on the new host that the single-worker lock reads "not held". That shows only that no worker
+  holds the lock, not that no worker process runs (a build from before the lock never takes it, and a worker whose
+  lock session ended runs until its next pass), so it confirms the stop above and never replaces it. Only then start
+  the units on the new host, re-point the target group, and terminate the old instance. Two workers against one
   database let one settle a job the other had already swept or an administrator had resolved
   (blockers.txt item 3); the worker refuses to start while another holds the lock, and systemd's
   `Restart=on-failure` retries it, so a skipped step delays the new worker rather than doubling it

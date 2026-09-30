@@ -82,16 +82,17 @@ class Command(BaseCommand):
 
     def worker(self):
         """Whether a worker holds the single-worker lock, and the role's session timeouts, which must be 0 (blockers.txt
-        item 3). The rows come from core.worker_lock.status_rows(), which the services page renders too. A non-zero
-        timeout makes this command exit non-zero after printing everything, exactly as the worker refuses to start."""
-        from core.worker_lock import WorkerRefused, refuse_nonzero_timeouts, status_rows
+        item 3). The rows come from core.worker_lock.worker_status(), whose rows the services page renders too, and the
+        exit from the same single read. A non-zero timeout makes this command exit non-zero after printing everything,
+        exactly as the worker refuses to start. A database that cannot be read prints UNKNOWN rows and exits 0, as the
+        rest of this report degrades: it is the screen an operator reads during an incident."""
+        from core.worker_lock import worker_status
         self.stdout.write('Worker (one per database; it refuses to start unless every timeout below is 0):')
-        for row in status_rows():
+        rows, refused = worker_status()
+        for row in rows:
             self.stdout.write(f'  {row["name"]}: {row["value"]}')
-        try:
-            refuse_nonzero_timeouts()
-        except WorkerRefused as exc:
-            raise CommandError(str(exc)) from None
+        if refused is not None:
+            raise CommandError(str(refused))
 
     def language_model(self):
         """The model, its rates, the request profile and the pricing version a generation queued NOW would carry.

@@ -24,8 +24,15 @@ Limits, stated rather than solved:
   second worker could then sweep that job. settle() refuses a job that is no longer running and the late receipt is held
   for an administrator (core.billing.SETTLEABLE_STATES, core.jobs.hold_late_receipt), so that race charges nothing and loses
   nothing.
-- idle_session_timeout ends an idle session, and the lock session is idle while a provider request runs; the worker refuses
-  to start while it (or lock_timeout, statement_timeout) is non-zero for its role (session_timeout_problems).
+- idle_session_timeout ends an idle session, and the lock session is idle while a provider request runs;
+  idle_in_transaction_session_timeout ends a session idle inside a transaction, and the worker's own session is exactly
+  that while an adoption runs in Python under the encounter's row lock (core.jobs.run_one), so a paid-for generation would
+  be lost. The worker refuses to start while any of these (or lock_timeout, statement_timeout) is non-zero for its role
+  (session_timeout_problems). It checks at start only: a login default changed later reaches the worker's next new
+  session unchecked.
+- An absent lock shows that no worker HOLDS it, not that no worker process runs: a worker whose lock session ended is
+  still inside its request until its next pass, and a worker built before this lock never takes it. The status wording
+  says only the first (status_rows); stopping the old units is what ends the second.
 """
 import re
 
@@ -38,8 +45,10 @@ HOLDERS = ("SELECT pid FROM pg_locks WHERE locktype='advisory' AND granted AND o
            "AND database=(SELECT oid FROM pg_database WHERE datname=current_database()) ORDER BY pid")
 
 #: Must be 0 for the worker's role. lock_timeout and statement_timeout turn an ordinary lock wait into a DatabaseError on the
-#: settlement path (residuals-assessment, "Remaining limits"); idle_session_timeout ends the idle lock session.
-TIMEOUT_SETTINGS = ('lock_timeout', 'statement_timeout', 'idle_session_timeout')
+#: settlement path (residuals-assessment, "Remaining limits"); idle_session_timeout ends the idle lock session;
+#: idle_in_transaction_session_timeout ends the worker's session in the middle of an adoption, which holds its transaction
+#: open while Python adopts the output (core.jobs.run_one).
+TIMEOUT_SETTINGS = ('lock_timeout', 'statement_timeout', 'idle_session_timeout', 'idle_in_transaction_session_timeout')
 _ZERO = re.compile(r"'?\s*0+(?:\.0*)?\s*(?:us|ms|s|min|h|d)?\s*'?", re.IGNORECASE)
 
 
@@ -156,34 +165,50 @@ def session_timeout_problems(timeouts=None):
     return problems
 
 
+def refusal(problems, role, database):
+    """The WorkerRefused for non-zero timeouts: the worker's refusal and configuration_status's exit, one text."""
+    names = ', '.join(TIMEOUT_SETTINGS[:-1]) + ' and ' + TIMEOUT_SETTINGS[-1]
+    return WorkerRefused(
+        f'{names} must be 0 for role {role!r} on database {database!r}; found {", ".join(problems)}. A lock or statement '
+        'timeout turns an ordinary wait on the settlement path into an error, an idle-session timeout ends the '
+        'single-worker lock session, and an idle-in-transaction timeout ends the worker\'s session in the middle of an '
+        'adoption. The worker does not start.')
+
+
 def refuse_nonzero_timeouts():
     problems = session_timeout_problems()
     if problems:
         with connection.cursor() as cursor:
             cursor.execute('SELECT session_user, current_database()')
             role, database = cursor.fetchone()
-        raise WorkerRefused(
-            f'lock_timeout, statement_timeout and idle_session_timeout must be 0 for role {role!r} on database '
-            f'{database!r}; found {", ".join(problems)}. A lock or statement timeout turns an ordinary wait on the '
-            'settlement path into an error, and an idle-session timeout ends the single-worker lock session. The worker '
-            'does not start.')
+        raise refusal(problems, role, database)
 
 
 def status_rows():
     """The worker section of `manage.py configuration_status` and of the services page, as data (one implementation)."""
-    rows = []
+    return worker_status()[0]
+
+
+def worker_status():
+    """(rows, refusal): the worker section's rows and the WorkerRefused its timeouts call for (None when all are 0), from
+    ONE read of the database. A database that cannot be read gives an UNKNOWN row for the lock and for every timeout, and no
+    refusal: the report degrades, as its other sections do, instead of ending in a traceback (L2:R2-2). The worker itself
+    never starts on an unreadable database: its own check (refuse_nonzero_timeouts) raises."""
     try:
         with connection.cursor() as cursor:
             holders = lock_holders(cursor)
-            cursor.execute('SELECT session_user')
-            role = cursor.fetchone()[0]
+            cursor.execute('SELECT session_user, current_database()')
+            role, database = cursor.fetchone()
             timeouts = session_timeouts(cursor)
-    except DatabaseError as exc:
-        return [{'name': 'single-worker lock', 'value': f'UNKNOWN: the database could not be read ({type(exc).__name__})',
-                 'severity': 'error'}]
+    except (DatabaseError, InterfaceError) as exc:
+        unknown = f'UNKNOWN: the database could not be read ({type(exc).__name__})'
+        return ([{'name': 'single-worker lock', 'value': unknown, 'severity': 'error'}]
+                + [{'name': name, 'value': unknown, 'severity': 'error'} for name in TIMEOUT_SETTINGS]), None
+    rows = []
+    # 'not held' says that no worker HOLDS the lock, never that no worker process runs (the module's limits).
     rows.append({'name': f'single-worker lock (advisory key {WORKER_LOCK_KEY})',
                  'value': (f'held by database session {", ".join(map(str, holders))}' if holders
-                           else 'not held: no worker is running against this database'),
+                           else 'not held: no lock-holding worker'),
                  'severity': 'success' if len(holders) == 1 else 'warning'})
     for name in TIMEOUT_SETTINGS:
         row = timeouts[name]
@@ -197,4 +222,5 @@ def status_rows():
             value += f' (role {role})'
         rows.append({'name': name, 'value': ('NON-ZERO, the worker refuses to start: ' + value) if problems else value,
                      'severity': 'error' if problems else 'success'})
-    return rows
+    problems = session_timeout_problems(timeouts)
+    return rows, (refusal(problems, role, database) if problems else None)

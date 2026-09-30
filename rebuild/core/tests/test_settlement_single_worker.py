@@ -30,14 +30,15 @@ from io import StringIO
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connection
+from django.db import OperationalError, connection
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from core import billing, worker_lock
-from core.jobs import LATE_RECEIPT, deliverable, ended_key, enqueue, mark_stale, run_one
+from core.jobs import LATE_RECEIPT, cancel, deliverable, ended_key, enqueue, mark_stale, run_one
 from core.management.commands.audit_billing import audit_report
 from core.models import AuditEvent, Encounter, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage, Wallet
 from core.tests.test_billing_boundary import LIVE, adopted_live_result
@@ -53,6 +54,9 @@ RECEIPT_ABSORBED = 'Resolved by administrator: the provider cost of its durable 
 SETTLED_ABSORBED = 'Resolved by administrator: settled provider cost absorbed by QuillMD.'
 RELEASE = {'outcome': 'release_no_cost', 'evidence_note': 'Synthetic: provider console shows no completed request yet'}
 UNITS = {'input_tokens': 100, 'output_tokens': 0, 'cached_input_tokens': 0, 'cache_creation_tokens': 0}
+#: Every session timeout the worker refuses unless it is 0 (core.worker_lock.TIMEOUT_SETTINGS), spelled out here so that
+#: dropping one from the module fails a test rather than shrinking every loop that reads the module.
+ALL_TIMEOUTS = ('lock_timeout', 'statement_timeout', 'idle_session_timeout', 'idle_in_transaction_session_timeout')
 
 
 def failing_checks(report):
@@ -201,23 +205,67 @@ class SecondWorkerDuringALiveProviderCall(Console, HeldSettlementFixture, Transa
         self.assertEqual(sum(b for _, b, _ in before) - sum(b for _, b, _ in self.wallets()), Decimal('0.15'))
         self.assertTrue(audit_report()['all_checks_pass'])
 
-    def test_a_late_receipt_meeting_an_earlier_typed_amount_is_refused_not_kept(self):
-        """The first resolution typed a platform cost (0.05) before the receipt existed. The receipt (0.10) is the evidence:
-        the second resolution refuses the conflicting amount (as the batch resolution does) and the audit stays failed."""
-        typed = {'outcome': 'absorb_platform_failure', 'actual_cost': '0.05', 'evidence_note': 'Synthetic typed estimate'}
-        job, draft, before, document, seen = self.second_worker_during_the_call('typed', resolve_form=typed)
-        self.assertEqual(seen['resolved'][1:3], ('failed', 'Resolved by administrator: provider cost absorbed by QuillMD.'))
-        job.refresh_from_db()
-        self.assertEqual((job.state, job.error), ('reconciliation', LATE_RECEIPT))
-        refused = self.resolve(job)  # the middleware answers a ValidationError with 400; the atomic view rolled back
-        self.assertEqual(refused.status_code, 400)
-        self.assertIn(b'conflicts with the previously recorded platform cost', refused.content)
-        job.refresh_from_db()
-        self.assertEqual(job.state, 'reconciliation')
-        self.assertEqual(PlatformCost.objects.get(job=job, kind='absorbed_failure').amount, Decimal('0.05'))
-        report = audit_report()
-        self.assertEqual(failing_checks(report), {'late_provider_receipts_resolved'})
-        self.assertEqual(self.wallets(), before)
+    def test_a_late_receipt_meeting_an_earlier_typed_amount_records_the_receipt_and_frees_the_encounter(self):
+        """L1:R1-1. The first resolution typed a platform cost before the receipt existed; the receipt (0.10) then reopened
+        the job. The second resolution, whatever outcome and amount its form carries, records the receipt's amount on that
+        same platform-cost row (audited with both amounts), charges nobody, ends the job and frees the encounter: the audit
+        passes and a new request is accepted. RED before: every resolution answered 400 and rolled back, so the job stayed
+        held, the audit failed and the encounter refused every new request ('already has a pending job') for good."""
+        runs = (  # (name, the first resolution's typed amount, the second resolution's form)
+            ('below_release', '0.05', RELEASE),
+            ('below_same', '0.05', {'outcome': 'absorb_platform_failure', 'actual_cost': '0.05',
+                                    'evidence_note': 'Synthetic: the same typed estimate again'}),
+            ('above_other', '0.5', {'outcome': 'absorb_platform_failure', 'actual_cost': '0.07',
+                                    'evidence_note': 'Synthetic: a second, different estimate'}),
+        )
+        for name, first_amount, second in runs:
+            with self.subTest(run=name):
+                typed = {'outcome': 'absorb_platform_failure', 'actual_cost': first_amount,
+                         'evidence_note': 'Synthetic typed estimate'}
+                job, draft, before, document, seen = self.second_worker_during_the_call('typed_' + name, resolve_form=typed)
+                self.assertEqual(seen['resolved'][:3], (302, 'failed', 'Resolved by administrator: provider cost absorbed by QuillMD.'))
+                job.refresh_from_db()
+                self.assertEqual((job.state, job.error), ('reconciliation', LATE_RECEIPT))
+                receipt = ProviderReceipt.objects.get(job=job)
+                self.assertEqual(receipt.actual_cost, Decimal('0.1'))
+                typed_row = PlatformCost.objects.get(job=job, kind='absorbed_failure')
+                self.assertEqual(typed_row.amount, Decimal(first_amount))
+                self.assertEqual(failing_checks(audit_report()), {'late_provider_receipts_resolved'})
+                with self.assertRaisesMessage(ValidationError, 'already has a pending job'):
+                    enqueue(Encounter.objects.get(pk=draft.pk), self.user)
+
+                response = self.resolve(job, second)
+                self.assertEqual(response.status_code, 302)
+                job.refresh_from_db()
+                self.assertEqual((job.state, job.error), ('failed', RECEIPT_ABSORBED))
+                self.assertEqual(job.request_key.count(':failed:'), 1)
+                # The same row, now at the receipt's amount and naming the receipt; never a second row.
+                row = PlatformCost.objects.get(job=job, kind='absorbed_failure')
+                self.assertEqual((row.pk, row.amount), (typed_row.pk, receipt.actual_cost))
+                self.assertTrue(row.evidence_reference.startswith(f'receipt:{receipt.pk} '))
+                self.assertEqual(PlatformCost.objects.filter(job=job).count(), 1)
+                adjusted = AuditEvent.objects.get(action='platform_cost.adjusted_to_receipt', target=str(job.pk))
+                self.assertEqual((Decimal(adjusted.details['previous_amount']), Decimal(adjusted.details['amount'])),
+                                 (Decimal(first_amount), receipt.actual_cost))
+                self.assertEqual((adjusted.details['platform_cost'], adjusted.details['receipt']), (str(row.pk), str(receipt.pk)))
+                self.assertEqual(adjusted.details['previous_evidence_reference'], 'Synthetic typed estimate')
+                resolved = AuditEvent.objects.filter(action='job.resolved', target=str(job.pk)).order_by('-created_at').first()
+                self.assertEqual(Decimal(resolved.details['actual_cost']), receipt.actual_cost)
+                # Never charged, never double-charged: no usage, no ledger movement, every hold released.
+                self.assertFalse(Usage.objects.filter(job=job).exists())
+                self.assertFalse(LedgerEntry.objects.filter(job=job).exists())
+                self.assertEqual(set(Reservation.objects.filter(job=job).values_list('state', flat=True)), {'released'})
+                self.assertEqual(self.wallets(), before)
+                self.assertEqual(self.document(draft), document)
+                report = audit_report()
+                self.assertTrue(report['all_checks_pass'], failing_checks(report))
+                self.assertEqual(report['receipt_policy']['late_provider_receipts'], [])
+                # The encounter takes new work again.
+                again = enqueue(Encounter.objects.get(pk=draft.pk), self.user)
+                self.assertFalse(getattr(again, 'reused', True))
+                self.assertEqual(Job.objects.get(pk=again.pk).state, 'queued')
+                self.assertEqual(self.resolve(job, second).status_code, 409)  # resolved once; never again
+                cancel(again, self.user)
 
     def settle_then(self, name, *, resolve):
         """The sweep (and, optionally, a resolution) lands AFTER settlement committed and BEFORE the adoption."""
@@ -404,6 +452,61 @@ class SettleRefusesAJobThatIsNoLongerRunning(PolicyFixture, TestCase):
         Job.objects.filter(pk=job.pk).update(request_key=once)  # fits the 160-character column
 
 
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES, **LIVE)
+class LateReceiptAgainstATypedAmount(Console, PolicyFixture, TestCase):
+    """The resolution's two answers to a platform cost of another amount than the job's receipt (views.admin_resolve_job).
+    The whole two-worker sequence is SecondWorkerDuringALiveProviderCall's typed-amount test; these build the end state."""
+
+    def held(self, key, *, late):
+        job = Job.objects.create(encounter=self.encounter, user=self.user, request_key=key)
+        billing.reserve(job, Decimal('0.2'))
+        billing.release(job)
+        Job.objects.filter(pk=job.pk).update(state='reconciliation', error=LATE_RECEIPT)
+        typed = PlatformCost.objects.create(job=job, kind='absorbed_failure', amount=Decimal('0.05'),
+                                            description='Provider cost absorbed: uncertain outcome resolved by administrator',
+                                            evidence_reference='Synthetic typed estimate')
+        receipt = ProviderReceipt.objects.create(job=job, provider='anthropic:synthetic-model', provider_request_id=f'req_{key}',
+                                                 actual_cost=Decimal('0.1'), units=UNITS, rates=AUDITABLE_RATES)
+        if late:
+            AuditEvent.objects.create(action='provider.receipt_late', target=str(job.pk),
+                                      details={'previous_state': 'failed', 'state': 'reconciliation'})
+        return job, typed, receipt
+
+    def money(self):
+        return (sorted((str(w.pk), w.balance, w.reserved) for w in Wallet.objects.all()), LedgerEntry.objects.count(),
+                Usage.objects.count())
+
+    def test_a_late_receipt_sets_the_typed_row_to_its_amount(self):
+        job, typed, receipt = self.held('late-receipt-typed', late=True)
+        before = self.money()
+        self.assertEqual(self.resolve(job).status_code, 302)
+        job.refresh_from_db()
+        self.assertEqual((job.state, job.error), ('failed', RECEIPT_ABSORBED))
+        row = PlatformCost.objects.get(job=job, kind='absorbed_failure')
+        self.assertEqual((row.pk, row.amount), (typed.pk, receipt.actual_cost))
+        self.assertEqual(self.money(), before)
+        adjusted = AuditEvent.objects.get(action='platform_cost.adjusted_to_receipt', target=str(job.pk))
+        self.assertEqual((Decimal(adjusted.details['previous_amount']), Decimal(adjusted.details['amount'])),
+                         (Decimal('0.05'), Decimal('0.1')))
+        self.assertTrue(audit_report()['all_checks_pass'])
+
+    def test_a_different_amount_with_no_late_receipt_is_still_refused(self):
+        """Every product path records an absorbed amount on a receipt-backed job from that receipt; only a receipt that
+        arrived after a typed resolution (provider.receipt_late) meets a different one. Any other disagreement has an
+        origin this view cannot see, so it is refused and nothing of the resolution stands."""
+        job, typed, receipt = self.held('not-late-typed', late=False)
+        before = self.money()
+        refused = self.resolve(job)
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn(b'conflicts with the previously recorded platform cost', refused.content)
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'reconciliation')
+        self.assertEqual(PlatformCost.objects.get(job=job, kind='absorbed_failure').amount, Decimal('0.05'))
+        self.assertFalse(AuditEvent.objects.filter(action__in=['platform_cost.adjusted_to_receipt', 'job.resolved'],
+                                                   target=str(job.pk)).exists())
+        self.assertEqual(self.money(), before)
+
+
 class TheLockKey(TestCase):
     databases = set()
 
@@ -507,9 +610,13 @@ class SingleWorkerLock(TestCase):
 
     def test_configuration_status_reports_the_lock_and_zero_timeouts(self):
         report = self.report()
-        self.assertIn(f'single-worker lock (advisory key {worker_lock.WORKER_LOCK_KEY}): not held: no worker is running '
-                      'against this database', report)
-        for name in ('lock_timeout', 'statement_timeout', 'idle_session_timeout'):
+        # L2:R2-5: an absent lock shows that no worker HOLDS it, never that no worker process runs (one whose lock session
+        # ended is still inside its request until its next pass; a build from before the lock never takes it).
+        self.assertIn(f'single-worker lock (advisory key {worker_lock.WORKER_LOCK_KEY}): not held: no lock-holding worker\n',
+                      report)
+        self.assertNotIn('no worker is running', report)
+        self.assertEqual(worker_lock.TIMEOUT_SETTINGS, ALL_TIMEOUTS)
+        for name in ALL_TIMEOUTS:
             self.assertRegex(report, rf'  {name}: 0 for this session; no login default \(role \w+\)')
         lock = worker_lock.acquire()
         try:
@@ -521,8 +628,9 @@ class SingleWorkerLock(TestCase):
         from core import admin_console
         lines = self.report().splitlines()
         start = lines.index('Worker (one per database; it refuses to start unless every timeout below is 0):')
-        section = [line.strip() for line in lines[start + 1:start + 5]]
         mirror = [f"{row['name']}: {row['value']}" for row in admin_console.configuration_rows()['worker']]
+        self.assertEqual(len(mirror), 1 + len(ALL_TIMEOUTS))
+        section = [line.strip() for line in lines[start + 1:start + 1 + len(mirror)]]
         self.assertEqual(mirror, section)
 
     def assert_refused(self, found):
@@ -537,12 +645,13 @@ class SingleWorkerLock(TestCase):
         self.assertEqual(holders(), [])  # refused before the lock
 
     def test_a_non_zero_timeout_in_this_session_is_refused(self):
-        for name in ('lock_timeout', 'statement_timeout', 'idle_session_timeout'):
+        # Seven minutes, not seconds: this test's own session sits idle in its transaction between statements.
+        for name in ALL_TIMEOUTS:
             with self.subTest(name=name):
                 with connection.cursor() as cursor:
-                    cursor.execute(f"SET {name} = '7s'")
+                    cursor.execute(f"SET {name} = '7min'")
                 try:
-                    self.assert_refused(f'{name}=7000 (this session)')
+                    self.assert_refused(f'{name}=420000 (this session)')
                 finally:
                     with connection.cursor() as cursor:
                         cursor.execute(f'RESET {name}')
@@ -556,6 +665,55 @@ class SingleWorkerLock(TestCase):
             cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(database)} SET lock_timeout = '5s'")
         self.assertEqual(worker_lock.session_timeouts()['lock_timeout']['current'], '0')
         self.assert_refused('lock_timeout=5s (login default for this role or database)')
+
+    def test_a_non_zero_idle_in_transaction_timeout_is_refused(self):
+        """L2:R2-3. The worker's adoption holds its transaction, and the encounter's row lock, open while Python adopts the
+        output, so its session sits 'idle in transaction': idle_in_transaction_session_timeout ends it mid-adoption and the
+        paid-for generation is lost. RED before: a 1s login default passed every check and the worker started."""
+        database = connection.settings_dict['NAME']
+        with connection.cursor() as cursor:
+            cursor.execute(f"ALTER DATABASE {connection.ops.quote_name(database)} SET idle_in_transaction_session_timeout = '1s'")
+        self.assertEqual(worker_lock.session_timeout_problems(),
+                         ['idle_in_transaction_session_timeout=1s (login default for this role or database)'])
+        self.assert_refused('idle_in_transaction_session_timeout=1s (login default for this role or database)')
+
+    def test_configuration_status_degrades_when_the_database_cannot_be_read(self):
+        """L2:R2-2. Every worker row reads UNKNOWN and the command exits 0, as the rest of the report degrades. RED before:
+        the timeout refusal opened its own cursor with no guard and ended the command in an OperationalError traceback."""
+        class Unreachable:
+            def cursor(self):
+                raise OperationalError('synthetic: connection refused')
+        out = StringIO()
+        with patch('core.worker_lock.connection', Unreachable()):
+            call_command('configuration_status', stdout=out)
+        lines = out.getvalue().splitlines()
+        start = lines.index('Worker (one per database; it refuses to start unless every timeout below is 0):')
+        unknown = 'UNKNOWN: the database could not be read (OperationalError)'
+        self.assertEqual([line.strip() for line in lines[start + 1:]],
+                         [f'single-worker lock: {unknown}'] + [f'{name}: {unknown}' for name in ALL_TIMEOUTS])
+        from core import admin_console
+        with patch('core.worker_lock.connection', Unreachable()):
+            rows = admin_console.configuration_rows()['worker']
+        self.assertEqual([(row['value'], row['severity']) for row in rows], [(unknown, 'error')] * (1 + len(ALL_TIMEOUTS)))
+
+
+class ConfigurationStatusWithoutADatabase(TestCase):
+    databases = set()
+
+    def test_an_unreachable_database_degrades_to_unknown_rows_and_exit_zero(self):
+        """L2:R2-2 end to end: a real `manage.py configuration_status` whose database port refuses the connection (port 1,
+        a synthetic password; nothing listens there). RED before: exit 1 with an OperationalError traceback."""
+        environment = dict(os.environ, QUILLMD_DB_HOST='127.0.0.1', QUILLMD_DB_PORT='1',
+                           QUILLMD_DB_PASSWORD='synthetic-unreachable-port-no-credential', PYTHONUNBUFFERED='1')
+        done = subprocess.run([sys.executable, '-B', str(Path(settings.BASE_DIR) / 'manage.py'), 'configuration_status'],
+                              cwd=settings.BASE_DIR, env=environment, stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, timeout=180)
+        self.assertEqual(done.returncode, 0, done.stderr[-3000:])
+        self.assertNotIn('Traceback', done.stderr)
+        unknown = 'UNKNOWN: the database could not be read (OperationalError)'
+        self.assertIn(f'  single-worker lock: {unknown}\n', done.stdout)
+        for name in ALL_TIMEOUTS:
+            self.assertIn(f'  {name}: {unknown}\n', done.stdout)
 
 
 class WorkerProcesses(TransactionTestCase):
