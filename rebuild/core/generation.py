@@ -2892,22 +2892,34 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     title_declarations = {key for key, span in own_spans.items() if span.get('complete_declaration')}
     # Claims and negations for the relation floors (`v3_relation_causes`). A labelled line claims its label's words and
     # its value's; it denies its label's topic when its value is a plain negative ('Smoker: No.', 'Allergies: none.'),
-    # and otherwise asserts it with its value's words as the complement ('Allergies: penicillin.'). An unlabelled
-    # statement's predicates come from the actor reader (`v3_actors._predicates`), and a verbless denial or the object of
-    # 'denies' ('No MAPPA involvement.', 'She denies smoking.') denies every word it names (`v3_actors._denied`).
-    claim_keys, negated_keys, predicates = {}, {}, {}
+    # and otherwise asserts its label with its value (`labelled_claims`: 'Allergies: penicillin.', read against every
+    # denial by `v3_denies_labelled`). An unlabelled statement's predicates come from the actor reader
+    # (`v3_actors._predicates`), and a verbless denial or the object of 'denies' ('No MAPPA involvement.', 'She denies
+    # smoking.') denies every word it names (`v3_actors._denied`).
+    claim_keys, negated_keys, predicates, labelled_claims = {}, {}, {}, {}
     for u in units:
         found = actors['units'][u['id']]
         claim, negated, records = set(found['claim_keys']), set(found['negated_keys']), found['predicates']
         own = parsed[u['id']]
-        if colon[u['id']] and own:
-            label_keys = v3_label_keys(own[0])
+        # A line labelled by a word the form does not print ('Mood: not depressed.') is read the same way, in addition
+        # to the actor reader's reading of it (so it only adds holds).
+        generic = None if colon[u['id']] and own else V3_GENERIC_LABEL.fullmatch(u['quote'])
+        pair = (own[0], own[1]) if colon[u['id']] and own else (generic.group(1), generic.group(2)) if generic else None
+        if pair:
+            label_keys = v3_label_keys(pair[0])
             claim |= label_keys | set(found['keys'])
-            value = without_closing_stop(own[1]).casefold()
+            value = without_closing_stop(pair[1]).casefold()
+            denial = V3_DENIAL_VALUE.match(value)
             if value in V3_NEGATIVE_VALUES:
                 negated |= label_keys
+            elif denial:
+                # A value that denies ('Mood: not depressed.') denies its words, or its label when it names only that
+                # something is there ('Psychosis: not present.').
+                words = {w for w in re.findall(r'[^\W\d_]+', denial.group(1)) if w not in V3_EXISTENCE_WORDS}
+                records = tuple(records) + (
+                    (v3_label_keys(' '.join(words)) if words else label_keys, True, None, frozenset(), False),)
             else:
-                records = ((label_keys, False, None, frozenset(found['keys']) - label_keys, False),)
+                labelled_claims[u['id']] = (label_keys, frozenset(found['keys']) - label_keys)
         claim_keys[u['id']], negated_keys[u['id']], predicates[u['id']] = frozenset(claim), frozenset(negated), records
     # A unit that DEPENDS on what came before it ('It was postponed.', 'Not anymore.', 'But he quit only last month.',
     # 'She quit last month.') reaches back to the unit before it, across a blank line too, and on through other
@@ -2944,7 +2956,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'form_title': title, 'title_resolved': title_resolved, 'title_declarations': title_declarations,
             'own_subjects': own_subjects,
             'relation_view': relation_view, 'claim_keys': claim_keys, 'negated_keys': negated_keys,
-            'predicates': predicates,
+            'predicates': predicates, 'labelled_claims': labelled_claims,
             'dependent_reach': dependent_reach, 'actor_patients': v3_actor_patients(units, actors, parsed),
             'elicited_frames': v3_elicited_frames(units),
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
@@ -3257,6 +3269,14 @@ def v3_word_causes(reading, unit, label, selected, info, colon):
 #: A labelled value that answers its own question in the negative ('Smoker: No.', 'Allergies: none.').
 V3_NEGATIVE_VALUES = frozenset(('no', 'none', 'none known', 'nil', 'negative', 'absent', 'never', 'nkda', 'denied',
                                 'denies'))
+#: A labelled value that is itself a denial phrase ('Mood: not depressed.'; a bare 'denies' is a plain negative above):
+#: read only to HOLD (`v3_denies_labelled`, `v3_opposed_predicates`).
+V3_DENIAL_VALUE = re.compile(r'(?:not|no|never|denies|denied|without)\s+(.+)$')
+#: A line labelled by one to four words the form does not print ('Mood: low.', 'Blood pressure: 120/80.').
+V3_GENERIC_LABEL = re.compile(r'\s*([^\W\d_][^\W\d_()/-]*(?:\s+[^\W\d_()/-]+){0,3})\s*:\s*(\S.*)', re.S)
+#: Words by which a denying value says only that something is not there: it then denies its label.
+V3_EXISTENCE_WORDS = frozenset(('present', 'seen', 'noted', 'found', 'evident', 'detected', 'reported', 'identified',
+                                'known', 'observed', 'elicited', 'apparent', 'any'))
 
 
 def v3_form_title(named, general):
@@ -3387,7 +3407,8 @@ def v3_current_state_field(field):
 def v3_opposed_predicates(first, second):
     """Two predicate records (`v3_actors._predicates`) of opposite polarity about the same thing: the same head word
     (or stem), one negated and the other not, at a time not read as different (the same finite tense, or either with
-    none), with the same complement, or the denial's whole complement inside the assertion's ('has no allergies' / 'has a
+    none), with the same complement, or a denial with none ('is not allergic' / 'is allergic to penicillin'; 'Allergies:
+    no known drug allergies.'), or the denial's whole complement inside the assertion's ('has no allergies' / 'has a
     penicillin allergy'), or the assertion's complement among the denial's coordinated alternatives ('on methadone' /
     'not on diazepam or methadone'). A different time ('was not on methadone'), object ('allergic to penicillin' / 'not
     allergic to latex'), site ('lateral' / 'medial epicondyle'), a more specific denial ('subject to MAPPA' / 'not subject
@@ -3399,10 +3420,40 @@ def v3_opposed_predicates(first, second):
     return bool(head & other_head and other_negated and not negated
                 and (tense is None or other_tense is None or tense == other_tense)
                 and (complement == other_complement
+                     # a whole denial ('is not allergic' / 'is allergic to penicillin')
+                     or not other_complement
                      # the denial's whole complement is asserted ('has no allergies' / 'has a penicillin allergy')
                      or (other_complement and other_complement <= complement)
                      # the assertion is one of the denial's alternatives ('on methadone' / 'not on diazepam or methadone')
                      or (complement and other_coordinated and complement <= other_complement)))
+
+
+def v3_denies_labelled(claim, records):
+    """Whether one of `records` (predicate records, `v3_actors._predicates`) denies what a labelled line with a positive
+    value asserts (`claim`: its label's keys and its value's, `labelled_claims`): a whole denial of the label's head or
+    of the value's ('Suicidal ideation: present.' / 'She is not suicidal.'; 'Mental state: depressed.' / 'Mood is not
+    depressed.'), a denial whose whole complement is the value ('Medication: methadone.' / 'She is not on methadone.',
+    'She does not take methadone.') or among its coordinated alternatives ('... not on diazepam or methadone.'), or whose
+    whole complement is the label ('Allergies: penicillin.' / 'She has no allergies.'). A denial with another object
+    ('not allergic to latex'), another site ('no tenderness over the medial epicondyle' / 'Examination: tenderness over
+    the lateral epicondyle.') or a wider complement ('takes no other medication') is not one. Only HOLDS."""
+    if not claim:
+        return False
+    from .v3_actors import keys
+    label, value = claim
+
+    def within(words, found):
+        content = [word for word in words if keys({word})]
+        return bool(content) and all(keys({word}) & found for word in content)
+
+    for head, negated, _, complement, coordinated in records:
+        if not negated:
+            continue
+        whole = not any(keys({word}) for word in complement)
+        if ((whole and head & (label | value)) or within(complement, value) or within(complement, label)
+                or (coordinated and any(keys({word}) & value for word in complement))):
+            return True
+    return False
 
 
 def v3_relation_causes(reading, unit, label, selected, field_key=None):
@@ -3430,7 +3481,10 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             diazepam or methadone.'; 'The patient smokes.' / 'The patient does not smoke.'; 'The patient is not
             depressed.' / 'Her mood is depressed.'), or a plain negative labelled value or a verbless denial whose topic
             the other claims ('Smoker: No.' / 'He quit smoking last month.'; 'The patient is subject to MAPPA.' / 'No
-            MAPPA involvement.'; 'The patient smokes.' / 'She denies smoking.').
+            MAPPA involvement.'; 'The patient smokes.' / 'She denies smoking.'), or a denial of what a labelled line
+            with a positive value asserts, whoever its subject short of another person (`v3_denies_labelled`:
+            'Mental state: depressed.' / 'She is not depressed.'; 'Medication: methadone.' / 'She does not take
+            methadone.'), a line labelled by a word the form does not print included ('Mood: not depressed.').
       ANOTHER PERSON'S SAME TOPIC: for an answer whose own subject is not the patient (a labelled line, a 'Label is'
             sentence, a thing), a statement earlier in the same run (after the last explicit-patient statement) naming
             another person, or a pronoun standing for another or an ambiguous actor, that shares a claimed word ('His
@@ -3470,13 +3524,16 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
         causes.append((later, None))
     mine_claim, mine_negated = reading['claim_keys'][uid], reading['negated_keys'][uid]
     mine = reading['predicates'][uid]
+    labelled = reading.get('labelled_claims', {})
     for other in reading['units']:
         oid = other['id']
         found = reading['actors'][oid]
         if oid == uid or not found['readable'] or found['other'] or reading['resolved'][oid].get('actor') == 'other':
             continue
         if (mine_claim & reading['negated_keys'][oid] or mine_negated & reading['claim_keys'][oid]
-                or any(v3_opposed_predicates(first, second) for first in mine for second in reading['predicates'][oid])):
+                or any(v3_opposed_predicates(first, second) for first in mine for second in reading['predicates'][oid])
+                or v3_denies_labelled(labelled.get(uid), reading['predicates'][oid])
+                or v3_denies_labelled(labelled.get(oid), mine)):
             causes.append((other, None))
             break
     if info['kind'] not in ('patient', 'pronoun'):

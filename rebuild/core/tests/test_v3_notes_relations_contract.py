@@ -438,6 +438,51 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         selected = 'The relationship reporting condition is monitored during weekly supervision visits.'
         self.assert_filled(notes, one, offered(notes, one, {'f': [selected]}), {'f': selected})
 
+    def test_a_denial_of_a_labelled_value_holds_it(self):
+        # A labelled answer beside a statement denying it, whose subject is a pronoun with no antecedent or a thing: the
+        # word cause reads only an explicit-patient statement, so 'She is not depressed.' was a model-only hold (and on
+        # 43fcf214 too). `v3_denies_labelled` and a whole denial in `v3_opposed_predicates` hold it.
+        def text(label):
+            return [v3('f', label, 'long_text')]
+        for notes, fields, key, choices in (
+                ('Mental state: depressed.\nShe is not depressed.', text('Mental state'), 'f', None),
+                ('Mental state: depressed.\n\nHe is not depressed.', text('Mental state'), 'f', None),
+                ('Mental state: depressed.\nMood is not depressed.', text('Mental state'), 'f', None),
+                ('Suicidal ideation: present.\nShe is not suicidal.', text('Suicidal ideation'), 'f', None),
+                ('Medication: methadone.\nShe is not on methadone.', text('Medication'), 'f', None),
+                ('Medication: methadone.\nShe does not take methadone.', text('Medication'), 'f', None),
+                ('Medication: methadone.\nShe is not on diazepam or methadone.', text('Medication'), 'f', None),
+                ('Medication: methadone.\nShe takes no medication.', text('Medication'), 'f', None),
+                ('Allergies: penicillin.\nShe has no allergies.', clinic_form(), 'v3_5', None),
+                ('Allergies: penicillin.\nShe is not allergic.', clinic_form(), 'v3_5', None),
+                ('Allergies: no known drug allergies.\nShe is allergic to penicillin.', clinic_form(), 'v3_5', None),
+                ('Examination: tenderness over the lateral epicondyle.\nThere is no tenderness over the lateral '
+                 'epicondyle.', clinic_form(), 'v3_7', None),
+                # a line labelled by a word the form does not print, either way round
+                ('Mental state: depressed.\nMood: not depressed.', text('Mental state'), 'f', None),
+                ('Mood: not depressed.\nMental state: depressed.', text('Mental state'), 'f', None)):
+            selected = next(line for line in notes.split('\n') if line.startswith(('Mental state', 'Suicidal',
+                                                                                     'Medication', 'Allergies',
+                                                                                     'Examination')))
+            with self.subTest(notes=notes):
+                self.assert_held(notes, fields, {key: [selected]}, key, choices=choices)
+        # Another object, site, time-free wider complement, topic or person is not a denial of the value.
+        for notes, fields, key in (
+                ('Mental state: depressed.\nShe is not suicidal.', text('Mental state'), 'f'),
+                ('Mental state: depressed.\nShe is not depressed about work.', text('Mental state'), 'f'),
+                ('Mental state: depressed.\nHer mother is not depressed.', text('Mental state'), 'f'),
+                ('Mental state: depressed.\nPsychosis: not present.', text('Mental state'), 'f'),
+                ('Medication: methadone.\nShe is not on diazepam.', text('Medication'), 'f'),
+                ('Medication: methadone.\nShe takes no other medication.', text('Medication'), 'f'),
+                ('Allergies: penicillin.\nShe is not allergic to latex.', clinic_form(), 'v3_5'),
+                ('Examination: tenderness over the lateral epicondyle.\nThere is no tenderness over the medial '
+                 'epicondyle.', clinic_form(), 'v3_7'),
+                ('Plan: MRI of the right knee.\nShe does not want an MRI of the left knee.', clinic_form(), 'v3_9')):
+            selected = notes.split('\n')[0]
+            with self.subTest(notes=notes):
+                self.assert_filled(notes, fields, offered(notes, fields, {key: [selected]}),
+                                   {key: selected.split(': ', 1)[1]})
+
     def test_a_same_topic_statement_by_another_person_holds_a_labelled_answer(self):
         fields = clinic_form()
         for notes, key, selected, choices in (
