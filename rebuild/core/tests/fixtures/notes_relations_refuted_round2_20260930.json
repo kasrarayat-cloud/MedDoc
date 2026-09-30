@@ -1,0 +1,1311 @@
+{
+ "L1:RR1-1": [
+  {
+   "id": "RR1-1a",
+   "form": "clinic",
+   "notes": "The patient babysits a newborn. She has jaundice.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She has jaundice."
+    ]
+   }
+  },
+  {
+   "id": "RR1-1a-blank",
+   "form": "clinic",
+   "notes": "The patient babysits a newborn.\n\nShe has jaundice.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She has jaundice."
+    ]
+   }
+  },
+  {
+   "id": "RR1-1b",
+   "form": "clinic",
+   "notes": "The patient is breastfeeding a newborn. She takes vitamin K.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes vitamin K."
+    ]
+   }
+  },
+  {
+   "id": "RR1-1c",
+   "form": "clinic",
+   "notes": "The patient employs a housekeeper. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-1c-crlf",
+   "form": "clinic",
+   "notes": "The patient employs a housekeeper.\r\nShe takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-1c-blank",
+   "form": "clinic",
+   "notes": "The patient employs a housekeeper.\n\nShe takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-1d",
+   "form": "clinic",
+   "notes": "The patient visits the housekeeper weekly. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-1e1",
+   "form": "clinic",
+   "notes": "The patient fosters a teenager. He takes risperidone.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "He takes risperidone."
+    ]
+   }
+  },
+  {
+   "id": "RR1-1e2",
+   "form": "clinic",
+   "notes": "The patient cares for a veteran. He takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "He takes warfarin."
+    ]
+   }
+  }
+ ],
+ "L1:RR1-2": [
+  {
+   "id": "RR1-2a",
+   "form": "clinic",
+   "notes": "The patient stays at the house of the au pair. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-2b",
+   "form": "clinic",
+   "notes": "The patient caught chickenpox from the babysitter. She is pregnant.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She is pregnant."
+    ]
+   }
+  },
+  {
+   "id": "RR1-2c",
+   "form": "clinic",
+   "notes": "The patient presents with her childminder. She has epilepsy.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She has epilepsy."
+    ]
+   }
+  },
+  {
+   "id": "RR1-2d",
+   "form": "clinic",
+   "notes": "The patient presents with her au pair. She has epilepsy.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She has epilepsy."
+    ]
+   }
+  },
+  {
+   "id": "RR1-2e",
+   "form": "order",
+   "notes": "The community treatment order of the au pair is in place.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The community treatment order of the au pair is in place."
+    ]
+   }
+  },
+  {
+   "id": "RR1-2f",
+   "form": "clinic",
+   "notes": "The patient presents with headaches. The headaches of the au pair are worse at night.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "The headaches of the au pair are worse at night."
+    ]
+   }
+  },
+  {
+   "id": "RR1-2g",
+   "form": "clinic",
+   "notes": "The patient is seen for cough. The cough in the housekeeper is chronic.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "The cough in the housekeeper is chronic."
+    ]
+   }
+  }
+ ],
+ "L1:RR1-3": [
+  {
+   "id": "RR1-3a",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Her husband takes warfarin, not her.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-3b",
+   "form": "clinic",
+   "notes": "The patient lives alone. She takes warfarin. Her husband takes warfarin, not her.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-3c",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She has epilepsy. Her daughter is the one with epilepsy.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She has epilepsy."
+    ]
+   }
+  },
+  {
+   "id": "RR1-3d",
+   "form": "clinic",
+   "notes": "The patient lives alone. She has breast cancer. Her mother had breast cancer, not the patient.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She has breast cancer."
+    ]
+   }
+  },
+  {
+   "id": "RR1-3e",
+   "form": "clinic",
+   "notes": "The patient lives alone. She has asthma. The previous sentence is about her sister.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She has asthma."
+    ]
+   }
+  }
+ ],
+ "L1:RR1-4": [
+  {
+   "id": "RR1-4a",
+   "form": "clinic",
+   "notes": "A 30-year-old woman presents for review. A 4-year-old girl presents with her. She has asthma.",
+   "key": "v3_3",
+   "picks": {
+    "v3_3": [
+     "She has asthma."
+    ]
+   }
+  },
+  {
+   "id": "RR1-4b",
+   "form": "clinic",
+   "notes": "A 30-year-old woman presents for review. A 4-year-old girl presents with a cough.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A 4-year-old girl presents with a cough."
+    ]
+   }
+  },
+  {
+   "id": "RR1-4c",
+   "form": "clinic",
+   "notes": "A 35-year-old man presents for review. A 12-year-old boy presents with him. He uses a salbutamol inhaler.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "He uses a salbutamol inhaler."
+    ]
+   }
+  }
+ ],
+ "L1:RR1-5": [
+  {
+   "id": "RR1-5o0",
+   "form": "order",
+   "notes": "A community treatment order is planned.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A community treatment order is planned."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5o1",
+   "form": "order",
+   "notes": "A community treatment order is proposed.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A community treatment order is proposed."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5o2",
+   "form": "order",
+   "notes": "A community treatment order is being considered.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A community treatment order is being considered."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5o3",
+   "form": "order",
+   "notes": "A community treatment order is recommended.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A community treatment order is recommended."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5o4",
+   "form": "order",
+   "notes": "A community treatment order is requested.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "A community treatment order is requested."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5o5",
+   "form": "order",
+   "notes": "The community treatment order starts on Monday.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "The community treatment order starts on Monday."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5p",
+   "form": "order",
+   "notes": "This is a 30-year-old female seen for headaches. She needs a community treatment order.",
+   "key": "v3_1",
+   "picks": {
+    "v3_1": [
+     "She needs a community treatment order."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5m0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She starts warfarin on Monday.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She starts warfarin on Monday."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5m1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She restarts apixaban on Friday.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She restarts apixaban on Friday."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5m2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She needs insulin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She needs insulin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5m3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She requests sertraline.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She requests sertraline."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5m4",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She declines statins.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She declines statins."
+    ]
+   }
+  },
+  {
+   "id": "RR1-5m5",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is due a flu vaccine.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She is due a flu vaccine."
+    ]
+   }
+  }
+ ],
+ "L1:RR1-6": [
+  {
+   "id": "RR1-6a",
+   "form": "clinic",
+   "notes": "The patient lives alone. Records from 2019 are reproduced here. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "RR1-6b",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Records from 2019 are reproduced here. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  }
+ ],
+ "L2:R2L2-1": [
+  {
+   "id": "R2L2-1m0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The preceding line was dictated in error.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-1m1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The previous sentence is incorrect.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-1m2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. That entry has been retracted.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-1m3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. This statement is false.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-1m4",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. This note was written on the wrong chart.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-1m5",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The last statement refers to her sister.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-1m6",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. This information is wrong.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-1m7",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. That line should be deleted.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-1s",
+   "form": "clinic",
+   "notes": "A 45-year-old man presents with cough. He smokes. This statement is false.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "He smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  }
+ ],
+ "L2:R2L2-2": [
+  {
+   "id": "R2L2-2m0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The patient came off warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m0-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient came off warfarin. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The patient is off warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m1-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient is off warfarin. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The patient gave up warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m2-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient gave up warfarin. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The patient was taken off warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m3-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient was taken off warfarin. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m4",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The patient replaced warfarin with apixaban.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2m4-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient replaced warfarin with apixaban. She takes warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2s",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. The patient gave up smoking.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2s-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient gave up smoking. She smokes.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2p0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She will start amitriptyline 10 mg at night. The patient declined amitriptyline.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "She will start amitriptyline 10 mg at night."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2p0-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient declined amitriptyline. She will start amitriptyline 10 mg at night.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "She will start amitriptyline 10 mg at night."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2p1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She will start amitriptyline 10 mg at night. The patient refused amitriptyline.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "She will start amitriptyline 10 mg at night."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2p1-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient refused amitriptyline. She will start amitriptyline 10 mg at night.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "She will start amitriptyline 10 mg at night."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2a",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is allergic to penicillin. The patient tolerates penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "She is allergic to penicillin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-2a-first",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The patient tolerates penicillin. She is allergic to penicillin.",
+   "key": "v3_5",
+   "picks": {
+    "v3_5": [
+     "She is allergic to penicillin."
+    ]
+   }
+  }
+ ],
+ "L2:R2L2-3": [
+  {
+   "id": "R2L2-3a",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. She has twenty cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3b",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. She has not had a cigarette in ten years.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3m0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. She takes no anticoagulants.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3m1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. She is not anticoagulated.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3m2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. She takes no blood thinners.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3c",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. Dr Smith confirms she has never smoked.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3d",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. Dr Smith notes she smokes 20 a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3e",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. Her husband reports that she smokes 20 a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3f",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. Her husband says she does not smoke.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "R2L2-3-pinned",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. She smokes twenty cigarettes a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  }
+ ],
+ "L2:R2L2-4": [
+  {
+   "id": "R2L2-4p0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She will start amitriptyline 10 mg at night. She is allergic to amitriptyline.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "She will start amitriptyline 10 mg at night."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-4p1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She will start amitriptyline 10 mg at night. Amitriptyline is contraindicated.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "She will start amitriptyline 10 mg at night."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-4p2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She will start amitriptyline 10 mg at night. The patient refuses amitriptyline.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "She will start amitriptyline 10 mg at night."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-4p3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She will start amitriptyline 10 mg at night. Amitriptyline caused a rash previously.",
+   "key": "v3_9",
+   "picks": {
+    "v3_9": [
+     "She will start amitriptyline 10 mg at night."
+    ]
+   }
+  }
+ ],
+ "L2:R2L2-5": [
+  {
+   "id": "R2L2-5e0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Examination shows a right knee effusion. Correct side is left.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Examination shows a right knee effusion."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-5e1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Examination shows a right knee effusion. Findings were on the left side.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Examination shows a right knee effusion."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-5e2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Examination shows a right knee effusion. Wrong side.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Examination shows a right knee effusion."
+    ]
+   }
+  },
+  {
+   "id": "R2L2-5e3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. Examination shows a right knee effusion. The effusion is in the left knee.",
+   "key": "v3_7",
+   "picks": {
+    "v3_7": [
+     "Examination shows a right knee effusion."
+    ]
+   }
+  }
+ ],
+ "L3:F1": [
+  {
+   "id": "F1a",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Her husband says she stopped the warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F1b",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Her daughter says she is not on warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F1c",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. Her husband confirms she quit smoking last year.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "F1d",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. Her husband says she has never smoked.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "F1e",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. Her husband says she smokes twenty a day.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "F1f",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. The headaches started two months ago. Her husband says the headaches started last week.",
+   "key": "v3_2",
+   "picks": {
+    "v3_2": [
+     "The headaches started two months ago."
+    ]
+   }
+  }
+ ],
+ "L3:F2": [
+  {
+   "id": "F2a",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. The patient has given up smoking.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "F2b",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The patient came off warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F2c",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The patient was taken off warfarin.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F2d",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin 5 mg daily. The patient takes warfarin 3 mg daily.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin 5 mg daily."
+    ]
+   }
+  },
+  {
+   "id": "F2-dated-ctl",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The patient came off warfarin last month.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  }
+ ],
+ "L3:F3": [
+  {
+   "id": "F3m0",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. This entry was made in error.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3m1",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The previous line is incorrect.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3m2",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. The last sentence is wrong.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3m3",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. This note is for a different patient.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3m4",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. I made a mistake.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3m5",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Entered in error.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F3m6",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Wrong patient.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  }
+ ],
+ "L3:F4": [
+  {
+   "id": "F4a",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. She takes no anticoagulants.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F4b",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Anticoagulation has been discontinued.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F4c",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. She is not on any blood thinners.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  },
+  {
+   "id": "F4d",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes lisinopril. She is on no antihypertensives.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes lisinopril."
+    ]
+   }
+  },
+  {
+   "id": "F4e",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She is a nonsmoker. She has a 20 pack-year history.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She is a nonsmoker."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:1"
+    ]
+   }
+  },
+  {
+   "id": "F4f",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She smokes. The patient quit five years ago.",
+   "key": "v3_6",
+   "picks": {
+    "v3_6": [
+     "She smokes."
+    ]
+   },
+   "choices": {
+    "v3_6": [
+     "v3_6:0"
+    ]
+   }
+  },
+  {
+   "id": "F4g",
+   "form": "clinic",
+   "notes": "This is a 30-year-old female seen for headaches. She takes warfarin. Plan: switch to apixaban.",
+   "key": "v3_4",
+   "picks": {
+    "v3_4": [
+     "She takes warfarin."
+    ]
+   }
+  }
+ ]
+}

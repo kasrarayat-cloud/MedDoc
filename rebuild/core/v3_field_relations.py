@@ -296,6 +296,10 @@ def records(notes, catalogue, context, units, selections, model):
         raise ValidationError('Ordinary relations contain missing, duplicate or unknown fields.')
     indexed = {f['key']: f for f in asked}; known = {u['id'] for u in units}; result = {}
     all_selections = {item.key: item for item in selections.fields}
+    # COVERAGE (refutation round 2): every unit some question of this response claims (`claimed`). A pronoun or thing
+    # answer proven only by the closed actor evidence is held unless every other unit is placed
+    # (`g.v3_relation_causes`, COVERAGE): the model's 'independent' is its evidence only for a line it has placed.
+    placed = sorted(set().union(*(claimed(item, units) for item in selections.fields)))
     for item in selections.fields:
         field = indexed[item.key]; allowed = {o['id'] for o in options(field)}
         if (len(item.context) != len(units) or len(item.unit_ids) != len(set(item.unit_ids))
@@ -307,6 +311,7 @@ def records(notes, catalogue, context, units, selections, model):
                    'key': item.key, 'competitors': competitors(catalogue, field),
                    'competing_output': {key: claimed(all_selections[key], units) for key in competitors(catalogue, field)
                                         if key in all_selections},
+                   'placed': placed,
                    'selection': item.model_dump()}
         result[item.key] = signing.dumps(payload, salt=SALT, compress=True)
     return result
@@ -336,8 +341,11 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
     if not records_enabled() or not isinstance(record, str) or len(record) > 50000: return refused
     try:
         value = signing.loads(record, salt=SALT)
-        if not isinstance(value, dict) or set(value) != {'contract', 'binding', 'model', 'key', 'competitors', 'competing_output', 'selection'}:
+        # A record signed before coverage was recorded ('placed') is read as before; its coverage is unknown, which
+        # holds a pronoun or thing answer (`g.v3_relation_causes`) and nothing else.
+        if not isinstance(value, dict) or set(value) - {'placed'} != {'contract', 'binding', 'model', 'key', 'competitors', 'competing_output', 'selection'}:
             return refused
+        placed = value.get('placed')
         catalogue = reading.get('catalogue', reading['fields'])
         field = next((f for f in catalogue if f['key'] == value['key']), None)
         if (value['contract'] != CONTRACT or value['model'] != g.SONNET_5 or not field
@@ -361,6 +369,10 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
                 or any(not isinstance(ids, list) or any(type(i) is not int for i in ids)
                        or len(ids) != len(set(ids)) or not set(ids) <= known.keys() for ids in competing.values())
                 or any(set(own).intersection(ids) for key, ids in competing.items() if key != item.key)):
+            return refused
+        if placed is not None and (not isinstance(placed, list) or any(type(i) is not int for i in placed)
+                                   or len(placed) != len(set(placed)) or not set(placed) <= known.keys()
+                                   or not set(own) <= set(placed)):
             return refused
         ordered = [u for u in units if u['id'] in chosen]
         expected = [{k: u[k] for k in ('quote', 'start', 'end')} for u in ordered]
@@ -446,7 +458,8 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         # question, read as the patient's by either reader - released 'The patient has no known drug allergies.' beside
         # 'The patient had anaphylaxis to penicillin.'. It is withdrawn: the coupling holds as on 43fcf214.)
         return {'ids': chosen, 'warnings': [], 'valid': True, 'value': answer, 'self_reference': self_reference,
-                'syntax_ids': literal_ids, 'actor_ids': actor_ids, 'actor_only': actor_only}
+                'syntax_ids': literal_ids, 'actor_ids': actor_ids, 'actor_only': actor_only,
+                'placed': frozenset(placed) if placed is not None else None}
     except (signing.BadSignature, KeyError, TypeError, ValueError, ValidationError):
         return refused
 

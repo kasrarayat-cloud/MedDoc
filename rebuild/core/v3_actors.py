@@ -53,6 +53,10 @@ the evidence of both (a thing must name its question or the complaint; a capital
 leaves every later pronoun unresolved); its own residual is a given name written in lower case without a determiner as
 the object of a verb ('She visits jane daily. She takes warfarin.'), which the pinned tagger reads as a common noun, like
 a medicine ('takes lisinopril'), and English subject continuity reads as the patient.
+
+Refutation round 2 (2026-09-30): who a later pronoun may stand for is read by what is SAFE ('antecedents': every noun but
+a bare, plural, time, patient or institution noun, `_referring`), the relation path's evidence must be a SETTLED
+predicate (`_settled_predicate`), and only the note's FIRST age presentation presents the patient on the relation path.
 """
 import re
 import unicodedata
@@ -200,6 +204,95 @@ CESSATION_VERBS = frozenset(('stop', 'discontinue', 'cease', 'withdraw', 'quit',
 PRESENTATION_VERBS = {'present': ('with', 'for'), 'see': ('for',), 'complain': ('of',)}
 #: 'Community Treatment Order (CTO)': capitalized words spelled out by the initialism after them name an institution.
 _INITIALISM = re.compile(r"((?:[A-Z][A-Za-z]*[ -]){1,7}[A-Z][A-Za-z]*) \(([A-Z]{2,})\)")
+
+# ─── 2026-09-30, refutation round 2: what the closed reading still read as NOTHING, now read by what is SAFE ────────
+# Round 2 (L1:RR1-1, RR1-2, RR1-5) found the round-1 reading still listing DANGERS in two places: who a later pronoun may
+# stand for was a list of reference shapes ('a newborn', 'the house of the au pair', 'her childminder' and a misparsed
+# 'the housekeeper weekly' were none of them), and the closed clause admitted any verb ('She needs insulin.', 'She is due
+# a flu vaccine.', 'A community treatment order is planned.'). Both are inverted here; each list names what is SAFE.
+#: Determiners by which a noun REFERS to somebody or something particular ('a newborn', 'the housekeeper'); with a
+#: possessive ('her childminder') such a noun may be whom a later pronoun stands for. 'No' refers to nothing.
+REFERRING_DETERMINERS = frozenset('a an the this that these those another some any each every either neither'.split())
+#: Prepositions of the presentation's own time ('... presents with right knee pain after a twisting injury'): the noun
+#: they govern directly (with its compounds) is an event, not somebody; a phrase inside it is read as it is.
+PRESENTATION_TIME_PREPS = frozenset(('after', 'since', 'following', 'during'))
+#: Verbs whose present statement about the patient is SETTLED - a state or a habit ('takes', 'has', 'is', 'attends',
+#: 'denies', 'Examination shows ...'). Any other verb ('needs', 'requests', 'declines', 'starts ... on Monday',
+#: 'restarts') withholds the evidence: it may state an intention, a request or a change.
+SETTLED_STATE_VERBS = frozenset(('be have take use smoke drink vape deny attend show reveal demonstrate complain '
+                                 'experience suffer feel describe see wake').split())
+#: Verbs of an event, settled only in the past ('The headaches started two months ago.') or, for a Plan, with 'will'
+#: ('She will follow up in six weeks.', decided per destination).
+SETTLED_EVENT_VERBS = frozenset('start begin follow return develop occur'.split())
+#: Prepositions an adjective complement of a settled copula may take ('allergic to penicillin', 'worse in the morning',
+#: 'tender over the epicondyle'); anything else ('due a flu vaccine', 'ready for discharge', 'eligible for') withholds.
+SETTLED_COMPLEMENT_PREPS = frozenset(('to', 'in', 'on', 'at', 'of', 'with', 'over', 'around'))
+#: Prepositions a copula may take as its own predicate ('is on warfarin', 'On examination there is ...').
+SETTLED_COPULA_PREPS = frozenset(('on', 'in', 'at'))
+#: Determiners and words by which a statement denies a whole CLASS ('no medicines', 'any blood thinners', 'never').
+QUANTIFIED_DENIALS = frozenset(('no', 'any', 'neither'))
+QUANTIFIED_DENIAL_WORDS = frozenset(('never', 'none', 'nothing', 'nobody', 'nil', 'nowhere', 'nor'))
+#: Endings of a noun naming whoever DOES something ('smoker', 'babysitter', 'visitor', 'therapist', 'physician'): such
+#: a subject is never set aside as a printed question's name.
+AGENTIVE_ENDINGS = ('er', 'or', 'ist', 'ian')
+
+
+def _referring(token):
+    """Whether a noun refers to somebody or something particular: a referring determiner or a possessive on it or, for
+    a compound or modifier ('the housekeeper weekly' parsed as a compound of 'weekly'), on the noun it modifies."""
+    node = token
+    while True:
+        if any((child.dep_ == 'det' and _fold(child.text) in REFERRING_DETERMINERS) or child.dep_ == 'poss'
+               or (child.dep_ == 'nummod' and _fold(child.text) == 'one') for child in node.children):
+            return True
+        if node.dep_ in ('compound', 'amod', 'nmod') and node.head.i != node.i:
+            node = node.head
+            continue
+        return False
+
+
+def _settled_predicate(root, words):
+    """The SETTLED predicate of the relation path's new evidence (refutation round 2, L1:RR1-5): no passive ('is
+    planned', 'are reproduced here'), no date by the calendar ('on Monday'), no past-time word in a present statement
+    ('She is on warfarin in 2019.'), and every clause head a settled verb: a state verb (`SETTLED_STATE_VERBS`, a copula
+    only with an attribute, an adjective whose only phrases are `SETTLED_COMPLEMENT_PREPS` ones, or its own
+    `SETTLED_COPULA_PREPS` phrase) or an event verb in the past or with 'will'/'shall' (`SETTLED_EVENT_VERBS`)."""
+    if any(t.dep_ in ('auxpass', 'nsubjpass', 'csubjpass') for t in words):
+        return False
+    if any(_fold(t.text) in CALENDAR_WORDS or _lemma(t) in CALENDAR_WORDS for t in words if t.pos_ != 'AUX'):
+        return False
+    past_word = any(_fold(t.text) in PAST_TIME_WORDS or (t.pos_ == 'NUM' and _YEAR.fullmatch(t.text)) for t in words)
+    if past_word and _tense(root) != 'past':
+        return False
+    clauses = [root] + [child for child in root.children if child.dep_ == 'conj' and child.pos_ in ('VERB', 'AUX')]
+    for clause in clauses:
+        if clause.pos_ not in ('VERB', 'AUX'):
+            # A noun-read clause ('She has epilepsy.' parses 'epilepsy' as the head, 'has' as its auxiliary) is settled
+            # only through a settled state auxiliary.
+            helpers = [c for c in clause.children if c.dep_ in ('aux', 'auxpass') and c.tag_ != 'MD']
+            if not helpers or any(_lemma(c) not in SETTLED_STATE_VERBS for c in helpers):
+                return False
+            continue
+        lemma = _lemma(clause)
+        if lemma == 'be':
+            for child in clause.children:
+                if child.dep_ == 'acomp' and any(
+                        grand.dep_ not in ('advmod', 'prep', 'conj', 'cc', 'punct')
+                        or (grand.dep_ == 'prep' and _fold(grand.text) not in SETTLED_COMPLEMENT_PREPS)
+                        for grand in child.children):
+                    return False
+                if child.dep_ == 'prep' and _fold(child.text) not in SETTLED_COPULA_PREPS:
+                    return False
+                if child.dep_ in ('dobj', 'dative', 'oprd', 'npadvmod', 'agent'):
+                    return False
+            continue
+        if lemma in SETTLED_STATE_VERBS:
+            continue
+        will = any(child.tag_ == 'MD' and _fold(child.text) in FUTURE_MODALS for child in clause.children)
+        if lemma in SETTLED_EVENT_VERBS and (_tense(clause) == 'past' or will):
+            continue
+        return False
+    return True
 
 
 def _fold(text):
@@ -608,14 +701,83 @@ def _closed_reading(unit, doc, root, words, main, subjects_tok, age, presented):
         elif (any((c.dep_ == 'det' and _fold(c.text) in ('the', 'this', 'that')) or c.dep_ == 'poss' for c in t.children)
               and not (t.dep_ == 'pobj' and _fold(t.head.text) in LOCATIVE_PREPS)):
             refs.append(('definite', key))
+    # Refutation round 2 (L1:RR1-1, RR1-2): WHO A LATER PRONOUN OR THING MAY STAND FOR, read by what is SAFE. Every noun
+    # of the unit's value is somebody a later pronoun may stand for, unless it is the patient or the noun an age
+    # presentation describes, a plural (never 'he' or 'she'), a word of time, inside an institution spelled out by its
+    # initialism, the direct object of the presentation's own time phrase ('after a twisting injury'), or BARE - no
+    # referring determiner or possessive on it or on the noun it modifies ('She denies nausea or weakness.', 'She takes
+    # ibuprofen.'). A capitalized name, a singular subject and an object of 'with'/'by' are someone whatever their
+    # article. So 'a newborn', 'the housekeeper', 'the house of the au pair', 'from the babysitter' and the presentation's
+    # 'her childminder' (and, over-holding, its 'a rash') are all someone. (kind, keys, agentive) each.
+    time_tokens = set()
+    if presentation:
+        for verb in words:
+            if verb.pos_ not in ('VERB', 'AUX') or _lemma(verb) not in PRESENTATION_VERBS:
+                continue
+            for prep in (c for c in verb.children if c.dep_ == 'prep' and _fold(c.text) in PRESENTATION_TIME_PREPS):
+                for obj in (g for g in prep.children if g.dep_ == 'pobj'):
+                    time_tokens.add(obj.i)
+                    time_tokens.update(t.i for t in obj.subtree if t.dep_ in ('compound', 'amod', 'det', 'nummod')
+                                       and t.head.i in time_tokens | {obj.i})
+    antecedents = []
+    for t in words:
+        if (t.pos_ not in ('NOUN', 'PROPN') or t.i in presented or this_patient(t) or t.is_stop
+                or not t.text[:1].isalpha() or t.i in time_tokens or (age and _described_by_age(t))
+                or any(low <= t.idx < high for low, high in institutions)):
+            continue
+        key = keys({_lemma(t), _fold(t.text)})
+        agentive = _fold(t.text).endswith(AGENTIVE_ENDINGS) or _lemma(t).endswith(AGENTIVE_ENDINGS)
+        if _name_token(t, institutions):
+            antecedents.append(('name', key, agentive))
+            continue
+        if 'Plur' in t.morph.get('Number') or not key:
+            continue
+        # A copula's attribute is its own subject again ('She is a nonsmoker.'), unless the subject is an expletive
+        # ('There is a housekeeper ...' names somebody new).
+        if (t.dep_ == 'attr' and _lemma(t.head) == 'be'
+                and any(c.dep_ in ('nsubj', 'nsubjpass') for c in t.head.children)):
+            continue
+        if t.dep_ in ('nsubj', 'nsubjpass') or (t.dep_ == 'conj' and t.head.dep_ in ('nsubj', 'nsubjpass')):
+            antecedents.append(('subject', key, agentive))
+        elif t.dep_ == 'pobj' and _fold(t.head.text) in ('with', 'by'):
+            antecedents.append(('companion' if t.i not in complaint_tokens or _referring(t) else 'bare', key, agentive))
+        elif _referring(t):
+            antecedents.append(('object', key, agentive))
+    antecedents = tuple(entry for entry in antecedents if entry[0] != 'bare')
+    # A thing's own subject modified by a phrase naming somebody ('The headaches of the au pair ...', 'The cough in the
+    # housekeeper ...'): a referring or named noun under a preposition inside its subject (or an existential's pivot).
+    pivot = main if main is not None else next((c for c in root.children if c.dep_ == 'attr'), None)
+    subject_modifiers = bool(pivot is not None and any(
+        t.pos_ in ('NOUN', 'PROPN') and t.i != pivot.i and (_referring(t) or _name_token(t, institutions))
+        and any(a.dep_ == 'prep' for a in t.ancestors if a.i in {s.i for s in pivot.subtree})
+        for t in pivot.subtree))
     polar = any(t.dep_ == 'neg' or (t.dep_ == 'det' and _fold(t.text) == 'no')
                 or _fold(t.text) in POLARITY_WORDS or _lemma(t) in POLARITY_WORDS
                 or (_fold(t.text).startswith('non') and len(t.text) >= 6 and _fold(t.text) not in ('none', 'nonsense'))
                 or _fold(t.text).startswith('ex-') for t in words)
     # The subject's HEAD only: 'The clinic cleaner attends every week.' names a cleaner, not the clinic.
     subject_keys = keys({_lemma(main)}) if main is not None else frozenset()
+    # Every word of the value by its spelling and lemma, whatever the tagger calls it ('She will start amitriptyline'
+    # tags the drug a preposition), but light verbs; and its TOPIC words - nouns and words the tagger could not place.
+    # Both only HOLD (`generation.v3_relation_causes`, SAME TOPIC).
+    surface = {w for t in words if t.is_alpha and not t.is_stop and _lemma(t) not in LIGHT_VERBS
+               and _lemma(t) != 'patient' for w in (_lemma(t), _fold(t.text))}
+    topic = {w for t in words if t.is_alpha and not t.is_stop and _lemma(t) != 'patient'
+             and t.pos_ in ('NOUN', 'PROPN', 'X', 'ADP', 'SYM') for w in (_lemma(t), _fold(t.text))}
     return {'closed': closed, 'bound_markers': frozenset(t.idx for t in doc if t.i in bound_markers),
             'future': any(t.tag_ == 'MD' and _fold(t.text) in FUTURE_MODALS for t in words),
+            'antecedents': antecedents, 'subject_modifiers': subject_modifiers,
+            # a denial by a quantifier or a negation ('She takes no medicines.', 'She has had no pain for a month.',
+            # 'She is not anticoagulated.', 'She has never smoked.'): it may cover another statement's topic by its class
+            'quantified_denial': any((t.dep_ == 'det' and _fold(t.text) in QUANTIFIED_DENIALS) or t.dep_ == 'neg'
+                                     or _fold(t.text) in QUANTIFIED_DENIAL_WORDS for t in words),
+            # a cessation with nothing named as what ends ('The patient quit five years ago.', 'She gave up.'): it
+            # leans on another line for what it stops
+            'bare_cessation': bool((_lemma(root) in CESSATION_VERBS or (_lemma(root) == 'give' and any(
+                c.dep_ == 'prt' and _fold(c.text) == 'up' for c in root.children)))
+                and not any(c.dep_ in ('dobj', 'obj', 'xcomp', 'ccomp', 'nsubjpass') for c in root.children)),
+            'settled': _settled_predicate(root, words), 'surface_keys': keys(surface), 'topic_keys': keys(topic),
+            'passive': any(t.dep_ in ('auxpass', 'nsubjpass', 'csubjpass') for t in words),
             'refs': tuple(refs),
             'subject_keys': subject_keys, 'complaint_keys': keys(complaint), 'polar': polar,
             'coordinated': any(child.dep_ == 'conj' and child.pos_ in ('VERB', 'AUX') for child in root.children),
@@ -651,6 +813,9 @@ def _unread(note_unread=True, quote=''):
             # the closed reading (`_closed_reading`): an unread unit is never settled, and it is a fragment
             'closed': False, 'bound_markers': frozenset(), 'future': False,
             'refs': (('unread', frozenset()),), 'subject_keys': frozenset(), 'complaint_keys': frozenset(),
+            'antecedents': (('unread', frozenset(), False),), 'subject_modifiers': True, 'settled': False,
+            'quantified_denial': True, 'passive': True, 'bare_cessation': True,
+            'surface_keys': frozenset(), 'topic_keys': frozenset(),
             'polar': True, 'coordinated': False, 'fragment': True, 'no_denial_keys': frozenset(),
             'ceased_keys': frozenset(), 'topic_denial_keys': frozenset()}
 
@@ -828,12 +993,17 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages, relation_age
 
     info = {unit['id']: unit_info(index, unit, explicit, ages) for index, unit in enumerate(units)}
     resolved, note_gender = _resolve(units, info)
-    extra = frozenset(relation_ages) - frozenset(ages)
-    if not extra:
+    # Refutation round 2 (L1:RR1-4): on the relation path ONLY the note's first age presentation presents the patient
+    # (`relation_ages`, with or without its article); a later one ('A 30-year-old woman presents for review. A 4-year-old
+    # girl presents with her.') presents somebody else, read like any other person.
+    relation_ages = frozenset(relation_ages)
+    changed = relation_ages ^ frozenset(ages)
+    if not changed:
         return {'units': info, 'resolved': resolved, 'gender': note_gender,
                 'relation_units': info, 'relation_resolved': resolved, 'relation_gender': note_gender}
-    relation_info = {unit['id']: (unit_info(index, unit, frozenset(explicit) | extra, frozenset(ages) | extra)
-                                  if unit['id'] in extra else info[unit['id']]) for index, unit in enumerate(units)}
+    relation_explicit = (frozenset(explicit) - (frozenset(ages) - relation_ages)) | relation_ages
+    relation_info = {unit['id']: (unit_info(index, unit, relation_explicit, relation_ages)
+                                  if unit['id'] in changed else info[unit['id']]) for index, unit in enumerate(units)}
     relation_resolved, relation_gender = _resolve(units, relation_info)
     return {'units': info, 'resolved': resolved, 'gender': note_gender,
             'relation_units': relation_info, 'relation_resolved': relation_resolved, 'relation_gender': relation_gender}

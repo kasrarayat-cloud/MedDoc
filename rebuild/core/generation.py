@@ -2805,8 +2805,11 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     # Who each unit may be about: ONE run over the whole note (`v3_actors`), never reset at a blank line (RR5, X1).
     from .v3_actors import read as actors_read
     explicit_patient = {u['id'] for u in units if EXPLICIT_PATIENT_SUBJECT.match(u['quote']) or u['id'] in age_presentations}
-    # The relation path's run also reads an age opener carrying its article as the patient (`AGE_ARTICLE_PRESENTATION`).
-    relation_ages = {u['id'] for u in units if AGE_ARTICLE_PRESENTATION.match(u['quote'])} | age_presentations
+    # The relation path's run also reads an age opener carrying its article as the patient (`AGE_ARTICLE_PRESENTATION`),
+    # and only the note's FIRST age presentation: a later one presents somebody else (refutation round 2, L1:RR1-4: 'A
+    # 30-year-old woman presents for review. A 4-year-old girl presents with her. She has asthma.').
+    relation_ages = set(next(([u['id']] for u in units if u['id'] in age_presentations
+                              or AGE_ARTICLE_PRESENTATION.match(u['quote'])), []))
     actors = actors_read(units, groups, colon=colon, parsed=parsed, subjects=subjects, explicit=explicit_patient,
                          ages=age_presentations, relation_ages=relation_ages)
     # PRE-2: a labelled value naming a side, an identity or an error ('Left knee: wrong side.', 'Allergies: wrong
@@ -2954,7 +2957,8 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'claim_keys': claim_keys, 'negated_keys': negated_keys,
             'predicates': predicates, 'labelled_claims': labelled_claims,
             'dependent_reach': dependent_reach, 'elicited_frames': v3_elicited_frames(units),
-            **v3_actor_candidates(units, relation_actors, actors['relation_resolved'], colon, parsed, fields, relation_ages),
+            **v3_actor_candidates(units, relation_actors, actors['relation_resolved'], colon, parsed, fields, relation_ages,
+                                  subjects),
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
             'conditional_multisentence': conditional_multisentence, 'conditional_unsafe': conditional_unsafe,
             'inherited_causes': [cause for cause in getattr(units, 'scope_causes', ())
@@ -3116,7 +3120,8 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
         for cause, flag in v3_added_causes(reading, unit, label, scoped, complete, set(selected),
                                            proven=set(history['ids']) | set(ordinary['ids']),
                                            proven_by_relation=unit['id'] in ordinary['ids'], field_key=field_key,
-                                           actor_only=unit['id'] in ordinary.get('actor_only', ())):
+                                           actor_only=unit['id'] in ordinary.get('actor_only', ()),
+                                           placed=ordinary.get('placed')):
             if cause['id'] == unit['id']:
                 warnings[unit['id']] = {**warnings.get(unit['id'], unit), **({flag: True} if flag else {})}
             else:
@@ -3138,7 +3143,7 @@ def v3_nearest(positions, at, exclude=frozenset()):
 
 
 def v3_added_causes(reading, unit, label, scoped, complete, selected, proven=frozenset(), proven_by_relation=False,
-                    field_key=None, actor_only=False):
+                    field_key=None, actor_only=False, placed=None):
     """⚠️ ROUND 3 (2026-09-29): EVERY HOLD ADDED TO debaefd9's POSITIONAL RULES, AND NOTHING THAT RELEASES. Returns
     [(cause unit, flag)] for one selected unit; `flag` ('unread', 'syntax_incomplete', 'other_person') marks the unit
     itself, None another unit shown with it. An empty list leaves debaefd9's reading unchanged. Each rule is structural
@@ -3185,7 +3190,8 @@ def v3_added_causes(reading, unit, label, scoped, complete, selected, proven=fro
     # ordinary field relations prove gets that contract's own hold-only floors instead (`v3_relation_causes`).
     if uid in proven:
         if proven_by_relation:
-            causes.extend(v3_relation_causes(reading, unit, label, selected, field_key, actor_only=actor_only))
+            causes.extend(v3_relation_causes(reading, unit, label, selected, field_key, actor_only=actor_only,
+                                             placed=placed))
         return causes
     if readable and any(not any(low <= unit['start'] + at < high for low, high in reading['conditional_spans'])
                         for at in info['bounded']):
@@ -3290,7 +3296,7 @@ def v3_form_keys(fields):
     return keys(words)
 
 
-def v3_actor_candidates(units, actors, resolved, colon, parsed, fields, ages):
+def v3_actor_candidates(units, actors, resolved, colon, parsed, fields, ages, subjects=None):
     """⚠️ THE RELATION PATH'S NEW PATIENT EVIDENCE, AND IT IS CLOSED (2026-09-30, refutation round 1).
 
     The first implementation read the actor run's resolution as positive evidence whenever no listed danger was found:
@@ -3319,7 +3325,26 @@ def v3_actor_candidates(units, actors, resolved, colon, parsed, fields, ages):
 
     Also returns the note's 'unplaced' units (a line labelled by a word the form does not print, or a fragment with no
     subject that is not a 'No ...' denial naming a printed question: 'Entered in error.', 'Wrong patient.', 'Right knee,
-    not left.', 'Update: ...'), which hold every pronoun or thing answer (`v3_relation_causes`, UNPLACED)."""
+    not left.', 'Update: ...'), which hold every pronoun or thing answer (`v3_relation_causes`, UNPLACED).
+
+    ⚠️ REFUTATION ROUND 2 (L1:RR1-1, RR1-2, RR1-5, RR1-6; L2:R2L2-1, R2L2-5; L3:F3). Three readings above still listed
+    dangers, and each leaked:
+      - `closed_before` read only the reference SHAPES round 1 listed, so 'The patient babysits a newborn.', 'The patient
+        stays at the house of the au pair.', 'The patient presents with her childminder.' named nobody and 'She' was the
+        patient. It now reads `v3_actors._closed_reading` 'antecedents': every noun is somebody unless it is BARE, plural,
+        a time, the patient or the age-described noun, an institution, or the presentation's own time; a subject is set
+        aside only when it names a printed question and is not an agent noun ('Neurological examination is normal.',
+        not 'The smoker next door ...'); an object never is (the form printing 'Smoker' made 'lives with a smoker'
+        nobody);
+      - a pronoun or thing candidate must be SETTLED (`v3_actors._settled_predicate`: 'She needs insulin.', 'She is due
+        a flu vaccine.', 'A community treatment order is planned.' are not), and a thing's own subject may name nobody
+        through a phrase ('The headaches of the au pair ...', 'The cough in the housekeeper ...');
+      - 'placed' is every unit whose own structure places it: a printed question's labelled line or 'Label is ...'
+        sentence, an explicit-patient statement, a he/she statement the run gives the patient, a thing whose subject
+        names a printed question or the presented complaint, a 'No ...' denial naming a printed question. Anything else
+        ('This statement is false.', 'Records from 2019 are reproduced here.', 'Correct side is left.', 'I made a
+        mistake.') may retract, correct or re-scope anything, and holds a pronoun or thing answer
+        (`v3_relation_causes`, PLACED)."""
     form_keys = v3_form_keys(fields)
     label_keys = frozenset().union(*(v3_label_keys(f.get('label')) for f in fields)) if fields else frozenset()
     complaint = frozenset().union(frozenset(), *(
@@ -3330,13 +3355,21 @@ def v3_actor_candidates(units, actors, resolved, colon, parsed, fields, ages):
     def set_aside(kind, key):
         return kind != 'unread' and (not key or bool(key & form_keys) or bool(key & complaint))
 
-    closed_before, opened, candidates, unplaced = {}, False, set(), []
+    def nobody(kind, key, agentive):
+        # Refutation round 2: who a later pronoun or thing may stand for, read by what is SAFE (see the docstring).
+        return kind == 'subject' and not agentive and bool(key) and bool(key & (label_keys | complaint))
+
+    subjects = subjects or {}
+    closed_before, opened, candidates, unplaced, placed = {}, False, set(), [], set()
     for unit in units:
         uid = unit['id']
         info, state = actors[uid], resolved[uid]
         closed_before[uid] = not opened
         opened = opened or not info['readable'] or info['other'] or info['mentions_other'] or any(
-            not set_aside(kind, key) for kind, key in info['refs'])
+            not set_aside(kind, key) for kind, key in info['refs']) or any(
+            not nobody(*entry) for entry in info['antecedents'])
+        if v3_structurally_placed(info, state, colon[uid], parsed[uid], subjects.get(uid), label_keys, complaint):
+            placed.add(uid)
         if not info['readable']:
             unplaced.append(uid)
             continue
@@ -3351,12 +3384,13 @@ def v3_actor_candidates(units, actors, resolved, colon, parsed, fields, ages):
             # nobody else in it either ('The patient gives warfarin to Jane.', 'The patient attends with the au pair.')
             ok = actor == 'patient' and all(set_aside(k, key) for k, key in info['refs'] if k != 'subject')
         elif kind == 'pronoun':
-            ok = (actor == 'patient' and info['gender'] in ('Masc', 'Fem') and closed_before[uid]
+            ok = (actor == 'patient' and info['gender'] in ('Masc', 'Fem') and closed_before[uid] and info['settled']
                   and all(set_aside(k, key) for k, key in info['refs'] if k != 'subject'))
         elif kind in ('thing', 'label_is'):
             ok = (actor in ('patient', 'unresolved') and info['main_lemma'] not in V3_CLINICIAN_SUBJECTS
-                  and closed_before[uid] and all(set_aside(k, key) or (k == 'subject' and key <= info['subject_keys'])
-                                                 for k, key in info['refs']))
+                  and closed_before[uid] and info['settled'] and not info['subject_modifiers']
+                  and all(set_aside(k, key) or (k == 'subject' and key <= info['subject_keys'])
+                          for k, key in info['refs']))
         else:
             ok = False       # a verbless or subjectless line, a labelled line, another person
         if ok and not any(INHERITED_SCOPE.search(text) or SELF_CORRECTION.search(text) or SCOPE_POINTER.search(text)
@@ -3364,7 +3398,35 @@ def v3_actor_candidates(units, actors, resolved, colon, parsed, fields, ages):
                           for text in safety_readings(unit['quote'])):
             candidates.add(uid)
     return {'actor_candidates': frozenset(candidates), 'closed_before': closed_before, 'complaint_keys': complaint,
-            'form_keys': form_keys, 'unplaced': tuple(unplaced)}
+            'form_keys': form_keys, 'unplaced': tuple(unplaced), 'placed_units': frozenset(placed)}
+
+
+def v3_structurally_placed(info, state, colon, parsed, subject, label_keys, complaint):
+    """Whether a unit's own structure places it (refutation round 2; `v3_actor_candidates` 'placed_units'): readable,
+    naming nobody else, and a printed question's labelled line or 'Label is ...' sentence, an explicit-patient statement
+    or a he/she statement the run gives the patient, a thing whose subject is a printed question (the destination
+    grammar's `subjects`, or its head naming one when it is not an agent noun) or the presented complaint, or a 'No ...'
+    denial naming a printed question. Only HOLDS: an unplaced unit holds a pronoun or thing answer."""
+    if not info['readable'] or info['other'] or info['mentions_other'] or state.get('self_other'):
+        return False
+    if colon:
+        return bool(parsed)
+    if parsed:
+        return True
+    kind, actor = info['kind'], state.get('actor')
+    if kind == 'patient':
+        return actor == 'patient'
+    if kind == 'pronoun':
+        # ... and itself one closed clause, neither passive nor in the simple past nor hedged ('She is now symptom
+        # free.', 'She was misheard.', 'She gave up.', 'She was taken off it.' are not placed by their structure).
+        return (actor == 'patient' and info['gender'] in ('Masc', 'Fem') and info['closed'] and not info['passive']
+                and not info['finite_past'] and not info['hedged'])
+    if kind in ('thing', 'label_is'):
+        agentive = str(info['main_lemma'] or '').endswith(('er', 'or', 'ist', 'ian'))
+        return bool(subject) or (not agentive and bool(info['subject_keys'] & (label_keys | complaint)))
+    if kind == 'missing':
+        return bool(info['no_denial_keys'] & label_keys)
+    return False
 
 
 def v3_actor_evidence(reading, field, unit):
@@ -3527,7 +3589,7 @@ def v3_ends_labelled(claim, found):
     return bool(found.get('ceased_keys', frozenset()) & value or found.get('topic_denial_keys', frozenset()) & label)
 
 
-def v3_relation_causes(reading, unit, label, selected, field_key=None, actor_only=False):
+def v3_relation_causes(reading, unit, label, selected, field_key=None, actor_only=False, placed=None):
     """⚠️ HOLD-ONLY FLOORS FOR A UNIT A FIELD RELATION PROVES (2026-09-30). The model's per-unit relations are the
     evidence that neighbouring statements are independent; these are the structural readings a model's 'independent'
     cannot remove. [(cause, flag)], like `v3_added_causes`; each only ever holds.
@@ -3582,7 +3644,26 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None, actor_onl
             printed question): 'Entered in error.', 'Wrong patient.', 'Please ignore the warfarin.', 'Right knee, not
             left.', 'Update: warfarin was switched to apixaban last week.', 'Tobacco: 20 cigarettes daily.' (L2:R2-3,
             L2:R2-1). Such a line may retract, correct or contradict anything.
-    STATED RESIDUALS (model-only, measured): a change stated by meaning alone with its own full subject and no shared
+    ⚠️ REFUTATION ROUND 2 (L1:RR1-3, R2L2-1..5, L3:F1-F4): each of those floors read a word or a shape, and a line changing
+    the answer in other words got through ('This statement is false.', 'Her husband takes warfarin, not her.', 'The
+    patient came off warfarin.', 'She takes no anticoagulants.'). Whether a line changes an answer is meaning, which is
+    the model's; so for such a unit (`placed`: the units the same response claims for some question,
+    `v3_field_relations.records`):
+      COVERAGE: every other line of the note must be claimed by some question of the response; a line the model
+            placed nowhere, or a record carrying no coverage, holds (the model's 'independent' is its evidence only for
+            a line it has placed);
+      PLACED: every other line must be placed by its own structure (`v3_structurally_placed`); a line naming somebody
+            else, unread, a statement whose subject names no printed question or complaint, a fragment, or a pronoun
+            statement that is passive, in the simple past, not closed or hedged, holds;
+      DEPENDS ANYWHERE: another line that points back or leans on another line holds, before the answer as well;
+      A CLASS DENIAL: another line denying by a quantifier ('no', 'any', 'never') holds unless it names another
+            printed question and not this one;
+      SAME TOPIC reads every word by its spelling too, and an anchor sharing a noun that is not the presented complaint
+            holds without a word of polarity ('The patient came off warfarin.', R2L2-2).
+    STATED RESIDUALS (model-only, measured): for a pronoun or thing answer, a line about the patient contradicting it by
+    meaning alone with no shared word ('She has twenty cigarettes a day.' beside 'She is a nonsmoker.'), when the model
+    makes TWO errors in one response - claiming the line as another question's answer AND calling it independent of
+    this one (tests: `MODEL_ONLY_WHEN_PLACED`). Round 1's, for other answers: a change stated by meaning alone with its own full subject and no shared
     word ('The pain resolved yesterday.' beside 'The patient presents with chest pain.', an explicit-patient answer);
     a topic or labelled line after another person's statement that shares no word with it ('Her sister was seen in
     oncology last month. Assessment is breast cancer.'); for an explicit-patient or labelled answer, a same-topic
@@ -3657,19 +3738,68 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None, actor_onl
                 causes.append((other, None))
                 break
     if actor_only:
-        mine = reading['claim_keys'][uid] | info['nominal_keys']
-        for other in reading['units']:
+        # Refutation round 2 (L1:RR1-3, R2L2-1..5, L3:F1-F4): a line anywhere in the note may change, retract or
+        # re-attribute a pronoun or thing answer in words it does not share ('This statement is false.', 'Her husband
+        # takes warfarin, not her.', 'She takes no anticoagulants.'). Meaning is the model's; so the model must have
+        # PLACED every other line (COVERAGE), and whatever structure can still read holds regardless of the model:
+        units = reading['units']
+        # COVERAGE: every other line of the note is claimed by some question of the same response (`placed`, recorded
+        # with the relations: `v3_field_relations.records`); a record without it cannot establish this and holds.
+        if placed is None:
+            causes.append((unit, None))
+        else:
+            gap = next((u for u in units if u['id'] != uid and u['id'] not in selected and u['id'] not in placed), None)
+            if gap is not None:
+                causes.append((gap, None))
+        # PLACED: any other line whose own structure does not place it (`v3_actor_candidates` 'placed_units'): among
+        # them every line naming or being somebody else, unread, or a pronoun the run does not give the patient as he or
+        # she ('Her husband takes warfarin, not her.', 'The previous sentence is about her sister.', 'This statement is
+        # false.'). (A co-selected line naming somebody else holds itself: ACTOR.)
+        loose = next((u for u in units if u['id'] != uid and u['id'] not in selected
+                      and u['id'] not in reading['placed_units']), None)
+        if loose is not None:
+            causes.append((loose, None))
+        # DEPENDS ANYWHERE: another line that points back or leans on another line ('She came off it.', 'She denies
+        # this.', 'She has since stopped.', 'The patient quit five years ago.'), before the answer as well as after it.
+        leaning = next((u for u in units if u['id'] != uid and u['id'] not in selected
+                        and (actors[u['id']]['dependent'] or actors[u['id']]['bare_cessation'])), None)
+        if leaning is not None:
+            causes.append((leaning, None))
+        # A CLASS DENIAL: another line denying by a quantifier or a negation ('She takes no medicines.', 'She has had no
+        # pain for a month.', 'She is not anticoagulated.') unless it names another printed question and not this one ('No known drug allergies.' beside a
+        # Medications answer, 'She has no allergies.'): only meaning says whether its class covers this answer. A
+        # printed question's labelled line or 'Label is ...' sentence names its question by its label (this question's
+        # own labelled line is held by the word overlaps, `v3_word_causes`).
+        own_keys = v3_label_keys(label)
+        other_keys = frozenset().union(frozenset(), *(v3_label_keys(f.get('label')) for f in reading['fields'])) - own_keys
+
+        def names_another(u):
+            if reading['parsed'][u['id']]:
+                return True
+            found_keys = actors[u['id']]['surface_keys']
+            return bool(found_keys & other_keys) and not found_keys & own_keys
+        denial = next((u for u in units if u['id'] != uid and u['id'] not in selected
+                       and actors[u['id']]['quantified_denial'] and not names_another(u)), None)
+        if denial is not None:
+            causes.append((denial, None))
+        # SAME TOPIC: its words by their spelling too ('She will start amitriptyline ...' tags the drug a preposition).
+        from .v3_actors import keys as keys_of
+        mine = reading['claim_keys'][uid] | info['nominal_keys'] | info['surface_keys']
+        for other in units:
             oid = other['id']
             found = actors[oid]
             if (oid == uid or oid in selected or not found['readable'] or found['other']
                     or resolved[oid].get('actor') == 'other'):
                 continue
             # An ANCHOR (the explicit patient as main subject, an age opener, a labelled line, a 'Label is ...'
-            # sentence) sharing a word holds only with a word of polarity; any other statement sharing one holds as it is
-            # (it may state a change of the same thing in words no list names: 'Warfarin was withheld.').
+            # sentence) sharing a word holds with a word of polarity or a date, or when it shares a TOPIC word (a noun,
+            # not the presented complaint: 'The patient came off warfarin.', 'The patient gave up smoking.', R2L2-2);
+            # any other statement sharing one holds as it is (it may state a change of the same thing in words no list
+            # names: 'Warfarin was withheld.').
             anchor = found['main_patient'] or found['age'] or reading['colon'][oid] or bool(reading['parsed'][oid])
-            if mine & (reading['claim_keys'][oid] | found['nominal_keys']) and (
-                    not anchor or info['polar'] or found['polar'] or found['past_time']):
+            theirs = reading['claim_keys'][oid] | found['nominal_keys'] | found['surface_keys']
+            topic = {key for key in found['topic_keys'] if not keys_of({key}) & reading['complaint_keys']}
+            if mine & theirs and (not anchor or info['polar'] or found['polar'] or found['past_time'] or mine & topic):
                 causes.append((other, None))
                 break
         by_id = {u['id']: u for u in reading['units']}
