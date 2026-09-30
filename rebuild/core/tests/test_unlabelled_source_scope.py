@@ -217,7 +217,7 @@ class SignatureIsRecognisedByPolicyOrLabel(TestCase):
     def test_signature_shaped_questions_are_recognised_wherever_they_sit(self):
         for label in ('Electronically signed by', 'Signed by', 'Signature', 'Signature:',
                       'Physician signature', 'Surgeon signature', 'Signature of surgeon',
-                      'Signed', 'Signed by (MD)', 'Electronically signed by (print name)',
+                      'Signed', 'Signed by (MD)', 'Electronically signed by (physician)',
                       'Signature/Date', 'Electronically signed by\uff1a', 'Electronically signed by.'):
             for locator in ({'cell': 0}, {'tab_form': {'version': 1}}):
                 with self.subTest(label=label, locator=tuple(locator)):

@@ -6,17 +6,24 @@ This module does not choose answers or change an existing stored mapping.
 import re
 
 
-def annotate(detector, fields):
+def _source(slot, text):
     if __package__:
-        from .word_v3 import fingerprint, q
-        from .mapping_limits import MAX_MAPPING_CONTEXT
+        from .word_v3 import fingerprint
     else:
-        from word_v3 import fingerprint, q
-        from mapping_limits import MAX_MAPPING_CONTEXT
+        from word_v3 import fingerprint
+    return {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el), 'text': text}
 
-    def source(slot, text):
-        return {'part': slot.part, 'slot': slot.path, 'fingerprint': fingerprint(slot.el), 'text': text}
 
+def section_sources(detector):
+    """{root slot id: the printed patient-author source governing it, or None} for every body root.
+
+    The ONE reader of a printed author role ('Completed by the patient:'): `annotate` gives a field the role of its
+    root, and `word_v3.destination_roles` makes every root it governs a policy role, so a field placed there later
+    (by a clinician or a model) must carry the same requirement."""
+    if __package__:
+        from .word_v3 import q
+    else:
+        from word_v3 import q
     roles = {}
     current = None
     for root in detector.index.roots:
@@ -28,7 +35,7 @@ def annotate(detector, fields):
             if root.el.find('.//' + q('w:sectPr')) is not None:
                 current = None
             elif role and role[1].lower() == 'patient':
-                current = source(root, text)
+                current = _source(root, text)
             elif role and role[1].casefold() in ('example', 'instance'):
                 # Capitalization does not turn an explanatory marker into a role.
                 pass
@@ -39,6 +46,16 @@ def annotate(detector, fields):
                     detector.is_heading(root.el):
                 current = None
         roles[root.id] = current
+    return roles
+
+
+def annotate(detector, fields):
+    if __package__:
+        from .mapping_limits import MAX_MAPPING_CONTEXT
+    else:
+        from mapping_limits import MAX_MAPPING_CONTEXT
+
+    roles = section_sources(detector)
 
     for field in fields:
         loc = field.get('locator') or {}
@@ -65,6 +82,6 @@ def annotate(detector, fields):
                             r'\bconfirm\s+(?:that\s+)?(?:the\s+)?patient\s+(?:(?:has|had)\s+)?'
                             r'(?:read\b|reviewed\b|seen\b|had\s+sight\s+of\b|'
                             r'(?:had|was\s+given)\s+(?:an?\s+)?opportunity\s+to\b)', text, re.I):
-                    policy.update(attestation='document_review', attestation_source=source(previous, text))
+                    policy.update(attestation='document_review', attestation_source=_source(previous, text))
         if policy:
             field['answer_policy'] = policy

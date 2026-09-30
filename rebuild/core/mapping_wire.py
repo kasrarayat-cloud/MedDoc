@@ -66,15 +66,26 @@ def _partition(groups,count,name):
         raise ValidationError(f'Mapping {name} IDs must form one complete, disjoint request-bound set.')
 
 def expand(payload,response):
-    """Validate the compact envelope, then restore the stable-source review contract."""
+    """Validate the compact envelope, then restore the stable-source review contract.
+
+    ENVELOPE violations refuse the WHOLE response: the schema, incomplete or duplicated field/slot partitions, a change
+    naming a field the request does not contain, an incomplete option triple, the source catalog differing from the
+    bound request, and the option capacity. An individually INVALID CHANGE never refuses the rest and is never adopted: a
+    replacement leaves its field `uncertain` with no target (the prior field is preserved), an addition is dropped, and
+    each is returned in `rejected` with its change index, wire array, field key, proposed slot and reason. `sources` maps
+    each surviving change to its index and records the text references each change quoted (a dependence reading)."""
     body=Proposal.model_validate(response).model_dump()
     _partition(body['f'],len(payload['fields']),'field')
     _partition(body['s'],len(payload['slots']),'slot')
     refs=payload['text_refs']
     if refs!=catalog(payload):raise ValidationError('Mapping source catalog differs from its bound request.')
+    for change in body['x']:
+        if (len(change)-7)%3:raise ValidationError('Incomplete mapping option span triple.')
+        if not -1<=change[0]<len(payload['fields']):
+            raise ValidationError('A mapping change names a field the request does not contain; no proposal was adopted.')
     if sum((len(change)-7)//3 for change in body['x'])>MAX_OPTIONS:
         raise ValidationError('Mapping option-reference capacity exceeded; no proposal was adopted.')
-    replacements={};additions=[]
+    used=[]
     def span(ref,start,end,sid,fid,label):
         if not 0<=ref<len(refs):raise ValidationError('Unknown source text reference.')
         owner,role,index=refs[ref]
@@ -89,30 +100,53 @@ def expand(payload,response):
             text=row.get('options',[])[index] if role==3 else row.get(('text','heading','row_label')[role],'')
         if not 0<=start<end<=len(text) or end-start>(MAX_MAPPING_LABEL if label else 200):
             raise ValidationError('Invalid Unicode source span; source text was not truncated.')
+        used.append([ref,start,end])
         return text[start:end]
+    owners={}
     for change in body['x']:
-        if (len(change)-7)%3:raise ValidationError('Incomplete mapping option span triple.')
+        if change[0]!=-1:owners[change[0]]=owners.get(change[0],0)+1
+    def target(change):
         fid,sid,kind,ref,start,end,glyph=change[:7]
-        if not (-1<=fid<len(payload['fields']) and 0<=sid<len(payload['slots']) and 0<=kind<len(KINDS) and -1<=glyph<=199):
-            raise ValidationError('Unknown mapping change destination, kind, field or glyph.')
-        if fid!=-1 and (fid not in body['f']['r'] or fid in replacements):
+        if not (0<=sid<len(payload['slots']) and 0<=kind<len(KINDS) and -1<=glyph<=199):
+            raise ValidationError('Unknown mapping change destination, kind or glyph.')
+        if fid!=-1 and (fid not in body['f']['r'] or owners[fid]!=1):
             raise ValidationError('Replacement does not uniquely own a replace verdict.')
         if fid!=-1 and not v3_mapping.is_mapped(payload['slots'][sid]['slot'],payload['fields'][fid]['slots']):
             raise ValidationError('Replacement target belongs to another field destination.')
-        target={'slot':payload['slots'][sid]['slot'],'kind':KINDS[kind],
+        return {'slot':payload['slots'][sid]['slot'],'kind':KINDS[kind],
                 'label':span(ref,start,end,sid,fid,True),'glyph':None if glyph==-1 else glyph,
                 'options':[span(*change[n:n+3],sid,fid,False) for n in range(7,len(change),3)]}
-        if fid==-1:additions.append(target)
-        else:replacements[fid]=target
-    if set(replacements)!=set(body['f']['r']):raise ValidationError('A replacement verdict lacks its bound change.')
+    replacements={};additions=[];rejected=[];sources={'fields':{},'additions':[],'refs':{}}
+    def reject(number,change,fid,sid,reason):
+        rejected.append({'change':number,'wire':None if change is None else list(change),
+                         'type':'addition' if fid==-1 else 'replacement',
+                         'key':payload['fields'][fid]['key'] if 0<=fid<len(payload['fields']) else '',
+                         'slot':payload['slots'][sid]['slot'] if 0<=sid<len(payload['slots']) else '','reason':reason})
+    for number,change in enumerate(body['x']):
+        fid,sid=change[0],change[1]
+        used.clear()
+        try:built=target(change)
+        except ValidationError as exc:
+            reject(number,change,fid,sid,' '.join(exc.messages));continue
+        finally:sources['refs'][number]=[list(row) for row in used]
+        if fid==-1:additions.append(built);sources['additions'].append(number)
+        else:replacements[fid]=built;sources['fields'][payload['fields'][fid]['key']]=number
+    for fid in body['f']['r']:
+        if fid not in replacements and not any(row['key']==payload['fields'][fid]['key'] for row in rejected):
+            reject(None,None,fid,-1,'A replacement verdict lacks its bound change.')
+    held={row['key'] for row in rejected if row['key']}
     fields=[];slots=[]
     for code,verdict in [('k','keep'),('r','replace'),('n','not_answer'),('u','uncertain')]:
-        fields.extend({'key':payload['fields'][fid]['key'],'verdict':verdict,'target':replacements.get(fid)} for fid in body['f'][code])
+        for fid in body['f'][code]:
+            key=payload['fields'][fid]['key']
+            # A field touched by a rejected change is held for review; it never carries a target.
+            fields.append({'key':key,'verdict':'uncertain' if key in held else verdict,
+                           'target':None if key in held else replacements.get(fid)})
     for code,verdict in [('c','covered'),('n','not_answer'),('u','uncertain')]:
         slots.extend({'slot':payload['slots'][sid]['slot'],'verdict':verdict} for sid in body['s'][code])
     fields.sort(key=lambda row:next(n for n,f in enumerate(payload['fields']) if f['key']==row['key']))
     slots.sort(key=lambda row:next(n for n,s in enumerate(payload['slots']) if s['slot']==row['slot']))
-    return {'fields':fields,'slots':slots,'additions':additions},body['e']
+    return {'fields':fields,'slots':slots,'additions':additions,'rejected':rejected,'sources':sources},body['e']
 
 def fixture(payload):
     mapped={slot for field in payload['fields'] for slot in field['slots']}

@@ -700,7 +700,16 @@ def run_one():
         # A job quoted with the narrative contract after the flag went off stops here: nothing is sent or charged.
         if job.kind=='generation' and (refusal:=generation.narrative_refusal(e.template_version.fields,job.config)):
             raise NoProviderRequest(refusal)
-        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements) if job.kind=='generation' else transcribe(job)
+        if job.kind=='generation':
+            # ⚠️ A FIELD ON A ROLE PLACE IS NEVER ASKED: the roles are read from the ORIGINAL now, never from the stored
+            # mapping (core.destination_roles). An original that cannot be read refuses before anything is sent.
+            from . import destination_roles
+            from documents import DocumentError
+            try:asked_fields=destination_roles.generation_fields(e.template_version)
+            except (DocumentError,ValidationError,OSError):raise NoProviderRequest(v3_mapping.GENERATION_SOURCE_REFUSAL)
+            if refusal:=destination_roles.generation_refusal(e.template_version,asked_fields,job.config):
+                raise NoProviderRequest(refusal)
+        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,asked_fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements],requirements=e.template_version.review_requirements) if job.kind=='generation' else transcribe(job)
         provider_returned=True
         response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
         resource_id=getattr(response,'id','') or ''

@@ -78,23 +78,22 @@ class MappingAssistance(TestCase):
         replacement = next(f for f in result['fields'] if f['label'] == prior['label'])
         self.assertEqual(replacement['context'], long_context)
         self.assertEqual(replacement['locator'], prior['locator'])
-        for key, value in (('fingerprint', '0' * 64), ('target', {'type': 'cell_replace'})):
-            with self.subTest(key=key):
-                saved = copy.deepcopy(prior['locator'])
-                prior['locator'][key] = value
-                result = mapping.validate_proposal(self.version, self.compiled, body)
-                replacement = next(f for f in result['fields'] if f['label'] == prior['label'])
-                self.assertNotEqual(replacement['context'], long_context)
-                prior['locator'] = saved
+        self.assertEqual((replacement['key'], replacement['origin']), (prior['key'], 'model_assisted'))
+        # ⚠️ A REPLACEMENT NEVER MOVES A FIELD: naming a slot inside its place keeps the prior locator and context
+        # exactly (it used to re-locate after the printed text - M11: 'Pulse findings: ______ weak radial pulse').
         descendant = copy.deepcopy(body); descendant['x'][0][1] = sid + 1
-        moved = mapping.validate_proposal(self.version, self.compiled, descendant)
-        descendant_field = next(f for f in moved['fields'] if f['label'] == prior['label'])
-        self.assertNotEqual(descendant_field['locator'], prior['locator'])
-        self.assertNotEqual(descendant_field['context'], long_context)
+        kept = mapping.validate_proposal(self.version, self.compiled, descendant)
+        kept_field = next(f for f in kept['fields'] if f['key'] == prior['key'])
+        self.assertEqual((kept_field['locator'], kept_field['context']), (prior['locator'], long_context))
+        # Another field's slot is ONE invalid change: held with its reason; the fields stay exactly as stored.
         foreign_slot = payload['fields'][1]['slots'][0]
         foreign = copy.deepcopy(body)
         foreign['x'][0][1] = next(n for n, row in enumerate(payload['slots']) if row['slot'] == foreign_slot)
-        with self.assertRaises(ValidationError): mapping.validate_proposal(self.version, self.compiled, foreign)
+        held = mapping.validate_proposal(self.version, self.compiled, foreign)
+        self.assertEqual(held['fields'], self.version.fields)
+        self.assertEqual(held['review']['changes'], [])
+        self.assertIn('Replacement target belongs to another field destination.',
+                      ' '.join(row['reason'] for row in held['review']['unresolved']))
 
     def test_complete_long_labels_are_priced_in_actual_request_and_old_profile_refuses(self):
         original_fields = copy.deepcopy(self.version.fields)
@@ -148,12 +147,18 @@ class MappingAssistance(TestCase):
         return [fid,sid,mapping.wire.KINDS.index(kind),*reference(label),-1]+[n for option in options for n in reference(option)]
 
     def test_wrong_slots_and_references_refuse_and_overlap_stays_visible(self):
+        """A wrong slot or text reference is ONE held change (M05), never a refused response and never adopted."""
         body=self.body();prior=self.version.fields[0]
         slot=next(iter(mapping.v3_mapping.mapped_slots([prior])))
         target=self.target(slot,prior['label'])
         for index,value in [(1,1199),(3,399999)]:
             altered=target.copy();altered[index]=value;body['x']=[altered]
-            with self.assertRaises((ValidationError,ValueError)):mapping.validate_proposal(self.version,self.compiled,body)
+            with self.subTest(index=index):
+                result=mapping.validate_proposal(self.version,self.compiled,body)
+                self.assertEqual(result['fields'],self.version.fields)
+                self.assertEqual([row['wire'] for row in result['review']['rejected_changes']],[altered])
+                self.assertTrue(any(row.get('change')==result['review']['rejected_changes'][0]['id']
+                                    for row in result['review']['unresolved']))
         body['x']=[target]
         result=mapping.validate_proposal(self.version,self.compiled,body)
         self.assertEqual(result['fields'],self.version.fields)
@@ -258,7 +263,10 @@ class MappingAssistance(TestCase):
     def test_manual_resolution_records_assistance_and_old_version_is_preserved(self):
         self.enqueue();jobs.run_one();version=self.template.versions.latest('number')
         body={'action':'resolve','mapping_version':str(version.pk)}
-        body.update({'resolution_'+str(n):'not_answer' for n,_ in enumerate(version.assistance['unresolved'])})
+        # An area a field already writes to is 'mapped'; 'not an answer' there would contradict the mapping (RF15).
+        mapped=mapping.v3_mapping.mapped_slots(version.fields)
+        body.update({'resolution_'+str(n):'mapped' if mapping.v3_mapping.is_mapped(row['slot'],mapped) else 'not_answer'
+                     for n,row in enumerate(version.assistance['unresolved'])})
         response=self.client.post(f'/templates/{self.template.pk}/assistance/',body)
         self.assertEqual(response.status_code,302)
         latest=self.template.versions.latest('number')
@@ -293,8 +301,27 @@ class MappingAssistance(TestCase):
             jobs.run_one()
         job.refresh_from_db();self.assertEqual(job.state,'succeeded',job.error)
         version=self.template.versions.latest('number')
-        self.assertEqual(version.assistance['unresolved'],[])
+        # ⚠️ A MODEL ADDITION IS NEVER ADOPTED AUTOMATICALLY: it is an explicit review item naming what was proposed,
+        # and it blocks confirmation until the clinician adds it (one add on the mapping page) or dismisses it.
+        self.assertEqual(len(version.fields),len(fields))
+        proposed=[row for row in version.assistance['unresolved'] if row.get('proposal')]
+        self.assertEqual([(row['slot'],row['proposal']['label'],row['proposal']['kind']) for row in proposed],
+                         [(next(iter(mapping.v3_mapping.mapped_slots([missing]))),'Plan',missing['kind'])])
+        self.assertEqual(self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_confirm','mapping_version':version.pk,'checked_every_field':'on'}).status_code,400)
+        row=proposed[0]
+        response=self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_add','mapping_version':version.pk,
+                                  'slot':row['slot'],'kind':row['proposal']['kind'],'label':row['proposal']['label']})
+        self.assertEqual(response.status_code,302)
+        version=self.template.versions.latest('number')
         self.assertEqual(len(version.fields),len(fields)+1)
+        self.assertEqual(next(f for f in version.fields if f['label']=='Plan')['origin'],'manual')
+        mapped=mapping.v3_mapping.mapped_slots(version.fields)
+        body={'action':'resolve','mapping_version':str(version.pk)}
+        body.update({'resolution_'+str(n):'mapped' if mapping.v3_mapping.is_mapped(r['slot'],mapped) else 'not_answer'
+                     for n,r in enumerate(version.assistance['unresolved'])})
+        self.assertEqual(self.client.post(f'/templates/{self.template.pk}/assistance/',body).status_code,302)
+        version=self.template.versions.latest('number')
+        self.assertEqual(version.assistance['unresolved'],[])
         self.assertEqual(self.client.post(f'/templates/{self.template.pk}/',{'action':'v3_confirm','mapping_version':version.pk,'checked_every_field':'on'}).status_code,302)
         patient=Patient.objects.create(department=self.department,display_name='SYNTHETIC MAPPING WORKFLOW',reference='mapping-flow',created_by=self.user)
         response=self.client.post('/encounters/new/',{'patient':patient.pk,'template_version':version.pk,'notes':'Plan: rest.','service_date':timezone.localdate().isoformat(),'synthetic_only':'on'})

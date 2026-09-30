@@ -70,6 +70,9 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
         (workspace / "request.json").write_bytes(raw_request)
         from .sdk_service import WM_IOV_SHA256, run as run_sdk, SdkUnavailable
         if suffix == ".docx" and digest == WM_IOV_SHA256:
+            if operation == "roles":
+                # The qualified WM form keeps its own reviewed contract; its roles are not read by this parser.
+                raise DocumentError("The qualified Word form keeps its own mapping contract.", "unsupported_format")
             sdk_request = {"operation": operation}
             if operation != "inspect":
                 metadata = document_backend or {}
@@ -179,6 +182,15 @@ def locate_fields(path, targets: list):
     if not isinstance(targets, list) or len(targets) > 200:
         raise DocumentError("Add at most 200 fields at a time.", "invalid_mapping")
     return _run(path, "locate", engine="v3", targets=targets)
+
+
+def destination_roles(path, mapping: list, *, engine):
+    """The original's destination roles, read in the isolated parser from a FRESH inspection (never from the stored
+    mapping): for a contract v3 original, every role place and each mapping field that touches one it may not take;
+    for a legacy original, each stored field's printed label and the role the engine's kind rule gives it."""
+    if not isinstance(mapping, list) or len(mapping) > 1500 or engine not in ("v3", "legacy"):
+        raise DocumentError("Destination role mapping is invalid.", "invalid_mapping")
+    return _run(path, "roles", mapping, None, engine=engine)
 
 
 def effective_options(path, mapping: list, answers: dict):

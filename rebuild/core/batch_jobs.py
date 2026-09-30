@@ -65,6 +65,15 @@ def enqueue(encounter, user, config, expected_revision=None):
     base_config = {k:v for k,v in config.items() if k != 'batch_quote'}
     if base_config != g.configuration(): b.refuse('The quoted model, mode, rate or generation contract changed.')
     if refusal := v3_mapping.generation_refusal(e.template_version): raise ValidationError(refusal)
+    # ⚠️ The complete-form plan binds the whole catalogue: a field on a role place of the ORIGINAL (read now, never from
+    # the stored mapping) is refused before anything is held or sent, never silently narrowed out of the plan.
+    from . import destination_roles
+    from documents import DocumentError
+    try: held = destination_roles.v3_held(e.template_version)
+    except (DocumentError, ValidationError, OSError): raise ValidationError(v3_mapping.GENERATION_SOURCE_REFUSAL) from None
+    if held:
+        raise ValidationError(destination_roles.GENERATION_HELD_REFUSAL.format(
+            labels=', '.join(v3_mapping.label_of(f) for f in e.template_version.fields if f['key'] in held)))
     plan = b.plan_for(e, base_config)
     if b.digest(plan) != authorization['plan_sha256'] or plan['maximum_charge'] != authorization['maximum_charge']:
         b.refuse('The complete form or charge changed after the quote.')

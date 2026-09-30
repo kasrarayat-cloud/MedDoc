@@ -43,6 +43,9 @@ NS = {"w": W, "w14": W14, "mc": MC}
 CONTRACT = "v3"
 MAX_FIELDS = 1500
 MAX_ANSWER = 100_000
+#: A content control the original locks (contentLocked / sdtContentLocked): its content cannot take an answer, so
+#: its area is protected and the control is a destination role (destination_roles).
+LOCKED_CONTROL = "This content control is locked in the original form. It remains unchanged; review it by hand."
 FLOATING_INITIALS_REFUSAL = ("Filled export is unavailable for this form's floating initials boxes: answer reflow can "
                            "clip or move a box away from its question. The unchanged original remains available. "
                            "This layout needs qualification before any nonempty export.")
@@ -1461,6 +1464,9 @@ class Detector:
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
+        # Question boxes whose printed question or section reads as signing or consent (question_box_signing),
+        # recorded BEFORE the empty-cell check: a signing box is a destination role whatever it prints.
+        self.signing_boxes: dict[str, str] = {}
         self.floating_initials = False
         self._order = 0
         self._grid = {}
@@ -2203,13 +2209,14 @@ class Detector:
             if typ in ("dropDownList", "comboBox"):
                 options = [o for o in info["options"] if o and not PLACEHOLDER_TEXT.match(o)]
                 self.add(Area("choice", clean_label(label) or "Choice", slot, {"type": "sdt_choice"},
-                              context=self.context_for(slot), options=options))
+                              context=self.context_for(slot), options=options,
+                              protection=LOCKED_CONTROL if info["locked"] else ""))
             elif typ == "date":
                 self.add(Area("date", clean_label(label) or "Date", slot, {"type": "sdt_text", "date": True},
-                              context=self.context_for(slot)))
+                              context=self.context_for(slot), protection=LOCKED_CONTROL if info["locked"] else ""))
             elif empty_like:
                 self.add(Area(self.kind_for(label), clean_label(label) or "Answer", slot, {"type": "sdt_text"},
-                              context=self.context_for(slot)))
+                              context=self.context_for(slot), protection=LOCKED_CONTROL if info["locked"] else ""))
             else:
                 self.notes.append("A content control holding fixed text was kept as printed: %s" % shown[:60])
             for x in slot.el.iter():
@@ -4975,6 +4982,13 @@ class Detector:
                 # Existing author statements are just as protected as an empty
                 # author box, including when a forged mapping changes its kind.
                 self.protected_regions.add(cell.id)
+            if question is not None and cell.id not in self.signing_boxes:
+                # ⚠️ READ BEFORE THE EMPTY-CELL CHECK: a signing or consent box that holds a drawing or prints 'Use
+                # black ink' was skipped here and never read, so a mapping could write into it. Notes and areas are
+                # unchanged; the reading is only the box's destination role (destination_roles).
+                section = self.question_box_context(question)[0]
+                if self.question_box_signing(raw) or self.question_box_signing(section):
+                    self.signing_boxes[cell.id] = raw
             if not self.is_empty_cell(cell):
                 continue
             context, scope_problem = self.question_box_context(question) if question is not None else ("", "")
@@ -5780,6 +5794,301 @@ def inspect(data: bytes) -> dict:
             "layout_pending": len(detector.layout_candidates)}
 
 
+# ─── destination roles: whether a place may receive an answer at all ───────────────────────────────────────────────
+#: ⚠️ WHETHER A DESTINATION MAY RECEIVE AN ANSWER IS A DIFFERENT QUESTION FROM WHETHER THE ANSWER IS SUPPORTED. A model
+#: (mapping or generation) never creates permission to write a signature, perform an attestation or change a protected
+#: area. The permission comes ONLY from structure this engine already reads in the ORIGINAL:
+#:   signing   - its signature and initials areas (a span area owns its line segment up to the next engine area, so
+#:               'Name: ____  Signature: ____' keeps Name answerable while 'Signature: ____ (use black ink)' holds the
+#:               whole segment), and a question box whose question or section reads as signing or consent
+#:               (question_box_signing, read before the empty-cell check - whatever the box prints);
+#:   protected - protected areas and regions, legacy form-field protection and locked content controls;
+#:   policy    - the printed patient-author role of a section and a printed review attestation cell (source_policy):
+#:               a field there must carry that same requirement.
+#: No wording reader is added: every source above already existed. Every gate re-inspects the original (never the
+#: stored mapping), so a removed engine field, a re-added manual field or a stored mapping cannot move a role.
+ROLE_SIGNING, ROLE_PROTECTED, ROLE_POLICY = "signing", "protected", "policy"
+ROLE_ORDER = (ROLE_SIGNING, ROLE_PROTECTED, ROLE_POLICY)
+ROLE_REFUSALS = {
+    ROLE_SIGNING: ("This place is a signing, initials or consent area of the original form. It never takes a typed or "
+                   "generated answer: only a Signature or Initials field may sit there, and it is completed by hand."),
+    ROLE_PROTECTED: "This place is protected on the original form and remains unchanged; no answer can be written there.",
+    ROLE_POLICY: ("This place carries a printed authorship or review requirement on the original form, and the field "
+                  "there does not carry that same requirement. Review the mapping again."),
+}
+ROLE_CODES = {ROLE_SIGNING: "protected_signing_area", ROLE_PROTECTED: "protected_signing_area",
+              ROLE_POLICY: "mapping_mismatch"}
+ROLE_REGION = "This area is protected on the original form and remains unchanged."
+ROLE_FORM_FIELD = "This legacy form field is protected on the original form and remains unchanged."
+ROLE_SIGNING_BOX = "Signing or consent box: it is completed by hand after the actual signing act."
+
+
+def _place_id(part, path):
+    return "%s#%s" % (part, path)
+
+
+def _root_of(place):
+    part, _, path = str(place).partition("#")
+    return part + "#" + "/".join(path.split("/")[:2])
+
+
+class _PlaceReader:
+    """Where a field writes, as slot ids of the ORIGINAL, with code-point offsets inside a paragraph when the write is a
+    part of it (a span, an insertion, a printed glyph box, an option word) - the same reading for the engine's own
+    areas (a role's extent) and for any field of any mapping (what it would write)."""
+
+    def __init__(self, index):
+        self.index = index
+        self._text = {}
+
+    def text(self, pslot):
+        if pslot.id not in self._text:
+            self._text[pslot.id] = paragraph_text(pslot.el)
+        return self._text[pslot.id]
+
+    def inline(self, parent_id, child_id):
+        """The offsets of an inline content control or legacy form field inside its own paragraph, or None."""
+        parent, child = self.index.by_id.get(parent_id), self.index.by_id.get(child_id)
+        if parent is None or child is None or parent.kind != "p" or child.parent is not parent \
+                or child.kind not in ("sdt", "ff"):
+            return None
+        for pc in self.text(parent)[1]:
+            if pc.kind == "obj" and pc.node is child.el:
+                return pc.start, pc.end
+        return None
+
+    def of(self, field):
+        """[(slot id, start, end)]; start/end None means the whole slot. Never empty: a field that writes nowhere
+        readable is read as writing its whole anchor (fail closed)."""
+        loc = field.get("locator") or {}
+        target = loc.get("target") or {}
+        part, typ = loc.get("part"), target.get("type")
+        anchors = [(loc.get("part"), loc.get("slot"))] + [(c.get("part"), c.get("slot"))
+                                                          for c in target.get("copies", []) or [] if isinstance(c, dict)]
+        out = []
+        if typ == "span":
+            try:
+                start, end = int(target["start"]), int(target["end"])
+            except (KeyError, TypeError, ValueError):
+                start = end = None
+            if start is not None and target.get("shape") == "after_label":
+                end = start
+            if start is not None and end < start:
+                start = end = None
+            out.extend((_place_id(p, path), start, end) for p, path in anchors)
+        elif typ == "checkboxes":
+            for box in target.get("boxes", []) or []:
+                if not isinstance(box, dict):
+                    continue
+                path = str(box.get("slot") or "")
+                if box.get("kind") == "glyph" and path.endswith("/glyphs"):
+                    pid = _place_id(box.get("part"), path[:-len("/glyphs")])
+                    pslot, at = self.index.by_id.get(pid), None
+                    if pslot is not None and pslot.kind == "p":
+                        boxes, n = glyph_boxes(pslot.el), box.get("glyph")
+                        if isinstance(n, int) and 0 <= n < len(boxes):
+                            pc, k, _ = boxes[n]
+                            at = pc.start + k
+                    out.append((pid, at, at + 1) if at is not None else (pid, None, None))
+                else:
+                    out.append((_place_id(box.get("part"), path), None, None))
+        elif typ == "paragraph_options":
+            for p, _ in anchors:
+                out.extend((_place_id(p, path), 0, 0) for path in target.get("paragraphs", []) or [])
+        elif typ == "text_options":
+            printed = [str(o) for o in printed_options(field)]
+            for p, path in anchors:
+                pslot = self.index.by_id.get(_place_id(p, path))
+                if pslot is None or pslot.kind != "p":
+                    out.append((_place_id(p, path), None, None))
+                    continue
+                text = self.text(pslot)[0]
+                for i, option in enumerate(printed):
+                    nth = sum(1 for j in range(i) if printed[j].strip() == option.strip())
+                    m = option_word_match(text, option, nth)
+                    out.append((pslot.id, m.start(), m.start()) if m else (pslot.id, None, None))
+        elif typ == "table_rows":
+            table = self.index.by_id.get(_place_id(part, target.get("table")))
+            rows, columns = set(target.get("rows") or []), set(target.get("columns") or [])
+            cells = [c.id for c in (table.children if table is not None else [])
+                     if c.kind == "tc" and c.info["row"] in rows and c.info["col"] in columns]
+            out.extend((c, None, None) for c in cells)
+            if not cells:
+                out.append((_place_id(part, target.get("table")), None, None))
+        elif typ != "none":
+            out.extend((_place_id(p, path), None, None) for p, path in anchors)
+        if typ == "paragraph":
+            out.extend((_place_id(x.get("part"), x.get("slot")), None, None)
+                       for x in loc.get("extra", []) or [] if isinstance(x, dict))
+        if not out:
+            out.append((_place_id(loc.get("part"), loc.get("slot")), None, None))
+        return out
+
+    def touches(self, place, role):
+        pid, s, e = place
+        rid, rs, re_ = role["place"], role["start"], role["end"]
+        if pid == rid:
+            if rs is None or s is None:
+                return True
+            return rs <= s < re_ if s == e else (s < re_ and e > rs)
+        if pid.startswith(rid + "/"):
+            if rs is None:
+                return True
+            inner = self.inline(rid, pid)
+            return inner is None or (inner[0] < re_ and inner[1] > rs)
+        if rid.startswith(pid + "/"):
+            if s is None:
+                return True
+            inner = self.inline(pid, rid)
+            if inner is None:
+                return True
+            return inner[0] <= s < inner[1] if s == e else (s < inner[1] and e > inner[0])
+        return False
+
+
+def _role(cls, source, place, start, end, reason, requires=None):
+    role = {"class": cls, "source": source, "place": place, "start": start, "end": end, "reason": reason}
+    if requires:
+        role["requires"] = requires
+    return role
+
+
+def destination_roles_of(package) -> list:
+    """Every destination role of the ORIGINAL package (see the section comment). Read-only."""
+    return _role_reading(package)[0]
+
+
+def _role_reading(package):
+    """(roles, the engine's own option groups as box keys - the boxes one engine choice area answers together)."""
+    detector = Detector(package)
+    areas, _ = detector.detect()
+    index = detector.index
+    reader = _PlaceReader(index)
+    engine = [area_to_field(n + 1, a) for n, a in enumerate(areas)]
+    source_policy.annotate(detector, engine)
+    roles = []
+    # Every paragraph offset an engine area occupies: the boundaries of a signing span's line segment.
+    occupied = {}
+    for field in engine:
+        for pid, start, end in reader.of(field):
+            slot = index.by_id.get(pid)
+            if start is None and slot is not None and slot.parent is not None and slot.kind in ("sdt", "ff"):
+                inner = reader.inline(slot.parent.id, pid)
+                if inner is not None:
+                    occupied.setdefault(slot.parent.id, []).append((inner, field["key"]))
+            elif start is not None:
+                occupied.setdefault(pid, []).append(((start, end), field["key"]))
+    for area, field in zip(areas, engine):
+        places = reader.of(field)
+        anchor = _place_id(field["locator"]["part"], field["locator"]["slot"])
+        if area.protection:
+            for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
+                roles.append(_role(ROLE_PROTECTED, "protected_area", pid, None, None, area.protection))
+        elif area.kind in SIGNING_KINDS:
+            for pid, start, end in places:
+                if start is None:
+                    roles.append(_role(ROLE_SIGNING, "signing_area", pid, None, None, ROLE_REFUSALS[ROLE_SIGNING]))
+                    continue
+                # The line segment this area owns: from the end of the engine area before it to the start of the one
+                # after it (the paragraph's end included, where an insertion after the printed text would go).
+                others = [rng for rng, key in occupied.get(pid, []) if key != field["key"]]
+                low = max([b for a, b in others if b <= start], default=0)
+                pslot = index.by_id.get(pid)
+                length = len(reader.text(pslot)[0]) if pslot is not None and pslot.kind == "p" else end
+                high = min([a for a, b in others if a >= max(start, end)], default=length + 1)
+                roles.append(_role(ROLE_SIGNING, "signing_area", pid, low, max(high, end, low + 1),
+                                   ROLE_REFUSALS[ROLE_SIGNING]))
+    for region in sorted(detector.protected_regions):
+        roles.append(_role(ROLE_PROTECTED, "protected_region", region, None, None, ROLE_REGION))
+    for cell in sorted(detector.signing_boxes):
+        roles.append(_role(ROLE_SIGNING, "question_box_signing", cell, None, None, ROLE_SIGNING_BOX))
+    for slot in index.slots:
+        if slot.kind == "ff" and ff_text_protection(slot.el):
+            roles.append(_role(ROLE_PROTECTED, "form_field_protection", slot.id, None, None, ROLE_FORM_FIELD))
+        elif slot.kind == "sdt" and slot.info.get("locked") and slot.info.get("type") != "checkbox":
+            roles.append(_role(ROLE_PROTECTED, "locked_control", slot.id, None, None, LOCKED_CONTROL))
+    for root, source in source_policy.section_sources(detector).items():
+        if source:
+            roles.append(_role(ROLE_POLICY, "source_policy", root, None, None, ROLE_REFUSALS[ROLE_POLICY],
+                               {"source_author": "patient", "source": source}))
+    for field in engine:
+        policy = field.get("answer_policy")
+        if isinstance(policy, dict) and "attestation" in policy:
+            for pid, _, _ in reader.of(field):
+                roles.append(_role(ROLE_POLICY, "attestation", pid, None, None, ROLE_REFUSALS[ROLE_POLICY],
+                                   {"attestation": policy["attestation"],
+                                    "attestation_source": policy["attestation_source"]}))
+    choices = [sorted(box_key(box) for box in field["locator"]["target"].get("boxes", []))
+               for field in engine if field["kind"] in ("choice", "multi_choice", "checkbox")
+               and field["locator"]["target"].get("type") == "checkboxes"]
+    return roles, [group for group in choices if group]
+
+
+def role_allows(field, role) -> bool:
+    """A signature/initials field and a write-protected field never take an answer, so they may sit on any role place;
+    a policy place also takes a field carrying exactly its printed requirement. Nothing else may touch a role."""
+    if field.get("kind") in SIGNING_KINDS or field.get("write_protected"):
+        return True
+    if role["class"] == ROLE_POLICY:
+        policy = field.get("answer_policy")
+        policy = policy if isinstance(policy, dict) else {}
+        return all(policy.get(name) == value for name, value in role["requires"].items())
+    return False
+
+
+def role_violations(reader, fields, roles) -> dict:
+    """{field key: {class, source, place, reason}} for every field whose writes touch a role place it may not take."""
+    by_root = {}
+    for role in roles:
+        by_root.setdefault(_root_of(role["place"]), []).append(role)
+    out = {}
+    for field in fields or []:
+        if not isinstance(field, dict):
+            continue
+        places = reader.of(field)
+        near = [r for pid in dict.fromkeys(_root_of(p[0]) for p in places) for r in by_root.get(pid, [])]
+        for cls in ROLE_ORDER:
+            hit = next((r for r in near if r["class"] == cls and not role_allows(field, r)
+                        and any(reader.touches(place, r) for place in places)), None)
+            if hit is not None:
+                out[str(field.get("key"))] = {"class": cls, "source": hit["source"], "place": hit["place"],
+                                              "reason": ROLE_REFUSALS[cls]}
+                break
+    return out
+
+
+def destination_roles(data: bytes, fields=None) -> dict:
+    """The role report of an original: its roles (class, source, place, span) and, for `fields` (any mapping), every
+    field whose writes touch a role place it may not take. Read-only; the isolated parser's 'roles' operation."""
+    package = open_package(data)
+    roles, choices = _role_reading(package)
+    reader = _PlaceReader(SlotIndex(package))
+    return {"contract": CONTRACT,
+            "roles": [{k: v for k, v in r.items() if k != "requires"} for r in roles],
+            "violations": role_violations(reader, fields or [], roles), "choices": choices}
+
+
+#: ⚠️ THE LEGACY DEFAULT PATH'S ROLE READER IS THE ENGINE'S OWN KIND RULE (Detector.kind_for), with its two MEASURED
+#: over-reads removed by RESTRICTING its own patterns - no new words: 'signed' is a signature only when 'by' follows it
+#: ('Consent form signed', 'Time signed' are checklist states: 13 of 15 were read as signatures), and a lone 'initial'
+#: followed by another word is the adjective ('Initial assessment', 'Initial dose': 12 of 12 were read as initials).
+#: Every match of these two is also a match of SIGNATURE / INITIALS. The v3 kind rule itself is unchanged.
+LEGACY_SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b(?=.*\bby\b)|\bsign(?:ed)? here\b", re.I)
+LEGACY_INITIALS = re.compile(r"\binitials\b|\binitial (?:the )?box|\binitial\b(?!\s+[^\W\d_])", re.I)
+
+
+def legacy_role_kind(label) -> str:
+    """'signature', 'initials' or '' for a legacy field's PRINTED label (kind_for's date exclusion kept)."""
+    label = label or ""
+    if DATE_LABEL.search(label):
+        return ""
+    if LEGACY_SIGNATURE.search(label):
+        return "signature"
+    if LEGACY_INITIALS.search(label):
+        return "initials"
+    return ""
+
+
 # ─── fill ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 MARK_FONT = "Segoe UI Symbol"
@@ -6508,6 +6817,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                        | protected.protected_regions | source_detector.protected_regions)
     legacy_protected = {slot.id: ff_text_protection(slot.el) for slot in index.slots if slot.kind == "ff"}
     legacy_protected = {identity: reason for identity, reason in legacy_protected.items() if reason}
+    # ⚠️ THE ORIGINAL'S DESTINATION ROLES, read before anything is written and never from the mapping: a stored or
+    # forged field on a signing, protected or policy place is refused by its span, not by its paragraph.
+    role_refusals = role_violations(_PlaceReader(index), fields, destination_roles_of(package))
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -6596,6 +6908,11 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
             resolve(extra["part"], extra["slot"], extra["fingerprint"])
         for copy in target.get("copies", []):
             anchors.append(resolve(copy["part"], copy["slot"], copy["fingerprint"]))
+        # After the anchors are proved to be this form's (a changed source is a stale mapping first): a place the
+        # ORIGINAL gives a role takes only what that role allows, by span and line segment, never by paragraph.
+        if str(field.get("key")) in role_refusals:
+            refusal = role_refusals[str(field.get("key"))]
+            fail(refusal["reason"], ROLE_CODES[refusal["class"]])
         kind = target["type"]
         for anchor in anchors:
             part = anchor.part
@@ -7319,6 +7636,7 @@ def locate(data: bytes, targets: list) -> list:
     package = open_package(data)
     detector = Detector(package)
     out = []
+    roles = None
     for n, t in enumerate(targets, 1):
         kind = t.get("kind")
         supplied_label, supplied_context = t.get("label") or "", t.get("context") or ""
@@ -7413,5 +7731,13 @@ def locate(data: bytes, targets: list) -> list:
         field["key"] = "m3_%s" % hashlib.sha256(("%s|%s|%s" % (slot.id, json_dumps(target), label)).encode()).hexdigest()[:12]
         field["origin"] = "manual"
         annotate_printed(detector.index, field)
+        # The place's printed authorship/review requirement, read exactly as for the engine's own fields.
+        source_policy.annotate(detector, [field])
+        # ⚠️ A ROLE PLACE TAKES ONLY WHAT IT ALLOWS, whoever chooses it: a clinician's add or a model's proposal on a
+        # signing, initials, consent or protected place is refused unless it is a Signature or Initials field.
+        roles = destination_roles_of(package) if roles is None else roles
+        refusal = role_violations(_PlaceReader(detector.index), [field], roles).get(field["key"])
+        if refusal:
+            fail(refusal["reason"] + " Nothing was added.", "destination_role")
         out.append(field)
     return out

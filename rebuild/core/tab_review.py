@@ -18,8 +18,11 @@ _ROLE = r"(?:physician|provider|surgeon|clinician|attending|resident|doctor|md|d
 #: signature", because `Signature date` and `Date of signature` are DATE questions — refusing to
 #: finalize them unless they equal the clinician's name would be a false rejection, and this
 #: file has already shipped one of those.
+#: ⚠️ A PARENTHETICAL MAKES A LABEL THE FINALIZER'S ONLY WHEN IT NAMES A CLINICIAN ROLE (the same `_ROLE` words the
+#: other arms use). Any parenthetical used to pass, so `Signature (participant)` and `Signature (mother)` were identity
+#: rows and finalization demanded - or wrote - the finalizing clinician's own name in another person's signature place.
 SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
-    r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",
+    rf"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\((?:the )?{_ROLE}\))?",
     rf"{_ROLE}'?s? sign(?:ature|ed)(?: by)?",
     rf"sign(?:ature|ed)(?: by| of)? (?:the )?{_ROLE}",
     r"signature ?/ ?date",
