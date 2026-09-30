@@ -501,6 +501,10 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         fields = clinic_form()
         self.assert_held('The patient smokes. She denies smoking.', fields, {'v3_6': ['The patient smokes.']}, 'v3_6',
                          choices=YES)
+        for notes, selected in (('The patient smokes. She denies smoking.', 'The patient smokes.'),
+                                ('Her mood is low. The patient denies low mood.', 'Her mood is low.')):
+            with self.subTest(notes=notes):
+                self.assert_held(notes, [v3('f', 'Clinical observation', 'long_text')], {'f': [selected]}, 'f')
         self.assert_held('The patient does not smoke. Allergies: none. She quit last month.', fields,
                          {'v3_6': ['The patient does not smoke.']}, 'v3_6', choices=NO)
 

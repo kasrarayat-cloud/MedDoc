@@ -408,13 +408,19 @@ def _dangling(words):
     return last is None or last.pos_ in ('CCONJ', 'SCONJ', 'ADP', 'DET', 'AUX', 'PART') or _fold(last.text) in DANGLING_WORDS
 
 
-def _negated_fragment(root):
-    """A verbless statement denying what it names ('No MAPPA involvement.', 'No known drug allergies.'): the keys of
-    every content word in it; empty otherwise. Used only to HOLD."""
-    if root.pos_ in ('VERB', 'AUX') or not any(child.dep_ == 'neg' or (child.dep_ == 'det' and _fold(child.text) == 'no')
-                                               for child in root.children):
-        return frozenset()
-    return keys({_lemma(t) for t in root.subtree if t.pos_ in CONTENT and _lemma(t) != 'patient'})
+def _denied(words, root):
+    """What a statement denies by a word rather than by 'not': the whole of a verbless denial ('No MAPPA involvement.',
+    'No known drug allergies.'), and the object of 'denies' / 'deny' ('She denies smoking.', 'The patient denies low
+    mood.'): the keys of their content words; empty otherwise. Used only to HOLD."""
+    found = set()
+    if root.pos_ not in ('VERB', 'AUX') and any(child.dep_ == 'neg' or (child.dep_ == 'det' and _fold(child.text) == 'no')
+                                                for child in root.children):
+        found |= {_lemma(t) for t in root.subtree if t.pos_ in CONTENT}
+    for token in words:
+        if token.pos_ == 'VERB' and _lemma(token) == 'deny':
+            found |= {_lemma(t) for child in token.children if child.dep_ in ('dobj', 'xcomp', 'ccomp')
+                      for t in child.subtree if t.pos_ in CONTENT}
+    return keys(found - {'patient'})
 
 def _content(doc):
     return {_lemma(token) for token in doc if token.pos_ in ('NOUN', 'PROPN', 'ADJ', 'VERB') and not token.is_stop
@@ -607,7 +613,7 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
                      'hedged': hedged, 'habitual': habitual, 'past_time': past_time, 'dependent': dependent,
                      'claim_keys': keys(claim - {'patient'}),
                      'predicates': () if colon.get(uid) else _predicates(root),
-                     'negated_keys': frozenset() if colon.get(uid) else _negated_fragment(root),
+                     'negated_keys': frozenset() if colon.get(uid) else _denied(words, root),
                      'patient_object': any(this_patient(t) and t.dep_ in ('dobj', 'obj', 'pobj', 'iobj', 'dative')
                                            for t in words),
                      'dangling': _dangling(words),

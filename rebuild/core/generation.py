@@ -2893,8 +2893,8 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     # Claims and negations for the relation floors (`v3_relation_causes`). A labelled line claims its label's words and
     # its value's; it denies its label's topic when its value is a plain negative ('Smoker: No.', 'Allergies: none.'),
     # and otherwise asserts it with its value's words as the complement ('Allergies: penicillin.'). An unlabelled
-    # statement's predicates come from the actor reader (`v3_actors._predicates`), and a verbless denial ('No MAPPA
-    # involvement.') denies every word it names.
+    # statement's predicates come from the actor reader (`v3_actors._predicates`), and a verbless denial or the object of
+    # 'denies' ('No MAPPA involvement.', 'She denies smoking.') denies every word it names (`v3_actors._denied`).
     claim_keys, negated_keys, predicates = {}, {}, {}
     for u in units:
         found = actors['units'][u['id']]
@@ -3425,7 +3425,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             diazepam or methadone.'; 'The patient smokes.' / 'The patient does not smoke.'; 'The patient is not
             depressed.' / 'Her mood is depressed.'), or a plain negative labelled value or a verbless denial whose topic
             the other claims ('Smoker: No.' / 'He quit smoking last month.'; 'The patient is subject to MAPPA.' / 'No
-            MAPPA involvement.').
+            MAPPA involvement.'; 'The patient smokes.' / 'She denies smoking.').
       ANOTHER PERSON'S SAME TOPIC: for an answer whose own subject is not the patient (a labelled line, a 'Label is'
             sentence, a thing), a statement earlier in the same run (after the last explicit-patient statement) naming
             another person, or a pronoun standing for another or an ambiguous actor, that shares a claimed word ('His
