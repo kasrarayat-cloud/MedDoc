@@ -72,6 +72,44 @@ def _parser():
         return None
 
 
+@lru_cache(maxsize=1)
+def _reader():
+    """The same verified bytes as `_parser`, with the model's own rule lemmatizer kept (its lookups file is in the
+    manifest). Used only by the actor reader (`v3_actors`), which only ever HOLDS; `_parser` and every existing caller
+    are unchanged. The entity recognizer stays excluded: measured on this model it tags drugs PERSON ('Lisinopril 10 mg
+    daily.', 'Apixaban was discontinued ...', 'Morphine was given.', a label's 'Urine') and misses names ('Ahmed',
+    'Priya', 'Wei'), so it cannot say who a sentence is about."""
+    if _parser() is None:
+        return None
+    try:
+        import spacy
+        package = importlib.metadata.distribution(MODEL)
+        directory = Path(package.locate_file(f'{MODEL}/{MODEL}-{MODEL_VERSION}'))
+        return spacy.load(directory, exclude=['ner'])
+    except (ImportError, OSError, ValueError, KeyError, importlib.metadata.PackageNotFoundError):
+        return None
+
+
+def docs(texts):
+    """Parse bounded source texts with `_reader`, in order: a list with a Doc per text, or None in its place when that
+    text is out of bounds (over `MAX_CHARACTERS` characters or `MAX_TOKENS` tokens); None instead of the list when the
+    verified model is missing or the parser fails. Every caller fails closed on a None (the unit is HELD)."""
+    texts = list(texts)
+    bounded = [index for index, text in enumerate(texts) if isinstance(text, str) and 0 < len(text) <= MAX_CHARACTERS]
+    try:
+        with _lock:
+            reader = _reader()
+            if reader is None:
+                return None
+            parsed = list(reader.pipe((texts[index] for index in bounded), batch_size=32))
+    except (ValueError, TypeError, RuntimeError, OSError, KeyError, importlib.metadata.PackageNotFoundError):
+        return None
+    out = [None] * len(texts)
+    for index, doc in zip(bounded, parsed):
+        out[index] = doc if len(doc) <= MAX_TOKENS else None
+    return out
+
+
 def _complete(doc, subject_span=None):
     if len(doc) > MAX_TOKENS or len(list(doc.sents)) != 1:
         return False
