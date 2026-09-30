@@ -466,6 +466,10 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
                                                                                      'Examination')))
             with self.subTest(notes=notes):
                 self.assert_held(notes, fields, {key: [selected]}, key, choices=choices)
+        # A selected denial beside another printed question's labelled value.
+        notes = 'Medication: methadone.\nCurrent medication: not methadone.'
+        both = [v3('f', 'Current medication', 'long_text'), v3('g', 'Medication', 'long_text')]
+        self.assert_held(notes, both, {'f': ['Current medication: not methadone.']}, 'f')
         # Another object, site, time-free wider complement, topic or person is not a denial of the value.
         for notes, fields, key in (
                 ('Mental state: depressed.\nShe is not suicidal.', text('Mental state'), 'f'),
