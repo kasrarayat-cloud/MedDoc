@@ -977,7 +977,10 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # v3_field_relations.parse (the keyed answer); the request, its price and every other path are unchanged.
 # The settlement-guard addendum (fix/v1-settlement-worker): resolve_view and recover_recorded pass allowed_states to
 # settle(); with that keyword removed both are AST-identical to 17623922, and run_one (the send boundary) is unchanged.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114830bae5f58c4561746694987fdd88cdd381c0', 'core/batch_jobs.py': '08669b8c5b287f0898bfe2b45627934a00055d166a8ad64b371b24978ca490b8'}
+# The destination-roles addendum (integration 98aebf7b, fix/v1-roles-salvage): enqueue refuses, before any hold or
+# send, a complete-form plan whose ORIGINAL has a field on a role place (destination_roles.v3_held); resolve_view and
+# recover_recorded keep the settlement keyword above; run_one (the send boundary) and every other definition unchanged.
+BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114830bae5f58c4561746694987fdd88cdd381c0', 'core/batch_jobs.py': 'a5b04bf5a6d07d28a9fbe97722d600b033d21d482a26dceb56536fbd57ed23d9'}
 
 # Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
 # quarantine admission gates. See ordinary-cost-scanner-20260928.md for the

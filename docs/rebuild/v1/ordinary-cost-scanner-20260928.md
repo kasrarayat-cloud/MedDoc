@@ -132,3 +132,14 @@ changed. `generation.py`, `v3_field_relations.py` and `generation_batch.py` are 
 Reviewed replacement normalized identity:
 
 - `core/batch_jobs.py`: `08669b8c5b287f0898bfe2b45627934a00055d166a8ad64b371b24978ca490b8`.
+
+### Addendum 2026-09-30 — destination roles in the batch plan (integration 98aebf7b)
+
+`core/batch_jobs.py` identity `a5b04bf5a6d07d28…`. Reviewed delta against 43fcf214 by top-level definition:
+only `enqueue`, `resolve_view` and `recover_recorded` differ; every other top-level statement is AST-identical.
+`resolve_view`/`recover_recorded` carry the settlement branch's `allowed_states` keyword reviewed above.
+`enqueue` gains one refusal, raised before the plan is built and before any hold or send: when
+`destination_roles.v3_held` reads a field of the complete form on a role place of the original (or the original
+cannot be read), the whole-catalogue plan is refused rather than narrowed. `run_one`, the send boundary, is
+unchanged; no request, price, hold amount or send changed. `core/generation_batch.py` is unchanged (`1da9f91b…`).
+
