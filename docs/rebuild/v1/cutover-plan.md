@@ -251,12 +251,61 @@ Data-preserving, in this order:
 5. **Data damage** (wrong writes, corruption): restore RDS to a point in time as a **new** instance,
    run `production_restore_check.py`, compare and reconcile the affected rows into the live database
    through a reviewed, declared correction that appends (ledger and audit are immutable). Never
-   restore over the live instance and never drop it.
+   restore over the live instance and never drop it. A restored instance is never served directly:
+   one that must take the live database's place goes through *Restoring a database into service*
+   below, and stays quarantined until its admission is recorded.
 6. **Host loss:** EC2 auto-recover, or the rebuild path with the surviving volume (RPO 0 for files)
    or the latest snapshot (RPO up to 1 hour for files; database unaffected on RDS).
 7. **Suspected PHI exposure:** follow the incident response plan (checklist J5): preserve evidence,
    rotate keys, assess breach notification with counsel on the HIPAA clock.
 8. Lift maintenance again only through the G9 step 3 checks.
+
+### Restoring a database into service (quarantine, replay, admission)
+
+Added 2026-09-30 with the restore-admission build (branch `fix/v1-retention-holds`). A restored
+database can be older than a disposition instruction or a preservation hold recorded after its
+restore point. Both are signed into the independent journal (outside the clinical database and the
+state volume) before their database rows commit. Nothing inside a restored database says it was
+restored, so the operator selects it, and the application stays quarantined until an admission
+record for that selection exists. No step below deletes restored content, and none needs a
+retention period, schedule or duration.
+
+1. Restore RDS (and, if needed, the state volume) as **new** resources; never over the live ones.
+   Record a new UUID as the restore instance id in the declaration.
+2. Start the restored target with `QUILLMD_RESTORE_QUARANTINE=1`,
+   `QUILLMD_RESTORE_INSTANCE_ID=<that UUID>` and the independent journal configured (path, journal
+   and checkpoint public keys; the journal file may be read-only for this host). Quarantine answers
+   503 for clinical routes and refuses workers and file cleanup.
+3. Obtain from the independent checkpoint signer, not from the host, an unexpired signed checkpoint
+   of the journal's current head (sequence and head sha256).
+4. **Replay.** A verified administrator runs the replay action at `/console/disposition-execution/`
+   (the only action offered while quarantined) with that checkpoint. It imports a tombstone for
+   every journaled disposition instruction and every journaled hold, each release only after its
+   hold. Restored rows are kept. A hold whose target was created after the restore point is
+   recorded as `target_absent`; a release whose second custodian is not an active administrator in
+   the restored database is recorded as `deferred`, and the hold stays active.
+5. **Check:** `manage.py restore_admission --instance-id <UUID> --custodian <administrator email>
+   --checkpoint <checkpoint file> --expected-triggers <release count> --check-only`. It prints a
+   counts-only report and exits non-zero naming any blocker: `restore_check_failed` (the release's
+   production restore check, including every journaled hold being present or recorded absent),
+   `tombstone_replay_incomplete`, `hold_replay_incomplete`, `release_replay_incomplete`,
+   `journal_target_visible`. The release count for this build is 88 (`len(ops.integrity_contract.GUARDS)`).
+6. **Admit:** the same command without `--check-only` writes the one append-only `RestoreAdmission`
+   record for that instance (the database refuses its update, deletion or truncation, and refuses a
+   report it can disprove). If the journal grew after the replay, for example a new hold, replay
+   again with a fresh checkpoint first.
+7. **Lift quarantine:** set `QUILLMD_RESTORE_QUARANTINE=0` and **keep**
+   `QUILLMD_RESTORE_INSTANCE_ID` unchanged. The application lifts quarantine only while a
+   `RestoreAdmission` exists for that instance id; the flag alone does not. Removing the instance id
+   as well also removes the quarantine, because nothing else identifies the database as restored:
+   never remove it from a restored target.
+8. Record the instance id, the admission record id, its `report_sha256`, and the journal sequence and
+   head in the declaration.
+
+Limits: a hold recorded while no journal was configured exists only in the database that recorded
+it (it is journaled when it is released); a target without a configured, verifiable journal cannot
+be admitted and stays quarantined; the `production_restore_check.py` drill tool does not read the
+journal, so the journaled-hold check runs through `restore_admission` on the target.
 
 ### Code rollback onto a newer schema (image rollback without a schema rollback)
 

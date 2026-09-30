@@ -53,7 +53,7 @@ class ExecuteForm(CheckpointForm):
 
 
 class ReplayForm(CheckpointForm):
-    confirmed = forms.BooleanField(label='Import suppression instructions into this quarantined target. Keep restored content and quarantine in place.')
+    confirmed = forms.BooleanField(label='Import suppression instructions and preservation holds into this quarantined target. Keep restored content and quarantine in place.')
 
 
 @require_http_methods(['GET', 'POST'])
@@ -93,7 +93,8 @@ def page(request):
                 message = 'The approved empty draft is deleted locally. Its retained history remains.'
             else:
                 result = x.replay(request.user, values['checkpoint'])
-                message = f"{result['tombstones']} suppression instructions verified. Restored content and quarantine remain."
+                message = (f"{result['tombstones']} suppression instructions and {result['holds']} preservation holds "
+                           "verified. Restored content and quarantine remain; admission is a separate recorded step.")
             messages.success(request, message)
             return redirect('disposition_execution')
         except ObjectDoesNotExist:

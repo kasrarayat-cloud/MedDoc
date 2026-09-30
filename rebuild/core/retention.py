@@ -4,6 +4,11 @@ No retention period, legal authority or purge permission is inferred here. The
 database captures prior row bodies. File cleanup serializes with hold creation;
 unattributed files are preserved while any hold is active. No patient text goes
 to ordinary audit rows or API responses.
+
+When the independent journal is configured, every hold and release is signed and
+fsynced there BEFORE its database row commits. A journaled hold whose database
+commit failed is treated as active by file cleanup and disposition, as a pending
+disposition instruction is, and a quarantined restore imports it (replay_journal_holds).
 """
 import hashlib
 import logging
@@ -17,7 +22,7 @@ from django.db import DatabaseError, connection, transaction
 from django.db.models import Q
 
 from .models import (AuditEvent, Department, Encounter, Organization, Patient, PreservedFile, PreservedRecord, RetentionHold,
-                     RetentionHoldRelease, User)
+                     RetentionHoldRelease, RetentionHoldReplay, User)
 from .security import audit, private_path
 
 LOCK_KEY=716849203517
@@ -99,7 +104,16 @@ def create_hold(actor,scope,target,authority,request_key):
               and all(getattr(existing,name+'_id')==getattr(fields.get(name),'pk',None) for name in SCOPES))
         if not same:raise ValidationError('Preservation request key was already used for another instruction.')
         return existing
-    hold=RetentionHold.objects.create(scope=scope,authority_sha256=authority,created_by=actor,request_key=key,**fields)
+    hold_id=uuid.uuid4()
+    if journal_configured():
+        # Signed and fsynced before the row below commits. A failed commit leaves a journal-only hold that cleanup and
+        # disposition treat as active; this retry (same request key) records the row under the journaled id.
+        from . import disposition_journal as journal
+        entry=journal.append_hold({'id':str(hold_id),'scope':scope,
+            'target_id':None if scope=='global' else str(fields[scope].pk),'authority_sha256':authority,
+            'request_key':str(key),'created_by':str(actor.pk)})
+        hold_id=uuid.UUID(entry['body']['hold']['id'])
+    hold=RetentionHold.objects.create(id=hold_id,scope=scope,authority_sha256=authority,created_by=actor,request_key=key,**fields)
     audit(actor,'retention.hold_created',hold.pk,scope=scope,authority_sha256=authority)
     return hold
 
@@ -116,9 +130,28 @@ def release_hold(actor,hold_id,authority):
         if existing.created_by_id!=actor.pk or existing.authority_sha256!=authority:
             raise ValidationError('This preservation instruction was already released with other evidence.')
         return existing
-    row=RetentionHoldRelease.objects.create(hold=hold,authority_sha256=authority,created_by=actor)
+    release_id=uuid.uuid4()
+    if journal_configured():
+        # Always after its hold: a hold recorded before the journal was configured is journaled first. Until the row
+        # below commits, the database hold stays active (the conservative side of a failed commit).
+        from . import disposition_journal as journal
+        entry=journal.append_release({'id':str(release_id),'hold_id':str(hold.pk),'authority_sha256':authority,
+                                      'created_by':str(actor.pk)},hold_record(hold))
+        release_id=uuid.UUID(entry['body']['release']['id'])
+    row=RetentionHoldRelease.objects.create(id=release_id,hold=hold,authority_sha256=authority,created_by=actor)
     audit(actor,'retention.hold_released',hold.pk,authority_sha256=authority)
     return row
+
+
+def journal_configured():
+    return bool(getattr(settings,'DISPOSITION_JOURNAL_PATH',''))
+
+
+def hold_record(hold):
+    """A database hold as its journal record."""
+    target=None if hold.scope=='global' else getattr(hold,hold.scope+'_id')
+    return {'id':str(hold.pk),'scope':hold.scope,'target_id':None if target is None else str(target),
+            'authority_sha256':hold.authority_sha256,'request_key':str(hold.request_key),'created_by':str(hold.created_by_id)}
 
 
 def scoped_holds(*,encounter_id=None,department_id=None):
@@ -141,6 +174,37 @@ def scoped_holds(*,encounter_id=None,department_id=None):
 
 def active_holds(**scope):
     return scoped_holds(**scope).filter(release__isnull=True)
+
+
+def journal_hold_ids(*,encounter_id=None,department_id=None):
+    """Journaled hold ids in the same scope scoped_holds uses, released or not, including a hold whose database commit
+    failed after its journal append. Empty when no journal is configured; an unreadable configured journal raises.
+    Unknown ownership (an unparseable id, or a row absent from this database) matches every hold, as there."""
+    from . import disposition_journal as journal
+    holds=[record['hold'] for record in journal.journaled_holds().values()]
+    if not holds:return set()
+    every={hold['id'] for hold in holds}
+    if encounter_id:
+        try:encounter_id=uuid.UUID(str(encounter_id))
+        except (ValueError,TypeError,AttributeError):return every
+        row=Encounter.objects.filter(pk=encounter_id).values('department_id','patient_id','department__organization_id').first()
+        if row is None:return every
+        keys={('global',None),('organization',str(row['department__organization_id'])),('department',str(row['department_id'])),
+              ('patient',str(row['patient_id'])),('encounter',str(encounter_id))}
+        return {hold['id'] for hold in holds if (hold['scope'],hold['target_id']) in keys}
+    if department_id:
+        try:department_id=uuid.UUID(str(department_id))
+        except (ValueError,TypeError,AttributeError):return every
+        org=Department.objects.filter(pk=department_id).values_list('organization_id',flat=True).first()
+        if org is None:return every
+        keys={('global',None),('organization',str(org)),('department',str(department_id))}
+        def within(hold):
+            if (hold['scope'],hold['target_id']) in keys:return True
+            if hold['scope'] not in ('patient','encounter'):return False
+            owner=SCOPES[hold['scope']].objects.filter(pk=hold['target_id']).values_list('department_id',flat=True).first()
+            return owner is None or owner==department_id
+        return {hold['id'] for hold in holds if within(hold)}
+    return every
 
 
 @transaction.atomic
@@ -212,6 +276,12 @@ def _cleanup_file(path,*,encounter_id=None,department_id=None):
             except (ValueError,TypeError,AttributeError):exempt=[]
     hold_ids=set(str(pk) for pk in scoped_holds(encounter_id=encounter_id,department_id=department_id)
                  .exclude(pk__in=exempt).values_list('pk',flat=True))
+    # A journaled hold counts even when its database commit failed. An unreadable configured journal keeps the bytes.
+    try:journaled=journal_hold_ids(encounter_id=encounter_id,department_id=department_id)
+    except ValidationError:
+        logging.getLogger(__name__).error('Private cleanup deferred: the independent preservation journal is unavailable.')
+        return False
+    hold_ids.update(journaled-{str(pk) for pk in exempt})
     # A prior immutable row is a durable file reference even when the current row
     # has changed scope or points at a replacement file.
     archives=PreservedRecord.objects.filter(
@@ -236,3 +306,97 @@ def _cleanup_file(path,*,encounter_id=None,department_id=None):
     existed=validated.is_file()
     validated.unlink(missing_ok=True)
     return existed
+
+
+REPLAY_CONFLICT='The restored preservation record conflicts with the independent journal.'
+
+
+def _hold_target_exists(hold):
+    return hold['scope']=='global' or SCOPES[hold['scope']].objects.filter(pk=hold['target_id']).exists()
+
+
+def _hold_matches(row,hold):
+    """Everything but the custodian, which replay_journal_holds checks against its marker."""
+    return {k:v for k,v in hold_record(row).items() if k!='created_by'}=={k:v for k,v in hold.items() if k!='created_by'}
+
+
+def _replay_marker(actor,event,record_id,hold_id,outcome,entry,digest):
+    return RetentionHoldReplay.objects.create(record_id=record_id,hold_id=hold_id,event=event,outcome=outcome,
+                                              journal_entry=entry,entry_sha256=digest,created_by=actor)
+
+
+def _replay_hold(actor,hold,entry):
+    from . import disposition_policy as p
+    digest=p.digest(entry);row=RetentionHold.objects.filter(pk=hold['id']).first()
+    marker=RetentionHoldReplay.objects.filter(entry_sha256=digest).first()
+    if marker:
+        # Idempotent: an earlier replay into this database recorded it; it must still hold.
+        consistent=(row is not None and _hold_matches(row,hold)) if marker.outcome in ('imported','present') else (
+            marker.outcome=='target_absent' and row is None and not _hold_target_exists(hold))
+        if not consistent or str(marker.record_id)!=hold['id']:raise ValidationError(REPLAY_CONFLICT)
+        return marker.outcome
+    if row is not None:
+        if not _hold_matches(row,hold) or str(row.created_by_id)!=hold['created_by']:raise ValidationError(REPLAY_CONFLICT)
+        _replay_marker(actor,'hold',hold['id'],hold['id'],'present',entry,digest)
+        return 'present'
+    if not _hold_target_exists(hold):
+        # The target was created after this backup: nothing here to preserve. The marker proves the absence.
+        _replay_marker(actor,'hold',hold['id'],hold['id'],'target_absent',entry,digest)
+        return 'target_absent'
+    # The journaled custodian when that account exists here (the 0032 guard accepts it inactive, marker first);
+    # otherwise the replaying custodian, which the marker's verbatim entry records beside the original.
+    creator=hold['created_by'] if User.objects.filter(pk=hold['created_by']).exists() else actor.pk
+    _replay_marker(actor,'hold',hold['id'],hold['id'],'imported',entry,digest)
+    fields={} if hold['scope']=='global' else {hold['scope']+'_id':hold['target_id']}
+    RetentionHold.objects.create(id=hold['id'],scope=hold['scope'],authority_sha256=hold['authority_sha256'],
+                                 created_by_id=creator,request_key=hold['request_key'],**fields)
+    audit(actor,'retention.hold_replayed',hold['id'],scope=hold['scope'],authority_sha256=hold['authority_sha256'])
+    return 'imported'
+
+
+def _replay_release(actor,hold,hold_outcome,release,entry):
+    from . import disposition_policy as p
+    digest=p.digest(entry);row=RetentionHoldRelease.objects.filter(hold_id=hold['id']).first()
+    exact=row is not None and (str(row.pk),row.authority_sha256,str(row.created_by_id))==(
+        release['id'],release['authority_sha256'],release['created_by'])
+    marker=RetentionHoldReplay.objects.filter(entry_sha256=digest).first()
+    if marker:
+        consistent={'imported':exact,'present':exact,'deferred':row is None or exact,
+                    'target_absent':hold_outcome=='target_absent'}.get(marker.outcome,False)
+        if not consistent or str(marker.record_id)!=release['id']:raise ValidationError(REPLAY_CONFLICT)
+        return marker.outcome
+    if hold_outcome=='target_absent':
+        _replay_marker(actor,'release',release['id'],hold['id'],'target_absent',entry,digest)
+        return 'target_absent'
+    if row is not None:
+        if not exact:raise ValidationError(REPLAY_CONFLICT)
+        _replay_marker(actor,'release',release['id'],hold['id'],'present',entry,digest)
+        return 'present'
+    held=RetentionHold.objects.get(pk=hold['id'])
+    releaser=User.objects.filter(pk=release['created_by'],is_active=True,is_staff=True,verified_at__isnull=False).first()
+    if releaser is None or releaser.pk==held.created_by_id:
+        # Ending preservation needs an active second custodian in THIS database. Without one the hold stays active:
+        # the conservative side. A custodian here may release it later through the ordinary two-person path.
+        _replay_marker(actor,'release',release['id'],hold['id'],'deferred',entry,digest)
+        return 'deferred'
+    _replay_marker(actor,'release',release['id'],hold['id'],'imported',entry,digest)
+    RetentionHoldRelease.objects.create(id=release['id'],hold=held,authority_sha256=release['authority_sha256'],created_by=releaser)
+    audit(actor,'retention.release_replayed',hold['id'],authority_sha256=release['authority_sha256'])
+    return 'imported'
+
+
+def replay_journal_holds(actor,records):
+    """Import journaled holds, and each release only after its hold, into a quarantined restored database.
+
+    The caller (disposition_execution.replay) has verified the complete journal against a fresh checkpoint, and holds
+    the scope rows and then the preservation lock. Nothing is deleted; a hold never loses preservation here. Returns
+    counts only."""
+    counts={'holds':0,'holds_imported':0,'holds_present':0,'holds_target_absent':0,
+            'releases':0,'releases_imported':0,'releases_present':0,'releases_deferred':0,'releases_target_absent':0}
+    for record in records.values():
+        outcome=_replay_hold(actor,record['hold'],record['hold_entry'])
+        counts['holds']+=1;counts['holds_'+outcome]+=1
+        if record['release'] is not None:
+            released=_replay_release(actor,record['hold'],outcome,record['release'],record['release_entry'])
+            counts['releases']+=1;counts['releases_'+released]+=1
+    return counts

@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-heading"><div><div class="eyebrow">Retention controls</div><h1>Empty-draft disposition</h1><p>Act on one exactly identified empty draft under a signed prospective policy and distinct custodian review.</p></div><div class="actions"><a class="button secondary" href="{% url 'disposition_review' %}">Review proposals</a><a class="button secondary" href="{% url 'retention_holds' %}">Preservation holds</a></div></div>
 {% if quarantined %}
-<div class="notice"><p><strong>Restore admission unavailable.</strong> Replay imports durable suppression instructions. Restored content and quarantine stay in place. External copies still need reconciliation.</p></div>
+<div class="notice"><p><strong>Replay does not admit this target.</strong> Replay imports durable suppression instructions and preservation holds. Restored content and quarantine stay in place until a restore admission is recorded (<span class="mono">manage.py restore_admission</span>). External copies still need reconciliation.</p></div>
 <section class="section"><div class="section-heading"><h2>Replay the independent journal</h2></div><form method="post" data-submit-once>{% csrf_token %}<input type="hidden" name="action" value="replay">{{ forms.replay.as_p }}<button type="submit">Replay suppression instructions</button></form></section>
 {% elif not enabled %}
 <div class="notice"><p><strong>Execution unavailable.</strong> This installation has no enabled disposition workflow. Approved policy authority and independent journal custody must be configured before an empty draft can be considered.</p></div>

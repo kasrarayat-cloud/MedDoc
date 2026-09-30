@@ -62,6 +62,16 @@
       "anchor": null,
       "days": null
     },
+    "restore_admissions": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
+    "retention_hold_replays": {
+      "mode": "unresolved",
+      "anchor": null,
+      "days": null
+    },
     "retention_holds": {
       "mode": "unresolved",
       "anchor": null,

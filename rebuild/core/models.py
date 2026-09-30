@@ -144,6 +144,31 @@ class DispositionCompletion(Entity):
     outcome=models.CharField(max_length=24)
     created_by=models.ForeignKey('User',on_delete=models.PROTECT)
 
+class RetentionHoldReplay(Entity):
+    """The imported-hold marker: one journaled hold or release replayed into a quarantined restored database.
+
+    Scalar identities, like a tombstone's, because the journaled target may be absent from an older backup. The outcome
+    states what this database holds for the entry (present, imported, target_absent, or a deferred release that leaves
+    the hold active). Append-only; the signed entry is kept verbatim and never contains clinical prose.
+    """
+    record_id=models.UUIDField(unique=True)
+    hold_id=models.UUIDField()
+    event=models.CharField(max_length=8)
+    outcome=models.CharField(max_length=16)
+    journal_entry=models.JSONField()
+    entry_sha256=models.CharField(max_length=64,unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
+class RestoreAdmission(Entity):
+    """Append-only admission of one quarantined restored target. Quarantine lifts only against this record."""
+    instance_id=models.UUIDField(unique=True)
+    checkpoint=models.JSONField()
+    journal_sequence=models.PositiveIntegerField()
+    journal_head_sha256=models.CharField(max_length=64)
+    report=models.JSONField()
+    report_sha256=models.CharField(max_length=64)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT)
+
 class ProviderIdentifiers:
     @property
     def legacy_resource_identifier(self):
