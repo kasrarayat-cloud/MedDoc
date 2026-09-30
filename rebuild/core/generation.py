@@ -2879,17 +2879,13 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     # (`labelled_claims`, read against every denial by `v3_denies_labelled`). An unlabelled statement's predicates come
     # from the actor reader (`v3_actors._predicates`), and a verbless denial or the object of 'denies' denies every word
     # it names (`v3_actors._denied`).
-    claim_keys, negated_keys, predicates, labelled_claims, labelled_lines = {}, {}, {}, {}, set()
+    claim_keys, negated_keys, predicates, labelled_claims = {}, {}, {}, {}
     for u in units:
         found = actors['units'][u['id']]
         claim, negated, records = set(found['claim_keys']), set(found['negated_keys']), found['predicates']
         own = parsed[u['id']]
         generic = None if colon[u['id']] and own else V3_GENERIC_LABEL.fullmatch(u['quote'])
         pair = (own[0], own[1]) if colon[u['id']] and own else (generic.group(1), generic.group(2)) if generic else None
-        if pair or own:
-            # a line naming its own topic by a label, printed or not ('Smoker: No.', 'Child protection plan: none.',
-            # 'Examination is normal.'): its denial is of that topic, read by OPPOSED, never a CLASS denial
-            labelled_lines.add(u['id'])
         if pair:
             label_keys = v3_label_keys(pair[0])
             claim |= label_keys | set(found['keys'])
@@ -2938,7 +2934,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'key_index': key_index, 'block_keys': block_keys, 'block_unread': block_unread, 'block_past': block_past,
             'block_identity': block_identity, 'reviewed_references': reviewed_references,
             'claim_keys': claim_keys, 'negated_keys': negated_keys, 'predicates': predicates,
-            'labelled_claims': labelled_claims, 'labelled_lines': labelled_lines, 'dependent_reach': dependent_reach,
+            'labelled_claims': labelled_claims, 'dependent_reach': dependent_reach,
             'elicited_frames': v3_elicited_frames(units), 'field_label_keys': field_label_keys,
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
             'conditional_multisentence': conditional_multisentence, 'conditional_unsafe': conditional_unsafe,
@@ -3330,8 +3326,8 @@ V3_CALENDAR_WORDS = frozenset(('january february march april may june july augus
 
 def v3_without_time(record):
     """A predicate record whose complement leaves out words of time and frequency ('has not smoked in years', 'has not
-    smoked since June' deny smoking itself): compared IN ADDITION to the record as it is (`v3_relation_causes`), so it
-    can only add a hold."""
+    smoked since June' deny smoking itself). OPPOSED compares records in this form: for a complement naming anything but
+    time it opposes whatever the record as it is opposes, and more."""
     from .v3_actors import GENERIC_WORDS
     head, negated, tense, complement, coordinated = record
     return (head, negated, tense,
@@ -3420,8 +3416,7 @@ def v3_floor_index(reading):
             by_key.setdefault(key, set()).add(uid)
     found = {'signature': signature, 'by_key': by_key,
              'bare_cessations': [u for u in reading['units'] if reading['actors'][u['id']]['bare_cessation']],
-             'class_denials': [u for u in reading['units'] if reading['actors'][u['id']]['quantified_denial']
-                               and u['id'] not in reading['labelled_lines']]}
+             'class_denials': [u for u in reading['units'] if reading['actors'][u['id']]['quantified_denial']]}
     reading['_floor_index'] = found
     return found
 
@@ -3461,7 +3456,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             `v3_actors` 'bare_cessation'), selected with it or not.
       OPPOSED SAME TOPIC: any other unit that is not another person's statement (a he/she standing for another person
             included), selected or not, that asserts what this unit denies or denies what it asserts
-            (`v3_opposed_predicates`, also with words of time left out of both complements: 'The patient smokes.' / 'The
+            (`v3_opposed_predicates`, words of time left out of both complements: 'The patient smokes.' / 'The
             patient has not smoked in years.'), or a plain negative or ended labelled value or a verbless denial whose
             topic the other claims ('Smoker: No.' / 'He quit smoking last month.'; 'The patient is subject to MAPPA.' /
             'No MAPPA involvement.'), or a denial of what a labelled line with a positive value asserts
@@ -3478,9 +3473,8 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             was said ('no other medication', 'no new illness') - the answer's own predicate or one of its words ('The
             patient takes no anticoagulants.' / 'takes warfarin'; 'She has had no pain for a month.' / 'presents with
             chest pain'; 'She has never smoked.'), or that re-attributes a statement away from the patient ('Her husband
-            takes warfarin, not her.'), unless it names its own topic by a label (printed or not: 'Smoker: No.', 'Child
-            protection plan: none.'; OPPOSED reads that) or names another printed question and not this one ('No known
-            drug allergies.' beside a Medications answer): only meaning says whether its class covers this answer. A
+            takes warfarin, not her.'), unless it names another printed question and not this one ('No known drug
+            allergies.' beside a Medications answer): only meaning says whether its class covers this answer. A
             quantified denial of another predicate and another thing ('expects no relationship changes' beside 'The
             relationship reporting condition is monitored ...', 'No fever.' beside 'takes warfarin') is not one, and a
             plain 'not' denies its own predicate and is read by OPPOSED. An unread line may be anything, so it holds.
@@ -3492,7 +3486,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     info = reading['actors'].get(uid)
     state = reading['resolved'].get(uid) or {}
     if not info or not info['readable']:
-        return [(unit, 'unread')]
+        return []                   # an over-long answer: 43fcf214's own reader holds it (test: test_v3_notes_floors)
     actors, resolved, units = reading['actors'], reading['resolved'], reading['units']
     causes = []
     matches = reading['named'].get(label, ())
@@ -3539,7 +3533,6 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             continue
         theirs = reading['predicates'][oid]
         if (mine_claim & reading['negated_keys'][oid] or mine_negated & reading['claim_keys'][oid]
-                or any(v3_opposed_predicates(first, second) for first in mine for second in theirs)
                 or any(v3_opposed_predicates(first, v3_without_time(second)) for first in mine_timeless for second in theirs)
                 or v3_denies_labelled(labelled.get(uid), theirs) or v3_denies_labelled(labelled.get(oid), mine)
                 or v3_ends_labelled(labelled.get(uid), found) or v3_ends_labelled(labelled.get(oid), info)

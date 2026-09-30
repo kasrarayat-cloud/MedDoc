@@ -491,6 +491,11 @@ KILLING = (
     ('OPPOSED timeless calendar', 'one:Smoking status',
      'The patient smokes. The patient has not smoked since June.',
      'f', 'The patient smokes.', None),
+    ('OPPOSED the answer denies what another claims', 'one:Smoking status',
+     'The patient denies smoking. The patient smokes ten cigarettes a day.',
+     'f', 'The patient denies smoking.', None),
+    ('OPPOSED the answer denies a labelled value', 'one:Allergy status', 'The patient has no allergies.\nAllergies: penicillin.',
+     'f', 'The patient has no allergies.', None),
     ('OPPOSED verbless denial', 'clinic',
      'Smoker: Yes.\nShe denies smoking.',
      'v3_6', 'Smoker: Yes.', YES),
@@ -565,6 +570,14 @@ CONTROLS = (
      'The patient takes warfarin.', 'The patient takes warfarin.', None),
     ('a plain not denies its own predicate', 'one:Smoking status', 'The patient is a smoker. The patient is not a drinker.',
      'The patient is a smoker.', 'The patient is a smoker.', None),
+    ("the patient's own statement naming another person", 'clinic', 'The patient and her husband smoke. Smoker: Yes.',
+     'Smoker: Yes.', 'Yes', YES),
+    ("another person's cessation hung on its noun", 'one:Presenting complaint',
+     "The patient presents with chest pain. Her husband's cough resolved yesterday.",
+     'The patient presents with chest pain.', 'The patient presents with chest pain.', None),
+    ("another person's cessation as a complement", 'one:Presenting complaint',
+     "The patient presents with chest pain. Her husband's cough is resolved.",
+     'The patient presents with chest pain.', 'The patient presents with chest pain.', None),
     ('a quantified denial of another predicate and thing', 'one:Medications', 'The patient takes warfarin. No fever.',
      'The patient takes warfarin.', 'The patient takes warfarin.', None),
     ("a clause stating the destination's own time", 'prodrome', 'The patient reports intermittent buzzing before the '
@@ -601,7 +614,7 @@ class EveryArm(Floors, SimpleTestCase):
                 self.assert_filled(notes, fields, picks, {key: expected}, choices=choices)
 
     def test_an_unreadable_answer_is_held(self):
-        # A unit longer than the parser reads cannot be read by any floor: held (43fcf214 also holds this one).
+        # A unit longer than the parser reads cannot be read by any floor; 43fcf214's own reader holds it (a pin).
         self.assert_held(LONG, one('Medications'), {'f': [LONG]}, 'f')
 
 

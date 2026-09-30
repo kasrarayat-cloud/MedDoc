@@ -310,9 +310,6 @@ SET_APART_WORDS = frozenset(('other', 'else', 'further', 'additional', 'more', '
 CESSATION_VERBS = frozenset(('stop', 'discontinue', 'cease', 'withdraw', 'quit', 'halt', 'suspend', 'resolve', 'subside',
                              'abate', 'disappear', 'wean'))
 CESSATION_PARTICLES = {'come': 'off', 'give': 'up'}
-#: Their participles as the tagger may leave them unlemmatized ('is resolved', 'was discontinued').
-CESSATION_FORMS = frozenset(('stopped', 'discontinued', 'ceased', 'withdrawn', 'quit', 'halted', 'suspended', 'resolved',
-                             'subsided', 'abated', 'disappeared', 'weaned'))
 #: What makes a statement an intention, plan, need, request or refusal rather than what is so now (the PLAN/intention
 #: floor, for a question that is not a Plan): a future modal, 'going to', one of these words ('needs', 'declines', 'is
 #: due', 'is a candidate for', 'is planned', 'is booked'), or a phrase of pending status ('on hold', 'on the waiting list',
@@ -323,7 +320,6 @@ INTENTION_WORDS = frozenset((
     'advise prefer arrange book offer aim seek defer postpone due candidate eligible keen willing agreeable interested '
     'awaiting pending ready suitable intended planned proposed scheduled booked provisional tentative prospective future'
 ).split())
-DOSING_WORDS = frozenset(('needed', 'required', 'directed', 'prescribed'))
 PENDING_PHRASES = frozenset(('hold', 'list', 'agenda', 'horizon', 'card', 'cards', 'pipeline', 'preparation', 'draft',
                              'discussion', 'consideration', 'review', 'waiting'))
 
@@ -480,8 +476,7 @@ def _floor_reading(words, root, lem=None, txt=None):
     for t in words:
         phrasal = CESSATION_PARTICLES.get(lem[t.i]) if t.pos_ in ('VERB', 'AUX') else None
         particle = [c for c in t.children if c.dep_ in ('prt', 'prep') and _fold(c.text) == phrasal] if phrasal else []
-        if not ((t.pos_ in ('VERB', 'ADJ', 'AUX') and (lem[t.i] in CESSATION_VERBS or txt[t.i] in CESSATION_FORMS))
-                or particle):
+        if not ((t.pos_ in ('VERB', 'ADJ', 'AUX') and lem[t.i] in CESSATION_VERBS) or particle):
             continue
         cessation = True
         for child in t.children:
@@ -535,10 +530,7 @@ def _floor_reading(words, root, lem=None, txt=None):
     heads = [t for t in words if t.head.i == t.i or t.head.i not in inside]
     heads += [c for h in list(heads) for c in h.children if c.dep_ == 'conj' and c.pos_ in ('VERB', 'AUX')]
     clauses = heads + [c for h in heads for c in h.children if c.dep_ in ('xcomp', 'ccomp') and c.i in inside]
-    # A dosing idiom ('She takes ibuprofen as needed.', 'as required', 'as directed') states how a current medicine is
-    # taken, not an intention.
-    dosing = {t.i for t in words if t.dep_ == 'advcl' and txt[t.i] in DOSING_WORDS
-              and [(_fold(c.text), c.dep_) for c in t.children] == [('as', 'mark')]}
+    # (a dosing idiom, 'She takes ibuprofen as needed.', is an adverbial clause, never one of these)
 
     def intended(h):
         if any(c.tag_ == 'MD' and _fold(c.text) in FUTURE_MODALS for c in h.children) or (
@@ -548,7 +540,7 @@ def _floor_reading(words, root, lem=None, txt=None):
                 c.dep_ == 'xcomp' and any(a.dep_ == 'aux' and _fold(a.text) == 'to' for a in c.children)
                 for c in h.children):
             return True                                                                    # 'is going to start'
-        if h.i not in dosing and (lem.get(h.i) in INTENTION_WORDS or txt.get(h.i) in INTENTION_WORDS):
+        if lem.get(h.i) in INTENTION_WORDS or txt.get(h.i) in INTENTION_WORDS:
             return True                                                                    # 'needs', 'is planned'
         for c in h.children:
             if c.dep_ in ('acomp', 'attr', 'oprd') and (_lemma(c) in INTENTION_WORDS or _fold(c.text) in INTENTION_WORDS):
