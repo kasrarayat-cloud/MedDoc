@@ -388,6 +388,10 @@ def _predicates(root):
                 continue
             own = negated or any(child.dep_ == 'neg' or (child.dep_ == 'det' and _fold(child.text) == 'no')
                                  for child in token.children if token is not clause)
+            # 'has no allergies', 'takes no medication': the object's 'no' denies the predicate's claim about it.
+            own = own or any(child.dep_ in ('dobj', 'attr') and any(grand.dep_ == 'det' and _fold(grand.text) == 'no'
+                                                                  for grand in child.children)
+                             for child in token.children)
             chain = [(token, own)]
             contrast = any(child.dep_ == 'cc' and _fold(child.text) in ('but', 'yet') for child in token.children)
             for conj in (child for child in token.children if child.dep_ == 'conj'):

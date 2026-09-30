@@ -239,6 +239,12 @@ class FirstDecisions(Settled, SimpleTestCase):
         self.assert_filled(notes, fields, offered(notes, fields, {'v3_5': ['She has a penicillin allergy.']}),
                            {'v3_5': 'She has a penicillin allergy.'})
         self.assert_held(notes, clinic_form(v3_5='Family history'), {'v3_5': ['She has a penicillin allergy.']}, 'v3_5')
+        # An answer that does not name its question is never its self-reference; nor is one only the literal reader
+        # admits for a field the source-subject reader knows ('medication' is not the Medications subject).
+        notes = U[1] + ' She has no drug reactions. Allergy testing is planned.'
+        self.assert_held(notes, fields, {'v3_5': ['She has no drug reactions.']}, 'v3_5')
+        notes = U[1] + ' The prescribed medication is administered by residence staff.'
+        self.assert_held(notes, fields, {'v3_4': ['The prescribed medication is administered by residence staff.']}, 'v3_4')
         # One general destination sharing the Examination's context is not a form title: the context qualifies.
         cardio = [v3('v3_1', 'Plan', 'long_text', 'Cardiovascular examination'),
                   v3('v3_2', 'Examination', 'long_text', 'Cardiovascular examination')]
@@ -390,6 +396,15 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         fields = clinic_form()
         self.assert_held('Smoker: No.\nHe quit smoking last month.', fields, {'v3_6': ['Smoker: No.']}, 'v3_6',
                          choices=NO)                                                                    # B12
+        # An asserted labelled value and a denial of it; an object's 'no' and the object asserted.
+        text = [v3('f', 'Allergy status', 'long_text')]
+        for notes, selected in (('Allergies: penicillin.\nThe patient is not allergic to penicillin.', 'Allergies: penicillin.'),
+                                ('The patient has no allergies. The patient has a penicillin allergy.',
+                                 'The patient has a penicillin allergy.')):
+            with self.subTest(notes=notes):
+                self.assert_held(notes, text + clinic_form()[4:5], {'v3_5' if selected.startswith('Allergies') else 'f':
+                                                                    [selected]},
+                                 'v3_5' if selected.startswith('Allergies') else 'f')
         # A negation of another topic in the same note is not the same topic (the D30 ordinary shape).
         notes = ('The patient reports stable relationships with family and expects no relationship changes before the '
                  'next report.\n\nThe relationship reporting condition is monitored during weekly supervision visits.'
@@ -496,6 +511,15 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         elicited = notes.split('\n\n')[2]
         self.assert_filled(notes, one, offered(notes, one, {'f': [elicited], 'g': [monitored]}),
                            {'f': elicited, 'g': monitored})
+        # A labelled answer after that report sharing its words is not held by the partner named inside the report.
+        later = 'Support: staff available daily.'
+        record = [v3('h', 'Support', 'long_text', 'Relationships')]
+        self.assert_filled(notes + '\n\n' + later, record, offered(notes + '\n\n' + later, record, {'h': [later]}),
+                           {'h': 'staff available daily.'})
+        # A tensed participle in a label does not make it a question about the past.
+        reported = [v3('v3_1', 'Symptoms reported by the patient', 'long_text')]
+        notes = 'The patient reported headaches last year.'
+        self.assert_held(notes, reported, {'v3_1': [notes]}, 'v3_1')
 
     def test_a_denial_verb_and_a_dependent_line_past_a_plain_value_hold(self):
         fields = clinic_form()

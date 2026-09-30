@@ -3372,32 +3372,37 @@ def v3_bound_by_destination(field, unit, at):
 
 
 def v3_current_state_field(field):
-    """A question about the patient's CURRENT state: a label that is not a history or a plan and carries no tense of its
-    own ('When was the patient last seen ...?', 'Has the patient ...' do; 'Right knee' and 'Right knee pain?' do not).
-    Read only to HOLD a dated past statement (`v3_relation_causes`)."""
+    """A question about the patient's CURRENT state: a label that is not a history or a plan, names no past time and
+    does not open as a question carrying its own tense ('When was the patient last seen ...?', 'Has the patient ...' do;
+    'Right knee' and 'Right knee pain?' do not). Read only to HOLD a dated past statement (`v3_relation_causes`)."""
     label = question_key(field.get('label'))
     if label in GENERAL_NARRATIVE_FIELDS:
         return False
     if re.search(LETTER_BEFORE + r'(?:history|past|previous|prior|ever|when|since|last|date|dated|onset)' + LETTER_AFTER,
                  label, re.I):
         return False
-    return not (FINITE_STATEMENT_V3.search(label) or re.match(
-        r'(?:has|have|had|did|does|do|is|are|was|were|what|which|how|why|where|who)' + LETTER_AFTER, label))
+    return not re.match(r'(?:has|have|had|did|does|do|is|are|was|were|what|which|how|why|where|who)' + LETTER_AFTER, label)
 
 
 def v3_opposed_predicates(first, second):
     """Two predicate records (`v3_actors._predicates`) of opposite polarity about the same thing: the same head word
     (or stem), one negated and the other not, at a time not read as different (the same finite tense, or either with
-    none), with the same complement, or one complement among the other's coordinated alternatives ('on methadone' /
+    none), with the same complement, or the denial's whole complement inside the assertion's ('has no allergies' / 'has a
+    penicillin allergy'), or the assertion's complement among the denial's coordinated alternatives ('on methadone' /
     'not on diazepam or methadone'). A different time ('was not on methadone'), object ('allergic to penicillin' / 'not
-    allergic to latex'), site ('lateral' / 'medial epicondyle') or head ('on' / 'not off') is not opposed."""
-    head, negated, tense, complement, coordinated = first
-    other_head, other_negated, other_tense, other_complement, other_coordinated = second
-    return bool(head & other_head and negated != other_negated
+    allergic to latex'), site ('lateral' / 'medial epicondyle'), a more specific denial ('subject to MAPPA' / 'not subject
+    to MAPPA level 3') or another head ('on' / 'not off') is not opposed."""
+    if first[1]:
+        first, second = second, first
+    head, negated, tense, complement, coordinated = first                          # the assertion
+    other_head, other_negated, other_tense, other_complement, other_coordinated = second    # the denial
+    return bool(head & other_head and other_negated and not negated
                 and (tense is None or other_tense is None or tense == other_tense)
                 and (complement == other_complement
-                     or (complement and other_coordinated and complement <= other_complement)
-                     or (other_complement and coordinated and other_complement <= complement)))
+                     # the denial's whole complement is asserted ('has no allergies' / 'has a penicillin allergy')
+                     or (other_complement and other_complement <= complement)
+                     # the assertion is one of the denial's alternatives ('on methadone' / 'not on diazepam or methadone')
+                     or (complement and other_coordinated and complement <= other_complement)))
 
 
 def v3_relation_causes(reading, unit, label, selected, field_key=None):
