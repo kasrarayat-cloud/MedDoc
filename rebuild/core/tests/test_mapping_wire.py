@@ -31,13 +31,18 @@ class MappingWire(SimpleTestCase):
                     self.assertEqual(expanded['additions'][0]['label'], label)
                     self.assertEqual(Target.model_validate(target).label, label)
                 else:
-                    with self.assertRaises(ValidationError): wire.expand(payload, body)
+                    # An over-long label is ONE invalid change: held with its reason, never truncated, never adopted.
+                    expanded, _ = wire.expand(payload, body)
+                    self.assertEqual(expanded['additions'], [])
+                    self.assertEqual([row['reason'] for row in expanded['rejected']],
+                                     ['Invalid Unicode source span; source text was not truncated.'])
                     with self.assertRaises(ValueError): Target.model_validate(target)
 
     def test_minimum_empty_complete_and_unicode_source_expansion(self):
         payload=self.payload(0,0)
         result,exhausted=wire.expand(payload,wire.fixture(payload))
-        self.assertEqual(result,{'fields':[],'slots':[],'additions':[]});self.assertFalse(exhausted)
+        self.assertEqual({k:result[k] for k in ('fields','slots','additions','rejected')},
+                         {'fields':[],'slots':[],'additions':[],'rejected':[]});self.assertFalse(exhausted)
         payload=self.payload();body=wire.fixture(payload);body['x']=[self.target(payload,1)]
         result,_=wire.expand(payload,body)
         self.assertEqual(result['additions'][0]['label'],'Plan')
@@ -72,6 +77,8 @@ class MappingWire(SimpleTestCase):
             with self.subTest(body=body),self.assertRaises((ValidationError,ValueError)):wire.expand(payload,body)
 
     def test_spans_refuse_foreign_context_wrong_destination_and_invalid_unicode_bounds(self):
+        """⚠️ ONE INVALID CHANGE IS HELD WITH ITS REASON; IT NEVER REFUSES THE REST (M05). Each bad change below comes
+        back in `rejected` beside a valid change that is still expanded; a replacement's field is held `uncertain`."""
         payload=self.payload(2,2);good=wire.fixture(payload)
         target=self.target(payload)
         changes=[]
@@ -80,22 +87,42 @@ class MappingWire(SimpleTestCase):
         # A field label reference cannot be used as an addition or in another field.
         for fid in [-1,1]:
             bad=self.target(payload,0,fid);bad[3]=payload['text_refs'].index([0,4,0]);bad[4:6]=[0,4];changes.append(bad)
+        valid=self.target(payload,1)
         for bad in changes:
-            body=copy.deepcopy(good);body['x']=[bad]
+            body=copy.deepcopy(good);body['x']=[bad,valid]
             if bad[0]>=0:body['f']['k'].remove(bad[0]);body['f']['r']=[bad[0]]
-            with self.subTest(change=bad),self.assertRaises((ValidationError,ValueError)):wire.expand(payload,body)
+            with self.subTest(change=bad):
+                expanded,_=wire.expand(payload,body)
+                self.assertEqual([row['change'] for row in expanded['rejected']],[0])
+                self.assertEqual(expanded['rejected'][0]['wire'],bad)
+                self.assertTrue(expanded['rejected'][0]['reason'])
+                self.assertEqual([a['slot'] for a in expanded['additions']],[payload['slots'][1]['slot']])
+                if bad[0]>=0:
+                    held=next(f for f in expanded['fields'] if f['key']==payload['fields'][bad[0]]['key'])
+                    self.assertEqual((held['verdict'],held['target']),('uncertain',None))
+        # The ENVELOPE still refuses the whole response: a catalog that differs from the bound request.
         payload['text_refs'][0][0]=1
         with self.assertRaises(ValidationError):wire.expand(payload,good)
 
     def test_replacement_ownership_is_complete_and_unique(self):
         payload=self.payload();body=wire.fixture(payload)
         body['f']['k']=[];body['f']['r']=[0]
-        with self.assertRaises(ValidationError):wire.expand(payload,body)
+        # A replace verdict without its change: the field is held uncertain and recorded, nothing else is refused.
+        expanded,_=wire.expand(payload,body)
+        self.assertEqual((expanded['fields'][0]['verdict'],expanded['fields'][0]['target']),('uncertain',None))
+        self.assertEqual([r['reason'] for r in expanded['rejected']],['A replacement verdict lacks its bound change.'])
         body['x']=[self.target(payload,0,0)]
         self.assertEqual(wire.expand(payload,body)[0]['fields'][0]['target']['label'],'Plan')
+        # Two changes for one field: neither owns it uniquely; both are held, the field is held.
         body['x']*=2
-        with self.assertRaises(ValidationError):wire.expand(payload,body)
+        expanded,_=wire.expand(payload,body)
+        self.assertEqual([r['change'] for r in expanded['rejected']],[0,1])
+        self.assertEqual(expanded['fields'][0]['verdict'],'uncertain')
+        # An incomplete option triple is an ENVELOPE violation: the whole response refuses.
         body['x']=[self.target(payload,0,0)+[0]]
+        with self.assertRaises(ValidationError):wire.expand(payload,body)
+        # So is a change naming a field the request does not contain.
+        body['x']=[self.target(payload,0,5)]
         with self.assertRaises(ValidationError):wire.expand(payload,body)
 
     def test_legacy_and_clinical_generation_profiles_are_unchanged(self):

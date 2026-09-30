@@ -73,15 +73,17 @@ def generation_refusal(version):
     in the existing document sandbox and bind its digest to the selected version's template. Never rewrite old
     mappings, warnings, jobs or receipts. Voice transcription does not depend on filled-form export.
     """
+    from documents import DocumentError, inspect_template
+    from . import destination_roles
     if not is_v3_version(version):
         return ''
     if export_refusal(version.template):
         return GENERATION_EXPORT_REFUSAL
-    from documents import DocumentError, inspect_template
     from documents.word_v3 import FLOATING_INITIALS_REFUSAL
     from .security import private_path
     try:
         result = inspect_template(private_path(version.template.original_path), engine=CONTRACT)
+        destination_roles.report(version)
     except (DocumentError, OSError, ValueError, ValidationError):
         return GENERATION_SOURCE_REFUSAL
     if result.get('sha256') != version.template.sha256 or result.get('contract') != CONTRACT:

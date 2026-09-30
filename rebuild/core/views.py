@@ -650,6 +650,13 @@ def v3_add_field(request,t):
     messages.success(request,f'Added "{field["label"]}" ({v3_mapping.KIND_NAMES.get(field["kind"],field["kind"])}) as a manual field in mapping version {version.number}. Confirm the mapping before creating documents.')
     return redirect('template_detail',pk=t.pk)
 
+ROLE_CONFIRM_REFUSAL=('These fields sit on a signing, initials, consent or protected place of the original form, or lack '
+                      "that place's printed authorship or review requirement, so they can never be answered there: ")
+ROLE_SAVE_REFUSAL=('These answers sit on a signing, initials, consent or protected place of the original form, which never '
+                   'takes a typed or generated answer: ')
+LEGACY_ROLE_SAVE_REFUSAL=('These answers were generated from the notes or accepted from a suggestion, but the form prints '
+                          'them as a signature, initials or signer row, which QuillMD never fills from notes: ')
+
 def v3_confirm(request,t):
     """The clinician's statement that every field was checked against the form, recorded with who and when."""
     membership(request.user,t.department,roles=['owner','clinician'])
@@ -666,6 +673,12 @@ def v3_confirm(request,t):
         if missing:raise ValidationError('These fields point at a printed box the form does not have: '+field_list(missing)+' Remove each one and add it again with the right box number.')
         off_box=v3_mapping.checkboxes_off_box(latest.fields)
         if off_box:raise ValidationError('These checkbox fields point at a place that is not a box: '+field_list(off_box)+' Remove each one and add it again on its printed box or checkbox control, or as text.')
+        # ⚠️ READ FROM THE ORIGINAL, NEVER FROM THIS MAPPING: a field on a signing, initials, consent or protected place
+        # (or without the place's printed authorship/review requirement) can never be answered there, whoever put it
+        # there - a removed engine field re-added by hand, a model proposal, or a version stored before this check.
+        from . import destination_roles
+        held=destination_roles.v3_held(latest)
+        if held:raise ValidationError(ROLE_CONFIRM_REFUSAL+field_list([v3_mapping.label_of(f) for f in latest.fields if f['key'] in held])+' Remove each one (only a Signature or Initials field may sit there), then confirm.')
         if latest.confirmed:
             messages.info(request,'This mapping version was already confirmed.')
             return redirect('template_detail',pk=t.pk)
@@ -735,6 +748,15 @@ def encounter_detail(request,pk):
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
     from .tab_review import clinician_identity
+    printed_roles={}
+    if not is_wm and not is_v3 and e.status!='finalized':
+        # Identity is read from each field's PRINTED label (core.destination_roles), as saving and finalization read it.
+        from . import destination_roles
+        try:printed_roles=destination_roles.legacy_roles(e.template_version)
+        except (ValidationError,DocumentError):printed_roles={}
+        from .destination_roles import printed as printed_field
+    else:
+        printed_field=lambda field,roles:field
     editors={str(pk):email for pk,email in User.objects.filter(
         pk__in={row.get('edited_by') for row in rows} - {None}).values_list('pk','email')}
     deciders={str(pk):email for pk,email in User.objects.filter(
@@ -763,7 +785,7 @@ def encounter_detail(request,pk):
         row['accepted_by_me']=str(row.get('accepted_by') or '')==str(request.user.pk)
         # "Leave blank — reviewed" is offered on ordinary forms only: a qualified Word form keeps
         # its own "No answer documented" choice, and a signature keeps the identity rules.
-        row['blank_eligible']=not e.template_version.document_backend and not clinician_identity(row)
+        row['blank_eligible']=not e.template_version.document_backend and not clinician_identity(printed_field(row,printed_roles))
         row['left_blank']=row.get('status')=='left_blank'
         row['blank_by_email']=deciders.get(str((row.get('blank_decision') or {}).get('by') or ''),'')
         # (who gave the answer, from its stored status — the badge below shows the review's, `conflict` until reviewed)
@@ -783,7 +805,7 @@ def encounter_detail(request,pk):
         row['stored_reviewed']=answer.get('reviewed') is True
         row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
         row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
-        row['identity']=clinician_identity(row)
+        row['identity']=clinician_identity(printed_field(row,printed_roles))
         if is_v3:
             # How the page asks for each kind; the stored answer stays its text form (core/v3_mapping.py).
             kind=row.get('kind')
@@ -1100,6 +1122,16 @@ def save_answers(request,pk):
         membership(request.user,e.department,roles=['owner','clinician'])
     answers={};review_errors=[];newly_accepted=[];withdrawn=[];newly_blank=[];withdrawn_blank=[];target_revision=e.revision+1
     previous_answers=dict(e.answers)
+    # The ORIGINAL's destination roles (core.destination_roles), read at most once per save and only when needed: a
+    # legacy field's printed label decides identity and role, never the mapping's edited label.
+    from . import destination_roles
+    role_cache={}
+    def legacy_roles():
+        if 'legacy' not in role_cache:role_cache['legacy']=destination_roles.legacy_roles(e.template_version)
+        return role_cache['legacy']
+    def identity(field):
+        if is_wm or is_v3 or not destination_roles.applies(e.template_version):return clinician_identity(field)
+        return clinician_identity(destination_roles.printed(field,legacy_roles()))
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
     from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
     from . import wm_narrative
@@ -1176,7 +1208,10 @@ def save_answers(request,pk):
         if blank and prior_blank and (value.strip() or request.POST.get('accept_'+key)=='on'):
             blank=False
         if blank:
-            if is_wm or clinician_identity(field):
+            try:identity_row=is_wm or identity(field)
+            except (ValidationError,DocumentError) as exc:
+                return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
+            if identity_row:
                 return document_refusal(request,e,'"'+field['label']+'" cannot be marked "Leave blank — reviewed". Nothing was saved.',400)
             if value.strip() or request.POST.get('accept_'+key)=='on':
                 return document_refusal(request,e,'Choose one decision for "'+field['label']+'": your own answer, the offered suggestion, or leave it blank. Nothing was saved.',400)
@@ -1291,6 +1326,26 @@ def save_answers(request,pk):
                 answers[key].update(status='edited' if value.strip() or origin not in ('conflict','missing') else origin,
                                     blank_history=history)
                 withdrawn_blank.append(key)
+    # ⚠️ A ROLE PLACE NEVER TAKES GENERATED OR ACCEPTED TEXT, read from the ORIGINAL (never from this mapping). A v3
+    # place takes no text at all (the export refuses it, so the page refuses it first); a legacy signature, initials or
+    # signer row keeps the clinician's own typed value (it exports) but never generation's or a suggestion's.
+    if destination_roles.applies(e.template_version) and not is_wm:
+        try:
+            if is_v3:
+                texted=[f for f in e.template_version.fields if (answers[f['key']].get('text') or '').strip()
+                        and f.get('kind') not in v3_mapping.SIGNING_KINDS and not f.get('write_protected')]
+                report=destination_roles.report(e.template_version) if texted else None
+                held=(report or {}).get('violations') or {}
+                refused=[f['label'] for f in texted if f['key'] in held];refusal=ROLE_SAVE_REFUSAL
+            else:
+                generated=[f for f in e.template_version.fields if destination_roles.generated_text(answers[f['key']])]
+                refused=[f['label'] for f in generated if destination_roles.legacy_reason(f,legacy_roles().get(f['key']))]
+                refusal=LEGACY_ROLE_SAVE_REFUSAL
+        except (ValidationError,DocumentError) as exc:
+            return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
+        if refused:
+            return document_refusal(request,e,refusal+field_list(refused)+(' Clear each one: it is completed by hand on the printed form.'
+                                    if is_v3 else ' Clear each one and save; you may then type your own entry.')+' Nothing was saved.',400)
     decisions={}
     if is_wm:
         for requirement in e.template_version.review_requirements:
@@ -1475,7 +1530,23 @@ def finalize(request,pk):
                 # made `fill_template`'s legacy-contract fallback unreachable, because the caller
                 # passed the fresh fields as the mapping and the two were equal by construction.
                 version=e.template_version
-                validate_identity(version.fields,e.answers,request.user)
+                # ⚠️ THE ORIGINAL'S DESTINATION ROLES, read now (core.destination_roles): a role place never exports
+                # generated or accepted text, and identity reads each legacy field's PRINTED label, never an edited one.
+                from . import destination_roles
+                identity_fields=version.fields
+                if destination_roles.applies(version):
+                    if is_v3:
+                        held=destination_roles.v3_held(version)
+                        refused=[f['label'] for f in version.fields if f['key'] in held
+                                 and (e.answers.get(f['key'],{}).get('text') or '').strip()]
+                        if refused:raise ValidationError(ROLE_SAVE_REFUSAL+field_list(refused)+' Clear each one: it is completed by hand on the printed form. Nothing was finalized.')
+                    else:
+                        roles=destination_roles.legacy_roles(version,fresh=True)
+                        refused=[f['label'] for f in version.fields if destination_roles.legacy_reason(f,roles.get(f['key']))
+                                 and destination_roles.generated_text(e.answers.get(f['key']))]
+                        if refused:raise ValidationError(LEGACY_ROLE_SAVE_REFUSAL+field_list(refused)+' Clear each one and save; you may then type your own entry. Nothing was finalized.')
+                        identity_fields=[destination_roles.printed(f,roles) for f in version.fields]
+                validate_identity(identity_fields,e.answers,request.user)
                 # A v3 answer is re-read from its text form (the same reader as saving) and converted per kind: an
                 # option label, a list of labels, a ticked box, table rows. The engine checks every anchor's
                 # fingerprint and refuses a stale one; its message is shown as it is.

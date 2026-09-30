@@ -71,6 +71,12 @@ def process_v3(workspace, request):
         if operation == "effective_values":
             return {"format": "docx", "states": word_v3.effective_values(data, request["mapping"], request["answers"]),
                     "contract": word_v3.CONTRACT, "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == "roles":
+            mapping = request.get("mapping") or []
+            if not isinstance(mapping, list):
+                fail("Invalid mapping.", "invalid_mapping")
+            return {"format": "docx", **word_v3.destination_roles(data, mapping),
+                    "adapter": "word-v3", "sandbox": "landlock+seccomp"}
         if operation == "fill":
             mapping, answers = request["mapping"], request["answers"]
             if not is_v3_mapping(mapping):
@@ -670,17 +676,27 @@ def fill_docx(path, output, document, paragraphs, cells, fields, answers):
         document.save(output)
 
 
+def legacy_roles(fields, mapping):
+    """The legacy default path's destination roles for a STORED mapping, read from a fresh inspection of the original:
+    each field's PRINTED label (the inspected one, never the mapping's edited label) and the role the engine's kind rule
+    gives it there (word_v3.legacy_role_kind: 'signature', 'initials' or ''). The mapping must be this original's."""
+    if not isinstance(mapping, list) or structure(fields) != structure(mapping):
+        fail("The field mapping does not match this original. Reinspect and create a new mapping version.", "mapping_mismatch")
+    return {"legacy_roles": {field["key"]: {"printed_label": field["label"],
+                                            "role": word_v3.legacy_role_kind(field["label"])} for field in fields}}
+
+
 def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
     warnings = []
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare")
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare", "roles")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):
         fail("Manual mapping needs a contract v3 Word form.", "unsupported_format")
     if fmt == "docx":
-        stored = request.get("mapping") if request.get("operation") == "fill" else None
+        stored = request.get("mapping") if request.get("operation") in ("fill", "roles") else None
         try:
             document, paragraphs, cells, fields, notes = docx_inspect(path)
         except DocumentFailure as refusal:
@@ -713,7 +729,7 @@ def process(workspace, request):
     result = {"format": fmt, "fields": fields, "warnings": warnings, "adapter": "python-docx" if fmt == "docx" else "pypdf", "sandbox": "landlock+seccomp"}
     if request["operation"] == "inspect":
         return result
-    if request["operation"] != "fill":
+    if request["operation"] not in ("fill", "roles"):
         fail("Unsupported operation.")
     answers = request["answers"]
     if fmt == "docx" and structure(fields) != structure(request["mapping"]):
@@ -727,6 +743,8 @@ def process(workspace, request):
         if structure(legacy[3]) == structure(request["mapping"]):
             document, paragraphs, cells, fields, _ = legacy
             result["fields"] = fields
+    if request["operation"] == "roles":
+        return legacy_roles(fields, request.get("mapping"))
     validate_mapping(fields, request["mapping"], answers)
     if fmt == "docx":
         fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)

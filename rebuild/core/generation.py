@@ -3214,7 +3214,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         governance=heading_governance(notes,labels)
         index=occurrence_index(notes,labels,units,parsed_units)
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
-    from .tab_review import clinician_identity
+    from .tab_review import clinician_identity, another_signers_line
+    from .destination_roles import ROLE_NOT_GENERATED
     output={}; used_numbered={}
     by_id={unit['id']:unit for unit in units}
     parsed_of={unit['id']:parsed for unit,parsed in zip(units,parsed_units)}
@@ -3299,6 +3300,10 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         if clinician_identity(field):
             output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,
                               'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
+            continue
+        # Another person's signature line ('Signature (participant, dd/mm/yyyy)') is signed by hand, never generated.
+        if another_signers_line(field):
+            output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,'reason':ROLE_NOT_GENERATED}
             continue
         label=question_key(field['label'])
         allowed={}; explicit={}
@@ -3511,11 +3516,15 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     governance=heading_governance(notes,labels,lexical=not word_form,per_sentence=False,
                                   questions=question_labels(fields) if word_form else frozenset())
     index=occurrence_index(notes,labels)
-    from .tab_review import clinician_identity
+    from .tab_review import clinician_identity, another_signers_line
+    from .destination_roles import ROLE_NOT_GENERATED
     for item in selections.fields:
         if clinician_identity(next(f for f in fields if f['key']==item.key)):
             output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,
                               'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
+            continue
+        if another_signers_line(next(f for f in fields if f['key']==item.key)):
+            output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,'reason':ROLE_NOT_GENERATED}
             continue
         if injection:
             output[item.key]={'text':'','status':'conflict','evidence':[],'reviewed':False,'reason':'Instruction-like source text requires manual review.'}; continue
@@ -3731,10 +3740,17 @@ V3_CHECKBOX_REASON = ('Read from the notes but NOT used as an answer: this box i
 
 
 def v3_generation_fields(fields, context_labels=()):
-    """Contract v3: the fields the extractive generation is asked about, and the context labels it reads with."""
+    """Contract v3: the fields the extractive generation is asked about, and the context labels it reads with.
+
+    ⚠️ Any other form: a field core.destination_roles marked (`destination_role`: its PRINTED label reads as a
+    signature, initials or identity row) is never asked; its label stays a context label, exactly as a v3 held field's."""
     from .v3_mapping import is_v3_fields
     if not is_v3_fields(fields):
-        return fields, context_labels, None
+        held = [f for f in fields if f.get('destination_role')]
+        if not held:
+            return fields, context_labels, None
+        return ([f for f in fields if not f.get('destination_role')],
+                list(context_labels) + [f['label'] for f in held], None)
     asked = [f for f in fields if f.get('kind') not in V3_NEVER_GENERATED and not f.get('write_protected')]
     held = [f['label'] for f in fields if f.get('kind') in V3_NEVER_GENERATED or f.get('write_protected')]
     return asked, list(context_labels) + held, fields
@@ -3960,7 +3976,9 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
     if narrative_contract(fields,config):
         return generate_narrative(notes,fields,config,list(requirements or []))
     # Contract v3 only: the provider is asked about the generated kinds, with the others' labels as context labels.
-    # Every other form reaches the unchanged request below with its fields and context labels untouched.
+    # Every other form reaches the unchanged request below with its fields and context labels untouched - except a field
+    # on a role place (core.destination_roles), which is never asked and is answered 'missing' with its reason.
+    role_held=role_records(fields)
     fields,context_labels,v3_fields=v3_generation_fields(fields,context_labels)
     # ⚠️ CONTRACT v3: NOTHING BEFORE THE PROVIDER CALL MAY LEAVE A HOLD STRANDED (R8). A refusal raised here after enqueue
     # held funds (1,001 source units, a limit, rates) ended the job in 'reconciliation' with the hold never released. It
@@ -3973,6 +3991,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
             contract=None if config.get('prompt_version') in TAB_PROMPT_VERSIONS and (v3_fields is None or v3_natural) else 'legacy'
             answers=validate_selections(notes,fields,fixture(notes,fields,context_labels=context_labels,evidence_contract=contract),context_labels=context_labels,evidence_contract=contract)
             if v3_fields is not None:answers=v3_adopted(v3_fields,answers,notes,fields,context_labels)
+            answers.update(role_held)
             return answers,Decimal('0'),{}, {},'synthetic-extractive-fixture','',True
         profile=job_request_profile(config)
         natural=(tab_evidence_contract(fields) or v3_natural) and config.get('prompt_version') in TAB_PROMPT_VERSIONS
@@ -4027,6 +4046,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
         raw={'anthropic_response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels),
              'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
         if v3_fields is not None:raw['v3_fields']=v3_fields
+        if role_held:raw['role_held']=role_held
         if history_targets:raw['history_context_contract']=history.CONTRACT
         return raw,cost,units,recorded,provider,getattr(response,'_request_id',None) or '',False
     response=client.responses.parse(model=config['model'],store=False,service_tier='default',truncation='disabled',max_output_tokens=profile['max_output_tokens'],
@@ -4041,6 +4061,7 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
     raw={'response':response,'notes':notes,'fields':fields,'context_labels':list(context_labels),
          'evidence_contract':TAB_CONTRACT if natural else 'legacy'}
     if v3_fields is not None:raw['v3_fields']=v3_fields
+    if role_held:raw['role_held']=role_held
     return raw,cost,units,cost_rates(r,list_cost,discount),f"openai:{config['model']}",getattr(response,'_request_id',None) or '',False
 
 def validated(result):
@@ -4077,6 +4098,15 @@ def validated(result):
     return result
 
 def v3_result(result,answers):
-    """A live provider result for a v3 mapping gets the same option rule as the fixture; any other form is unchanged."""
+    """A live provider result for a v3 mapping gets the same option rule as the fixture; any other form is unchanged,
+    except that a field held on a role place (never asked) is answered 'missing' with its reason."""
+    if result.get('role_held'):answers={**answers,**result['role_held']}
     if not result.get('v3_fields'):return answers
     return v3_adopted(result['v3_fields'],answers,result['notes'],result['fields'],result.get('context_labels',()))
+
+
+def role_records(fields):
+    """{key: missing record} for every non-v3 field core.destination_roles held (`destination_role`)."""
+    return {f['key']:{'text':'','status':'missing','evidence':[],'reviewed':False,
+                      'reason':str(f['destination_role'].get('reason') or '')}
+            for f in fields if isinstance(f,dict) and isinstance(f.get('destination_role'),dict)}
