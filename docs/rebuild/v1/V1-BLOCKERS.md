@@ -1,6 +1,6 @@
 # V1 blockers — the single list
 
-Last updated 2026-09-29. One list. Each row is a demonstrated blocker to "real patients, invited doctors, US"
+Last updated 2026-09-30. One list. Each row is a demonstrated blocker to "real patients, invited doctors, US"
 with its evidence and what clears it. **E** = engineering in this programme; **O** = owner action;
 **L** = legal representative / counsel; **V** = outside vendor. Items are closed only with evidence.
 
@@ -218,3 +218,28 @@ residual evidenced safe; neither closes a gate here.
 No gate above is closed by this entry: B-M1 still needs the installed cutover and the account agreement; B-G1's
 over-holds are developer-owned; model-assisted mapping stays off. No merge to `main`, deployment, payment,
 purchase or vendor contact occurred.
+
+## 2026-09-30 — close-out milestone, candidate `630b6185` and its documentation descendant
+
+Candidate `v1/release-integration` (draft PR #1291) at `630b6185`: CI six jobs and secrets-scan green. Integrated since
+`debaefd9`: the incident record and dated amendments; the field-relations keyed contract (v2), the remainder-only
+runner and the per-field hold; human-readable account-email domains (install precondition: run
+`account_email_audit` on the target database); the recorded scratch reaper; the tightening-only ordinary-note holds.
+Installed release unchanged: `dedac162`, Sonnet 4.6, synthetic-only, not restarted.
+
+- **B-G1 (useful ordinary notes) stays open.** Default path: 0 unsafe on the retained 14 notes, automatic answers
+  unchanged at 7 of 76; the note tightening removes the four frozen default-path leaks and the wrong-subject exposure,
+  and every structural release that would have raised usefulness was refuted (see V1-DECISIONS 2026-09-30). The
+  model-judged field-relations path, live on its six planned contradiction cases: 0 unsafe of 12 fields, every
+  contradiction flagged by the model and held; it stays off by default and is not qualified by six cases
+  (`sonnet5-campaign/relations-remainder-20260930.md`).
+- **B-W2 (Word v3 mapping) stays open, and the signing/attestation protection is NOT in the candidate.** The
+  mapping-authority branch (`fix/v1-mapping-authority`, 4 rounds, last `6ad0451c`) closed many leak shapes but kept
+  producing new HIGH findings in both directions; it is kept, pushed and unintegrated. The candidate has no
+  place-based signing authority on the model, manual or legacy fill paths (flag-gated for v3 and model assistance;
+  the legacy default path writes by label identity only). Model-assisted mapping stays off.
+- **B-M1** unchanged: served Sonnet 5 is QA-worker evidence only; installed cutover and the account agreement remain.
+- Campaign: $0.112104 of $40.00 over 23 attempts; no open or unknown attempt; model_check passed; mapping failed-1;
+  ordinary_notes failed-3 (its remainder cannot pass after two recorded contract stops).
+
+No gate is closed by this entry. No merge to `main`, deployment, payment, purchase or vendor contact occurred.
