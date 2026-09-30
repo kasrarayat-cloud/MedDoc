@@ -975,7 +975,9 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # batch_jobs delta: billing classification in finish/stop/run_one's handler only.
 # The relations-contract-v2 addendum (fix/v1-relations-contract): parse_part reads an ordinary part through
 # v3_field_relations.parse (the keyed answer); the request, its price and every other path are unchanged.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114830bae5f58c4561746694987fdd88cdd381c0', 'core/batch_jobs.py': '17623922c4281d303374aef30d2de0898d4816cae602b6fe055cf582e636ad58'}
+# The settlement-guard addendum (fix/v1-settlement-worker): resolve_view and recover_recorded pass allowed_states to
+# settle(); with that keyword removed both are AST-identical to 17623922, and run_one (the send boundary) is unchanged.
+BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114830bae5f58c4561746694987fdd88cdd381c0', 'core/batch_jobs.py': '08669b8c5b287f0898bfe2b45627934a00055d166a8ad64b371b24978ca490b8'}
 
 # Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
 # quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
