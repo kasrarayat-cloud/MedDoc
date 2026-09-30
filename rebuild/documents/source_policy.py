@@ -6,6 +6,12 @@ This module does not choose answers or change an existing stored mapping.
 import re
 
 
+#: The persons a printed author role names ('Completed by the clinician:'). Also read by word_v3.signing_place: a person
+#: before a bare 'sign' ('Nurse sign') names who signs there.
+ROLE_PERSONS = (r'(?:clinicians?|doctors?|physicians?|nurses?|supervisors?|parents?|guardians?|carers?|caregivers?|'
+                r'witnesses?|employers?|managers?|representatives?)')
+
+
 def _source(slot, text):
     if __package__:
         from .word_v3 import fingerprint
@@ -39,8 +45,7 @@ def section_sources(detector):
             elif role and role[1].casefold() in ('example', 'instance'):
                 # Capitalization does not turn an explanatory marker into a role.
                 pass
-            elif (role and re.search(r'\b(?:clinicians?|doctors?|physicians?|nurses?|supervisors?|parents?|guardians?|'
-                                      r'carers?|caregivers?|witnesses?|employers?|managers?|representatives?)\b', role[1], re.I)) or \
+            elif (role and re.search(r'\b' + ROLE_PERSONS + r'\b', role[1], re.I)) or \
                     (role and (re.fullmatch(r'[A-Z][A-Z /&-]{1,20}', role[1]) or
                                re.match(r'^(?:to be )?completed by\b', text, re.I))) or \
                     detector.is_heading(root.el):

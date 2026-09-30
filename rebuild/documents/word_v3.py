@@ -1288,14 +1288,22 @@ DATE_LABEL = re.compile(r"\b(?:date|dob|d\.o\.b|born)\b|mm/dd|dd/mm|yyyy|\bD[DT]
 #: the signing reading from the whole label, so 'Signature and date: ____', 'Patient signature / date' and 'Sign & date'
 #: became DATE fields and the export wrote 'Dr Example 30/09/2026' in the signing place. Only the two joined by 'and',
 #: '&', '+' or '/' - 'Signature date', 'Date of signature' and 'Date signed' stay date questions.
-_JOIN = r"(?:\band\b|&|\+|/)"
+#: ⚠️ REFUTATION ROUND 2 (RR1-02 / RR3-01, HIGH): a comma, a dash or 'with' joins them just as well - 'Signature, date',
+#: 'Signature - date', 'Signature – date', 'Signed by (name, date)', 'Print name, sign and date', 'Patient to sign and
+#: date' and 'Signed (mother, DOB)' were DATE fields, and generation wrote 'Dr Example 30/09/2026' into the signing place.
+#: A time or a date of birth printed with the signature is the same place. 'sign and date' is read wherever it stands.
+_JOIN = r"(?:\band\b|&|\+|/|,|\bwith\b|[-\u2010-\u2015])"
+_PAIR_DATE = r"(?:dated?|time|dob|d\.o\.b)\b"
+#: The words between the two may not be a date or time themselves: 'Signature date/time' is the compound date question.
+_PAIR_GAP = r"(?:(?!\b(?:dated?|time|dob)\b)[^.;:?])*?"
 SIGNATURE_DATE_PAIR = re.compile(
-    r"\b(?:(?:counter|co)?signed|signatures?)\b[^.;:?]*?" + _JOIN + r"\s*dated?\b"
-    r"|^\s*(?:please\s+)?sign\s*" + _JOIN + r"\s*dated?\b"
-    r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*(?:sign(?:ed|atures?)?|(?:counter|co)signed)\b", re.I)
+    r"\b(?:(?:counter|co)?signed|signatures?)\b" + _PAIR_GAP + _JOIN + r"\s*" + _PAIR_DATE +
+    r"|\bsign\s*" + _JOIN + r"\s*" + _PAIR_DATE +
+    r"|\b" + _PAIR_DATE + _PAIR_GAP + _JOIN +
+    r"\s*(?:sign(?:ed|atures?)?(?=\s*(?:$|[^\w\s]))|signed\b|signatures?\b|(?:counter|co)signed\b)", re.I)
 INITIALS_DATE_PAIR = re.compile(
-    r"\binitials\b[^.;:?]*?" + _JOIN + r"\s*dated?\b|\binitial\s*" + _JOIN + r"\s*dated?\b"
-    r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*initials?\b", re.I)
+    r"\binitials\b" + _PAIR_GAP + _JOIN + r"\s*" + _PAIR_DATE + r"|\binitial\s*" + _JOIN + r"\s*" + _PAIR_DATE +
+    r"|\b" + _PAIR_DATE + _PAIR_GAP + _JOIN + r"\s*(?:initials\b|initial(?=\s*(?:$|[^\w\s])))", re.I)
 TIME_LABEL = re.compile(r"\btime\b|hh:mm|\(24.?h", re.I)
 LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|notes?|summary|history|findings|plan|narrative|reason)\b", re.I)
 HEADING_STYLE = re.compile(r"^(?:heading|title|subtitle|toc)", re.I)
@@ -1881,6 +1889,14 @@ class Detector:
 
     def kind_for(self, label: str) -> str:
         label = re.sub(r"\s+", " ", label or "")
+        # ⚠️ REFUTATION ROUND 2 (RR1-11, RR3-02): the kind rule and the signing-place reader disagreed - 'Sign below',
+        # 'Sign and print name', 'Countersignature' and 'Nurse sign' were places to the reader but TEXT to the kind
+        # rule, so on contract v3 they were ordinary answers with no role and generation filled them. A label the ONE
+        # reader reads as a signing place is typed as that place; the kind rule may still type more labels signature/
+        # initials (a checklist state, the adjective 'initial') - never generated, and not a role.
+        place = signing_place(label)
+        if place:
+            return place
         if SIGNATURE_DATE_PAIR.search(label):
             return "signature"
         if INITIALS_DATE_PAIR.search(label):
@@ -4798,25 +4814,6 @@ class Detector:
             return True
         return SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
 
-    def question_box_role_source(self, table):
-        """(printed question, section) over a one-cell box, read for the box's DESTINATION ROLE only (destination_roles).
-
-        Unlike rule_question_boxes' reading, a question paragraph holding a line break, a drawing or a field is still
-        read, and so is a header or footer box: those are never mapped by the engine (so nothing here becomes a label),
-        but a signing box printed that way is still a signing box. At most two empty paragraphs are skipped."""
-        node, skipped = table.el.getprevious(), 0
-        while node is not None and node.tag == q("w:p"):
-            raw = re.sub(r"\s+", " ", self.text(node)).strip()
-            if raw:
-                slot = self.index.by_el.get(id(node))
-                section = self.question_box_context(slot)[0] if slot is not None and slot.parent is None else ""
-                return raw, section
-            skipped += 1
-            if skipped > 2:
-                break
-            node = node.getprevious()
-        return "", ""
-
     def previous_question_source(self, question, raw, context):
         """Resolve only the immediately preceding, already owned question box.
 
@@ -5973,8 +5970,13 @@ class _PlaceReader:
     def touches(self, place, role):
         pid, s, e = place
         rid, rs, re_ = role["place"], role["start"], role["end"]
-        if any(pid == x or pid.startswith(x + "/") for x in role.get("except") or ()):
-            return False
+        for x in role.get("except") or ():
+            # An excepted place: a whole slot (and what it holds), or [paragraph, start, end] - a line segment of it.
+            if isinstance(x, (list, tuple)):
+                if pid == x[0] and s is not None and x[1] <= s and e <= x[2]:
+                    return False
+            elif pid == x or pid.startswith(x + "/"):
+                return False
         if pid == rid:
             if rs is None or s is None:
                 return True
@@ -6027,6 +6029,63 @@ def _writing_line(text) -> bool:
     return len(visible) >= 3 and re.fullmatch(r"[_.\u2026\u2025\u00b7\-\u2013\u2014]+", visible) is not None
 
 
+#: A printed answer blank inside a paragraph's text (an underscore rule, leader dots or an ellipsis run).
+_BLANK_RUN = re.compile(r"_{3,}|\.{4,}|\u2026{2,}")
+_ANSWERABLE_KINDS = frozenset(("text", "long_text", "date", "time"))
+
+
+def _caption_text(text) -> bool:
+    """Printed words that end as a caption ('Name:', 'Presenting complaint:'): a label naming its own question."""
+    text = (text or "").strip()
+    return len(text) > 1 and text[-1] in ":\uff1a" and re.search(r"[^\W\d_]", text) is not None
+
+
+def _block_neighbour(detector, el, step):
+    """The nearest printed block before (step -1) or after (step +1) an element in its container: a paragraph with
+    text or a drawing, or a table. Empty paragraphs and markup between blocks (bookmarks, permissions, proofing marks)
+    are skipped however many there are; a block content control or custom XML element is read through, in and out.
+    ⚠️ Refutation round 2 (RR1-07): the box reading stopped at a bookmark, at a question inside a block content control
+    and after two empty paragraphs, and it never read a box nested in a layout cell - each hid a signing box."""
+    containers = (q("w:sdtContent"), q("w:customXml"))
+
+    def flat(node):
+        kids = list(node) if step > 0 else list(reversed(node))
+        for kid in kids:
+            if kid.tag in (q("w:p"), q("w:tbl")):
+                yield kid
+            elif kid.tag == q("w:sdt"):
+                content = kid.find(q("w:sdtContent"))
+                if content is not None:
+                    yield from flat(content)
+            elif kid.tag == q("w:customXml"):
+                yield from flat(kid)
+
+    def stream(node):
+        while node is not None:
+            sibling = node.getnext() if step > 0 else node.getprevious()
+            while sibling is not None:
+                if sibling.tag in (q("w:p"), q("w:tbl")):
+                    yield sibling
+                elif sibling.tag == q("w:sdt"):
+                    content = sibling.find(q("w:sdtContent"))
+                    if content is not None:
+                        yield from flat(content)
+                elif sibling.tag == q("w:customXml"):
+                    yield from flat(sibling)
+                sibling = sibling.getnext() if step > 0 else sibling.getprevious()
+            parent = node.getparent()
+            if parent is None or parent.tag not in containers:
+                return
+            node = parent.getparent() if parent.tag == q("w:sdtContent") else parent
+
+    for block in stream(el):
+        if block.tag == q("w:tbl"):
+            return detector.index.by_el.get(id(block))
+        if detector.text(block).strip() or any(x.tag in (q("w:drawing"), q("w:pict"), q("w:object")) for x in block.iter()):
+            return detector.index.by_el.get(id(block))
+    return None
+
+
 def _role_reading(package):
     """(roles, the engine's own option groups as box keys - the boxes one engine choice area answers together)."""
     detector = Detector(package)
@@ -6068,6 +6127,37 @@ def _role_reading(package):
             low, high = segment(slot.parent.id, inner[0], inner[1], key)
             roles.append(_role(cls, source, slot.parent.id, low, high, reason))
 
+    def captioned(area, field):
+        # The area prints its OWN caption: 'Label:' on its line right before its blank (after the engine area before
+        # it), or a caption paragraph ending with a colon that the engine read its label from.
+        target = field["locator"]["target"]
+        if target.get("type") == "span":
+            pid, start, _ = _extent(reader, field)[0]
+            pslot = index.by_id.get(pid)
+            if start is None or pslot is None or pslot.kind != "p":
+                return False
+            low = max([b for (a, b), key in occupied.get(pid, []) if key != field["key"] and b <= start], default=0)
+            return _caption_text(reader.text(pslot)[0][low:start])
+        return area.label_slot is not None and _caption_text(reader.text(area.label_slot)[0])
+
+    by_paragraph = {}
+    for area, field in zip(areas, engine):
+        by_paragraph.setdefault(_place_id(field["locator"]["part"], field["locator"]["slot"]), []).append((area, field))
+
+    def writing_areas(pslot):
+        # The answerable engine areas of a paragraph that print no caption of their own (a writing line's blank).
+        return [(area, field) for area, field in by_paragraph.get(pslot.id, [])
+                if field["kind"] in _ANSWERABLE_KINDS and not captioned(area, field)]
+
+    def writing_place(slot):
+        return slot is not None and slot.kind == "p" and bool(writing_areas(slot) or _writing_line(reader.text(slot)[0]))
+
+    def plain_caption(slot):
+        # A paragraph printing words and no blank of its own, and no heading: the caption of what is written under it.
+        text = reader.text(slot)[0] if slot is not None and slot.kind == "p" else ""
+        return bool(text.strip()) and not _BLANK_RUN.search(text) and not detector.is_heading(slot.el) \
+            and not _writing_line(text)
+
     signing = ROLE_REFUSALS[ROLE_SIGNING]
     for area, field in zip(areas, engine):
         places = reader.of(field)
@@ -6100,24 +6190,69 @@ def _role_reading(package):
                 roles.append(_role(ROLE_SIGNING, "signing_caption", area.label_slot.id, None, None, signing))
     for region in sorted(detector.protected_regions):
         roles.append(_role(ROLE_PROTECTED, "protected_region", region, None, None, ROLE_REGION))
-    for table in index.roots:
+    for table in [x for x in index.slots if x.kind == "tbl"]:
         # A one-cell box whose printed question or section reads as signing or consent is a signing box, whatever it
-        # prints. The answer areas the engine maps INSIDE it (a frame holding 'Presenting complaint: ____') are excepted:
-        # each carries its own role, and the rest of the box stays the box's. A box the engine maps AS an answer is one
-        # its own (broader) signing reading let through, so it is no signing box.
-        cells = [c for c in table.children if c.kind == "tc"] if table.kind == "tbl" else []
+        # prints - in the body, a header or footer, or nested in a layout cell. A box the engine maps AS an answer is
+        # one its own signing reading let through, so it is no signing box.
+        # ⚠️ Refutation round 2 (RR1-01, HIGH): EVERY engine area inside a signing box was excepted from it, so the
+        # box's own writing line ('______', labelled 'Answer'), 'Dr ______ (consultant)' and the blank before 'Date:'
+        # were answered and exported in the consultant's box. Only an ANSWER AREA WITH ITS OWN CAPTION ('Presenting
+        # complaint: ____' in a frame of questions, R2-01) is excepted, by its line segment; a tick box, an unlabelled
+        # line or a title before a blank stays the box's.
+        cells = [c for c in table.children if c.kind == "tc"]
         if len(cells) != 1 or len(table_rows_of(table.el)) != 1:
             continue
         cell = cells[0]
         if cell.id in engine_places:
             continue
-        question, section = detector.question_box_role_source(table)
-        if signing_box_reading(question) or signing_box_reading(section):
-            role = _role(ROLE_SIGNING, "question_box_signing", cell.id, None, None, ROLE_SIGNING_BOX)
-            inside = sorted(pid for pid in engine_places if pid.startswith(cell.id + "/"))
-            if inside:
-                role["except"] = inside
-            roles.append(role)
+        question, section = "", ""
+        source = _block_neighbour(detector, table.el, -1)
+        if source is not None and source.kind == "p":
+            question = re.sub(r"\s+", " ", detector.text(source.el)).strip()
+            root = source
+            while root.parent is not None:
+                root = root.parent
+            section = detector.question_box_context(root)[0]
+        if not (signing_box_reading(question) or signing_box_reading(section)):
+            continue
+        role = _role(ROLE_SIGNING, "question_box_signing", cell.id, None, None, ROLE_SIGNING_BOX)
+        excepted = []
+        for area, field in zip(areas, engine):
+            if not _place_id(field["locator"]["part"], field["locator"]["slot"]).startswith(cell.id + "/") \
+                    or field["kind"] not in _ANSWERABLE_KINDS or not captioned(area, field):
+                continue
+            if area.label_slot is not None and not area.label_slot.id.startswith(cell.id + "/"):
+                continue
+            for pid, start, end in _extent(reader, field):
+                if not pid.startswith(cell.id + "/"):
+                    continue
+                excepted.append([pid, *segment(pid, start, end, field["key"])] if start is not None else pid)
+        if excepted:
+            role["except"] = excepted
+        roles.append(role)
+    for caption in [x for x in index.slots if x.kind == "p"]:
+        # ⚠️ Refutation round 2 (RR1-06): a signing caption owns the writing place printed with it - the nearest printed
+        # paragraph under it (however many empty paragraphs between), and the one above it when nothing is written
+        # under it ('____' over 'Consultant signature') or when that line is no other caption's (a heading above it).
+        # A blank there with its own caption ('Date: ____') is its own question; the rest of the line is the caption's
+        # ('____ (use black ink)', 'Dr ____', the blank before 'Date:').
+        text = reader.text(caption)[0]
+        if not text.strip() or _BLANK_RUN.search(text) or not signing_place(text):
+            continue
+        if any(field["kind"] not in SIGNING_KINDS for _, field in by_paragraph.get(caption.id, [])):
+            continue
+        below, above = _block_neighbour(detector, caption.el, 1), _block_neighbour(detector, caption.el, -1)
+        governed = [below] if writing_place(below) else []
+        if writing_place(above) and (not governed or not plain_caption(_block_neighbour(detector, above.el, -1))):
+            governed.append(above)
+        for line in governed:
+            owned = writing_areas(line)
+            for _, field in owned:
+                pid, start, end = _extent(reader, field)[0]
+                low, high = segment(pid, start, end, field["key"]) if start is not None else (None, None)
+                roles.append(_role(ROLE_SIGNING, "signing_line", pid, low, high, signing))
+            if not owned:
+                roles.append(_role(ROLE_SIGNING, "signing_line", line.id, None, None, signing))
     for slot in index.slots:
         if slot.kind == "ff" and ff_text_protection(slot.el):
             roles.append(_role(ROLE_PROTECTED, "form_field_protection", slot.id, None, None, ROLE_FORM_FIELD))
@@ -6150,9 +6285,18 @@ def _role_reading(package):
         if table is not None and target.get("rows"):
             # A log table's signing or initials column ('Nurse initials'), read from its printed header.
             rows = set(target["rows"])
+            width = detector.grid_cols(table)
             for col in target.get("columns") or []:
-                header = option_text(detector.column_header(table, col, min(rows)))
-                if not signing_place(header):
+                # ⚠️ Every header printed above the column, not only the nearest one (refutation round 2, RR1-08): 'Drug |
+                # Dose | Administered by' over 'Initials | Time' read only 'Administered by', and 'JE' was written under
+                # 'Initials'. A title merged across the whole table is no column's header.
+                printed = [option_text(detector.column_header(table, col, min(rows)))]
+                for r in sorted(x for x in detector.grid(table) if x < min(rows)):
+                    for c in detector.grid(table)[r]:
+                        if c.info["col"] <= col < c.info["col"] + c.info["span"] and not (width > 1 and c.info["span"] >= width):
+                            printed.append(option_text(detector.text_at(table, r, col)))
+                header = next((h for h in printed if signing_place(h)), "")
+                if not header:
                     continue
                 for cell in table.children:
                     if cell.kind == "tc" and cell.info["col"] == col and cell.info["row"] in rows:
@@ -6214,31 +6358,78 @@ def destination_roles(data: bytes, fields=None) -> dict:
 
 
 #: ⚠️ THE ONE READER OF WHETHER A PRINTED LABEL NAMES A SIGNING PLACE (a signature or initials area): the legacy default
-#: path's role (never generated; generated or accepted text refused) and, on contract v3, whether an area the kind rule
-#: typed signature/initials is a destination role. It FAILS CLOSED: every label naming a signature, 'signed by',
-#: initials or a signature/initials-and-date place is a signing place, and only two POSITIONAL readings are released,
-#: each measured as a clinical reading rather than a place:
-#:   - 'signed' closing a label after other words, with no agent: a checklist state ('Consent form signed', 'Time
-#:     signed', 'Signed consent in notes' - a leading 'signed' followed by an ordinary word);
-#:   - 'initial' followed by an ordinary word or a number: the adjective ('Initial assessment', 'Initial 12-lead ECG').
-#: An ordinary word is anything outside a CLOSED class of function words (_ACT_WORDS: where or what an imperative 'sign'
-#: or 'initial' acts on) - so 'Signed (Consultant)', 'Initial here', 'Initial each page', 'Sign here' stay places.
-#: ⚠️ The earlier restriction ('signed' only with a later 'by'; 'initial' before ANY word) released 'Signed (GP)', 'Signed
-#: (patient)', 'Initial here' and 'Initial each page', and generation filled them. Declared residuals, held (never
-#: generated; the clinician types the value, and it exports): 'Consent form signed by patient', 'Patient signature
-#: obtained', 'Troponin (initial)', 'Troponin — Initial', 'Initial / repeat', a bare 'Initial' - the same wording prints
-#: a real signing place ('Note signed by attending physician', 'Patient signature', 'Nurse (initial)', 'Initial:').
+#: path's role (never generated; generated or accepted text refused), the kind rule's signature/initials reading
+#: (Detector.kind_for types every label read here as that place) and, on contract v3, whether an area is a destination
+#: role. It FAILS CLOSED: EVERY signing word is a place - 'signature(s)', 'countersignature', 'signatory', 'signed',
+#: 'countersigned', 'undersigned', 'signing', 'initials', 'initialled' - unless one of these POSITIONAL readings
+#: releases it:
+#:   - a date question ABOUT the signing: the label opens with the date or time ('Date signed', 'Date of signature',
+#:     'Time signed'), or the date or time is the head noun right after the signing word ('Signature date', 'Signed
+#:     date/time', 'Signature (date)'). A date JOINED to a signing word (and, &, +, /, a comma, a dash, 'with') is one
+#:     place with it (SIGNATURE_DATE_PAIR): 'Signature, date', 'Signed by (name, date)', 'Print name, sign and date'.
+#:   - a checklist STATE: 'signed' (or 'initialled') closing a label right after, or opening it right before, a thing
+#:     that is signed (_SIGNED_THINGS): 'Consent form signed', 'Drug chart signed', 'Signed consent in notes'.
+#:   - the adjective 'initial' before an ordinary word, or before a number that does not close the label ('Initial
+#:     assessment', 'Initial 12-lead ECG'). 'initial' closing the label or before a function word, a form-filling noun,
+#:     punctuation or a closing count is the imperative ('Initial on each page', 'Initial page', 'Initial 1', 'Initial x2').
+#: The singular 'sign' is a place only as the imperative or with its signer: '(Please) sign' alone, 'Sign' opening a
+#: label before a function word ('Sign in box', 'Sign on the line', 'Sign below'), punctuation or another act ('Sign &
+#: stamp', 'Sign and print name'), a parenthetical '(sign)', 'sign' before a place word ('... sign here'), and
+#: '<person> sign' / '<person> to sign' with a person this code names (_SIGNER: 'Nurse sign', 'Consultant sign'). Every
+#: other 'sign' is the noun ('Babinski sign', 'Sign of infection', 'Sign present', 'Signs and symptoms', a compound
+#: 'Sign-posting'), and 'Sign in', 'Sign out' and 'Sign-off' alone (or with their time) are a checklist's steps.
+#: ⚠️ WHY A LIST OF SIGNED THINGS AND NOT A LIST OF PERSONS (refutation round 2, RR1-04): round 1 released 'signed' after
+#: ANY word that was not a function word, and the refuters answered with persons - 'Consultant signed', 'Registrar
+#: signed', 'Signed patient', 'To be signed' - which generation filled and the export printed. A list of persons fails
+#: OPEN (the next person outside it is released and generated). The state reading now needs a THING that is signed, so a
+#: thing missing from _SIGNED_THINGS is only an over-hold: never generated, and the clinician's typed value exports.
+#: The one person-gated reading, '<person> sign', has no finite release set (clinical signs are an open class of eponyms:
+#: 'Babinski sign', 'Empty can sign'), so it holds on the persons this code already names (source_policy.ROLE_PERSONS,
+#: the patient, core.v3_actors' clinicians); a signer outside them ('Prescriber sign') is a declared residual.
+#: Declared residuals, held (never generated; a typed value still exports): 'Consent form signed by patient', 'Signed
+#: off by consultant', 'Patient signature obtained', 'Troponin (initial)', 'Troponin — Initial', 'Initial / repeat',
+#: a bare 'Initial', 'Sign and symptom review', and any checklist state whose signed thing is not in _SIGNED_THINGS.
 _ACT_WORDS = ("here|there|below|above|beside|overleaf|opposite|each|every|all|both|the|this|these|those|if|to|where"
               "|when")
+#: The closed class of function words: the engine's own (_FUNCTION_WORDS), the place adverbs above and the English
+#: prepositions neither lists. RR1-04: 'Initial on each page', 'Initial against each entry' and 'Initial in box' were
+#: read as the adjective because 'on', 'against' and 'in' were missing from the class. A word outside it is a content word.
+_CLOSED_WORDS = frozenset(_FUNCTION_WORDS) | frozenset(_ACT_WORDS.split("|")) | frozenset((
+    "against within inside outside under underneath beneath over across along alongside beside besides near next onto "
+    "into upon via after before behind below above between beyond around throughout toward towards without off out up "
+    "down opposite overleaf both when who whom whose what how").split())
+#: What an imperative 'initial' acts on ('Initial page', 'Initial box'): a box and the engine's nouns of form-filling
+#: mechanics that are places on the form (not 'contact', 'letter' or 'phone', which the adjective takes: 'Initial contact').
+_INITIAL_OBJECTS = frozenset(("box", "boxes")) | (_MECHANICS_NOUNS & frozenset("page pages sheet sheets form forms copy "
+                                                                            "copies".split()))
+#: The things a checklist records as signed (see above). A thing missing here is an over-hold, never a release.
+_SIGNED_THINGS = frozenset((
+    "form forms consent consents chart charts summary summaries plan plans checklist checklists prescription "
+    "prescriptions script scripts letter letters report reports note notes record records certificate certificates "
+    "order orders request requests referral referrals agreement agreements declaration declarations document documents "
+    "paperwork card cards sheet sheets proforma proformas pathway pathways list lists assessment assessments directive "
+    "directives contract contracts waiver waivers kardex").split())
 _INVISIBLE = re.compile("[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]")
-SIGNATURE_PLACE = re.compile(r"\bsignatures?\b", re.I)
-SIGNED_PLACE = re.compile(
-    r"^(?:please\s+)?(?:electronically\s+|digitally\s+)?(?:counter-?|co-?|e-?)?signed"
-    r"(?=\s*$|\s*[^\w\s]|\s+(?:" + _ACT_WORDS + r"|and|or|by|for|on|off)\b)"
-    r"|\b(?:counter-?|co-?)?signed\b.*\bby\b"
-    r"|\bsign(?:ed)?\s+(?:" + _ACT_WORDS + r")\b"
-    r"|^(?:please\s+)?sign\s*(?:\band\b|\bor\b|&|\+|/)", re.I)
-INITIALS_PLACE = re.compile(r"\binitials\b|\binitial(?=\s*$|\s*[^\w\s]|\s+(?:box|" + _ACT_WORDS + r"|and|or)\b)", re.I)
+_LABEL_TOKEN = re.compile(r"[^\W_]+(?:['\u2019][^\W_]+)*|[^\w\s]")
+_SIGNATURE_WORD = re.compile(r"(?:counter|co|e)?signat(?:ures?|ory|ories)")
+_SIGNED_WORD = re.compile(r"(?:counter|co|under|e)?sign(?:ed|ing)|initiall?ed")
+#: The care nouns core.v3_actors.CARE_NOUNS reads as clinicians (this isolated parser cannot import core; a core test
+#: keeps the two in step). Used ONLY to hold: '<clinician> sign' ('Consultant sign', 'Registrar sign').
+CARE_SIGNERS = frozenset((
+    'doctor physician gp surgeon anaesthetist anesthetist consultant clinician nurse midwife therapist physiotherapist '
+    'physio psychiatrist psychologist pharmacist dentist optometrist paramedic practitioner registrar resident '
+    'specialist cardiologist neurologist oncologist radiologist dermatologist worker keyworker coordinator officer '
+    'staff team').split())
+_SIGNER = re.compile(r"(?:" + source_policy.ROLE_PERSONS + r"|patients?|(?:" + "|".join(sorted(CARE_SIGNERS)) + r")s?)")
+#: The date question about a signing (see above): the date or time opening the label and asking WHEN it was signed
+#: ('Date signed', 'Date consent signed', 'Date/time signed', 'Date of signature', 'Time of signing') - not a date
+#: printed beside a signature noun ('Date Signature' is two places) - or the head noun right after the signing word.
+DATE_QUESTION = re.compile(
+    r"^\W*(?:date|time)\b(?:\s*(?:/|and|&)\s*time\b)?[^,;:()]*?\b(?:counter-?|co-?)?(?:signed|initiall?ed)\b"
+    r"|^\W*(?:date|time)\b(?:\s*(?:/|and|&)\s*time\b)?\s+of\s+(?:the\s+)?(?:[^\W\d_]+\s+)?"
+    r"(?:signatures?|signing|initials)\b"
+    r"|\b(?:signatures?|signed|signing|initials|initiall?ed)\s+(?:date|dated|time)\b"
+    r"|\b(?:signatures?|signed|signing|initials|initiall?ed)\s*\(\s*(?:date|time)(?:\s*(?:and|&|/)\s*(?:date|time))?\s*\)")
 #: The measured over-read of the engine's question_box_signing: the adjective 'initial' ('Describe the initial
 #: presentation?', a section 'Initial assessment'). A signing verb still governs once it is removed.
 ADJECTIVE_INITIAL = re.compile(r"\binitial(?=\s+(?!(?:box|" + _ACT_WORDS + r"|and|or)\b)[^\W_])", re.I)
@@ -6251,6 +6442,63 @@ def _plain(label) -> str:
     return clean_label(_INVISIBLE.sub("", text), limit=1000).casefold()
 
 
+def _is_word(token) -> bool:
+    return bool(token) and token[0].isalnum()
+
+
+def _signing_state(tokens, n) -> bool:
+    """'signed' / 'initialled' at n is a checklist state: it closes the label (only punctuation or one parenthetical after
+    it) right after a signed thing, or opens the label right before one."""
+    rest = tokens[n + 1:]
+    if rest and rest[0] == "(" and ")" in rest:
+        rest = rest[rest.index(")") + 1:]
+    if not any(_is_word(t) for t in rest):
+        return n > 0 and tokens[n - 1] in _SIGNED_THINGS
+    return n == 0 and len(tokens) > 1 and tokens[1] in _SIGNED_THINGS
+
+
+def _sign_is_place(tokens, n) -> bool:
+    """The singular 'sign' at n is a signing place (the imperative, or a named signer's), not the noun."""
+    before = [t for t in tokens[:n] if t != "please"]
+    after = tokens[n + 1:]
+    following = after[0] if after else ""
+    if not before:
+        # The label opens with the imperative ('Sign', 'Please sign', 'Sign below').
+        if not following:
+            return True
+        particle = [t for t in after if t != "-"][:1]
+        if particle and particle[0] in ("in", "out", "off") and (after[0] == "-" or _is_word(following)):
+            # 'Sign in' / 'Sign out' / 'Sign-off' alone (or with its time) are a checklist's steps; 'Sign in box' is not.
+            tail = after[after.index(particle[0]) + 1:]
+            return any(_is_word(t) for t in tail) and tail[0] not in ("date", "time")
+        if following == "of" or following in ("and", "&") and len(after) > 1 and after[1].startswith("symptom"):
+            return False                                        # 'Sign of infection', 'Sign and symptom review' (PC05)
+        if following == "-" and len(after) > 1 and _is_word(after[1]):
+            return False                                        # a compound: 'Sign-posting', 'Sign-language'
+
+        return not _is_word(following) or following in _CLOSED_WORDS or following in ("and", "or")
+    if tokens[n - 1] == "(" or (tokens[n - 1] == "please" and n > 1 and tokens[n - 2] == "("):
+        return True                                             # 'Given by (sign)', '(please sign)'
+    if following in _ACT_WORDS.split("|"):
+        return True                                             # '... sign here', '... sign the form below'
+    closes = not any(_is_word(t) for t in after)
+    signer = before[-1] if before and before[-1] != "to" else (before[-2] if len(before) > 1 else "")
+    return closes and bool(_SIGNER.fullmatch(signer)) and (before[-1] != "to" or len(before) > 1)
+
+
+def _initial_is_place(tokens, n) -> bool:
+    """The singular 'initial' at n is the imperative (a place), not the adjective."""
+    after = tokens[n + 1:]
+    following = after[0] if after else ""
+    if not _is_word(following):
+        return True                                             # 'Initial', 'Initial:', 'Troponin (initial)'
+    if following in _CLOSED_WORDS or following in ("and", "or") or following in _INITIAL_OBJECTS:
+        return True                                             # 'Initial on each page', 'Initial page'
+    if re.fullmatch(r"x?\d+", following) and not any(_is_word(t) for t in after[1:]):
+        return True                                             # 'Initial 1', 'Initial x2'
+    return False
+
+
 def signing_place(label) -> str:
     """'signature', 'initials' or '' for a PRINTED label (see the section comment above)."""
     text = _plain(label)
@@ -6260,13 +6508,23 @@ def signing_place(label) -> str:
         return "signature"
     if INITIALS_DATE_PAIR.search(text):
         return "initials"
-    if DATE_LABEL.search(text):
+    tokens = _LABEL_TOKEN.findall(text)
+    signature = initials = False
+    for n, token in enumerate(tokens):
+        if _SIGNATURE_WORD.fullmatch(token):
+            signature = True
+        elif _SIGNED_WORD.fullmatch(token):
+            if not _signing_state(tokens, n):
+                initials, signature = (True, signature) if token.startswith("initial") else (initials, True)
+        elif token == "sign":
+            signature = signature or _sign_is_place(tokens, n)
+        elif token == "initials":
+            initials = True
+        elif token == "initial":
+            initials = initials or _initial_is_place(tokens, n)
+    if not (signature or initials) or DATE_QUESTION.search(text):
         return ""
-    if SIGNATURE_PLACE.search(text) or SIGNED_PLACE.search(text):
-        return "signature"
-    if INITIALS_PLACE.search(text):
-        return "initials"
-    return ""
+    return "signature" if signature else "initials"
 
 
 def legacy_role_kind(label) -> str:
@@ -6276,8 +6534,13 @@ def legacy_role_kind(label) -> str:
 
 def signing_box_reading(text) -> bool:
     """Whether a box's printed question or section makes it a signing box: the engine's own question_box_signing (the
-    reading that declines to map it), less the adjective 'initial' - never wider than the engine's own reading."""
-    if not text or not Detector.question_box_signing(text):
+    reading that declines to map it) less the adjective 'initial', or the ONE signing-place reader ('Please sign in the
+    box below:' is no signing reading of the engine's, and the box took a long answer)."""
+    if not text:
+        return False
+    if signing_place(text):
+        return True
+    if not Detector.question_box_signing(text):
         return False
     reading = ADJECTIVE_INITIAL.sub(" ", text)
     return reading == text or bool(Detector.question_box_signing(reading) or BOX_SIGNING_VERB.search(reading))

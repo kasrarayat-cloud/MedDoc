@@ -54,9 +54,23 @@ QUALIFIER = re.compile(r'\(([^)]*)\)')
 DATE_QUESTION = re.compile(r'\b(?:date|dated|time|day)\b')
 
 
+def names_another_signer(text):
+    """The label names somebody other than the finalizer AS THE SIGNER. ⚠️ A person named only as the possessor or the
+    object of another word is not the signer (refutation round 2, RR3-05): 'Signed by (doctor responsible for patient)'
+    and "Signature (patient's consultant)" were read as the patient's, so the finalizer's name rule was off and another
+    clinician's typed name finalized and exported. A miss here only keeps the finalizer's rule (fail closed)."""
+    for match in NOT_THE_CLINICIAN.finditer(text):
+        if re.match(r"['\u2019]s?\b", text[match.end():]):
+            continue                                                # "patient's consultant"
+        if re.search(r"\w\s+for\s+(?:the\s+|this\s+|a\s+)?$", text[:match.start()]):
+            continue                                                # 'doctor responsible for (the) patient'
+        return True
+    return False
+
+
 def signature_label(label):
     text = re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(TRAILING).strip().casefold()
-    if NOT_THE_CLINICIAN.search(text):
+    if names_another_signer(text):
         return False
     inner = QUALIFIER.search(text)
     if inner and DATE_QUESTION.search(inner.group(1)):

@@ -694,5 +694,301 @@ class ReadingsReleased(unittest.TestCase):
                 self.assertEqual(refusal(blob, [stored], stored['key']), 'protected_signing_area')
 
 
+
+# ─── refutation round 2 (a32243eb): each test is red on a32243eb and names the finding it closes ─────────────────
+def question_box(inside=(), question='Signed by the consultant:', heading='Consultant review'):
+    doc = Document(); doc.add_heading(heading, level=2); doc.add_paragraph(question)
+    cell = box(doc).cell(0, 0)
+    for n, text in enumerate(inside):
+        (cell.paragraphs[0] if n == 0 else cell.add_paragraph()).add_run(text)
+    doc.add_paragraph('Plan: ______')
+    return data(doc)
+
+
+def captioned_lines(*texts, heading='Consultant review'):
+    doc = Document(); doc.add_heading(heading, level=2)
+    for text in texts:
+        doc.add_paragraph(text)
+    doc.add_paragraph('Plan: ______')
+    return data(doc)
+
+
+def answer_for(field):
+    return {'date': '2026-09-30', 'time': '10:30'}.get(field['kind'], SYN)
+
+
+def filled_text(blob, fields, answers):
+    return re.sub(r'<[^>]+>', '', xml(w.fill(blob, fields, answers)))
+
+
+class SigningBoxWritingLine(unittest.TestCase):
+    """RR1-01 (HIGH): every engine area INSIDE a signing box was excepted from the box, so its writing line, 'Dr ____
+    (consultant)' and the blank before 'Date:' were written in the consultant's box."""
+
+    def test_rr1_01_the_boxs_own_lines_are_the_boxs(self):
+        for inside in ('______________________________', 'Dr ______________________ (consultant)',
+                       '______________________    Date: ______'):
+            with self.subTest(inside=inside):
+                blob = question_box((inside,))
+                engine = w.inspect(blob)['fields']
+                line = engine[0]
+                self.assertEqual(line['locator']['slot'], 'b/tbl[0]/tr[0]/tc[0]/p[0]')
+                self.assertIn(line['key'], w.destination_roles(blob, engine)['violations'])
+                self.assertEqual(refusal(blob, engine, line['key'], answer_for(line)), 'protected_signing_area')
+                plan = next(f for f in engine if f['label'] == 'Plan')
+                self.assertIsNone(refusal(blob, [f for f in engine if f is not line], plan['key'], 'Rest.'))
+
+    def test_rr1_01_a_captioned_question_in_the_box_keeps_its_answer(self):
+        """The blank with its own caption ('Date: ____') is its own question, as it is beside a signature on a line."""
+        blob = question_box(('______________________    Date: ______',))
+        engine = w.inspect(blob)['fields']
+        date = next(f for f in engine if f['locator']['target'].get('start', 0) > 0 and f['kind'] == 'date')
+        self.assertNotIn(date['key'], w.destination_roles(blob, engine)['violations'])
+        text = filled_text(blob, [f for f in engine if f is not engine[0]], {date['key']: '2026-09-30'})
+        self.assertIn('______________________    Date: 2026-09-30', text)
+
+    def test_rr1_01_a_signature_and_date_line_in_the_box_is_a_signature(self):
+        blob = question_box(('Signature, date: ______',))
+        engine = w.inspect(blob)['fields']
+        self.assertEqual(engine[0]['kind'], 'signature')
+        stored = {**engine[0], 'kind': 'date', 'key': 'stored_date'}
+        self.assertEqual(refusal(blob, [stored] + engine[1:], 'stored_date', '2026-09-30'), 'protected_signing_area')
+
+
+class SignatureJoinedToADate(unittest.TestCase):
+    """RR1-02 / RR3-01 (HIGH), RR1-10: a comma, a dash, 'with', a parenthetical or 'sign and date' anywhere made these
+    DATE fields; generation wrote 'Dr Example 30/09/2026' into the signing place and the export printed it."""
+
+    PLACES = ('Signature, date', 'Signature - date', 'Signature – date', 'Signature, date/time',
+              'Print name, sign and date', 'Patient to sign and date', 'Patient signature, date', 'Signed by (name, date)',
+              'Electronically signed by (name, date)', 'Signature with date', 'Signature (participant, dd/mm/yyyy)',
+              'Signed (mother, DOB)', 'Initials, date', 'Date, signature')
+    DATES = ('Signature date', 'Date of signature', 'Date signed', 'Date consent signed', 'Time signed',
+             'Signature date/time', 'Signature (date)', 'Date and time signed')
+
+    def test_rr1_02_joined_dates_are_signing_places(self):
+        for label in self.PLACES:
+            with self.subTest(label=label):
+                self.assertIn(w.signing_place(label), ('signature', 'initials'))
+                self.assertEqual(w.Detector.kind_for(None, label), w.signing_place(label))
+
+    def test_pc04_date_questions_about_a_signature_stay_dates(self):
+        for label in self.DATES:
+            with self.subTest(label=label):
+                self.assertEqual(w.signing_place(label), '')
+                if 'date' in label.lower():     # 'Time signed' is typed signature by the kind rule (never generated)
+                    self.assertEqual(w.Detector.kind_for(None, label), 'date')
+
+    def test_rr1_02_a_signature_date_line_is_a_signing_area(self):
+        blob = line_form('Signature, date: ______________')
+        engine = w.inspect(blob)['fields']
+        self.assertEqual(engine[0]['kind'], 'signature')
+        stored = {**engine[0], 'kind': 'date', 'key': 'stored_date'}
+        self.assertEqual(refusal(blob, [stored] + engine[1:], 'stored_date', '2026-09-30'), 'protected_signing_area')
+
+
+class SigningWordsReadFailClosed(unittest.TestCase):
+    """RR1-03, RR1-04, RR1-11, RR3-02: the reader released these (or the kind rule typed them text), so generation
+    filled and exported a signing or initials place."""
+
+    PLACES = (('Initial 1', 'initials'), ('Initial 2', 'initials'), ('Initial x2', 'initials'),
+              ('Initial on each page', 'initials'), ('Initial against each entry', 'initials'),
+              ('Initial in box', 'initials'), ('Initial page', 'initials'), ('Initialled by', 'initials'),
+              ('Sign in box', 'signature'), ('Sign on the line', 'signature'), ('Please sign in the box', 'signature'),
+              ('To be signed', 'signature'), ('Must be signed', 'signature'), ('Signed consultant', 'signature'),
+              ('Signed patient', 'signature'), ('Consultant signed', 'signature'), ('Registrar signed', 'signature'),
+              ('Patient signed', 'signature'), ('Reviewed and signed', 'signature'), ('Sign below', 'signature'),
+              ('Sign and print name', 'signature'), ('Sign & stamp', 'signature'), ('Sign', 'signature'),
+              ('Please sign', 'signature'), ('Given by (sign)', 'signature'), ('Countersignature', 'signature'),
+              ('Nurse sign', 'signature'), ('(sign)', 'signature'), ('Patient to sign', 'signature'),
+              ('Signatures', 'signature'), ('Undersigned', 'signature'), ('Signing clinician', 'signature'),
+              ('Authorised signatory', 'signature'), ('Parent/guardian sign', 'signature'),
+              ('Consultant sign', 'signature'), ('Registrar sign', 'signature'),
+              ('Patient or carer to sign', 'signature'))
+    RELEASED = ('Consent form signed', 'Consent signed', 'Drug chart signed', 'Discharge summary signed',
+                'DNACPR form signed', 'Prescription signed', 'Care plan signed', 'Theatre checklist signed',
+                'Signed consent in notes', 'Consent form signed (Y/N)', 'Sign in', 'Sign out', 'Sign-off',
+                'Sign in time', 'Initial assessment', 'Initial dose', 'Initial GCS', 'Initial 12-lead ECG',
+                'Initial 4AT score', 'Initial contact', 'Babinski sign', 'Positive Romberg sign', 'Empty can sign',
+                'Sign of infection', 'Signs of infection', 'Sign present', 'Sign language interpreter required',
+                'Sign and symptom review', 'Vital signs', 'Warning signs discussed', 'Reason patient unable to sign',
+                'Sign-posting', 'Signposted to', 'Assigned consultant', 'Designated lead', 'Significant history',
+                'Initially seen by')
+
+    def test_rr1_03_rr1_04_rr3_02_every_signing_word_is_a_place(self):
+        for label, kind in self.PLACES:
+            with self.subTest(label=label):
+                self.assertEqual(w.signing_place(label), kind)
+                self.assertEqual(w.legacy_role_kind(label), kind)
+                self.assertEqual(w.Detector.kind_for(None, label), kind)
+
+    def test_pc05_pc09_readings_and_states_stay_released(self):
+        for label in self.RELEASED:
+            with self.subTest(label=label):
+                self.assertEqual(w.signing_place(label), '')
+        for label in ('Babinski sign', 'Sign of infection', 'Sign present', 'Sign and symptom review', 'Vital signs'):
+            with self.subTest(kind=label):
+                self.assertEqual(w.Detector.kind_for(None, label), 'text')
+
+    def test_rr1_11_a_sign_imperative_line_is_a_signing_area(self):
+        for label in ('Sign below', 'Sign and print name', 'Sign & stamp', 'Nurse sign', 'Countersignature'):
+            with self.subTest(label=label):
+                blob = line_form(label + ': ______')
+                engine = w.inspect(blob)['fields']
+                self.assertEqual(engine[0]['kind'], 'signature')
+                stored = {**engine[0], 'kind': 'text', 'key': 'stored_text'}
+                self.assertEqual(refusal(blob, [stored] + engine[1:], 'stored_text'), 'protected_signing_area')
+
+    def test_rr1_03_initial_columns_take_no_text(self):
+        doc = Document(); doc.add_heading('Medication log', level=2)
+        t = doc.add_table(rows=3, cols=4); t.style = 'Table Grid'
+        for c, h in enumerate(('Drug', 'Dose', 'Initial 1', 'Initial 2')):
+            t.cell(0, c).text = h
+        doc.add_paragraph('Plan: ______')
+        blob = data(doc)
+        engine = w.inspect(blob)['fields']
+        rows = next(f for f in engine if f['kind'] == 'table_rows')
+        with self.assertRaises(w.V3Failure) as refused:
+            w.fill(blob, engine, {rows['key']: [['Morphine', '5 mg', 'JE', 'AB']]})
+        self.assertEqual(refused.exception.code, 'protected_signing_area')
+        self.assertIn('Morphine', xml(w.fill(blob, engine, {rows['key']: [['Morphine', '5 mg', '', '']]})))
+
+
+class CaptionOwnsItsWritingLine(unittest.TestCase):
+    """RR1-06: the caption's writing line was a role only when printed DIRECTLY under the caption as a bare line."""
+
+    CASES = (('a blank paragraph between', ('Consultant signature:', '', '____________________'), 'b/p[3]'),
+             ('the line above the caption', ('____________________', 'Consultant signature'), 'b/p[1]'),
+             ('guidance after the line', ('Consultant signature:', '____________________ (use black ink)'), 'b/p[2]'),
+             ('a date after the line', ('Consultant signature:', '____________________    Date: ______'), 'b/p[2]'),
+             ('a title before the line', ('Signed by the consultant:', 'Dr ______________________'), 'b/p[2]'))
+
+    def test_rr1_06_the_line_printed_with_a_signing_caption_is_the_captions(self):
+        for name, texts, slot in self.CASES:
+            with self.subTest(name=name):
+                blob = captioned_lines(*texts)
+                engine = w.inspect(blob)['fields']
+                line = min((f for f in engine if f['locator']['slot'] == slot),
+                           key=lambda f: f['locator']['target'].get('start', 0))
+                self.assertIn(line['key'], w.destination_roles(blob, engine)['violations'])
+                self.assertEqual(refusal(blob, engine, line['key'], answer_for(line)), 'protected_signing_area')
+                if name != 'a date after the line':    # there an added field lands after 'Date:', the date's own place
+                    self.assertEqual(located(blob, BODY + slot, label='Consultant signature')[1], 'destination_role')
+
+    def test_rr1_06_the_captioned_date_on_the_line_keeps_its_answer(self):
+        blob = captioned_lines('Consultant signature:', '____________________    Date: ______')
+        engine = w.inspect(blob)['fields']
+        date = next(f for f in engine if f['locator']['slot'] == 'b/p[2]' and f['locator']['target']['start'] > 0)
+        self.assertNotIn(date['key'], w.destination_roles(blob, engine)['violations'])
+
+    def test_a_question_line_above_a_signature_block_is_not_the_signatures(self):
+        """Over-hold control: 'Clinical summary' over its line, then 'Signature' over its own line. The summary's line
+        belongs to its own caption (with or without a colon), so it stays answerable."""
+        for summary, signature in (('Clinical summary:', 'Signature:'), ('Clinical summary', 'Signature')):
+            with self.subTest(summary=summary):
+                blob = captioned_lines(summary, '____________________', signature, '____________________')
+                engine = w.inspect(blob)['fields']
+                first = next(f for f in engine if f['locator']['slot'] == 'b/p[2]')
+                self.assertEqual(first['kind'] in ('text', 'long_text'), True)
+                self.assertNotIn(first['key'], w.destination_roles(blob, engine)['violations'])
+                self.assertIn(SYN, xml(w.fill(blob, [f for f in engine if f['locator']['slot'] != 'b/p[4]'],
+                                              {first['key']: SYN})))
+
+
+class SigningBoxStructure(unittest.TestCase):
+    """RR1-07: a bookmark, a block content control, three empty paragraphs or a layout cell hid a signing box."""
+
+    def forms(self):
+        doc = Document(); doc.add_heading('Consultant review', level=2); doc.add_paragraph('Signed by the consultant:')
+        tbl = box(doc)._tbl; doc.add_paragraph('Plan: ______')
+        bs = OxmlElement('w:bookmarkStart'); bs.set(qn('w:id'), '7'); bs.set(qn('w:name'), 'sig'); tbl.addprevious(bs)
+        be = OxmlElement('w:bookmarkEnd'); be.set(qn('w:id'), '7'); tbl.addnext(be)
+        yield 'bookmark', data(doc), 'b/tbl[0]/tr[0]/tc[0]'
+        doc = Document(); doc.add_heading('Consultant review', level=2); qp = doc.add_paragraph('Signed by the consultant:')
+        box(doc); doc.add_paragraph('Plan: ______')
+        sdt = OxmlElement('w:sdt'); pr = OxmlElement('w:sdtPr'); pr.append(OxmlElement('w:richText')); sdt.append(pr)
+        content = OxmlElement('w:sdtContent'); sdt.append(content); qp._p.addprevious(sdt); content.append(qp._p)
+        yield 'block control', data(doc), 'b/tbl[0]/tr[0]/tc[0]'
+        doc = Document(); doc.add_heading('Consultant review', level=2); doc.add_paragraph('Signed by the consultant:')
+        for _ in range(3):
+            doc.add_paragraph('')
+        box(doc); doc.add_paragraph('Plan: ______')
+        yield 'three empty paragraphs', data(doc), 'b/tbl[0]/tr[0]/tc[0]'
+        doc = Document(); doc.add_heading('Consultant review', level=2)
+        outer = doc.add_table(rows=1, cols=1).cell(0, 0); outer.paragraphs[0].add_run('Signed by the consultant:')
+        inner = outer.add_table(rows=1, cols=1)
+        borders = OxmlElement('w:tcBorders')
+        for side in ('top', 'left', 'bottom', 'right'):
+            edge = OxmlElement('w:' + side); edge.set(qn('w:val'), 'single'); borders.append(edge)
+        inner.cell(0, 0)._tc.get_or_add_tcPr().append(borders); outer.add_paragraph('')
+        doc.add_paragraph('Plan: ______')
+        yield 'nested in a layout cell', data(doc), 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]'
+
+    def test_rr1_07_the_box_is_a_signing_box_whatever_surrounds_it(self):
+        for name, blob, cell in self.forms():
+            with self.subTest(name=name):
+                self.assertIn(('question_box_signing', BODY + cell),
+                              {(r['source'], r['place']) for r in w.destination_roles(blob)['roles']})
+                self.assertEqual(located(blob, BODY + cell, 'long_text', 'Consultant review')[1], 'destination_role')
+                stored = forged(blob, cell, 'long_text')
+                self.assertEqual(refusal(blob, [stored], stored['key']), 'protected_signing_area')
+
+
+class TwoLevelHeader(unittest.TestCase):
+    def test_rr1_08_a_signing_column_under_a_merged_header(self):
+        """'Administered by' merged over 'Initials | Time': only the top header was read, and 'JE' was written."""
+        doc = Document(); doc.add_heading('Medication log', level=2)
+        t = doc.add_table(rows=4, cols=4); t.style = 'Table Grid'
+        t.cell(0, 0).text = 'Drug'; t.cell(0, 1).text = 'Dose'; t.cell(0, 2).merge(t.cell(0, 3)).text = 'Administered by'
+        t.cell(1, 2).text = 'Initials'; t.cell(1, 3).text = 'Time'
+        doc.add_paragraph('Plan: ______')
+        blob = data(doc)
+        engine = w.inspect(blob)['fields']
+        rows = next(f for f in engine if f['kind'] == 'table_rows')
+        with self.assertRaises(w.V3Failure) as refused:
+            w.fill(blob, engine, {rows['key']: [['Morphine', '5 mg', 'JE', '10:00']]})
+        self.assertIn('Initials', str(refused.exception))
+        self.assertIn('10:00', xml(w.fill(blob, engine, {rows['key']: [['Morphine', '5 mg', '', '10:00']]})))
+
+    def test_a_title_across_the_whole_table_is_no_columns_header(self):
+        doc = Document(); doc.add_heading('Medication log', level=2)
+        t = doc.add_table(rows=4, cols=3); t.style = 'Table Grid'
+        t.cell(0, 0).merge(t.cell(0, 2)).text = 'Record of doses (initial each entry)'
+        for c, h in enumerate(('Drug', 'Dose', 'Time')):
+            t.cell(1, c).text = h
+        doc.add_paragraph('Plan: ______')
+        blob = data(doc)
+        engine = w.inspect(blob)['fields']
+        rows = next((f for f in engine if f['kind'] == 'table_rows'), None)
+        if rows is not None:
+            self.assertIn('Morphine', xml(w.fill(blob, engine, {rows['key']: [['Morphine', '5 mg', '10:00']]})))
+
+
+class LegacyWrappedLabel(unittest.TestCase):
+    def test_rr1_05_a_label_cell_with_a_line_break_reads_its_printed_words(self):
+        """'Consultant' + line break + 'signature' was the label 'Consultantsignature' (no signing place), so the
+        consultant's signing row was generated and exported."""
+        import tempfile
+        from pathlib import Path
+        from .engine import docx_inspect
+        for mode in ('br', 'paragraphs', 'tab'):
+            with self.subTest(mode=mode):
+                doc = Document(); doc.add_paragraph('Clinic record'); t = doc.add_table(rows=2, cols=2)
+                cell = t.cell(0, 0)
+                if mode == 'br':
+                    run = cell.paragraphs[0].add_run('Consultant'); run.add_break(); cell.paragraphs[0].add_run('signature')
+                elif mode == 'tab':
+                    cell.paragraphs[0].add_run('Consultant'); cell.paragraphs[0].add_run().add_tab()
+                    cell.paragraphs[0].add_run('signature')
+                else:
+                    cell.paragraphs[0].add_run('Consultant'); cell.add_paragraph('signature')
+                t.cell(1, 0).text = 'Plan'
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / 'form.docx'; path.write_bytes(data(doc))
+                    fields = docx_inspect(path)[3]
+                self.assertEqual(fields[0]['label'], 'Consultant signature')
+                self.assertEqual(w.legacy_role_kind(fields[0]['label']), 'signature')
+
+
 if __name__ == '__main__':
     unittest.main()

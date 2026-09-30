@@ -865,3 +865,231 @@ class ModelProposalsRound1(V3Fixture, TestCase):
         result = self.proposal(version, replaced=[date['key']], dismissed=[BODY + cell + '/p[0]'],
                                changes=[self.relabel(date['key'], cell, 'date', 0, 20, role=2)])
         self.assertEqual(result['review']['changes'], [{'key': date['key'], 'replacement': date['key']}])
+
+
+# ─── refutation round 2 (a32243eb): each test is red on a32243eb and names the finding it closes ─────────────────
+def wrapped_label(first, second, mode):
+    doc = Document(); doc.add_paragraph('Clinic record')
+    table = doc.add_table(rows=2, cols=2)
+    cell = table.cell(0, 0)
+    if mode == 'br':
+        p = cell.paragraphs[0]; p.add_run(first).add_break(); p.add_run(second)
+    else:
+        cell.paragraphs[0].add_run(first); cell.add_paragraph(second)
+    table.cell(1, 0).text = 'Plan'
+    return saved(doc)
+
+
+@override_settings(**TEST_SETTINGS)
+class LegacyRound2(Walk, V3Fixture, TestCase):
+    ROWS = (('Signature, date', 'Dr Somebody Else 30/09/2026'), ('Signature - date', 'Dr Somebody Else 30/09/2026'),
+            ('Print name, sign and date', 'Dr Somebody Else'), ('Signed by (name, date)', 'Dr Example 30/09/2026'),
+            ('Signature (participant, dd/mm/yyyy)', 'John Example 30/09/2026'),
+            ('Signed (mother, DOB)', 'Jane Example 01/01/1990'), ('Initial 1', 'JE'), ('Initial on each page', 'JE'),
+            ('Sign in box', 'Dr Somebody Else'), ('Consultant signed', 'Dr Somebody Else'),
+            ('Signed patient', 'John Example'), ('To be signed', 'Dr Somebody Else'), ('Sign below', 'Dr Somebody Else'),
+            ('Please sign', 'Dr Example'), ('Countersignature', 'Dr Example'), ('Initialled by', 'Dr Example'))
+
+    def test_rr1_02_rr1_03_rr1_04_rr1_10_rr1_11_rr3_02_signing_rows_are_never_generated_or_exported(self):
+        """a32243eb generated each value into its signing or initials row, and the finalized export printed it."""
+        for n, (label, value) in enumerate(self.ROWS):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic RR2 %d' % n)
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                answer = e.answers[self.by_label(version)[label]['key']]
+                self.assertEqual((answer['status'], answer['text']), ('missing', ''))
+                self.assertEqual(self.reviewed(e, version).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+                self.assertNotIn(value, part_text(private_path(e.export_path).read_bytes()))
+
+    def test_rr1_05_a_wrapped_signing_label_is_never_generated(self):
+        """'Consultant' + line break (or a second paragraph) + 'signature' read as 'Consultantsignature'."""
+        for n, (mode, (first, second, value)) in enumerate(itertools.product(
+                ('br', 'paragraphs'), (('Consultant', 'signature', 'Dr Somebody Else'), ('Nurse', 'initials', 'JE')))):
+            with self.subTest(mode=mode, label=first + ' ' + second):
+                template, version = self.uploaded(data=wrapped_label(first, second, mode), name='Synthetic RR1-05 %d' % n)
+                label = first + ' ' + second
+                self.assertIn(label, self.by_label(version))
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                answer = e.answers[self.by_label(version)[label]['key']]
+                self.assertEqual((answer['status'], answer['text']), ('missing', ''))
+                self.assertEqual(self.reviewed(e, version).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+                self.assertNotIn(value, part_text(private_path(e.export_path).read_bytes()))
+
+    def test_pc09_checklist_states_are_still_generated(self):
+        for n, label in enumerate(('Consent form signed', 'Drug chart signed', 'Time signed')):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic PC09 %d' % n)
+                e = self.generated(version, f'{label}: Yes\nPlan: Rest.')
+                answer = e.answers[self.by_label(version)[label]['key']]
+                self.assertEqual((answer['status'], answer['text']), ('supported', 'Yes'))
+
+    def test_rr3_05_a_patient_named_as_possessor_or_object_does_not_make_the_signer_the_patient(self):
+        """'Signed by (doctor responsible for patient)' and "Signature (patient's consultant)" finalized another
+        clinician's typed name: the patient word turned the finalizer's name rule off."""
+        from core.tab_review import clinician_identity
+        for label in ('Signed by (doctor responsible for patient)', "Signature (patient's consultant)",
+                      'Signed by (doctor caring for the patient)'):
+            with self.subTest(label=label):
+                self.assertTrue(clinician_identity({'label': label}))
+        for label in ('Signature (patient)', "Signature (patient's relative)", 'Signed by (witness)',
+                      'Signature (for patient)', 'Signature (participant)'):
+            with self.subTest(other=label):
+                self.assertFalse(clinician_identity({'label': label}))
+        for n, label in enumerate(('Signed by (doctor responsible for patient)', "Signature (patient's consultant)")):
+            with self.subTest(walk=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic RR3-05 %d' % n)
+                e = self.generated(version, 'Plan: Rest.')
+                self.assertEqual(self.reviewed(e, version, typed={label: 'Dr Somebody Else'}).status_code, 302)
+                response = self.finalized(e)
+                self.assertIn('must match your signed-in clinician name', response.content.decode())
+                self.assertEqual(e.status, 'review')
+
+
+@override_settings(**V3)
+class V3Round2(Walk, V3Fixture, TestCase):
+    def confirmation(self, template, version):
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm', 'mapping_version': version.pk,
+                                                                   'checked_every_field': 'on'})
+        return response.status_code, (response.context or {}).get('v3_error') if response.status_code == 400 else None
+
+    def test_rr1_01_rr1_06_the_writing_line_of_a_signing_box_or_caption_is_listed_at_confirmation(self):
+        """a32243eb confirmed these, generated 'Dr Somebody Else' onto the signing line and exported it."""
+        doc = Document(); doc.add_heading('Consultant review', level=2); doc.add_paragraph('Signed by the consultant:')
+        box(doc, text='______________________________'); doc.add_paragraph('Plan: ______')
+        in_box = saved(doc)
+        caption_under = lines('____________________', 'Consultant signature', 'Plan: ______', heading='Consultant review')
+        blank_between = lines('Consultant signature:', '', '____________________', 'Plan: ______', heading='Consultant review')
+        for n, (name, data) in enumerate((('box', in_box), ('caption under the line', caption_under),
+                                          ('a blank paragraph between', blank_between))):
+            with self.subTest(name=name):
+                template, version = self.uploaded(data=data, name='Synthetic RR1-01/06 %d' % n)
+                status, error = self.confirmation(template, version)
+                self.assertEqual(status, 400)
+                self.assertIn('signing', error)
+
+    def test_rr1_07_a_manual_answer_in_a_hidden_signing_box_is_refused(self):
+        doc = Document(); doc.add_heading('Consultant review', level=2); doc.add_paragraph('Signed by the consultant:')
+        tbl = box(doc)._tbl; doc.add_paragraph('Plan: ______')
+        bs = OxmlElement('w:bookmarkStart'); bs.set(qn('w:id'), '7'); bs.set(qn('w:name'), 'sig'); tbl.addprevious(bs)
+        be = OxmlElement('w:bookmarkEnd'); be.set(qn('w:id'), '7'); tbl.addnext(be)
+        bookmark = saved(doc)
+        doc = Document(); doc.add_heading('Consultant review', level=2)
+        outer = doc.add_table(rows=1, cols=1).cell(0, 0); outer.paragraphs[0].add_run('Signed by the consultant:')
+        inner = outer.add_table(rows=1, cols=1)
+        borders = OxmlElement('w:tcBorders')
+        for side in ('top', 'left', 'bottom', 'right'):
+            edge = OxmlElement('w:' + side); edge.set(qn('w:val'), 'single'); borders.append(edge)
+        inner.cell(0, 0)._tc.get_or_add_tcPr().append(borders); outer.add_paragraph('')
+        doc.add_paragraph('Plan: ______')
+        nested = saved(doc)
+        for n, (name, data, slot) in enumerate((('bookmark', bookmark, 'b/tbl[0]/tr[0]/tc[0]'),
+                                                ('nested', nested, 'b/tbl[0]/tr[0]/tc[0]/tbl[0]/tr[0]/tc[0]'))):
+            with self.subTest(name=name):
+                template, version = self.uploaded(data=data, name='Synthetic RR1-07 %d' % n)
+                response = self.client.post(f'/templates/{template.pk}/', {
+                    'action': 'v3_add', 'mapping_version': version.pk, 'slot': BODY + slot, 'kind': 'long_text',
+                    'label': 'Consultant review'})
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(self.latest(template).pk, version.pk)
+
+    def test_rr1_02_rr1_11_signing_lines_joined_to_a_date_or_another_act_are_never_generated(self):
+        for n, (label, value) in enumerate((('Signature, date', 'Dr Example 30/09/2026'),
+                                            ('Sign and print name', 'Dr Somebody Else'), ('Nurse sign', 'Dr Example'))):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=lines(f'{label}: ______________', 'Plan: ______'),
+                                                  name='Synthetic RR2 v3 %d' % n)
+                field = self.by_label(version)[label]
+                self.assertEqual(field['kind'], 'signature')
+                self.assertEqual(self.confirmation(template, version)[0], 302)
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                self.assertEqual((e.answers[field['key']]['status'], e.answers[field['key']]['text']), ('missing', ''))
+
+
+@override_settings(**MAPPING_SETTINGS)
+class ModelProposalsRound2(V3Fixture, TestCase):
+    proposal = ModelProposalsRound1.proposal
+    relabel = staticmethod(ModelProposalsRound1.relabel)
+
+    def setUp(self):
+        super().setUp()
+        self.config = generation.configuration()
+
+    def run_job(self, version, body):
+        from decimal import Decimal
+        from core import jobs, mapping_jobs
+        from core.models import Job
+        compiled = mapping.compile_request(version, self.config)
+        mapping_jobs.enqueue(version, self.user, self.config, compiled['request_sha256'])
+        with patch('anthropic.Anthropic', side_effect=AssertionError('provider construction forbidden')), \
+                patch('core.mapping_jobs.send', return_value=(body, Decimal(0), {}, {}, 'synthetic-mapping-fixture',
+                                                             '', '', True)):
+            jobs.run_one()
+        job = Job.objects.filter(kind='mapping').latest('created_at')
+        return job.state, version.template.versions.latest('number')
+
+    def body(self, version, replaced, changes):
+        compiled = mapping.compile_request(version, self.config)
+        payload = json.loads(compiled['request']['messages'][0]['content'])
+        body = mapping.wire.fixture(payload)
+        fids = {f['key']: n for n, f in enumerate(payload['fields'])}
+        body['f']['k'] = [n for n in body['f']['k'] if n not in {fids[k] for k in replaced}]
+        body['f']['r'] = sorted(fids[k] for k in replaced)
+        sids = {row['slot']: n for n, row in enumerate(payload['slots'])}
+        body['x'] = [change(payload, fids, sids) for change in changes]
+        return body
+
+    def test_rr3_04_a_relabel_never_creates_a_signature_or_identity_label(self):
+        """'Reviewed by' relabelled to the printed word 'signature' was adopted: the identity rule then held a place with
+        no signing role, and the clinician could not rename it back."""
+        for n, text in enumerate(('Reviewed by: ______    Consultant signature: ______', 'Reviewed by: ______ (signature)')):
+            with self.subTest(text=text):
+                template, version = self.uploaded(data=lines(text, 'Plan: ______'), name='Synthetic RR3-04 %d' % n)
+                reviewed = next(f for f in version.fields if f['label'].startswith('Reviewed by'))
+                at = text.index('signature')
+                result = self.proposal(version, replaced=[reviewed['key']],
+                                       changes=[self.relabel(reviewed['key'], 'b/p[1]', reviewed['kind'], at, at + 9)])
+                self.assertEqual(result['review']['changes'], [])
+                self.assertEqual(next(f for f in result['fields'] if f['key'] == reviewed['key']), reviewed)
+                self.assertIn(mapping.SIGNING_LABEL, ' '.join(r['reason'] for r in result['review']['unresolved']))
+
+    def test_rr3_03_an_adopted_relabel_beside_an_inline_control_can_be_resolved_and_confirmed(self):
+        """The resolution re-validated overlaps the engine's own mapping already had (a span beside an inline control on
+        one line), so the adopted Weight relabel refused every resolution and the mapping could never be confirmed."""
+        doc = Document(); doc.add_heading('Clinic record', level=2)
+        p = doc.add_paragraph('Hospital number: ')
+        sdt = OxmlElement('w:sdt'); pr = OxmlElement('w:sdtPr'); pr.append(OxmlElement('w:text')); sdt.append(pr)
+        content = OxmlElement('w:sdtContent'); r = OxmlElement('w:r'); t = OxmlElement('w:t'); t.text = ''
+        r.append(t); content.append(r); sdt.append(content); p._p.append(sdt)
+        p.add_run('    Weight: ______ kg')
+        doc.add_paragraph('Plan: ______')
+        template, version = self.uploaded(data=saved(doc), name='Synthetic RR3-03')
+        weight = self.by_label(version)['Weight']
+        compiled = mapping.compile_request(version, self.config)
+        payload = json.loads(compiled['request']['messages'][0]['content'])
+        source = next(row['text'] for row in payload['slots'] if row['slot'] == BODY + 'b/p[1]')
+        at = source.index('Weight')
+        state, new = self.run_job(version, self.body(version, [weight['key']], [
+            self.relabel(weight['key'], 'b/p[1]', weight['kind'], at, at + 6)]))
+        self.assertEqual(state, 'succeeded')
+        self.assertEqual(next(f for f in new.fields if f['key'] == weight['key'])['origin'], 'model_assisted')
+        mapped = v3_mapping.mapped_slots(new.fields)
+        post = {'action': 'resolve', 'mapping_version': str(new.pk)}
+        post.update({'resolution_%d' % n: 'mapped' if row.get('slot') and v3_mapping.is_mapped(row['slot'], mapped)
+                     else 'not_answer' for n, row in enumerate(new.assistance.get('unresolved', []))})
+        if new.assistance.get('unresolved'):
+            self.assertEqual(self.client.post(f'/templates/{template.pk}/assistance/', post).status_code, 302)
+        latest = self.latest(template)
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm', 'mapping_version': latest.pk,
+                                                                   'checked_every_field': 'on'})
+        self.assertEqual(response.status_code, 302)
+
+
+class SignerNounsInStep(TestCase):
+    def test_the_parsers_clinician_signers_are_core_v3_actors_care_nouns(self):
+        """The isolated parser keeps its own copy of the clinician nouns (it cannot import core): they must not drift."""
+        from core.v3_actors import CARE_NOUNS
+        self.assertEqual(word_v3.CARE_SIGNERS, CARE_NOUNS)

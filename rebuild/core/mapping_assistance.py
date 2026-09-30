@@ -130,6 +130,8 @@ NOT_ORDINARY=('This field carries a signature, initials, protection, printed aut
               "finalizing clinician's signature label; a model proposal cannot change it.")
 ROLE_PLACE=('This field sits on a signing, initials, consent or protected place of the original form (or lacks its '
             'printed requirement); a model proposal cannot change it.')
+SIGNING_LABEL=('A model proposal cannot relabel a field as a signature, initials or signing place, or as the finalizing '
+               "clinician's signature; only the clinician adds such a field.")
 KIND_CHANGE='A model proposal may change a kind only among text, long text, date and time.'
 OPTIONS_CHANGE='A model proposal cannot change the printed options of a field.'
 LABEL_SOURCE='Label is not verbatim source wording.'
@@ -286,6 +288,11 @@ def validate_proposal(version,compiled,response):
                     or clinician_identity(prior):
                 raise ValidationError(NOT_ORDINARY)
             if prior['key'] in held_now:raise ValidationError(ROLE_PLACE)
+            # ⚠️ Nor may a replacement's NEW label make it one (refutation round 2, RR3-04): 'Reviewed by' relabelled to
+            # the quoted 'signature' was adopted, the identity check turned on for a place with no signing role, and the
+            # clinician could no longer rename it back. A model never creates a signing or identity field.
+            from documents.word_v3 import signing_place
+            if signing_place(label) or clinician_identity({'label':label}):raise ValidationError(SIGNING_LABEL)
             if target.kind!=prior['kind'] and not (target.kind in v3_mapping.TEXT_KINDS and prior['kind'] in v3_mapping.TEXT_KINDS):
                 raise ValidationError(KIND_CHANGE)
             if prior['kind'] in v3_mapping.TEXT_KINDS and target.options or \
@@ -495,8 +502,24 @@ def validate_mapping(version,fields,outline_rows):
     if len({f['key'] for f in fields})!=len(fields):problems.append('two fields share one key')
     # V1 over the fields a model proposal put there: the engine's own fields may legitimately share a line (a span and
     # the printed boxes beside it), and a clinician's add refuses a mapped place, so only a model field is judged here.
+    # ⚠️ And only an overlap the model field did not already have at its own place (refutation round 2, RR3-03): a
+    # replacement keeps its field's locator, so 'Hospital number: <control>    Weight: ____ kg' - the engine's own two
+    # fields on one line - refused every resolution once the Weight relabel was adopted, and the mapping could never be
+    # confirmed. The prior field is the proposal's base version's (the same rule validate_proposal's V1 applies); a model
+    # field with no prior there is judged on every overlap (fail closed).
+    from .models import TemplateVersion
+    base=TemplateVersion.objects.filter(pk=(version.assistance or {}).get('base_version') or None,
+                                        template=version.template).first()
+    priors={f['key']:f for f in (base.fields if base is not None else []) if isinstance(f,dict)}
+    def new_overlap(model,other):
+        prior,prior_other=priors.get(model['key']),priors.get(other['key'])
+        if prior is None or prior_other is None or prior.get('locator')!=model.get('locator') \
+                or prior_other.get('locator')!=other.get('locator'):
+            return overlaps(model,other)
+        return overlaps(model,other) and not overlaps(prior,prior_other)
     clashes=sorted({v3_mapping.label_of(a) for i,a in enumerate(fields) for b in fields[i+1:]
-                    if 'model_assisted' in (a.get('origin'),b.get('origin')) and overlaps(a,b)})
+                    if a.get('origin')=='model_assisted' and new_overlap(a,b)
+                    or b.get('origin')=='model_assisted' and new_overlap(b,a)})
     if clashes:problems.append('these fields write to the same place: '+', '.join(clashes))
     boxes=v3_mapping.missing_boxes(fields,outline_rows)+v3_mapping.checkboxes_off_box(fields)
     if boxes:problems.append('these checkbox fields do not point at a printed box: '+', '.join(boxes))

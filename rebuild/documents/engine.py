@@ -209,6 +209,18 @@ def cell_text(cell):
     return "".join(cell.xpath(".//w:t/text()")).strip()
 
 
+def label_text(cell):
+    """A question cell's PRINTED label: its words with a line break, a tab or a paragraph boundary read as the space it
+    prints. ⚠️ cell_text joins every w:t with nothing between them (right for 'is this cell empty?', wrong for a label):
+    'Consultant' + line break + 'signature' became the label 'Consultantsignature', which reads as no signing place, so
+    generation filled the consultant's signing row and the export printed it (refutation round 2, RR1-05)."""
+    printed = []
+    for paragraph in cell.xpath(".//w:p"):
+        printed.append("".join(node.text or "" if node.tag == qn("w:t") else " "
+                               for node in paragraph.iter(qn("w:t"), qn("w:br"), qn("w:cr"), qn("w:tab"))))
+    return re.sub(r"\s+", " ", " ".join(printed)).strip()
+
+
 #: ⚠️ ELEMENTS THAT RENDER SOMETHING WITHOUT PRODUCING A `w:t`. `cell_text` reads only
 #: `.//w:t`, so a cell holding a TICKED WINGDINGS CHECKBOX (`w:sym w:char="F0FE"`) reads as
 #: empty — and the write path assigns `Run.text`, which clears the run and DELETES the symbol.
@@ -275,7 +287,7 @@ def multi_column_answers(row_cells):
         labels, values = texts[0::2], row_cells[1::2]
         if (all(label and len(label) <= MAX_LABEL_CELL for label in labels)
                 and all(index % 2 == 1 for index in blanks)):
-            offered = [(label, cell) for label, cell in zip(labels, values)
+            offered = [(label_text(question), cell) for question, cell in zip(row_cells[0::2], values)
                        if not cell_text(cell) and usable_answer_cell(cell)]
             if len(offered) == len(values) == len(blanks):
                 return offered
@@ -325,7 +337,7 @@ def docx_inspect(path, contract=CONTRACT):
                                    "locator": {"cell": len(cells) - 1}})
                 continue
             left, right = row_cells
-            label = "".join(left.xpath(".//w:t/text()")).strip()
+            label = label_text(left)
             contents = "".join(right.xpath(".//w:t/text()")).strip()
             if label and not contents:
                 # ⚠️ THE THIRD READER, AND IT WAS LEFT BEHIND. `cell_occupied`'s docstring says
