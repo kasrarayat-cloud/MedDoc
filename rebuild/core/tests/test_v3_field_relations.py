@@ -132,9 +132,7 @@ class OrdinaryFieldRelations(SimpleTestCase):
         answers = offered(first, fields, {'f': [first]})
         changed = {**answers['f'], 'text': 'The patient is not subject to the arrangements.'}
         self.assertEqual(g.governed_decisions(first, fields, {'f': changed}), [fields[0]['label']])
-        # The kill switch: an explicit QUILLMD_V3_FIELD_RELATIONS other than '1' turns off new generations AND the stored
-        # records (2026-09-30: a model-string rollback alone turns off only the first).
-        with override_settings(V3_FIELD_RELATIONS=False, V3_FIELD_RELATIONS_RECORDS=False):
+        with override_settings(V3_FIELD_RELATIONS=False):
             self.assertEqual(g.governed_decisions(first, fields, answers), [fields[0]['label']])
 
     def test_direct_opposite_copular_source_cannot_be_declared_independent(self):
@@ -945,8 +943,7 @@ class OrdinaryFieldRelations(SimpleTestCase):
         altered = copy.deepcopy(fields); altered[0]['locator']['fingerprint'] = '1' * 64
         self.assertIn('Other:', g.governed_decisions(notes, altered, original))
         self.assertIn('Other:', g.governed_decisions(notes + ' New source.', fields, original))
-        # The kill switch (an explicit QUILLMD_V3_FIELD_RELATIONS other than '1') refuses stored records (2026-09-30).
-        with override_settings(V3_FIELD_RELATIONS=False, V3_FIELD_RELATIONS_RECORDS=False):
+        with override_settings(V3_FIELD_RELATIONS=False):
             self.assertIn('Other:', g.governed_decisions(notes, fields, original))
 
     def test_complete_catalogue_actual_wire_and_price_share_one_compiler(self):

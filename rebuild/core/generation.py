@@ -1880,10 +1880,7 @@ def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_unit
             note_units = [{'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)}]
             corrections = note_units
         preceding = v3_preceding_reading(notes, asked, context, note_units, v3_parsed)
-        # Stored relation drafts are read unless explicitly switched off (`v3_field_relations.records_enabled`), so the
-        # page's reading carries the form's full catalogue for their binding check.
-        if getattr(settings, 'V3_FIELD_RELATIONS_RECORDS', getattr(settings, 'V3_FIELD_RELATIONS', False)):
-            preceding['catalogue'] = fields
+        if getattr(settings, 'V3_FIELD_RELATIONS', False): preceding['catalogue'] = fields
         result += ({'units': note_units, 'corrections': corrections, 'preceding': preceding},)
     return result
 
@@ -3390,34 +3387,79 @@ def v3_ends_labelled(claim, found):
 
 
 def v3_floor_index(reading):
-    """Per-note indexes for `v3_relation_causes`, built once per reading (kept in it): each unit's SIGNATURE (every key
-    any OPPOSED arm compares: its claim and negated keys, predicate heads, the keys of its predicates' complement words,
-    a labelled line's label and value keys, and what it ends or denies having) with the units by signature key - an arm
-    can hold only between two units whose signatures share a key, so candidates are exactly the units sharing one; the
-    bare cessations; and the class denials (quantified or negated lines that are not a printed question's labelled
-    line or 'Label is ...' sentence). An index, never a rule: it changes no outcome, only what is compared."""
+    """Per-note indexes for `v3_relation_causes`, built once per reading (kept in it): for each KIND of key an OPPOSED
+    arm compares, the units carrying that key as that kind (`v3_opposed_candidates` reads them), the bare cessations,
+    and the class denials (quantified or negated lines that are not a printed question's labelled line or 'Label is ...'
+    sentence). An index, never a rule: it changes no outcome, only what is compared.
+
+    ⚠️ REPAIR (2026-09-30, L3:R3-COST-1): this indexed each unit by ONE signature of every key it carries, so a unit
+    that merely shared a word with the answer ('takes aspirin' beside 'takes aspirin') was compared predicate by
+    predicate, once per proven unit - quadratic in a long note whose lines share their words (2.6x to 5.9x 43fcf214's
+    page, save and generation time). Each arm needs its OWN kinds of key to meet (a claim and a negation, an asserting
+    and a denying predicate head, a denial's words and a labelled line's), so it is indexed by those."""
     found = reading.get('_floor_index')
     if found is not None:
         return found
     from .v3_actors import keys
-    signature, by_key = {}, {}
+    by = {name: {} for name in ('negated', 'claim', 'asserting_head', 'denying_head', 'denial_words', 'labelled',
+                               'labelled_label', 'topic_denial', 'ceased')}
+
+    def add(name, keyset, uid):
+        for key in keyset:
+            by[name].setdefault(key, set()).add(uid)
+    labelled = reading.get('labelled_claims', {})
     for u in reading['units']:
         uid = u['id']
         info = reading['actors'][uid]
-        keyset = set(reading['claim_keys'][uid]) | set(reading['negated_keys'][uid])
-        for head, _, _, complement, _ in reading['predicates'][uid]:
-            keyset |= set(head) | keys(complement)
-        claim = reading.get('labelled_claims', {}).get(uid)
+        add('negated', reading['negated_keys'][uid], uid)
+        add('claim', reading['claim_keys'][uid], uid)
+        for head, negated, _, complement, _ in reading['predicates'][uid]:
+            add('denying_head' if negated else 'asserting_head', head, uid)
+            if negated:
+                add('denial_words', set(head) | keys(complement), uid)
+        claim = labelled.get(uid)
         if claim:
-            keyset |= set(claim[0]) | set(claim[1])
-        keyset |= set(info.get('topic_denial_keys', ())) | set(info.get('ceased_keys', ()))
-        signature[uid] = frozenset(keyset)
-        for key in keyset:
-            by_key.setdefault(key, set()).add(uid)
-    found = {'signature': signature, 'by_key': by_key,
+            add('labelled', set(claim[0]) | set(claim[1]), uid)
+            add('labelled_label', claim[0], uid)
+        add('topic_denial', info.get('topic_denial_keys', ()), uid)
+        add('ceased', info.get('ceased_keys', ()), uid)
+    found = {'by': by,
              'bare_cessations': [u for u in reading['units'] if reading['actors'][u['id']]['bare_cessation']],
              'class_denials': [u for u in reading['units'] if reading['actors'][u['id']]['quantified_denial']]}
     reading['_floor_index'] = found
+    return found
+
+
+def v3_opposed_candidates(reading, uid):
+    """The units any OPPOSED SAME TOPIC arm (`v3_relation_causes`) can hold unit `uid` by: each arm compares one kind of
+    key of the answer with one kind of the other unit's and holds only when they share one - its claim with their
+    negation and the reverse, a predicate with one of the other polarity and the same head (`v3_opposed_predicates`), a
+    denial's head or complement words with a labelled line's label or value (`v3_denies_labelled`, both ways), a
+    labelled line's label with a denial of ever having it (`v3_ends_labelled`, both ways), and its claim with their
+    cessation. A superset of every unit an arm holds, never a rule: the arms themselves decide."""
+    from .v3_actors import keys
+    by = v3_floor_index(reading)['by']
+    info = reading['actors'][uid]
+    mine_claim, mine_negated = reading['claim_keys'][uid], reading['negated_keys'][uid]
+    claim = reading.get('labelled_claims', {}).get(uid)
+    found = set()
+
+    def look(name, keyset):
+        index = by[name]
+        for key in keyset:
+            found.update(index.get(key, ()))
+    look('negated', mine_claim)
+    look('claim', mine_negated)
+    look('ceased', mine_claim)
+    for head, negated, _, complement, _ in reading['predicates'][uid]:
+        look('asserting_head' if negated else 'denying_head', head)
+        if negated:
+            look('labelled', set(head) | keys(complement))
+    if claim:
+        look('denial_words', set(claim[0]) | set(claim[1]))
+        look('topic_denial', claim[0])
+    look('labelled_label', info.get('topic_denial_keys', ()))
+    found.discard(uid)
     return found
 
 
@@ -3518,14 +3560,13 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected)
-    # OPPOSED SAME TOPIC (only units sharing a signature key can meet any arm: `v3_floor_index`)
-    index = v3_floor_index(reading)
+    # OPPOSED SAME TOPIC (only the units an arm can meet by its own kind of key: `v3_opposed_candidates`)
     mine_claim, mine_negated = reading['claim_keys'][uid], reading['negated_keys'][uid]
     mine = reading['predicates'][uid]
     mine_timeless = [v3_without_time(record) for record in mine]
     labelled = reading.get('labelled_claims', {})
-    candidates = set().union(*(index['by_key'].get(key, ()) for key in index['signature'][uid]))
-    for other in (u for u in units if u['id'] in candidates):
+    position = reading['position']
+    for other in [units[position[oid]] for oid in sorted(v3_opposed_candidates(reading, uid), key=position.__getitem__)]:
         oid = other['id']
         found = actors[oid]
         if (oid == uid or not found['readable'] or found['other_floor'] or resolved[oid].get('self_other')
@@ -3560,7 +3601,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     other_keys = frozenset().union(*(keys for name, keys in label_keys.items() if name != label)) - own_keys
     my_heads = frozenset().union(frozenset(), *(record[0] for record in mine))
     my_words = mine_claim
-    for other in index['class_denials']:
+    for other in v3_floor_index(reading)['class_denials']:
         oid = other['id']
         if oid == uid or oid in selected:
             continue
@@ -4412,10 +4453,14 @@ def generate(notes,fields,config=None,*,context_labels=(),requirements=None):
         # prompt v7: a v6 job, a job quoted before that contract and every non-v3 form are sent exactly what they were
         # quoted for, and a question with no printed context is sent as before. `maximum_cost` already bounds these bytes
         # (it serializes whole fields). Validation of the answer is unchanged.
+        # ⚠️ REPAIR (2026-09-30, L2:F7): the injection screen (`INJECTION`, read by validation) reads the notes and the
+        # labels, never a question's context, and 43fcf214 never sent the context. A context that screen would flag is
+        # not sent, so that question's request is exactly 43fcf214's.
         with_context=v3_natural and natural and config.get('prompt_version')==CURRENT_PROMPT_VERSION
         def question(f):
             asked={'key':f['key'],'label':f['label'],'answer_policy':f.get('answer_policy','documented_source_only')}
-            if with_context and isinstance(f.get('context'),str) and f['context'].strip():
+            if (with_context and isinstance(f.get('context'),str) and f['context'].strip()
+                    and not INJECTION.search(f['context'])):
                 asked['context']=f['context']
             return asked
         payload={'questions':[question(f) for f in fields],
