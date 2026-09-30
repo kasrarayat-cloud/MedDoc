@@ -986,6 +986,12 @@ class TableHeadingsAndAnswerLines(unittest.TestCase):
                  ([["~** Upper Arm **", "WIDTH (mm)", "FLOW (ms)"], ["~** Lower Arm **", "WIDTH (mm)", "FLOW (ms)"]],
                   ["b/tbl[0]/tr[1]/tc[0]"]),
                  ([["~Describe the left knee", "Yes", "No"], ["Knee", "", ""], ["~Describe the right knee", "Yes", "No"]],
+                  ["b/tbl[0]/tr[2]/tc[0]"]),
+                 # the first row's cell is printed, not guidance: no section heading pair
+                 ([["Item", "Grade", "Notes"], ["~Swelling", "Grade", "Notes"], ["Knee", "", ""],
+                   ["~Redness", "Grade", "Notes"]], ["b/tbl[0]/tr[1]/tc[0]", "b/tbl[0]/tr[3]/tc[0]"]),
+                 # the repeated cells are answers (Yes/No boxes), not printed column headers
+                 ([["~Left knee swelling", "Yes", "No"], ["Knee", "", ""], ["~Right knee swelling", "Yes", "No"]],
                   ["b/tbl[0]/tr[2]/tc[0]"]))
         for rows, appended in cases:
             with self.subTest(rows=rows):
