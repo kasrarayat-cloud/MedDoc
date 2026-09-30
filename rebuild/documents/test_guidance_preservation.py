@@ -38,6 +38,18 @@ class LegacyTextBounds(unittest.TestCase):
         self.assertEqual(len(fields), 1)
         return raw, fields
 
+    def micro(self, **kwargs):
+        """A tiny guidance control: inspected (no field; a note with its complete help) and a field for it as a mapping
+        stored before 2026-09-30 carried it (text, write-protected, one character)."""
+        raw = data(legacy_text(**kwargs)); result = w.inspect(raw)
+        self.assertEqual(result['fields'], [])
+        slot = w.SlotIndex(w.open_package(raw)).by_id['word/document.xml#b/p[0]/ff[0]']
+        stored = {'key': 'v3_1', 'label': 'Answer', 'kind': 'text', 'context': '', 'max_chars': 1,
+                  'write_protected': True, 'review_reason': w.FF_GUIDANCE_REASON,
+                  'locator': {'contract': 'v3', 'part': slot.part, 'slot': slot.path, 'target': {'type': 'ff_text'},
+                              'fingerprint': w.fingerprint(slot.el)}}
+        return raw, result, stored
+
     def result(self, raw, field):
         index = w.SlotIndex(w.open_package(raw)); loc = field['locator']
         runs, _ = w._field_result_runs(index.by_id[loc['part']+'#'+loc['slot']].el)
@@ -76,13 +88,16 @@ class LegacyTextBounds(unittest.TestCase):
         with self.assertRaises(w.V3Failure): w.fill(raw, fields, {fields[0]['key']:'LONGER ORIGINAL'})
         self.assertEqual(self.result(w.fill(raw, fields, {fields[0]['key']:'A'}), fields[0]), 'A')
 
-    def test_micro_guidance_is_visible_protected_metadata_and_keeps_full_help(self):
+    def test_micro_guidance_is_a_visible_note_not_an_answer_field_and_keeps_full_help(self):
         help_text = 'Press TAB to continue.\nKeep this full source guidance Ω.'
-        raw, fields = self.mapped(help_text=help_text)
-        field = fields[0]; self.assertTrue(field['write_protected']); self.assertEqual(field['max_chars'], 1)
-        self.assertIn('help', field['review_reason'])
-        self.assertEqual(field['source_instructions'][0]['text'], help_text)
-        self.assertEqual(w.fill(raw, fields, {}), raw)
+        raw, result, field = self.micro(help_text=help_text)
+        notes = [n for n in result['notes'] if n.startswith(w.FF_GUIDANCE_REASON)]
+        self.assertEqual(len(notes), 1)
+        self.assertIn('b/p[0]/ff[0]', notes[0])
+        self.assertTrue(notes[0].endswith('Help text: ' + help_text))
+        self.assertEqual(w.fill(raw, [], {}), raw)
+        self.assertEqual(w.fill(raw, [field], {}), raw)
+        fields = [field]
         for metadata in ('new', 'removed', 'false'):
             forged = copy.deepcopy(fields)
             if metadata != 'new':
@@ -92,7 +107,7 @@ class LegacyTextBounds(unittest.TestCase):
             self.assertEqual(failure.exception.code, 'protected_source_guidance')
 
     def test_micro_source_protection_cannot_be_bypassed_by_replacing_its_parent(self):
-        raw, fields = self.mapped(); field = fields[0]
+        raw, _, _ = self.micro()
         p = w.SlotIndex(w.open_package(raw)).by_id['word/document.xml#b/p[0]']
         forged = {'key':'old', 'kind':'text', 'label':'Prior mapping', 'locator':{
             'contract':'v3','part':p.part,'slot':p.path,'fingerprint':w.fingerprint(p.el),'target':{'type':'paragraph'}}}
@@ -111,7 +126,7 @@ class LegacyTextBounds(unittest.TestCase):
     def test_direct_writer_checks_native_cap_and_guidance_before_mutation(self):
         for kwargs, answer, code in (({'name':'Code','points':'22'},'AB','answer_too_long'),
                                      ({},'A','protected_source_guidance')):
-            raw, fields = self.mapped(**kwargs)
+            raw = data(legacy_text(**kwargs))
             slot = w.SlotIndex(w.open_package(raw)).by_id['word/document.xml#b/p[0]/ff[0]']
             before = etree.tostring(slot.el.getparent())
             with self.assertRaises(w.V3Failure) as failure: w.write_ff_text(slot.el,answer)
@@ -146,8 +161,11 @@ class LegacyTextBounds(unittest.TestCase):
         raw = data(legacy_text())
         with tempfile.TemporaryDirectory() as directory:
             original = Path(directory)/'original.docx'; final = Path(directory)/'final.docx'; original.write_bytes(raw)
-            fields = json.loads(json.dumps(inspect_template(original,engine='v3')['fields']))
-            self.assertTrue(fields[0]['write_protected'])
+            inspected = json.loads(json.dumps(inspect_template(original,engine='v3')))
+            self.assertEqual(inspected['fields'], [])
+            self.assertTrue(any(n.startswith(w.FF_GUIDANCE_REASON) for n in inspected['warnings']))
+            _, _, stored = self.micro()
+            fields = json.loads(json.dumps([stored]))
             fill_template(original,fields,{},final)
             self.assertEqual(final.read_bytes(),raw)
             fields[0].pop('write_protected'); fields[0].pop('review_reason')
