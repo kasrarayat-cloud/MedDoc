@@ -3277,6 +3277,21 @@ def v3_elicited_frames(units):
     return frozenset(u['id'] for u in units if ELICITED_FRAME.fullmatch(u['quote']))
 
 
+def v3_bound_by_destination(field, unit, at):
+    """Whether the bounding clause at offset `at` of `unit` states the destination's OWN printed time: 'before the
+    headache begins' answering a question printed under 'Which symptoms occur before the headache begins?'. The question
+    asks for exactly that scope (43fcf214's relation reader already requires it: `v3_destination.temporal_warnings`), so
+    it does not bound the statement's currency. Only before/after clauses can; 'when', 'until', 'unless', 'if', 'once'
+    never do. Read only to decide whether BOUNDED adds a hold."""
+    from .v3_destination import destination_temporal_scopes, _TEMPORAL, word_roots
+    required = destination_temporal_scopes(field)
+    match = _TEMPORAL.match(unicodedata.normalize('NFKC', unit['quote'][at:]))
+    if not required or not match:
+        return False
+    direction = 'before' if re.sub(r'\s+', ' ', match[1].casefold()) in ('before', 'prior to', 'preceding') else 'after'
+    return any(wanted == direction and event & word_roots(match[2]) for wanted, event in required)
+
+
 def v3_current_state_field(field):
     """A question about the patient's CURRENT state: a label that is not a history or a plan, names no past time and
     does not open as a question in the PAST tense ('Did the patient have right knee pain?', 'Was the patient admitted?',
@@ -3424,7 +3439,9 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             (`v3_literal_facts._elicited_report`); a personal pronoun the note's run does not resolve uniquely to the
             patient.
       BOUNDED: a subordinate clause bounding or conditioning the statement ('when', 'until', 'unless', 'if', 'once',
-            'before', 'after'), unless it is the 'When asked ...' frame of that admitted elicited report.
+            'before', 'after'), unless it states the destination's own printed time (`v3_bound_by_destination`: 'The
+            patient reports intermittent buzzing before the headache begins.' under 'Which symptoms occur before the
+            headache begins?') or is the 'When asked ...' frame of that admitted elicited report.
       DATED PAST: an ended habit, or a statement dated to the past and not in the present tense (a simple past, or a
             verbless labelled value), for a current-state question (`v3_current_state_field`: 'The patient had right knee
             pain last year.', 'Right knee: pain last year.', 'The patient used to smoke.'; a perfect is present: 'has been
@@ -3441,7 +3458,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             has no content word, or has no complement and no subject but a personal pronoun: 'It was postponed.', 'Not
             anymore.', 'But he quit only last month.'), reaching back through other questions' plain labelled values;
             and a cessation naming nothing, anywhere in the note ('The patient quit five years ago.', 'She stopped it.',
-            `v3_actors` 'bare_cessation'). A dependent unit a text answer itself selects is part of it.
+            `v3_actors` 'bare_cessation'), selected with it or not.
       OPPOSED SAME TOPIC: any other unit that is not another person's statement (a he/she standing for another person
             included), selected or not, that asserts what this unit denies or denies what it asserts
             (`v3_opposed_predicates`, also with words of time left out of both complements: 'The patient smokes.' / 'The
@@ -3457,13 +3474,16 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
             another person, or a pronoun standing for another or an ambiguous actor, that shares a claimed word ('His
             father had a heart attack at 55. He smoked heavily. Smoker: Yes.'), unless its main subject is the explicit
             patient or it is the patient's completed elicited report (`v3_elicited_frames`).
-      CLASS DENIAL: any other line, not selected with it, that denies by a quantifier ('The patient takes no
-            anticoagulants.', 'She has had no pain for a month.', 'She has never smoked.') - not a thing set apart from
-            what was said ('no other medication') - or re-attributes a statement away from the patient ('Her husband takes
-            warfarin, not her.'), unless it names its own topic by a label (printed or not: 'Smoker: No.', 'Child
+      CLASS DENIAL: any other line, not selected with it, that denies by a quantifier - not a thing set apart from what
+            was said ('no other medication', 'no new illness') - the answer's own predicate or one of its words ('The
+            patient takes no anticoagulants.' / 'takes warfarin'; 'She has had no pain for a month.' / 'presents with
+            chest pain'; 'She has never smoked.'), or that re-attributes a statement away from the patient ('Her husband
+            takes warfarin, not her.'), unless it names its own topic by a label (printed or not: 'Smoker: No.', 'Child
             protection plan: none.'; OPPOSED reads that) or names another printed question and not this one ('No known
-            drug allergies.' beside a Medications answer): only meaning says whether its class covers this answer. A plain
-            'not' denies its own predicate and is read by OPPOSED. An unread line may be one, so it holds too.
+            drug allergies.' beside a Medications answer): only meaning says whether its class covers this answer. A
+            quantified denial of another predicate and another thing ('expects no relationship changes' beside 'The
+            relationship reporting condition is monitored ...', 'No fever.' beside 'takes warfarin') is not one, and a
+            plain 'not' denies its own predicate and is read by OPPOSED. An unread line may be anything, so it holds.
     STATED RESIDUALS (model-only): a change stated by meaning alone with its own full subject and no shared or ended word
     ('The pain got better.' beside 'The patient presents with chest pain.'); a topic or labelled line after another
     person's statement that shares no word with it ('Her sister was seen in oncology last month. Assessment is breast
@@ -3486,7 +3506,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     if info['kind'] == 'pronoun' and state.get('actor') in ('other', 'ambiguous'):
         causes.append((state.get('hold_cause') or unit, None))
     # BOUNDED
-    if not elicited and info['bounded']:
+    if not elicited and any(not (field is not None and v3_bound_by_destination(field, unit, at)) for at in info['bounded']):
         causes.append((unit, 'syntax_incomplete'))
     # DATED PAST
     if field is not None and (
@@ -3501,9 +3521,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
         causes.append((unit, None))
     # DEPENDS
     text_answer = field is None or field.get('kind') in ('text', 'long_text')
-    for later in reading['dependent_reach'].get(uid, ()):
-        if not (text_answer and later['id'] in selected):
-            causes.append((later, None))
+    causes.extend((later, None) for later in reading['dependent_reach'].get(uid, ()))
     causes.extend((other, None) for other in v3_floor_index(reading)['bare_cessations']
                   if other['id'] != uid and other['id'] not in selected)
     # OPPOSED SAME TOPIC (only units sharing a signature key can meet any arm: `v3_floor_index`)
@@ -3547,12 +3565,20 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     label_keys = reading['field_label_keys']
     own_keys = label_keys.get(label, frozenset())
     other_keys = frozenset().union(*(keys for name, keys in label_keys.items() if name != label)) - own_keys
+    my_heads = frozenset().union(frozenset(), *(record[0] for record in mine))
+    my_words = mine_claim
     for other in index['class_denials']:
         oid = other['id']
         if oid == uid or oid in selected:
             continue
-        surface = actors[oid]['surface_keys']
-        if not (surface & other_keys and not surface & own_keys):
+        found = actors[oid]
+        surface = found['surface_keys']
+        if surface & other_keys and not surface & own_keys:
+            continue
+        # a re-attribution away from the patient, or a class denied OF THE ANSWER's own predicate ('takes no
+        # anticoagulants' / 'takes warfarin') or naming what it claims ('has had no pain' / 'presents with chest pain';
+        # not a modifier of it: 'expects no relationship changes' / 'The relationship reporting condition ...')
+        if found['reattribution'] or found['denial_heads'] & my_heads or found['denial_nouns'] & my_words:
             causes.append((other, None))
     return causes
 

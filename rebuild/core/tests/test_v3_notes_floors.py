@@ -132,10 +132,11 @@ class ContractSelection(SimpleTestCase):
 
     @override_settings(**RELATIONS)
     def test_a_stored_draft_survives_a_model_string_rollback_and_the_record_keeps_its_keys(self):
-        fields = order_form()
-        cto = 'The patient is subject to a Community Treatment Order (CTO).'
-        notes = cto + ' The patient attends the clinic every week.'
-        stored = {'v3_1': offered(notes, fields, {'v3_1': [cto]})['v3_1']}
+        # the clinic form: its signature is never asked, so the page's reading needs the full catalogue for the binding
+        fields = clinic_form()
+        cc = 'This is a 30-year-old female seen for headaches.'
+        notes = N01
+        stored = {'v3_1': offered(notes, fields, {'v3_1': [cc]})['v3_1']}
         self.assertEqual(stored['v3_1']['status'], 'supported')
         # The signed record carries exactly 43fcf214's seven keys, so a code rollback reads it unchanged.
         record = stored['v3_1']['ordinary_relation']
@@ -200,6 +201,18 @@ class RequestVersion(SimpleTestCase):
         # v6 and v7 send the same instructions but for that one sentence.
         v6 = self.captured_for(fields, notes, g.PREVIOUS_PROMPT_VERSION)
         self.assertTrue(current['system'].replace(v6['system'], '', 1).strip().startswith('A question may carry'))
+        # ... and the sentences of v5 and v6 stay with every version from the one that introduced them
+        independent = 'independently applicable fields in different sections'
+        for version in (g.V5_PROMPT_VERSION, g.PREVIOUS_PROMPT_VERSION, g.CURRENT_PROMPT_VERSION):
+            with self.subTest(version=version):
+                self.assertIn(independent, self.captured_for(fields, notes, version)['system'])
+        from core.tests.test_unlabelled_source_scope import _legacy_instructions
+        attestation = 'Preprinted form text is context, not a documented patient fact.'
+        for version, present in ((g.V5_PROMPT_VERSION, False), (g.PREVIOUS_PROMPT_VERSION, True),
+                                 (g.CURRENT_PROMPT_VERSION, True)):
+            with self.subTest(version=version, legacy=True):
+                config = {**g.configuration(), 'mode': 'live', 'prompt_version': version}
+                self.assertEqual(attestation in _legacy_instructions(config), present)
 
 
 # ─── 3. the hold-only floors ─────────────────────────────────────────────────────────────────────────────────────
@@ -366,10 +379,13 @@ class HoldOnlyFloors(Floors, SimpleTestCase):
                            {'f': ['The patient is a smoker.']}, {'f': 'The patient is a smoker.'})
         self.assert_filled('The patient is subject to MAPPA. Child protection plan: none.', one('MAPPA status'),
                            {'f': ['The patient is subject to MAPPA.']}, {'f': 'The patient is subject to MAPPA.'})
-        # STATED OVER-HOLD: a quantified denial naming no printed question ('No fever.') holds every relation answer of
-        # the note, since only meaning says whether its class covers one
-        self.assert_held('The patient takes warfarin. No fever.', clinic_form(), {'v3_4': ['The patient takes warfarin.']},
-                         'v3_4', shown='No fever.')
+        # a quantified denial of another predicate and another thing is not a class of the answer (the D30 shape)
+        self.assert_filled('The patient takes warfarin. No fever.', clinic_form(), {'v3_4': ['The patient takes warfarin.']},
+                           {'v3_4': 'The patient takes warfarin.'})
+        notes = ('The patient reports stable relationships with family and expects no relationship changes before the '
+                 'next report.\n\nThe relationship reporting condition is monitored during weekly supervision visits.')
+        selected = 'The relationship reporting condition is monitored during weekly supervision visits.'
+        self.assert_filled(notes, one('Condition monitoring'), {'f': [selected]}, {'f': selected})
 
     def test_reference_answers_stay_filled(self):
         """The independent freeze's answers the relation path already filled on 43fcf214 stay filled."""
@@ -508,6 +524,9 @@ KILLING = (
     ('CLASS DENIAL quantifier', 'one:Anticoagulation',
      'The patient takes warfarin. The patient takes no anticoagulants.',
      'f', 'The patient takes warfarin.', None),
+    ('CLASS DENIAL of the answer\'s word', 'one:Presenting complaint',
+     'The patient presents with chest pain. The patient has had no pain for a month.',
+     'f', 'The patient presents with chest pain.', None),
     ('CLASS DENIAL re-attribution', 'one:Medications',
      'The patient takes warfarin. Her husband takes warfarin, not her.',
      'f', 'The patient takes warfarin.', None),
@@ -546,6 +565,11 @@ CONTROLS = (
      'The patient takes warfarin.', 'The patient takes warfarin.', None),
     ('a plain not denies its own predicate', 'one:Smoking status', 'The patient is a smoker. The patient is not a drinker.',
      'The patient is a smoker.', 'The patient is a smoker.', None),
+    ('a quantified denial of another predicate and thing', 'one:Medications', 'The patient takes warfarin. No fever.',
+     'The patient takes warfarin.', 'The patient takes warfarin.', None),
+    ("a clause stating the destination's own time", 'prodrome', 'The patient reports intermittent buzzing before the '
+     'headache begins.', 'The patient reports intermittent buzzing before the headache begins.',
+     'The patient reports intermittent buzzing before the headache begins.', None),
 )
 
 
@@ -566,6 +590,8 @@ class EveryArm(Floors, SimpleTestCase):
                 fields = one('History of present illness')
             elif exemption == 'a denial naming another printed question':
                 fields = one('Medications') + [v3('g', 'Allergies', 'text', 'Community care review')]
+            elif form == 'prodrome':
+                fields = [v3('f', 'Other:', 'text', 'Current headache > Which symptoms occur before the headache begins?')]
             else:
                 fields = build(form)
             key = 'f' if fields[0]['key'] == 'f' else ('v3_6' if choices is not None else 'v3_1')

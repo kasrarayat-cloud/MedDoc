@@ -456,8 +456,9 @@ def _denied(words, root):
 def _floor_reading(words, root, lem=None, txt=None):
     """The rest of what the relation floors read of one parsed unit (`generation.v3_relation_causes`); each only HOLDS.
 
-      'quantified_denial': a denial by a quantifier or a negation ('She takes no medicines.', 'She is not
-          anticoagulated.', 'She has never smoked.'): its class may cover another statement's topic (CLASS DENIAL);
+      'quantified_denial': a denial by a quantifier, of a thing not set apart from what was said ('She takes no
+          medicines.', 'She has never smoked.'; not 'no other medication'), or a negated reference to the patient ('Her
+          husband takes warfarin, not her.'): its class may cover another statement's topic (CLASS DENIAL);
       'ceased_keys': what a cessation ends ('Methadone was stopped.', 'She stopped the methadone.', 'The pain resolved
           yesterday.', 'The patient came off warfarin.'); 'bare_cessation': a cessation naming nothing but the patient or
           a pronoun ('The patient quit five years ago.', 'Stopped last month.', 'It was stopped.'), which leans on another
@@ -504,11 +505,26 @@ def _floor_reading(words, root, lem=None, txt=None):
     def set_apart(t):
         near = [t.head] + list(t.head.children) + list(t.children) + ([t.head.head] if t.dep_ == 'det' else [])
         return any(txt.get(x.i, _fold(x.text)) in SET_APART_WORDS for x in near)
-    quantified = (any(((t.dep_ == 'det' and txt[t.i] in QUANTIFIED_DENIALS) or txt[t.i] in QUANTIFIED_DENIAL_WORDS)
-                      and not set_apart(t) for t in words)
-                  or any((_personal(t) or this_patient(t)) and (
-                      any(c.dep_ == 'neg' for c in t.children)
-                      or (t.i > 0 and _fold(t.doc[t.i - 1].text) in ('not', 'never'))) for t in words))
+    quantifiers = [t for t in words if ((t.dep_ == 'det' and txt[t.i] in QUANTIFIED_DENIALS)
+                                        or txt[t.i] in QUANTIFIED_DENIAL_WORDS) and not set_apart(t)]
+    reattribution = any((_personal(t) or this_patient(t)) and (
+        any(c.dep_ == 'neg' for c in t.children) or (t.i > 0 and _fold(t.doc[t.i - 1].text) in ('not', 'never')))
+        for t in words)
+    quantified = bool(quantifiers) or reattribution
+    # what a quantifier denies: the thing it quantifies ('no anticoagulants') and the predicate governing it ('takes'),
+    # or for 'never' / 'nothing' / 'none' the predicate it hangs on ('has never smoked')
+    denial_nouns, denial_heads = set(), set()
+    for q in quantifiers:
+        if q.dep_ == 'det' and q.head.i != q.i:
+            # the noun phrase's own head ('no relationship changes' parses 'no' onto 'relationship', a modifier)
+            noun = q.head
+            while noun.dep_ in ('compound', 'amod', 'nmod') and noun.head.i != noun.i and noun.head.pos_ in ('NOUN', 'PROPN'):
+                noun = noun.head
+            denial_nouns.add(_lemma(noun))
+            if noun.head.i != noun.i:
+                denial_heads.add(_lemma(noun.head))
+        elif q.head.i != q.i:
+            denial_heads.add(_lemma(q.head))
     # (read only for a class denial: which printed question it names)
     surface = {w for t in words if t.is_alpha and not t.is_stop and lem[t.i] not in LIGHT_VERBS
                and lem[t.i] != 'patient' for w in (lem[t.i], txt[t.i])} if quantified else set()
@@ -543,7 +559,8 @@ def _floor_reading(words, root, lem=None, txt=None):
                 return True                                                                # 'on the waiting list'
         return False
     intention = any(intended(h) for h in clauses)
-    return {'quantified_denial': quantified,
+    return {'quantified_denial': quantified, 'reattribution': reattribution,
+            'denial_nouns': keys(denial_nouns), 'denial_heads': keys(denial_heads) | frozenset(denial_heads),
             'ceased_keys': keys(ended), 'bare_cessation': cessation and not keys(ended),
             'topic_denial_keys': (keys({_lemma(m) for c in root.children if c.dep_ in ('dobj', 'attr')
                                         and not any(g.dep_ == 'prep' for g in c.children)
@@ -575,7 +592,8 @@ def _unread(note_unread=True, quote=''):
             'main_patient': False,
             'other_floor': person,
             'claim_keys': frozenset(), 'negated_keys': frozenset(), 'predicates': (),
-            'quantified_denial': True, 'bare_cessation': True, 'ceased_keys': frozenset(),
+            'quantified_denial': True, 'reattribution': True, 'denial_nouns': frozenset(), 'denial_heads': frozenset(),
+            'bare_cessation': True, 'ceased_keys': frozenset(),
             'topic_denial_keys': frozenset(), 'surface_keys': frozenset(), 'intention': True}
 
 
