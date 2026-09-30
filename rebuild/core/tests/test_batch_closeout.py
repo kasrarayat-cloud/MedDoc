@@ -26,12 +26,21 @@ class BatchCloseout(BatchFixture, TestCase):
         Job.objects.filter(pk=part.job_id).update(started_at=timezone.now()-timedelta(minutes=6))
         jobs.mark_stale()
 
-    def assert_no_user_cost(self, batch):
+    def assert_no_user_cost(self, batch, late=None):
         self.assertEqual(sum(LedgerEntry.objects.filter(job__generation_part__batch=batch).values_list('amount',flat=True),Decimal(0)),0)
         self.assertFalse(Reservation.objects.filter(job__generation_part__batch=batch,state='held').exists())
         self.assertTrue(all(row['status']=='matched' for row in reconciliation()))
         self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers,{})
-        report=audit_report();self.assertTrue(report['all_checks_pass'],report)
+        report=audit_report()
+        if late is None:self.assertTrue(report['all_checks_pass'],report);return
+        # A late receipt nothing accounts for yet fails the audit on exactly that check, naming its child
+        # (audit_billing.provider_receipt_policy, 2026-09-30); everything else still passes.
+        self.assertFalse(report['all_checks_pass'])
+        self.assertEqual(report['receipt_policy']['late_provider_receipts'],[str(late)])
+        self.assertEqual(report['receipt_policy']['checks'],{'provider_receipts_settled_absorbed_or_held':True,
+                                                             'late_provider_receipts_resolved':False})
+        self.assertTrue(all(all(row['checks'].values()) for row in report['rows']+report['wallets']+report['generation_batches']))
+        for section in ('ledger_policy','cancellation_policy','hold_policy'):self.assertTrue(all(report[section]['checks'].values()))
 
     def test_recorded_final_interruption_financial_closeout_closes_staged_sibling(self):
         batch=self.admit();calls,call=self.fake(batch);store=jobs.store_response
@@ -70,7 +79,9 @@ class BatchCloseout(BatchFixture, TestCase):
         self.assertTrue(jobs.pending(self.encounter))
         self.assertTrue(part.events.filter(kind='late_response_recorded').exists())
         self.assertEqual(part.events.filter(kind='send_intent').count(),1)
-        self.assert_no_user_cost(batch)
+        receipt=ProviderReceipt.objects.filter(job=part.job).first()
+        unaccounted=receipt is not None and not PlatformCost.objects.filter(job=part.job,kind='absorbed_failure',amount=receipt.actual_cost).exists()
+        self.assert_no_user_cost(batch,late=part.job_id if unaccounted else None)
         if replacement:
             replacement[0].refresh_from_db();self.assertEqual(replacement[0].state,'queued')
             self.assertEqual(replacement[0].parts.filter(job__state='queued').count(),2)
@@ -102,7 +113,7 @@ class BatchCloseout(BatchFixture, TestCase):
         with self.assertRaisesMessage(ValidationError,'previously recorded platform cost'):self.resolve(part)
         self.assertEqual(PlatformCost.objects.get(job=part.job,kind='absorbed_failure').amount,Decimal('0.50'))
         part.job.refresh_from_db();self.assertEqual(part.job.state,'reconciliation')
-        self.assertTrue(jobs.pending(self.encounter));self.assert_no_user_cost(batch)
+        self.assertTrue(jobs.pending(self.encounter));self.assert_no_user_cost(batch,late=part.job_id)
 
     def test_late_unreadable_metering_remains_visible_until_explicit_resolution(self):
         batch,part,_=self.late_response(unreadable=True)

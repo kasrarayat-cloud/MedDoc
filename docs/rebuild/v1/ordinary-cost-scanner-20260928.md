@@ -115,3 +115,20 @@ read from already-loaded modules only; nothing is imported in the handler.
 Only `core/jobs.py` changed. `generation.py`, `v3_field_relations.py`,
 `generation_batch.py`, `batch_jobs.py` and `mapping_jobs.py` are unchanged, so
 every fixed identity above stands; no request, price, hold or send changed.
+
+## Settlement-guard addendum (fix/v1-settlement-worker, 2026-09-30) — two administrator settle() calls only
+
+Reviewed the finished normalized delta of `core/batch_jobs.py` against the candidate `43fcf214` before changing its
+fixed identity. `settle()` now refuses a job that is not `queued` or `running` unless its caller names the states it
+settles from (`core.billing.SETTLEABLE_STATES`, blockers.txt item 3). The batch module's two administrator paths name
+theirs: `resolve_view` passes `allowed_states=('reconciliation',)` and `recover_recorded` passes
+`allowed_states=('staged','reconciliation','running')`, the states its own check already admits. With that one keyword
+removed, both functions are AST-identical to `17623922…` (checked by walking both trees); every other top-level
+definition is unchanged, `run_one` included: the plan, the `b.request` wire, the request digest, the sandbox and
+held-amount checks, the client construction, the send intent, `client.messages.create(**wire)`, the worker's own
+settlement (which now refuses a child that is no longer running) and the staging. No request, price, hold or send
+changed. `generation.py`, `v3_field_relations.py` and `generation_batch.py` are unchanged.
+
+Reviewed replacement normalized identity:
+
+- `core/batch_jobs.py`: `08669b8c5b287f0898bfe2b45627934a00055d166a8ad64b371b24978ca490b8`.

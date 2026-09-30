@@ -41,6 +41,11 @@ class NoProviderRequest(ValidationError):
     """Raised before any provider request is made: nothing billable happened, so the held funds are released."""
 
 
+class JobNoLongerRunning(ValidationError):
+    """The job left 'running' while its worker was busy with it (the stale sweep, an administrator's resolution): the worker
+    adopts nothing and records nothing over what the other party recorded."""
+
+
 #: What the doctor reads when the provider SDK refused to build a request for want of a credential. Fixed, non-clinical.
 PROVIDER_NOT_CONNECTED='Generation provider is not connected.'
 
@@ -192,7 +197,13 @@ CANCEL_REFUSALS={'running':'Processing already started; the outcome will be bill
 
 def ended_key(job,label):
     """Free the request key of a job that ended without success so a fresh request for the same revision is accepted; the ended
-    row keeps its history under a key only it can hold. Longest key today is transcription (115 chars) + 43 = 158 of 160."""
+    row keeps its history under a key only it can hold. Longest key today is transcription (115 chars) + 43 = 158 of 160.
+
+    ⚠️ Once only. A key that already ends with this job's own id was ended before (a job an administrator resolved, reopened
+    by a late provider receipt and resolved again, core.jobs.hold_late_receipt): suffixing it twice would pass 160
+    characters and fail the resolution. A key is built before its job exists (enqueue), so a live key never carries its own
+    job's id."""
+    if job.request_key.endswith(':'+job.pk.hex): return job.request_key
     return f'{job.request_key}:{label}:{job.pk.hex}'
 
 
@@ -715,9 +726,13 @@ def run_one():
         resource_id=getattr(response,'id','') or ''
         # Financial evidence commits before any clinical serialization or file IO.
         with transaction.atomic():
+            # Under the job's row lock: the state this receipt arrives into. A receipt is recorded whatever it is — provider
+            # cost is never dropped — and one that arrives after the job left 'running' is held for an administrator.
+            arrived_into=Job.objects.select_for_update().get(pk=job.pk).state
             ProviderReceipt.objects.get_or_create(job=job,defaults={'provider':provider,'provider_request_id':request_id,'provider_resource_id':resource_id,'actual_cost':cost,'units':units,'rates':rates,'simulated':simulated})
             job.provider=provider;job.provider_request_id=request_id;job.provider_resource_id=resource_id;job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
             audit(job.user,'provider.receipt',job.pk,department=e.department,provider=provider,request_id=request_id,resource_id=resource_id,actual_cost=str(cost))
+            if arrived_into!='running': hold_late_receipt(job,arrived_into)
         # The delivered transcript, stored and downloaded, carries the same incomplete-portion marker the notes would.
         note=coverage_note(job,units) if job.kind=='transcription' and isinstance(result,str) else ''
         if job.kind=='transcription':
@@ -746,6 +761,12 @@ def run_one():
             # Output QuillMD cannot use is a platform failure whatever the user did meanwhile, so it is checked first and absorbed.
             if job.kind=='generation': answers,review=generation.adoption(result)
             elif not isinstance(result,str): raise PlatformFailure('Provider supplied no usable transcript.')
+            # ⚠️ The encounter, then the job (the global lock order, core.retention), and before any write: a job swept or
+            # resolved after its settlement committed is never adopted, and its state is never overwritten as succeeded
+            # (blockers.txt item 3, case A: this block's full save used to turn a job the sweep held back into 'succeeded').
+            # Taken after the validation above, which writes nothing, so a cancellation during it still answers at once.
+            if Job.objects.select_for_update().get(pk=job.pk).state!='running':
+                raise JobNoLongerRunning('The request left processing before its output could be adopted.')
             # Usable output that the user's own state (finalized, edited, access revoked) declines is not a platform failure:
             # NotAdoptedByUser keeps the settled charge.
             try: membership(job.user,e.department)
@@ -768,7 +789,8 @@ def run_one():
                 # A generation's statement proposals only pre-select the page; the first save replaces them with decisions.
                 e.template_review=review if job.kind=='generation' else {}
                 e.save()
-            job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
+            job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now()
+            job.save(update_fields=['state','provider','provider_request_id','finished_at'])
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)
     except Exception as exc:
         # A request the SDK refused to build never left: it is the pre-send refusal it is (MONEY-2).
@@ -841,6 +863,42 @@ def hold_for_reconciliation(job,exc,message,billing='uncertain',absorb_error=Non
         job.save(update_fields=['state','error','finished_at'])
         if absorb_error is not None: audit(job.user,'usage.absorb_failed',job.pk,department=job.department,error_class=type(absorb_error).__name__)
         audit(job.user,action,job.pk,department=job.department,error_class=type(exc).__name__,billing=billing)
+
+
+#: A provider receipt that arrived after its job had left 'running' (blockers.txt item 3): recorded, never settled, never
+#: dropped, and held for an administrator, whose resolution absorbs the receipt's cost (views.admin_resolve_job).
+LATE_RECEIPT=('The provider completed after this request had been ended or held elsewhere. Its receipt is recorded and nothing '
+              'is charged for it; an administrator must reconcile it.')
+#: The audit action audit_billing reads to find late receipts (late_provider_receipts_resolved).
+LATE_RECEIPT_ACTION='provider.receipt_late'
+
+
+def hold_late_receipt(job,state):
+    """Inside the receipt's own transaction, under the job's row lock: a receipt arrived for a job in `state`, not 'running'.
+
+    Somebody ended or held the job while its provider request was in flight: a second worker's stale sweep, or an
+    administrator resolving what that sweep held ('Resolved by administrator: no provider cost evidenced.', its hold released
+    and its request key freed). The receipt proves provider cost that record denies. So:
+
+    - a job that ENDED with no usage row ('failed', 'cancelled') is reopened for reconciliation, so its record no longer says
+      that no provider cost exists; the administrator's resolution then absorbs the receipt's cost (views.admin_resolve_job,
+      receipt branch). Its request key stays as it is: a freed key may already carry a new request, charged once, as its own.
+    - a job already held for reconciliation keeps its state, and its error now says that a receipt arrived.
+    - the arrival is recorded (LATE_RECEIPT_ACTION, with the previous state and error): audit_billing fails until the
+      receipt is accounted for, by a usage row or an absorbed platform cost of exactly its amount.
+
+    Nothing is settled here or later: settle() refuses a job that is not running (core.billing.SETTLEABLE_STATES). The batch
+    runner reopens an ENDED child the same way (core.batch_jobs.store_response, 'late_response_recorded'); a batch child that
+    was only held when its response arrived is not marked late and stays held for the batch resolution."""
+    current=Job.objects.get(pk=job.pk)  # the caller holds its row lock
+    previous_error=current.error
+    if state in ('failed','cancelled') and not Usage.objects.filter(job=job).exists():
+        current.state='reconciliation';current.finished_at=None;current.error=LATE_RECEIPT
+        current.save(update_fields=['state','finished_at','error'])
+    elif state=='reconciliation':
+        current.error=LATE_RECEIPT;current.save(update_fields=['error'])
+    audit(job.user,LATE_RECEIPT_ACTION,job.pk,department=job.department,previous_state=state,
+          previous_error=previous_error[:250],state=current.state)
 
 
 def end_failed_job(job,exc,provider_returned,in_doubt):

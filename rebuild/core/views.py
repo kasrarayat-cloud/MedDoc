@@ -30,7 +30,7 @@ from .security import audit,departments,scoped,membership,digest,token,store_upl
 from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,stripe_key_configured,reconcile_usage,release
 from .context import integration_status
 from . import batch_jobs, generation_batch
-from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
+from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full,LATE_RECEIPT_ACTION
 from .billing import available_balance
 from . import wm_review
 from . import v3_mapping
@@ -2137,6 +2137,27 @@ def admin_resolve_job(request,pk):
     elif simulated: absorbed=None
     elif receipt:
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':receipt.actual_cost,'description':'Provider cost absorbed: provider completed, settlement failed','evidence_reference':f'receipt:{receipt.pk} {note}'[:240],'recorded_by':request.user})
+        if absorbed.amount!=receipt.actual_cost:
+            # ⚠️ A RECEIPT THAT ARRIVED AFTER A TYPED RESOLUTION (L1:R1-1). An administrator resolved the job with a typed
+            # amount while no receipt existed; the provider then completed and core.jobs.hold_late_receipt reopened the job
+            # (provider.receipt_late). The receipt is the evidence, so this resolution sets the absorbed platform cost to the
+            # receipt's amount, on the same row, and audits both amounts; the user is not charged either way. It used to
+            # refuse, and the job then stayed in reconciliation for good: every resolution answered 400, the audit failed and
+            # the encounter refused all new work (pending() counts 'reconciliation'). The batch resolution
+            # (batch_jobs.resolve_view) still refuses its own conflicting amount, as it did before this change.
+            # Every other product path records a receipt-backed job's absorbed amount FROM that receipt, so a conflict with
+            # no late receipt has an origin this view cannot see: it is refused, and nothing of this resolution stands.
+            if not AuditEvent.objects.filter(action=LATE_RECEIPT_ACTION,target=str(job.pk)).exists():
+                raise ValidationError('The provider receipt conflicts with the previously recorded platform cost, and no late receipt explains it; independent financial reconciliation is required.')
+            previous=(absorbed.amount,absorbed.description,absorbed.evidence_reference,absorbed.recorded_by_id)
+            absorbed.amount=receipt.actual_cost
+            absorbed.description='Provider cost absorbed: the provider completed after an earlier resolution; amount set from its late receipt'
+            absorbed.evidence_reference=f'receipt:{receipt.pk} {note}'[:240];absorbed.recorded_by=request.user
+            absorbed.save(update_fields=['amount','description','evidence_reference','recorded_by'])
+            audit(request.user,'platform_cost.adjusted_to_receipt',job.pk,department=job.department,platform_cost=str(absorbed.pk),
+                  receipt=str(receipt.pk),previous_amount=str(previous[0]),amount=str(receipt.actual_cost),
+                  previous_description=previous[1],previous_evidence_reference=previous[2],
+                  previous_recorded_by=str(previous[3]) if previous[3] else None,evidence_note=note)
     elif data['outcome']=='absorb_platform_failure':
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':data['actual_cost'],'description':'Provider cost absorbed: uncertain outcome resolved by administrator','evidence_reference':note,'recorded_by':request.user})
     else: absorbed=None

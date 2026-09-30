@@ -117,10 +117,15 @@ def run_one():
         raw,cost,units,rates,provider,request_id,resource_id,simulated=send(compiled,job.config)
         returned=True
         with transaction.atomic():
+            # Under the job's row lock, as core.jobs.run_one: a receipt that arrives after the job left 'running' is recorded
+            # and held for an administrator (core.jobs.hold_late_receipt); settle() below then refuses it.
+            from .jobs import hold_late_receipt
+            arrived_into=Job.objects.select_for_update().get(pk=job.pk).state
             ProviderReceipt.objects.create(job=job,provider=provider,provider_request_id=request_id,provider_resource_id=resource_id,
                 actual_cost=cost,units=units,rates=rates,simulated=simulated)
             job.provider=provider;job.provider_request_id=request_id;job.provider_resource_id=resource_id
             job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
+            if arrived_into!='running':hold_late_receipt(job,arrived_into)
         payload=json.dumps(raw if simulated else raw.model_dump(mode='json'),ensure_ascii=False).encode()
         relative=f'receipts/{secrets.token_hex(24)}.json';path=private_path(relative)
         path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -134,6 +139,11 @@ def run_one():
         proposal=mapping.validate_proposal(version,compiled,parse_response(raw,simulated))
         with transaction.atomic():
             template=Template.objects.select_for_update().get(pk=version.template_id)
+            # The template, then the job (the global lock order, core.retention): a job swept or resolved after its
+            # settlement committed adopts no mapping version and is never overwritten as succeeded (as core.jobs.run_one).
+            if Job.objects.select_for_update().get(pk=job.pk).state!='running':
+                from .jobs import JobNoLongerRunning
+                raise JobNoLongerRunning('The request left processing before its output could be adopted.')
             try:membership(job.user,template.department,roles=['owner','clinician','manager'])
             except PermissionDenied as exc:raise NotAdoptedByUser('Access revoked before mapping adoption.') from exc
             if template.versions.order_by('-number').first().pk!=version.pk:
