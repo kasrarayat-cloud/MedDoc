@@ -3294,9 +3294,10 @@ def v3_actor_patients(units, actors, parsed):
     ordinary relation reader (`v3_field_relations.read`): an explicit-patient statement, a personal pronoun whose
     antecedent in the note's one run is the patient (never unresolved; the pronoun's gender agrees, else the run reads
     it as ambiguous), or a thing, subjectless or field-topic statement ('On examination there is ...') the run gives the
-    patient or no one and that does not name the patient as its object (someone else acting on the patient, 'The
-    clinical supervisor saw the patient ...', is the literal reader's) - and in every case a complete clause (no
-    dangling last word), NO
+    patient or no one and whose subject is not a member of the care team (a clinician acting on the patient, 'The
+    clinical supervisor saw the patient ...', is the literal reader's; a thing acting on the patient, 'The headache
+    wakes the patient at night.', is the patient's exactly as 'The headache wakes her at night.' is) - and in every
+    case a complete clause (no dangling last word), NO
     other person named anywhere earlier in the note or in the unit itself (a clinician included), no other-person or
     disagreeing reading of the unit, and no hedge, hypothetical modal, conditional or pointing scope word or
     self-correction in it (`v3_actors.HEDGES`, `HEDGE_MODALS`, `INHERITED_SCOPE`, `SCOPE_POINTER`, `SELF_CORRECTION`),
@@ -3315,8 +3316,7 @@ def v3_actor_patients(units, actors, parsed):
         if not ((kind in ('patient', 'pronoun') and actor == 'patient')
                 or (kind in ('thing', 'missing', 'label_is') and actor in ('patient', 'unresolved'))):
             continue
-        if info['dangling'] or (kind not in ('patient', 'pronoun')
-                                and (info['patient_object'] or info['main_lemma'] in V3_CLINICIAN_SUBJECTS)):
+        if info['dangling'] or (kind not in ('patient', 'pronoun') and info['main_lemma'] in V3_CLINICIAN_SUBJECTS):
             continue
         if any(INHERITED_SCOPE.search(text) or SELF_CORRECTION.search(text) or SCOPE_POINTER.search(text)
                or any(not v3_settled_word(match.group()) for match in UNSETTLED.finditer(text))

@@ -455,7 +455,7 @@ def _unread(note_unread=True, quote=''):
             'gender': None, 'pronoun_genders': frozenset(), 'embedded': frozenset(), 'cues': frozenset(),
             'past': True, 'bounded': (0,), 'age': False, 'standalone': False, 'patient_past': True,
             'hedged': True, 'habitual': True, 'past_time': True, 'dependent': False, 'claim_keys': frozenset(),
-            'negated_keys': frozenset(), 'main_patient': False, 'predicates': (), 'patient_object': False,
+            'negated_keys': frozenset(), 'main_patient': False, 'predicates': (),
             'dangling': True, 'nominal_keys': frozenset(), 'main_lemma': None, 'finite_past': True}
 
 
@@ -618,8 +618,6 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
                      'claim_keys': keys(claim - {'patient'}),
                      'predicates': () if colon.get(uid) else _predicates(root),
                      'negated_keys': frozenset() if colon.get(uid) else _denied(words, root),
-                     'patient_object': any(this_patient(t) and t.dep_ in ('dobj', 'obj', 'pobj', 'iobj', 'dative')
-                                           for t in words),
                      'dangling': _dangling(words),
                      'nominal_keys': keys(nominal),
                      'main_lemma': _lemma(main) if main is not None else None,

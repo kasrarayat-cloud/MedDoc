@@ -208,9 +208,34 @@ class FirstDecisions(Settled, SimpleTestCase):
                                 (U[1] + ' The patient takes warfarin for her husband.',
                                  'The patient takes warfarin for her husband.'),
                                 (U[1] + ' She takes warfarin with her husband.', 'She takes warfarin with her husband.'),
+                                # nor one pointing at other lines or scoping itself by them
+                                (U[1] + ' She takes these.', 'She takes these.'),
                                 (U[1] + ' She used to take ibuprofen.', 'She used to take ibuprofen.')):
             with self.subTest(notes=notes):
                 self.assert_held(notes, fields, {'v3_4': [selected]}, 'v3_4')
+
+    def test_a_thing_acting_on_the_patient_is_the_patients_in_either_object_form(self):
+        # The object's form decided nothing clinical: 'The headache wakes her at night.' was the patient's while 'The
+        # headache wakes the patient at night.' was held (a surviving mutant of a39a905e's patient-object exclusion).
+        fields = clinic_form()
+        for key, statement in (('v3_2', 'The headache wakes the patient at night.'),
+                               ('v3_2', 'The headache wakes her at night.'),
+                               ('v3_5', 'Penicillin gives the patient a rash.'), ('v3_5', 'Penicillin gives her a rash.')):
+            notes = U[1] + ' ' + statement
+            with self.subTest(notes=notes):
+                self.assert_filled(notes, fields, offered(notes, fields, {key: [statement]}), {key: statement})
+        attendance = order_form()
+        for statement in ('The clinic sees the patient every week.', 'The clinic sees her every week.'):
+            notes = 'The patient was reviewed today. ' + statement
+            with self.subTest(notes=notes):
+                self.assert_filled(notes, attendance, offered(notes, attendance, {'v3_2': [statement]}),
+                                   {'v3_2': statement})
+        # A member of the care team acting on the patient is the literal reader's, never this one's.
+        for key, statement in (('v3_4', 'The clinical supervisor gives the patient warfarin.'),
+                               ('v3_9', 'The clinical supervisor will review the patient in six weeks.')):
+            notes = U[1] + ' ' + statement
+            with self.subTest(notes=notes):
+                self.assert_held(notes, fields, {key: [statement]}, key)
 
     def test_a_form_title_is_not_a_field_qualifier(self):
         # :372 read 'Neurological examination is normal.' as an unresolved subject because the Examination field's
