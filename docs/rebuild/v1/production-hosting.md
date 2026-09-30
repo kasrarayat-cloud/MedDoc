@@ -427,7 +427,8 @@ drill measures them before go-live and quarterly.
 3. Launch a drill instance (same AMI) without the production role, attach the volume read-only at
    `/mnt/quillmd-drill-<same stamp>`.
 4. As root on the drill instance (the restored files are 0600 for uid 931), run
-   `ops/production_restore_check.py --expected-triggers 9` (the number recorded at activation) with
+   `ops/production_restore_check.py --expected-triggers 82` (the number recorded at activation: 82 for this release,
+   `len(ops.integrity_contract.GUARDS)`) with
    the backup role; it refuses the live endpoint and live mount and prints counts only.
 5. Record: restore start/end times (RTO), T versus the last write before the incident simulation
    (RPO), the check's counts. Delete the drill instance, volume and database; keep the record.
@@ -503,8 +504,15 @@ operational alerts do not use Resend in production (SNS).
 - **Rebuild, never repair in place.** A lost or suspect host is replaced: launch the recorded AMI
   with `cloud-init.yaml`, attach the surviving state volume (or one restored from the latest
   snapshot), run `bootstrap-host.sh --existing-state-volume` with the recorded release artifact,
-  confirm the fixed identity number owns the volume, start the units, re-point the target group,
-  then terminate the old instance. EC2 auto-recover covers hardware failure without a rebuild.
+  confirm the fixed identity number owns the volume. **Then stop every QuillMD unit on the old
+  instance, worker first** (or confirm the instance is stopped), and confirm with `manage.py
+  configuration_status` on the new host that the single-worker lock reads "not held". Only then start the units on the
+  new host, re-point the target group, and terminate the old instance. Two workers against one
+  database let one settle a job the other had already swept or an administrator had resolved
+  (blockers.txt item 3); the worker refuses to start while another holds the lock, and systemd's
+  `Restart=on-failure` retries it, so a skipped step delays the new worker rather than doubling it
+  — unless the old host vanished without closing its database connection, which holds the lock
+  until the server notices. EC2 auto-recover covers hardware failure without a rebuild.
 - **Rebuild drill** before go-live and after any change to the bootstrap: time it (RTO), record the
   receipt hashes, and confirm the launcher proofs on the new host.
 - **Patching.** Security updates install daily through unattended-upgrades without automatic reboot;

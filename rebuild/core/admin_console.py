@@ -392,6 +392,11 @@ def language_model_rows():
     return rows
 
 
+def worker_status_rows():
+    from .worker_lock import status_rows
+    return status_rows()
+
+
 def configuration_rows():
     """Everything `manage.py configuration_status` prints, as data. Values are never returned."""
     import os
@@ -426,6 +431,8 @@ def configuration_rows():
                     for name, value, recogniser in secret_rows],
         # The same rows `configuration_status` prints under 'Language model', from the same function.
         'language_model': language_model_rows(),
+        # The same rows `configuration_status` prints under 'Worker', from the same function (core.worker_lock).
+        'worker': worker_status_rows(),
         'media_tools': [
             {'name': 'ffprobe', 'status': probe or missing, 'severity': 'success' if probe else 'error'},
             {'name': 'ffmpeg', 'status': remuxer or missing, 'severity': 'success' if remuxer else 'error'},

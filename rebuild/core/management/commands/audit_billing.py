@@ -8,8 +8,8 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Sum
 from django.utils import timezone
-from core.models import (CostReconciliation, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage, Wallet,
-                         GenerationBatch, GenerationBatchResponse)
+from core.models import (AuditEvent, CostReconciliation, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage,
+                         Wallet, GenerationBatch, GenerationBatchEvent, GenerationBatchResponse)
 from core.security import private_path
 
 
@@ -56,6 +56,34 @@ def recompute_cost(provider, units, rates, simulated):
     if simulated:
         return Decimal('0')
     return discounted_cost(recompute_list_cost(provider,units,rates),Decimal(str(rates.get('discount_rate','0') or '0')))
+
+
+def provider_receipt_policy():
+    """Where every provider receipt went (blockers.txt item 3, the two-worker probe).
+
+    A non-simulated receipt is provider cost QuillMD holds evidence of. It is ACCOUNTED FOR by a usage row (settled) or by
+    an absorbed platform cost of exactly its amount (an administrator's resolution), or it is HELD: its job is not ended
+    (in 'reconciliation', listed under unresolved_jobs, or still being processed). A receipt on an ENDED job (succeeded,
+    failed, cancelled) that nothing accounts for is provider cost that left the books unnoticed — the probe's case B ended
+    exactly so, under a job reading 'Resolved by administrator: no provider cost evidenced.' — and fails the audit.
+
+    A LATE receipt arrived after its job had been ended or held by somebody else: core.jobs.hold_late_receipt records it
+    (audit action provider.receipt_late), a batch child records 'late_response_recorded' (core.batch_jobs.store_response).
+    It proves two workers served one job, so it fails the audit until an administrator's resolution accounts for it, even
+    while its job is held for reconciliation. Simulated receipts carry no provider cost and are not judged here.
+    """
+    from core.jobs import LATE_RECEIPT_ACTION
+    def accounted(receipt):
+        return (Usage.objects.filter(job_id=receipt.job_id).exists()
+                or PlatformCost.objects.filter(job_id=receipt.job_id,kind='absorbed_failure',amount=receipt.actual_cost).exists())
+    receipts=list(ProviderReceipt.objects.filter(simulated=False).select_related('job').order_by('created_at','pk'))
+    late_jobs=(set(AuditEvent.objects.filter(action=LATE_RECEIPT_ACTION).values_list('target',flat=True))
+               |{str(job_id) for job_id in GenerationBatchEvent.objects.filter(kind='late_response_recorded',part__isnull=False)
+                                                                        .values_list('part__job_id',flat=True)})
+    unaccounted=[str(r.job_id) for r in receipts if r.job.state in ('succeeded','failed','cancelled') and not accounted(r)]
+    late=[str(r.job_id) for r in receipts if str(r.job_id) in late_jobs and not accounted(r)]
+    return {'unaccounted_provider_receipts':unaccounted,'late_provider_receipts':late,
+            'checks':{'provider_receipts_settled_absorbed_or_held':not unaccounted,'late_provider_receipts_resolved':not late}}
 
 
 def audit_report(file_reader=None):
@@ -172,6 +200,7 @@ def audit_report(file_reader=None):
         wallets.append({'wallet_id':str(wallet.pk),'kind':wallet.kind,'balance_usd':str(wallet.balance),'ledger_sum_usd':str(total),
             'reserved_usd':str(wallet.reserved),'held_reservations_usd':str(held),'checks':{'balance_equals_ledger':wallet.balance==total,'reserved_equals_holds':wallet.reserved==held}})
     unsettled=list(ProviderReceipt.objects.exclude(job__usage__isnull=False).values('job_id','provider','provider_request_id','provider_resource_id','actual_cost','units','rates'))
+    receipt_policy=provider_receipt_policy()
     unresolved=list(Job.objects.filter(state__in=['queued','running','staged','reconciliation']).values('id','kind','state','provider','provider_request_id','provider_resource_id'))
     batches=[]
     for batch in GenerationBatch.objects.prefetch_related('parts__job').order_by('created_at'):
@@ -211,7 +240,8 @@ def audit_report(file_reader=None):
         'rows':rows,'wallets':wallets,'unsettled_provider_receipts':unsettled,'unresolved_jobs':unresolved,
         'ledger_policy':ledger_policy,'cancellation_policy':cancellation_policy,'hold_policy':hold_policy,
         'generation_batches':batches,
-        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets+batches) and all(ledger_policy['checks'].values()) and all(cancellation_policy['checks'].values()) and all(hold_policy['checks'].values()),
+        'receipt_policy':receipt_policy,
+        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets+batches) and all(ledger_policy['checks'].values()) and all(cancellation_policy['checks'].values()) and all(hold_policy['checks'].values()) and all(receipt_policy['checks'].values()),
         'durable_receipt_gaps':sum(not row['durable_receipt_present'] and not row['simulated'] for row in rows),
         'invoice_reconciliation':{'invoice_rows':evidence_counts['invoice'],'provider_report_rows':evidence_counts['provider_report'],'unclassified_rows':evidence_counts['unclassified'],'scope':'Administrator-recorded per-usage classification; no account-wide or whole-invoice reconciliation is implied.','provenance':'Source authenticity and attribution require administrator review; this audit verifies ledger arithmetic, not provider authenticity.'}}
 

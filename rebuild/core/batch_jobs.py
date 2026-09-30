@@ -405,8 +405,11 @@ def resolve_view(request,job_id):
         receipt=ProviderReceipt.objects.filter(job=job).first()
         if receipt and not Usage.objects.filter(job=job).exists():
             if job.reservations.filter(state='held').exists():
+                # An administrator settles the held attempt (then absorbs it below): the one settlement of a job that is
+                # not running (core.billing.SETTLEABLE_STATES), named here.
                 settle(job,receipt.actual_cost,receipt.units,receipt.rates,receipt.provider,
-                       receipt.provider_request_id,receipt.simulated,provider_resource_id=receipt.provider_resource_id)
+                       receipt.provider_request_id,receipt.simulated,provider_resource_id=receipt.provider_resource_id,
+                       allowed_states=('reconciliation',))
             else:
                 # Never recreate a released grant or debit a replacement hold.
                 # The original receipt remains authoritative; this separate
@@ -464,8 +467,10 @@ def recover_recorded(batch_id,user):
         for part in parts:
             job=Job.objects.select_for_update().get(pk=part.job_id)
             receipt=ProviderReceipt.objects.get(job=job)
+            # An administrator's explicit recovery of durable responses: the states the check above admits.
             settle(job,receipt.actual_cost,receipt.units,receipt.rates,receipt.provider,
-                   receipt.provider_request_id,receipt.simulated,provider_resource_id=receipt.provider_resource_id)
+                   receipt.provider_request_id,receipt.simulated,provider_resource_id=receipt.provider_resource_id,
+                   allowed_states=('staged','reconciliation','running'))
             job.state='staged';job.save(update_fields=['state'])
             event(batch,'recovered_locally',part=part,details={'actor':str(user.pk)})
         batch.state='validating';batch.error='';batch.save(update_fields=['state','error'])

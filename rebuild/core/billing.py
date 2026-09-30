@@ -109,6 +109,21 @@ class SandboxFundsRefused(ValidationError):
     """Real data mode refused to debit a balance sandbox payments funded; nothing was charged."""
 
 
+class SettlementRefused(ValidationError):
+    """settle() refused a job whose state is not one its caller may settle from; nothing was written."""
+
+
+#: ⚠️ THE STATES A WORKER'S settle() ACCEPTS. A worker settles the job it set 'running' before its provider request. Any
+#: other state means somebody else ended or held the job while the request was in flight — the stale sweep
+#: ('reconciliation'), an administrator's resolution ('failed'), a cancellation ('cancelled') — and settling it anyway
+#: charged a job its record says was not charged, or overwrote a resolution (blockers.txt item 3, the two-worker probe).
+#: 'queued' is accepted because it is only ever a job's creation state: no code returns a job to it
+#: (core.tests.test_settlement_single_worker pins that), so a job that ran can never be 'queued' again; direct callers that
+#: settle a freshly created job (the demo seeder, tests) keep working. Administrator paths that settle a held job name the
+#: states they settle from (core.batch_jobs.resolve_view, recover_recorded).
+SETTLEABLE_STATES=('queued','running')
+
+
 def department_payer(user_id,department):
     """The payer reserve() records for a request: the organization when the department pays, otherwise the user."""
     return f'organization:{department.organization_id}' if department.organization_pays else f'user:{user_id}'
@@ -309,11 +324,18 @@ def reserve(job,maximum_cost=None,*,charge_limit=None):
             remaining-=amount
 
 @transaction.atomic
-def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated=False,provider_resource_id=''):
+def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated=False,provider_resource_id='',
+           allowed_states=SETTLEABLE_STATES):
     # Lock the job first so replay cannot release/spend twice.
     from .models import Job
     # Lock only the job row: the related rows are read, not written, and locking them deadlocks a wallet holder that audits.
     job=Job.objects.select_for_update(of=('self',)).select_related('encounter__department__organization','user').get(pk=job.pk)
+    # ⚠️ Under the job's row lock and before ANY read or write of money (SETTLEABLE_STATES): the state read here cannot change
+    # until this transaction ends, because any UPDATE of the job row waits for this lock. A refusal writes nothing; the
+    # worker's handler then finds the job not running and records nothing over what the other party recorded.
+    if job.state not in allowed_states:
+        raise SettlementRefused(f'Settlement refused: this request is {job.state}, not running. Nothing was charged; '
+                                'its provider receipt awaits administrator reconciliation.')
     existing=Usage.objects.filter(job=job).first()
     if existing: return existing
     preservation_before_money()

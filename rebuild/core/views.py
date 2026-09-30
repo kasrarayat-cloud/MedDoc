@@ -2066,6 +2066,10 @@ def admin_resolve_job(request,pk):
     elif simulated: absorbed=None
     elif receipt:
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':receipt.actual_cost,'description':'Provider cost absorbed: provider completed, settlement failed','evidence_reference':f'receipt:{receipt.pk} {note}'[:240],'recorded_by':request.user})
+        # A receipt that arrived late (core.jobs.hold_late_receipt) can meet an earlier resolution's typed amount. The receipt
+        # is the evidence: a different amount is refused, and nothing of this resolution stands, as the batch resolution does.
+        if absorbed.amount!=receipt.actual_cost:
+            raise ValidationError('Late provider evidence conflicts with the previously recorded platform cost; independent financial reconciliation is required.')
     elif data['outcome']=='absorb_platform_failure':
         absorbed,_=PlatformCost.objects.get_or_create(job=job,kind='absorbed_failure',defaults={'amount':data['actual_cost'],'description':'Provider cost absorbed: uncertain outcome resolved by administrator','evidence_reference':note,'recorded_by':request.user})
     else: absorbed=None

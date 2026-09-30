@@ -21,7 +21,10 @@ and the live endpoint and live state root are refused, so the tool cannot be poi
 
     python3 ops/production_restore_check.py --database-host <drill endpoint> \
         --state-root /mnt/quillmd-drill-20261101t0300 --credentials <role credential file> \
-        --expected-triggers 63
+        --expected-triggers 82
+
+82 is len(integrity_contract.GUARDS) for this release (ops/test_operator_trigger_counts.py keeps this text equal to it);
+a different number refuses (declaration_matches_release).
 """
 import argparse
 import hashlib

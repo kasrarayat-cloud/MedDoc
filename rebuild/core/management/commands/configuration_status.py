@@ -11,7 +11,7 @@ that would reveal them.
 import os
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from core.billing import stripe_key_configured
 
@@ -78,6 +78,20 @@ class Command(BaseCommand):
         self.stdout.write(f'  QUILLMD_STRIPE_MODE: {settings.QUILLMD_STRIPE_MODE}')
         self.stdout.write(f'  QUILLMD_MFA_REQUIRED_ALL: {settings.QUILLMD_MFA_REQUIRED_ALL}')
         self.stdout.write(f'  database: {settings.DATABASES["default"]["NAME"]}')
+        self.worker()
+
+    def worker(self):
+        """Whether a worker holds the single-worker lock, and the role's session timeouts, which must be 0 (blockers.txt
+        item 3). The rows come from core.worker_lock.status_rows(), which the services page renders too. A non-zero
+        timeout makes this command exit non-zero after printing everything, exactly as the worker refuses to start."""
+        from core.worker_lock import WorkerRefused, refuse_nonzero_timeouts, status_rows
+        self.stdout.write('Worker (one per database; it refuses to start unless every timeout below is 0):')
+        for row in status_rows():
+            self.stdout.write(f'  {row["name"]}: {row["value"]}')
+        try:
+            refuse_nonzero_timeouts()
+        except WorkerRefused as exc:
+            raise CommandError(str(exc)) from None
 
     def language_model(self):
         """The model, its rates, the request profile and the pricing version a generation queued NOW would carry.
