@@ -533,19 +533,17 @@ class SigningColumns(unittest.TestCase):
         doc.add_paragraph('Plan: ______')
         return data(doc)
 
-    def test_l1f7_a_log_tables_initials_column_takes_no_text(self):
-        """L1:F7: one table_rows field covers 'Drug | Dose | Nurse initials'; fill wrote 'JE' into the initials cells."""
+    def test_l1f7_declared_residual_a_typed_initials_column_fills_as_on_43fcf214(self):
+        """L1:F7 (pre-existing on 43fcf214) is a declared residual again: a log table's column carries no role, because
+        reading one from its printed header refused ordinary clinical columns (refutation of 258650f2, L1:R1-03). Only
+        the clinician's typed rows reach it (table_rows is never generated)."""
         blob = self.log(('Drug', 'Dose', 'Nurse initials'))
         engine = w.inspect(blob)['fields']
         rows = next(f for f in engine if f['kind'] == 'table_rows')
         self.assertEqual(w.destination_roles(blob, engine)['violations'], {})
-        with self.assertRaises(w.V3Failure) as refused:
-            w.fill(blob, engine, {rows['key']: [['Paracetamol', '1 g', 'JE'], ['Ibuprofen', '400 mg', '']]})
-        self.assertEqual(refused.exception.code, 'protected_signing_area')
-        self.assertIn('Nurse initials', str(refused.exception))
-        out = xml(w.fill(blob, engine, {rows['key']: [['Paracetamol', '1 g', ''], ['Ibuprofen', '400 mg', '']]}))
+        out = xml(w.fill(blob, engine, {rows['key']: [['Paracetamol', '1 g', 'JE'], ['Ibuprofen', '400 mg', '']]}))
         self.assertIn('Paracetamol', out)
-        self.assertNotIn('JE', out)
+        self.assertIn('JE', out)
 
     def test_pc10_an_admin_grid_without_a_signing_column_is_unchanged(self):
         blob = self.log(('Drug', 'Dose', 'Initial dose'))
@@ -725,3 +723,106 @@ class DashQualifiedInitial(unittest.TestCase):
     def test_the_v3_kind_rule_is_unchanged(self):
         # On contract v3 the area stays an initials field (never generated); only its role is released.
         self.assertEqual(w.Detector.kind_for(None, 'Troponin — Initial'), 'initials')
+
+
+# ─── b2 repair round (refutation of 258650f2): regressions vs 43fcf214 removed by dropping or narrowing their cause ───
+def log_table(headers, group=None, rows=3):
+    doc = Document(); doc.add_paragraph('Synthetic results log')
+    extra = 1 if group else 0
+    t = doc.add_table(rows=rows + 1 + extra, cols=len(headers)); t.style = 'Table Grid'
+    if group:
+        text, start, end = group
+        for c in range(len(headers)):
+            if c < start or c > end:
+                t.cell(0, c).text = headers[c]
+        merged = t.cell(0, start).merge(t.cell(0, end)); merged.text = text
+        for c in range(len(headers)):
+            if start <= c <= end:
+                t.cell(1, c).text = headers[c]
+            else:
+                t.cell(0, c).merge(t.cell(1, c))
+    else:
+        for c, h in enumerate(headers):
+            t.cell(0, c).text = h
+    return data(doc)
+
+
+class RepairDatePairs(unittest.TestCase):
+    """L1:R1-04 / L1:R1-05: the signature-and-date pair counts only with 'signed' opening the label (a 'signed' after
+    other words is the checklist state signing_place already releases), and the initials-and-date pair only when it
+    closes the label. Both are narrowings of a32243eb's pair arms: fewer labels become signing places."""
+
+    RESTORED_KINDS = {'Date signed / date received': 'date', 'Date of diagnosis / initial stage': 'date',
+                      'Care plan signed and date of next review': 'long_text', 'Patient initials and date of birth': 'date',
+                      'Date of referral / initial contact': 'date', 'Consent form signed and dated': 'signature'}
+
+    def test_the_kind_rule_is_43fcf214s_for_a_pair_that_is_not_one_place(self):
+        for label, kind in self.RESTORED_KINDS.items():
+            with self.subTest(label=label):
+                self.assertEqual(w.Detector.kind_for(None, label), kind)
+                self.assertEqual(w.signing_place(label), '')
+                self.assertEqual(w.legacy_role_kind(label), '')
+
+    def test_a_signature_or_initials_and_date_place_stays_a_signing_place(self):
+        for label, kind in (('Signature and date', 'signature'), ('Signature and date:', 'signature'),
+                            ('Patient signature / date', 'signature'), ('Sign & date', 'signature'),
+                            ('Signed and date', 'signature'), ('Signed / date', 'signature'),
+                            ('Co-signed and date', 'signature'), ('Date and signature', 'signature'),
+                            ('Participant signature and date', 'signature'), ('Signature + date', 'signature'),
+                            ('Initials and date', 'initials'), ('Initial and date', 'initials'), ('Date / initials', 'initials'),
+                            ('Nurse initials and date', 'initials'), ('Initials and date (dd/mm/yyyy)', 'initials')):
+            with self.subTest(label=label):
+                self.assertEqual(w.Detector.kind_for(None, label), kind)
+                self.assertEqual(w.signing_place(label), kind)
+                self.assertEqual(w.legacy_role_kind(label), kind)
+
+
+class RepairLegacyRoleIsTheV3Rule(unittest.TestCase):
+    """L1:R1-04 and PC05: the legacy role holds a printed label only where the v3 path would (the engine's kind rule
+    types it signature or initials AND signing_place names a signing place). 'Tinel sign both wrists' and 'Sign and
+    symptom review' are text to the kind rule - generated on v3 and on 43fcf214 - and were held only on legacy."""
+
+    def test_a_label_the_kind_rule_reads_as_text_is_no_legacy_role(self):
+        for label in ('Tinel sign both wrists', 'Sign and symptom review'):
+            with self.subTest(label=label):
+                self.assertEqual(w.Detector.kind_for(None, label), 'text')
+                self.assertEqual(w.legacy_role_kind(label), '')
+
+    def test_rf16_rf17_signing_rows_stay_roles(self):
+        for label in ('Patient signature', 'Witness signature', "Participant's signature", 'Initials',
+                      'Consultant signature', 'Signature of examining clinician', 'Signature', 'Sign here',
+                      'Initial here', 'Signed (patient)', 'Signature and date', 'Nurse initials'):
+            with self.subTest(label=label):
+                self.assertIn(w.legacy_role_kind(label), ('signature', 'initials'))
+
+    def test_the_legacy_role_is_never_wider_than_the_kind_rule(self):
+        corpus = (LegacyRoleKind.CHECKLIST_SIGNED + LegacyRoleKind.INITIAL_READINGS + LegacyRoleKind.SIGNING
+                  + ['Sign below', 'Sign and print name', 'Sign & stamp', 'Signatures', 'Sign each page',
+                     'Tinel sign both wrists', 'Sign and symptom review', 'Gene expression signature', 'Sig­nature'])
+        for label in corpus:
+            with self.subTest(label=label):
+                kind = w.legacy_role_kind(label)
+                if kind:
+                    self.assertEqual(w.Detector.kind_for(None, w._plain(label)), kind)
+
+
+class RepairLogColumns(unittest.TestCase):
+    """L1:R1-03: a log table's column is no destination role (as on 43fcf214); its rows are typed by the clinician only
+    (table_rows is never generated)."""
+
+    CASES = ((['Date', 'Visit type (initial/follow-up)', 'Clinician notes'], None, ['01/09/2026', 'Follow-up', 'Stable']),
+             (['Drug', 'Dose (initial)', 'Dose (maintenance)'], None, ['Levothyroxine', '25 micrograms', '50 micrograms']),
+             (['Date', 'Initial', 'Repeat'], ('Troponin (ng/L)', 1, 2), ['01/09/2026', '12', '14']),
+             (['Date', 'Troponin initial', 'Troponin 3 h'], None, ['01/09/2026', '12', '14']),
+             (['Problem', 'Initial and ongoing management'], None, ['Sepsis', 'IV antibiotics']))
+
+    def test_the_typed_rows_fill(self):
+        for headers, group, row in self.CASES:
+            with self.subTest(headers=headers):
+                blob = log_table(headers, group=group)
+                engine = w.inspect(blob)['fields']
+                rows = next(f for f in engine if f['kind'] == 'table_rows')
+                self.assertEqual([r for r in w.destination_roles(blob, engine)['roles'] if r['source'] == 'signing_column'], [])
+                out = xml(w.fill(blob, engine, {rows['key']: [row]}))
+                for value in row:
+                    self.assertIn(value, out)

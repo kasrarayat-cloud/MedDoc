@@ -1337,17 +1337,6 @@ def save_answers(request,pk):
                 report=destination_roles.report(e.template_version) if texted else None
                 held=(report or {}).get('violations') or {}
                 refused=[f['label'] for f in texted if f['key'] in held];refusal=ROLE_SAVE_REFUSAL
-                # A log table's signing or initials column (by its printed header) takes no text in any row.
-                columns={(r.get('table'),r.get('column')):r.get('header') or '' for r in (report or {}).get('roles') or []
-                         if r.get('source')=='signing_column'}
-                for f in texted:
-                    target=(f.get('locator') or {}).get('target') or {}
-                    if f.get('kind')!='table_rows' or not columns:continue
-                    table=f"{f['locator'].get('part')}#{target.get('table')}"
-                    rows=v3_mapping.table_rows(f,answers[f['key']].get('text'))
-                    signed=sorted({columns[(table,col)] for row in rows for col,value in zip(target.get('columns') or [],row)
-                                   if value.strip() and (table,col) in columns})
-                    if signed and f['label'] not in refused:refused.append(f['label']+' (column '+', '.join(signed)+')')
             else:
                 generated=[f for f in e.template_version.fields if destination_roles.generated_text(answers[f['key']])]
                 refused=[f['label'] for f in generated if destination_roles.legacy_reason(f,legacy_roles().get(f['key']))]

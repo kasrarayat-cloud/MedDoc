@@ -1288,14 +1288,23 @@ DATE_LABEL = re.compile(r"\b(?:date|dob|d\.o\.b|born)\b|mm/dd|dd/mm|yyyy|\bD[DT]
 #: the signing reading from the whole label, so 'Signature and date: ____', 'Patient signature / date' and 'Sign & date'
 #: became DATE fields and the export wrote 'Dr Example 30/09/2026' in the signing place. Only the two joined by 'and',
 #: '&', '+' or '/' - 'Signature date', 'Date of signature' and 'Date signed' stay date questions.
+#: ⚠️ NARROWED (refutation of 258650f2, L1:R1-04 / L1:R1-05): searched anywhere, the pair also read ordinary questions as
+#: signing places - 'Date signed / date received', 'Care plan signed and date of next review', 'Consent form signed and
+#: dated', 'Patient initials and date of birth', 'Date of referral / initial contact', 'Date of diagnosis / initial
+#: stage' - so they were never generated (43fcf214 generated them). A 'signed' pair now opens the label (a 'signed' after
+#: other words is the checklist state signing_place already releases), and an initials pair closes it (only a
+#: parenthetical, punctuation or a writing line may follow). No signing word is added; fewer labels are pairs.
 _JOIN = r"(?:\band\b|&|\+|/)"
+_PAIR_CLOSES = r"(?=\s*(?:\([^)]*\))?[\W_]*$)"
 SIGNATURE_DATE_PAIR = re.compile(
-    r"\b(?:(?:counter|co)?signed|signatures?)\b[^.;:?]*?" + _JOIN + r"\s*dated?\b"
+    r"\bsignatures?\b[^.;:?]*?" + _JOIN + r"\s*dated?\b"
+    r"|^\s*(?:please\s+)?(?:electronically\s+|digitally\s+)?(?:counter-?|co-?|e-?)?signed\b[^.;:?]*?" + _JOIN
+    + r"\s*dated?\b"
     r"|^\s*(?:please\s+)?sign\s*" + _JOIN + r"\s*dated?\b"
     r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*(?:sign(?:ed|atures?)?|(?:counter|co)signed)\b", re.I)
 INITIALS_DATE_PAIR = re.compile(
-    r"\binitials\b[^.;:?]*?" + _JOIN + r"\s*dated?\b|\binitial\s*" + _JOIN + r"\s*dated?\b"
-    r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*initials?\b", re.I)
+    r"(?:\binitials\b[^.;:?]*?" + _JOIN + r"\s*dated?\b|\binitial\s*" + _JOIN + r"\s*dated?\b"
+    r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*initials?\b)" + _PAIR_CLOSES, re.I)
 TIME_LABEL = re.compile(r"\btime\b|hh:mm|\(24.?h", re.I)
 LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|notes?|summary|history|findings|plan|narrative|reason)\b", re.I)
 HEADING_STYLE = re.compile(r"^(?:heading|title|subtitle|toc)", re.I)
@@ -5836,10 +5845,15 @@ def inspect(data: bytes) -> dict:
 #:               measured by each neighbour's FULL printed extent ('Printed name:    Signature: ____' keeps Name
 #:               answerable; 'Signature: ____ (use black ink)' holds the whole segment). An inline control or legacy
 #:               field area owns its line segment the same way. A caption over a writing line owns the line under it,
-#:               and a writing line owns the caption the engine read its label from. The signing columns of a log
-#:               table, by their printed header. A one-cell box whose question or section reads as signing or consent
-#:               (the engine's question_box_signing, whatever the box prints), unless the engine maps answer areas
-#:               INSIDE it (then it is a frame holding questions, and those areas carry their own roles).
+#:               and a writing line owns the caption the engine read its label from. A one-cell box whose question or
+#:               section reads as signing or consent (the engine's question_box_signing, whatever the box prints),
+#:               unless the engine maps answer areas INSIDE it (then it is a frame holding questions, and those areas
+#:               carry their own roles).
+#:               ⚠️ A LOG TABLE'S COLUMN IS NO ROLE (as on 43fcf214; refutation of 258650f2, L1:R1-03). Its rows are
+#:               typed by the clinician only (table_rows is never generated), and a column read as signing by its
+#:               printed header refused ordinary clinical columns - 'Visit type (initial/follow-up)', 'Dose (initial)',
+#:               'Initial' under 'Troponin (ng/L)' - at save and at fill. Declared residual (L1:F7, pre-existing on
+#:               43fcf214): a clinician's typed text in a 'Nurse initials' column exports, as a typed legacy value does.
 #:   protected - protected areas and regions, legacy form-field protection, locked content controls (a control nested
 #:               inside one keeps its own lock) and picture content controls.
 #:   policy    - the printed patient-author role of a section and a printed review attestation cell (source_policy):
@@ -5865,8 +5879,6 @@ ROLE_FORM_FIELD = "This legacy form field is protected on the original form and 
 ROLE_SIGNING_BOX = "Signing or consent box: it is completed by hand after the actual signing act."
 ROLE_PICTURE = ("This place holds a picture content control of the original form (a signature image or a photograph); "
                 "it takes no typed or generated answer.")
-ROLE_SIGNING_COLUMN = ("The column \"{header}\" is a signing or initials column of the original form: it never takes a typed "
-                       "or generated answer and is completed by hand. Clear that column.")
 
 
 def _place_id(part, path):
@@ -6144,22 +6156,6 @@ def _role_reading(package):
                 roles.append(_role(ROLE_POLICY, "attestation", pid, None, None, ROLE_REFUSALS[ROLE_POLICY],
                                    {"attestation": policy["attestation"],
                                     "attestation_source": policy["attestation_source"]}))
-        target = field["locator"]["target"]
-        table = index.by_id.get(_place_id(field["locator"]["part"], target.get("table"))) \
-            if target.get("type") == "table_rows" else None
-        if table is not None and target.get("rows"):
-            # A log table's signing or initials column ('Nurse initials'), read from its printed header.
-            rows = set(target["rows"])
-            for col in target.get("columns") or []:
-                header = option_text(detector.column_header(table, col, min(rows)))
-                if not signing_place(header):
-                    continue
-                for cell in table.children:
-                    if cell.kind == "tc" and cell.info["col"] == col and cell.info["row"] in rows:
-                        role = _role(ROLE_SIGNING, "signing_column", cell.id, None, None,
-                                     ROLE_SIGNING_COLUMN.format(header=header))
-                        role.update(table=table.id, column=col, header=header)
-                        roles.append(role)
     choices = [sorted(box_key(box) for box in field["locator"]["target"].get("boxes", []))
                for field in engine if field["kind"] in ("choice", "multi_choice", "checkbox")
                and field["locator"]["target"].get("type") == "checkboxes"]
@@ -6189,9 +6185,6 @@ def role_violations(reader, fields, roles) -> dict:
             continue
         places = reader.of(field)
         near = [r for pid in dict.fromkeys(_root_of(p[0]) for p in places) for r in by_root.get(pid, [])]
-        if ((field.get("locator") or {}).get("target") or {}).get("type") == "table_rows":
-            # A log table's answer covers its signing column only when a row puts text there: fill judges the rows.
-            near = [r for r in near if r["source"] != "signing_column"]
         for cls in ROLE_ORDER:
             hit = next((r for r in near if r["class"] == cls and not role_allows(field, r)
                         and any(reader.touches(place, r) for place in places)), None)
@@ -6277,8 +6270,17 @@ def signing_place(label) -> str:
 
 
 def legacy_role_kind(label) -> str:
-    """The legacy default path's role for a field's PRINTED label: signing_place."""
-    return signing_place(label)
+    """The legacy default path's role for a field's PRINTED label: the v3 rule for a labelled area - the engine's kind
+    rule types it signature or initials AND signing_place names a signing place - so the legacy path never holds a
+    label the v3 path generates. Returns the kind rule's kind, or ''.
+
+    ⚠️ signing_place ALONE (refutation of 258650f2, L1:R1-04 and PC05) held labels the kind rule reads as text - 'Tinel
+    sign both wrists', 'Sign and symptom review' - which 43fcf214 generated on legacy and every tree generates on v3.
+    The design (matrix L02: 'Sign below', 'Sign and print name', 'Nurse sign' are text to the kind rule, LEAVE) never
+    gave the legacy path a reader wider than the engine's own; declared residual, as on v3 (L1:RR1-11)."""
+    text = _plain(label)
+    kind = Detector.kind_for(None, text)
+    return kind if kind in SIGNING_KINDS and signing_place(text) else ""
 
 
 def signing_box_reading(text) -> bool:
@@ -7022,8 +7024,6 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     # forged field on a signing, protected or policy place is refused by its span, not by its paragraph.
     original_roles = destination_roles_of(package)
     role_refusals = role_violations(_PlaceReader(index), fields, original_roles)
-    # A log table's signing or initials column takes no text in any row (its answer rows are judged, not its mapping).
-    signing_columns = {(r["table"], r["column"]): r["reason"] for r in original_roles if r["source"] == "signing_column"}
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -7190,11 +7190,6 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     nth = sum(1 for j in range(i) if printed[j].strip() == printed[i].strip())
                     ops.append((anchor.el, 0, lambda el=anchor.el, o=printed[i], k=nth: mark_option_text(el, o, k), part))
             elif kind == "table_rows":
-                table_id = "%s#%s" % (field["locator"]["part"], target.get("table"))
-                for values in answer if isinstance(answer, list) else []:
-                    for column, value in zip(target.get("columns") or [], values if isinstance(values, list) else []):
-                        if str(value or "").strip() and (table_id, column) in signing_columns:
-                            fail(signing_columns[(table_id, column)], ROLE_CODES[ROLE_SIGNING])
                 ops.append((anchor.el, 0, lambda f=field, a=answer: write_table_rows(index, f, a), part))
             else:
                 fail("This answer area cannot be filled automatically.", "unsupported_layout")

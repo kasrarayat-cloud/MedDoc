@@ -37,11 +37,15 @@ SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
 #: one is a FALSE REFUSAL: `validate_identity` would then demand the finalizing clinician's own
 #: name in a witness or patient signature line and refuse the document until it got it.
 #: `Signed by (witness)` matched the qualifier arm and did exactly that. Measured.
-#: `participant`, `mother`, `father` and `donor` were measured missing (`Signature (participant)` demanded the
-#: finalizer's own name in a research participant's signature place).
+#: ⚠️ KEPT AT 43fcf214's LIST (refutation of 258650f2, L1:R1-01 / L2:R2-01). Widening it by `participant`, `mother`,
+#: `father` and `donor` (a32243eb) is searched over the WHOLE label, so it also released CLINICIANS' own lines from
+#: identity - "Signature (participant's consultant)", 'Signed by (doctor recruiting the participant)', 'Signature (donor
+#: coordinator)', "Signature (father's GP)" finalized another clinician's typed name - and let 'Signature (participant,
+#: dd/mm/yyyy)' be renamed away from its signature label and generated. Telling the signer from a person merely named
+#: needs a new wording reader, so the widening is dropped: `Signature (participant)` demands the finalizer's own name
+#: again, exactly as on 43fcf214 (declared residual, design matrix L04 LEAVE); it is never generated.
 NOT_THE_CLINICIAN = re.compile(
-    r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer|participant|mother|father|'
-    r'donor)\b')
+    r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer)\b')
 
 
 #: ⚠️ THE QUALIFIER ARM IS CONTENT-BLIND, AND THAT REOPENED THE BOUND THIS FILE CLAIMS.
@@ -78,13 +82,11 @@ def another_signers_line(field):
     """A signature line the label names as somebody else's (`NOT_THE_CLINICIAN`): not the finalizer's identity row, and
     never generated from notes either - it is signed by hand by the person it names.
 
-    ⚠️ THE EXCLUSION LIST DECIDES WHOSE SIGNATURE IT IS, NEVER WHETHER IT IS ONE (refutation of a32243eb, RR1-10).
-    Widening `NOT_THE_CLINICIAN` by 'participant', 'mother', 'father' and 'donor' correctly stopped demanding the
-    finalizer's own name in those lines, but it also took them out of the only hold 43fcf214 gave them (identity), and
-    a date word the identity qualifier does not know ('dd/mm/yyyy', 'DOB', 'born') took them out of the role reader:
-    'Signature (participant, dd/mm/yyyy)' and 'Signed (mother, DOB)' were generated and exported. This reads the SAME
-    patterns as identity - no new wording - and holds from generation exactly the lines 43fcf214 held (plus the
-    exclusion list's own persons, whose lines are signing places too); a clinician's typed value still exports."""
+    ⚠️ THE EXCLUSION LIST DECIDES WHOSE SIGNATURE IT IS, NEVER WHETHER IT IS ONE (refutation of a32243eb, RR1-10). It
+    reads the SAME patterns as identity - no new wording - so identity and this together hold exactly the lines
+    SIGNATURE_PATTERNS reads, whoever signs them: 'Signature (patient, dd/mm/yyyy)' or 'Signed by (witness, DOB)' (a
+    date word the role reader treats as a date question) is never generated; a clinician's typed value still exports.
+    'Signature (participant, dd/mm/yyyy)' and 'Signed (mother, DOB)' are identity rows again (43fcf214's hold)."""
     label = (field or {}).get('label')
     return bool(NOT_THE_CLINICIAN.search(_normal(label))) and signature_line(label)
 

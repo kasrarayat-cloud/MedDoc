@@ -93,9 +93,20 @@ def legacy_roles(version, *, fresh=False):
 
 
 def printed(field, roles):
-    """The field as identity reads it: its PRINTED (inspected) label, never the mapping's edited one."""
+    """The field as identity reads it. Its PRINTED (inspected) label decides wherever that label is itself a signing
+    place (legacy_reason: identity, a signature or initials role, or another named person's signature line), so a
+    participant's signature line renamed 'Signature' is not the finalizer's (design matrix L05). Everywhere else the
+    mapping's label decides, as on 43fcf214.
+
+    ⚠️ Reading ONLY the printed label (refutation of 258650f2, L1:R1-02) dropped identity from a field a clinician
+    renamed TO a signature label: a Word row 'Doctor' renamed "Doctor's signature" and a PDF field 'Text1' renamed
+    'Signature' finalized another clinician's typed name, and 'Leave blank - reviewed' was accepted there. The rename
+    guard refuses only renames AWAY from a signature label, so this is the only way such a field becomes identity.
+    So identity = the printed label's identity, or the mapped label's where the printed label is no signing place."""
     row = (roles or {}).get(field.get('key'))
-    return {**field, 'label': row['printed_label']} if row else field
+    if not row:
+        return field
+    return {**field, 'label': row['printed_label']} if legacy_reason(field, row) else field
 
 
 def legacy_reason(field, row):

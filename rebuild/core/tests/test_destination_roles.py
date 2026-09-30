@@ -649,10 +649,13 @@ class LegacyRound1(Walk, V3Fixture, TestCase):
 
     def test_another_persons_parenthetical_is_not_the_finalizers(self):
         from core.tab_review import clinician_identity
-        for label in ('Signature (participant)', 'Signature (mother)', 'Signature (father)', 'Signature (donor)',
-                      'Signed (patient)', 'Signed by (witness)'):
+        for label in ('Signed (patient)', 'Signed by (witness)', 'Signature (guardian)'):
             with self.subTest(label=label):
                 self.assertFalse(clinician_identity({'label': label}))
+        # Declared residual (design matrix L04 LEAVE; refutation of 258650f2, L1:R1-01): 43fcf214's exclusion list.
+        for label in ('Signature (participant)', 'Signature (mother)', 'Signature (father)', 'Signature (donor)'):
+            with self.subTest(label=label):
+                self.assertTrue(clinician_identity({'label': label}))
         for label in ('Signed (Consultant)', 'Signature (GP)', 'Signed (print name)', 'Signature (registrar)'):
             with self.subTest(label=label):
                 self.assertTrue(clinician_identity({'label': label}))
@@ -745,8 +748,10 @@ class V3Round1(Walk, V3Fixture, TestCase):
                                                         'remove_' + answer['key']: 'on'})
         self.assertEqual(self.confirm_status(template, self.latest(template)), 302)
 
-    def test_l1f7_a_typed_initial_in_a_log_tables_initials_column_is_refused(self):
-        """L1:F7: the initials column of 'Drug | Dose | Nurse initials' took typed 'JE' and exported it."""
+    def test_l1f7_declared_residual_a_typed_initial_in_a_log_tables_initials_column_exports(self):
+        """L1:F7 (pre-existing on 43fcf214) is a declared residual again: a log table's column carries no role (refutation
+        of 258650f2, L1:R1-03: a column read from its printed header refused ordinary clinical columns). Only the
+        clinician's typed rows reach it; table_rows is never generated."""
         doc = Document(); doc.add_heading('Medication log', level=2)
         t = doc.add_table(rows=3, cols=3); t.style = 'Table Grid'
         for c, h in enumerate(('Drug', 'Dose', 'Nurse initials')):
@@ -757,9 +762,10 @@ class V3Round1(Walk, V3Fixture, TestCase):
         e = self.generated(version, 'Plan: Rest.')
         log = next(f for f in version.fields if f['kind'] == 'table_rows')
         response = self.reviewed(e, version, typed={log['label']: 'Paracetamol | 1 g | JE'}, skip_signing=True)
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('Nurse initials', response.content.decode())
-        self.assertEqual(self.reviewed(e, version, typed={log['label']: 'Paracetamol | 1 g |'}, skip_signing=True).status_code, 302)
+        self.assertEqual(response.status_code, 302)
+        self.finalized(e)
+        self.assertEqual(e.status, 'finalized')
+        self.assertIn('JE', part_text(private_path(e.export_path).read_bytes()))
 
 
 @override_settings(**MAPPING_SETTINGS)
@@ -876,8 +882,10 @@ OTHER_SIGNERS_DATED = (('Signature (participant, dd/mm/yyyy)', 'John Example 30/
 class SalvageLegacy(Walk, V3Fixture, TestCase):
     def test_rr1_10_another_named_signers_dated_line_is_never_generated(self):
         """RR1-10 (MEDIUM, regression vs 43fcf214): a32243eb generated and exported these; 43fcf214 held them (identity).
-        Still not the finalizer's identity row: a clinician's typed value finalizes and exports."""
-        for n, (label, value) in enumerate(OTHER_SIGNERS_DATED):
+        The patient's and the witness's dated lines are held too (another_signers_line), and there a clinician's typed
+        value finalizes and exports. The participant's and the mother's are identity rows again (L1:R1-01)."""
+        for n, (label, value) in enumerate((('Signature (patient, dd/mm/yyyy)', 'John Example 30/09/2026'),
+                                            ('Signed by (witness, DOB)', 'Jane Example 01/01/1990'))):
             with self.subTest(label=label):
                 template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic RR1-10 %d' % n)
                 field = self.by_label(version)[label]
@@ -913,33 +921,37 @@ class SalvageLegacy(Walk, V3Fixture, TestCase):
 
     def test_rr1_10_the_legacy_request_does_not_ask_it(self):
         """Layer 1 (core.destination_roles.legacy_reason): the row is never asked; its label is a context label."""
-        template, version = self.uploaded(data=legacy_rows('Signed (mother, DOB)', 'Plan'), name='Synthetic RR1-10 ask')
+        template, version = self.uploaded(data=legacy_rows('Signed by (witness, DOB)', 'Plan'), name='Synthetic RR1-10 ask')
         asked = {f['label']: f for f in destination_roles.generation_fields(version)}
-        self.assertEqual(asked['Signed (mother, DOB)']['destination_role'], {'reason': destination_roles.ROLE_NOT_GENERATED})
+        self.assertEqual(asked['Signed by (witness, DOB)']['destination_role'], {'reason': destination_roles.ROLE_NOT_GENERATED})
         self.assertNotIn('destination_role', asked['Plan'])
         questions, context, _ = generation.v3_generation_fields(list(asked.values()))
         self.assertEqual([f['label'] for f in questions], ['Plan'])
-        self.assertIn('Signed (mother, DOB)', context)
+        self.assertIn('Signed by (witness, DOB)', context)
 
     def test_rr1_10_the_validator_holds_it_on_any_path(self):
         """Layer 2 (the generation validator, where 43fcf214 held identity): a field that reaches generation unmarked
         (a caller that did not prepare it) is still answered 'missing' with the reason."""
-        template, version = self.uploaded(data=legacy_rows('Signature (participant, dd/mm/yyyy)', 'Plan'), name='Synthetic RR1-10 v')
+        template, version = self.uploaded(data=legacy_rows('Signature (patient, dd/mm/yyyy)', 'Plan'), name='Synthetic RR1-10 v')
         fields = [dict(f) for f in version.fields]
-        answers = generation.generate('Signature (participant, dd/mm/yyyy): John Example 30/09/2026\nPlan: Rest.', fields,
+        answers = generation.generate('Signature (patient, dd/mm/yyyy): John Example 30/09/2026\nPlan: Rest.', fields,
                                       generation.configuration(fields))[0]
         by = self.by_label(version)
-        self.assertEqual((answers[by['Signature (participant, dd/mm/yyyy)']['key']]['status'],
-                          answers[by['Signature (participant, dd/mm/yyyy)']['key']]['reason']),
+        self.assertEqual((answers[by['Signature (patient, dd/mm/yyyy)']['key']]['status'],
+                          answers[by['Signature (patient, dd/mm/yyyy)']['key']]['reason']),
                          ('missing', destination_roles.ROLE_NOT_GENERATED))
         self.assertEqual(answers[by['Plan']['key']]['status'], 'supported')
 
     def test_rr1_10_identity_is_unchanged_for_other_persons(self):
         from core.tab_review import another_signers_line, clinician_identity, signature_label
-        for label in ('Signature (participant, dd/mm/yyyy)', 'Signed (mother, DOB)', 'Signature (patient)', 'Signed by (witness)'):
+        for label in ('Signature (patient, dd/mm/yyyy)', 'Signed by (witness, DOB)', 'Signature (patient)', 'Signed by (witness)'):
             with self.subTest(label=label):
                 self.assertFalse(clinician_identity({'label': label}))
                 self.assertTrue(another_signers_line({'label': label}))
+        for label in ('Signature (participant, dd/mm/yyyy)', 'Signed (mother, DOB)', 'Signature (father, born)'):
+            with self.subTest(label=label):   # 43fcf214's hold: identity (L1:R1-01)
+                self.assertTrue(clinician_identity({'label': label}))
+                self.assertFalse(another_signers_line({'label': label}))
         for label in ('Signed (Consultant)', 'Signature (GP)', 'Signature date', 'Date of signature', 'Signature (patient, date)',
                       'Patient signature', 'Consent obtained by (name and grade)', 'Babinski sign'):
             with self.subTest(label=label):
@@ -959,7 +971,7 @@ class SalvageV3(Walk, V3Fixture, TestCase):
                 e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
                 answer = e.answers[field['key']]
                 self.assertEqual((answer['status'], answer['text']), ('missing', ''))
-                self.assertEqual(answer['reason'], destination_roles.ROLE_NOT_GENERATED)
+                self.assertEqual(answer['reason'], destination_roles.IDENTITY_NOT_GENERATED)   # 43fcf214's hold (L1:R1-01)
                 self.assertEqual(self.reviewed(e, version).status_code, 302)
                 self.finalized(e)
                 self.assertEqual(e.status, 'finalized')
@@ -1072,3 +1084,242 @@ class SalvageResolveOverlap(V3Fixture, TestCase):
         # a place that moved is judged as new, even where the prior places overlapped too
         moved = {**relabelled, 'locator': copy.deepcopy(control['locator'])}
         self.assertEqual(len(mapping.model_overlaps([moved, control], version.fields)), 1)
+
+
+# ─── b2 repair round (refutation of 258650f2): each regression vs 43fcf214 is removed by restoring 43fcf214's behaviour
+# for its input class - its cause dropped or narrowed, no wording reader added. Each test is red on 258650f2.
+def pdf_form(fields):
+    from reportlab.pdfgen import canvas
+    buffer = io.BytesIO(); c = canvas.Canvas(buffer); y = 780
+    for printed, name in fields:
+        c.drawString(30, y, printed)
+        c.acroForm.textfield(name=name, x=200, y=y - 8, width=300, height=22, fontName='Helvetica', fontSize=10)
+        y -= 60
+    c.showPage(); c.save(); return buffer.getvalue()
+
+
+def log_table(headers, group=None, rows=3):
+    """A bordered log table: a header row (or a two-level header, `group` = (text, first, last) merged over columns
+    first..last) and `rows` empty rows."""
+    doc = Document(); doc.add_paragraph('Synthetic results log')
+    extra = 1 if group else 0
+    t = doc.add_table(rows=rows + 1 + extra, cols=len(headers)); t.style = 'Table Grid'
+    if group:
+        text, start, end = group
+        for c in range(len(headers)):
+            if c < start or c > end:
+                t.cell(0, c).text = headers[c]
+        merged = t.cell(0, start).merge(t.cell(0, end)); merged.text = text
+        for c in range(len(headers)):
+            if start <= c <= end:
+                t.cell(1, c).text = headers[c]
+            else:
+                t.cell(0, c).merge(t.cell(1, c))
+    else:
+        for c, h in enumerate(headers):
+            t.cell(0, c).text = h
+    return saved(doc)
+
+
+FINALIZER = 'Synthetic Alpha Clinician'
+IDENTITY_REFUSAL = 'must match your signed-in clinician name'
+
+
+def messages_of(response):
+    return ' '.join(str(m) for m in (response.context or {}).get('messages') or [])
+
+
+@override_settings(**TEST_SETTINGS)
+class RepairLegacyIdentity(Walk, V3Fixture, TestCase):
+    """L1:R1-01, L1:R1-02, L2:R2-01 / L3:F1 (legacy half): identity and the rename guard as on 43fcf214."""
+
+    def page_row(self, e, key):
+        return next(r for r in self.client.get(f'/encounters/{e.pk}/').context['answer_rows'] if r['key'] == key)
+
+    def test_r1_01_a_clinicians_line_mentioning_another_person_is_the_finalizers(self):
+        """L1:R1-01 (regression vs 43fcf214): widening NOT_THE_CLINICIAN by participant/mother/father/donor, searched over
+        the WHOLE label, released these clinicians' own lines from identity: 'Dr Somebody Else' finalized and exported."""
+        for n, label in enumerate(("Signature (participant's consultant)", 'Signed by (doctor recruiting the participant)',
+                                   'Signature (donor coordinator)', "Signature (father's GP)", 'Signature (consultant)')):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic R1-01 %d' % n)
+                key = self.by_label(version)[label]['key']
+                e = self.generated(version, f'{label}: Dr Somebody Else\nPlan: Rest.')
+                self.assertEqual((e.answers[key]['status'], e.answers[key]['reason']),
+                                 ('missing', destination_roles.IDENTITY_NOT_GENERATED))
+                row = self.page_row(e, key)
+                self.assertEqual((row['identity'], row['blank_eligible']), (True, False))
+                self.assertEqual(self.reviewed(e, version, typed={label: 'Dr Somebody Else'}).status_code, 302)
+                self.assertIn(IDENTITY_REFUSAL, messages_of(self.finalized(e)))
+                self.assertEqual(e.status, 'review')
+                self.assertEqual(self.reviewed(e, version, typed={label: FINALIZER}).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+
+    def test_rr1_10_a_dated_line_naming_another_signer_is_identity_as_on_43fcf214(self):
+        """RR1-10 stays held (43fcf214's hold: identity), and L2:R2-01 / L3:F1: its label cannot be renamed away."""
+        for n, (label, value) in enumerate(OTHER_SIGNERS_DATED + (('Signature (father, born)', 'Dr Somebody Else'),)):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic RR1-10 id %d' % n)
+                key = self.by_label(version)[label]['key']
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                self.assertEqual((e.answers[key]['status'], e.answers[key]['text'], e.answers[key]['reason']),
+                                 ('missing', '', destination_roles.IDENTITY_NOT_GENERATED))
+                self.assertEqual(self.reviewed(e, version, typed={label: value}).status_code, 302)
+                self.assertIn(IDENTITY_REFUSAL, messages_of(self.finalized(e)))
+                self.assertEqual(e.status, 'review')
+                response = self.client.post(f'/templates/{template.pk}/', {
+                    'mapping_version': version.pk, 'labels': json.dumps({key: 'DOB', self.by_label(version)['Plan']['key']: 'Plan'})})
+                self.assertIn('A signature question keeps a signature label', response.content.decode())
+                self.assertEqual(self.latest(template).pk, version.pk)
+
+    def test_r1_02_a_field_renamed_to_a_signature_label_is_the_finalizers(self):
+        """L1:R1-02 (regression vs 43fcf214): identity read only the PRINTED label, so a Word row 'Doctor' or a PDF field
+        'Text1' renamed to a signature label finalized another clinician's typed name (and could be left blank)."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        response = self.client.post('/templates/upload/', {'name': 'Synthetic R1-02 pdf', 'department': self.department.pk,
+                                    'synthetic_only': 'on', 'file': SimpleUploadedFile('form.pdf', pdf_form(
+                                        [('Signature of doctor:', 'Text1'), ('Plan:', 'Text2')]))})
+        self.assertEqual(response.status_code, 302)
+        pdf = Template.objects.get(name='Synthetic R1-02 pdf')
+        word, _ = self.uploaded(data=legacy_rows('Doctor', 'Plan'), name='Synthetic R1-02 word')
+        for template, old, new in ((pdf, 'Text1', 'Signature'), (word, 'Doctor', "Doctor's signature")):
+            with self.subTest(label=new):
+                version = self.latest(template)
+                labels = {f['key']: (new if f['label'] == old else f['label']) for f in version.fields}
+                response = self.client.post(f'/templates/{template.pk}/', {'mapping_version': version.pk,
+                                                                          'labels': json.dumps(labels)})
+                self.assertEqual(response.status_code, 302)
+                renamed = self.latest(template)
+                key = self.by_label(renamed)[new]['key']
+                e = self.generated(renamed, f'{new}: Dr Somebody Else\nPlan: Rest.')
+                self.assertEqual(e.answers[key]['status'], 'missing')
+                row = self.page_row(e, key)
+                self.assertEqual((row['identity'], row['blank_eligible']), (True, False))
+                post = {'revision': e.revision}
+                for f in renamed.fields:
+                    post['answer_' + f['key']] = '' if f['key'] == key else 'Rest.'
+                    post['reviewed_' + f['key']] = 'on'
+                post['blank_' + key] = 'on'
+                response = self.client.post(f'/encounters/{e.pk}/save/', post)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('cannot be marked', response.content.decode())
+                self.assertEqual(self.reviewed(e, renamed, typed={new: 'Dr Somebody Else'}).status_code, 302)
+                self.assertIn(IDENTITY_REFUSAL, messages_of(self.finalized(e)))
+                self.assertEqual(e.status, 'review')
+
+
+@override_settings(**V3)
+class RepairV3Rename(Walk, V3Fixture, TestCase):
+    def test_r2_01_a_dated_line_naming_another_signer_keeps_its_signature_label(self):
+        """L2:R2-01 / L3:F1 (regression vs 43fcf214): the rename guard reads signature_label, which the widened
+        NOT_THE_CLINICIAN made False, so the rename passed and generation read the new label and wrote the value."""
+        for n, (label, renamed) in enumerate((('Signature (participant, dd/mm/yyyy)', 'Participant'),
+                                              ('Signature (participant, dd/mm/yyyy)', 'Participant signature and date'),
+                                              ('Signed (mother, DOB)', 'Mother DOB'), ('Signed (mother, DOB)', 'DOB'),
+                                              ('Signed (mother, DOB)', "Mother's DOB"),
+                                              ('Signed (mother, DOB)', "Mother's signature (DOB)"),
+                                              ('Signature (father, born)', 'Father born'))):
+            with self.subTest(label=label, renamed=renamed):
+                template, version = self.uploaded(data=lines(label + ': ______________', 'Plan: ______'),
+                                                  name='Synthetic R2-01 %d' % n)
+                field = self.by_label(version)[label]
+                response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
+                                                                          'label_' + field['key']: renamed})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('A signature question keeps a signature label', response.context['v3_error'])
+                self.assertEqual(self.latest(template).pk, version.pk)
+
+
+@override_settings(**V3)
+class RepairV3Usefulness(Walk, V3Fixture, TestCase):
+    def rows_post(self, e, version, texts):
+        post = {'revision': e.revision}
+        for f in version.fields:
+            if f.get('kind') in v3_mapping.SIGNING_KINDS:
+                continue
+            post['answer_' + f['key']] = texts.get(f['label'], (e.answers.get(f['key']) or {}).get('text', ''))
+            post['reviewed_' + f['key']] = 'on'
+        response = self.client.post(f'/encounters/{e.pk}/save/', post)
+        e.refresh_from_db()
+        return response
+
+    def test_r1_03_a_log_tables_clinical_columns_take_typed_rows(self):
+        """L1:R1-03 (regression vs 43fcf214): a log-table column whose printed header the signing reader reads as an
+        initials place ('Visit type (initial/follow-up)', 'Dose (initial)', 'Initial' under 'Troponin (ng/L)') refused
+        the clinician's typed rows at save and fill. 43fcf214 filled them."""
+        cases = ((['Date', 'Visit type (initial/follow-up)', 'Clinician notes'], None, ['01/09/2026', 'Follow-up', 'Stable']),
+                 (['Drug', 'Dose (initial)', 'Dose (maintenance)'], None, ['Levothyroxine', '25 micrograms', '50 micrograms']),
+                 (['Date', 'Initial', 'Repeat'], ('Troponin (ng/L)', 1, 2), ['01/09/2026', '12', '14']),
+                 (['Date', 'Troponin initial', 'Troponin 3 h'], None, ['01/09/2026', '12', '14']),
+                 (['Problem', 'Initial and ongoing management'], None, ['Sepsis', 'IV antibiotics']))
+        for n, (headers, group, row) in enumerate(cases):
+            with self.subTest(headers=headers):
+                template, version = self.uploaded(data=log_table(headers, group=group), name='Synthetic R1-03 %d' % n)
+                table = next(f for f in version.fields if f['kind'] == 'table_rows')
+                version = self.confirm(template)
+                e = self.generated(version, 'Clinic review.')
+                self.assertEqual(self.rows_post(e, version, {table['label']: ' | '.join(row)}).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+                exported = part_text(private_path(e.export_path).read_bytes())
+                for value in row:
+                    self.assertIn(value, exported)
+
+    def test_r1_05_a_date_pair_that_does_not_close_the_label_keeps_43fcf214s_kind_and_is_generated(self):
+        """L1:R1-05 (regression vs 43fcf214): the signature/initials-and-date pair arms read 'Date signed / date received',
+        'Care plan signed and date of next review', 'Patient initials and date of birth' and 'Date of diagnosis / initial
+        stage' as signing places, so they were never generated (and a replacement field there was refused)."""
+        for n, (label, kind, value) in enumerate((('Date signed / date received', 'date', '01/09/2026'),
+                                                  ('Date of diagnosis / initial stage', 'date', '12/03/2026'),
+                                                  ('Care plan signed and date of next review', 'long_text', 'Yes, review 01/12/2026'),
+                                                  ('Patient initials and date of birth', 'date', '01/01/1970'))):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=lines(label + ': ______________', 'Plan: ______________'),
+                                                  name='Synthetic R1-05 %d' % n)
+                field = self.by_label(version)[label]
+                self.assertEqual(field['kind'], kind)
+                version = self.confirm(template)
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                self.assertEqual(e.answers[field['key']]['status'], 'supported')
+                self.assertEqual(self.rows_post(e, version, {}).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+
+    def test_r1_05_a_checklist_signed_and_dated_line_can_be_replaced_by_its_answer(self):
+        """L1:R1-05: 'Consent form signed and dated' is typed signature by the kind rule (as on 43fcf214) but is no
+        signing place: the clinician may replace it with the answer it asks, as on 43fcf214."""
+        template, version = self.uploaded(data=lines('Consent form signed and dated: ______________', 'Plan: ______________'),
+                                          name='Synthetic R1-05 consent')
+        field = self.by_label(version)['Consent form signed and dated']
+        self.assertEqual(field['kind'], 'signature')
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
+                                                                  'remove_' + field['key']: 'on'})
+        self.assertEqual(response.status_code, 302)
+        latest = self.latest(template)
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_add', 'mapping_version': latest.pk,
+                                    'slot': BODY + 'b/p[1]', 'kind': 'text', 'label': 'Consent form signed and dated'})
+        self.assertEqual(response.status_code, 302)
+
+
+@override_settings(**TEST_SETTINGS)
+class RepairLegacyUsefulness(Walk, V3Fixture, TestCase):
+    def test_r1_04_readings_the_kind_rule_or_a_closing_pair_does_not_make_a_signing_place_are_generated(self):
+        """L1:R1-04 (regression vs 43fcf214) and PC05: these legacy rows were held as signing places and never generated.
+        43fcf214 generated and exported each value."""
+        for n, (label, value) in enumerate((('Care plan signed and date of next review', 'Yes, review 01/12/2026'),
+                                            ('Consent form signed and dated', 'Yes'),
+                                            ('Date of referral / initial contact', '02/09/2026'),
+                                            ('Date signed / date received', '01/09/2026 / 03/09/2026'),
+                                            ('Patient initials and date of birth', 'J.E. 01/01/1970'),
+                                            ('Tinel sign both wrists', 'Positive'),
+                                            ('Sign and symptom review', 'No new symptoms'))):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic R1-04 %d' % n)
+                key = self.by_label(version)[label]['key']
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                self.assertEqual((e.answers[key]['status'], e.answers[key]['text']), ('supported', value))
+                self.assertEqual(self.reviewed(e, version).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+                self.assertIn(value, part_text(private_path(e.export_path).read_bytes()))
