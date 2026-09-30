@@ -102,9 +102,18 @@ def printed(field, roles):
     renamed TO a signature label: a Word row 'Doctor' renamed "Doctor's signature" and a PDF field 'Text1' renamed
     'Signature' finalized another clinician's typed name, and 'Leave blank - reviewed' was accepted there. The rename
     guard refuses only renames AWAY from a signature label, so this is the only way such a field becomes identity.
-    So identity = the printed label's identity, or the mapped label's where the printed label is no signing place."""
+    So identity = the printed label's identity, or the mapped label's where the printed label is no signing place.
+
+    ⚠️ AND THE MAPPED LABEL'S IDENTITY IS NEVER DROPPED (final verification of 8951fdec, FV-01, a regression vs
+    43fcf214). Returning the printed label whenever it is a signing place dropped identity from a real signing place
+    renamed TO a signature label ('Initials', 'Sign here', 'Signature and date', a PDF field 'Initials' renamed
+    'Signature'): another clinician's typed name finalized and 'Leave blank - reviewed' was accepted, where 43fcf214
+    refused both. Identity is therefore the mapped label's OR the printed label's, never less than 43fcf214's reading;
+    the design-matrix L05 relaxation (another person's line renamed 'Signature' is not the finalizer's) is withdrawn,
+    because it was the same drop."""
+    from .tab_review import clinician_identity
     row = (roles or {}).get(field.get('key'))
-    if not row:
+    if not row or clinician_identity(field):
         return field
     return {**field, 'label': row['printed_label']} if legacy_reason(field, row) else field
 

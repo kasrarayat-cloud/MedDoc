@@ -304,7 +304,9 @@ class LegacyDefaultPath(V3Fixture, TestCase):
 
 @override_settings(**TEST_SETTINGS)
 class LegacyIdentityReadsThePrintedLabel(V3Fixture, TestCase):
-    def test_l05_renaming_a_participants_signature_to_signature_does_not_make_it_the_finalizers(self):
+    def test_l05_renaming_a_participants_signature_to_signature_makes_it_the_finalizers_as_on_43fcf214(self):
+        """Withdrawn relaxation (FV-01): a clinician who renames a row 'Signature' gets the finalizer-identity rule, as on
+        43fcf214; reading only the printed label here dropped identity from real signing places renamed the same way."""
         template, version = self.uploaded(data=legacy_rows("Participant's signature", 'Plan'), name='Synthetic L05')
         by = self.by_label(version)
         response = self.client.post(f'/templates/{template.pk}/', {
@@ -318,8 +320,8 @@ class LegacyIdentityReadsThePrintedLabel(V3Fixture, TestCase):
         key = by["Participant's signature"]['key']
         post = {'revision': e.revision, 'answer_' + key: '', 'blank_' + key: 'on', 'reviewed_' + key: 'on',
                 'answer_' + by['Plan']['key']: 'Rest.', 'reviewed_' + by['Plan']['key']: 'on'}
-        # 'Leave blank - reviewed' is refused only for the finalizer's own signature row; this one is the participant's.
-        self.assertEqual(self.client.post(f'/encounters/{e.pk}/save/', post).status_code, 302)
+        # The renamed row is the finalizer's own signature row, as on 43fcf214: 'Leave blank - reviewed' is refused.
+        self.assertEqual(self.client.post(f'/encounters/{e.pk}/save/', post).status_code, 400)
 
 
 @override_settings(**MAPPING_SETTINGS)
@@ -1204,6 +1206,35 @@ class RepairLegacyIdentity(Walk, V3Fixture, TestCase):
                 response = self.client.post(f'/encounters/{e.pk}/save/', post)
                 self.assertEqual(response.status_code, 400)
                 self.assertIn('cannot be marked', response.content.decode())
+                self.assertEqual(self.reviewed(e, renamed, typed={new: 'Dr Somebody Else'}).status_code, 302)
+                self.assertIn(IDENTITY_REFUSAL, messages_of(self.finalized(e)))
+                self.assertEqual(e.status, 'review')
+
+
+    def test_fv_01_a_signing_place_renamed_to_a_signature_label_keeps_the_finalizer_identity(self):
+        """FV-01 (regression vs 43fcf214): identity read the printed label wherever it was a signing place, so a real
+        signing place ('Initials', 'Sign here', 'Signature and date', 'Signed off by consultant') renamed to a signature
+        label finalized another clinician's typed name and accepted 'Leave blank - reviewed'."""
+        for n, (old, new) in enumerate((('Initials', 'Signature'), ('Sign here', "Doctor's signature"),
+                                        ('Signature and date', 'Signature'), ('Signed off by consultant', 'Signature'))):
+            with self.subTest(old=old, new=new):
+                template, version = self.uploaded(data=legacy_rows(old, 'Plan'), name='Synthetic FV-01 %d' % n)
+                labels = {f['key']: (new if f['label'] == old else f['label']) for f in version.fields}
+                response = self.client.post(f'/templates/{template.pk}/', {'mapping_version': version.pk,
+                                                                          'labels': json.dumps(labels)})
+                self.assertEqual(response.status_code, 302)
+                renamed = self.latest(template)
+                key = self.by_label(renamed)[new]['key']
+                e = self.generated(renamed, f'{new}: Dr Somebody Else\nPlan: Rest.')
+                self.assertEqual(e.answers[key]['status'], 'missing')
+                row = self.page_row(e, key)
+                self.assertEqual((row['identity'], row['blank_eligible']), (True, False))
+                post = {'revision': e.revision}
+                for f in renamed.fields:
+                    post['answer_' + f['key']] = '' if f['key'] == key else 'Rest.'
+                    post['reviewed_' + f['key']] = 'on'
+                post['blank_' + key] = 'on'
+                self.assertEqual(self.client.post(f'/encounters/{e.pk}/save/', post).status_code, 400)
                 self.assertEqual(self.reviewed(e, renamed, typed={new: 'Dr Somebody Else'}).status_code, 302)
                 self.assertIn(IDENTITY_REFUSAL, messages_of(self.finalized(e)))
                 self.assertEqual(e.status, 'review')
