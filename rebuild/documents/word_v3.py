@@ -688,8 +688,15 @@ SEGMENTED = re.compile(r"\|(?:[ _]*_[ _]*\|)+(?:\s*[/.:\-]?\s*\|(?:[ _]*_[ _]*\|
 DOTS = re.compile(r"(?:\.{5,}|…{2,}|(?:\. ){4,}\.?)[.…]*")
 #: A drawn date: three underscore groups joined by one separator ('_____/_____/_____', '__.__.____', '__-__-____'). It is
 #: one answer; read piecewise, the second and third groups were separate '/' fields. Two groups ('___/___' - a blood
-#: pressure, a ratio, a month and year) are left as printed: they can be two answers.
+#: pressure, a ratio, a month and year) are left as printed: they can be two answers. ⚠️ Read as one blank ONLY after a
+#: date label ('Date of birth: __/__/____'): three groups after any other label are three answers ('BP/HR/RR:
+#: ___/___/___' - one date would have been written over three vital signs; refutation 2026-09-30 L2:R2-05).
 DATE_BLANK = re.compile(r"_{2,}[ \t]*([/.\-])[ \t]*_{2,}[ \t]*\1[ \t]*_{2,}")
+
+
+def date_label_before(text: str, start: int) -> bool:
+    """Whether the printed words just before `start` - since the previous drawn blank, tab or line start - name a date."""
+    return bool(DATE_LABEL.search(re.split(r"_{2,}|\t", text[:start])[-1]))
 BRACKET_ANY = re.compile(r"\[([^\[\]\n]{2,120})\]")
 
 
@@ -724,27 +731,44 @@ BRACKET = _Bracket()
 ANGLE = re.compile(r"<<?(?![/!?<])[^<>\n]{3,120}>>?")
 TOKEN = re.compile(r"\{\{\s*([\w][\w .?:/()\-]{0,119}?)\s*\}\}")
 #: A bracketed AUTHOR'S NOTE, not a place to write: a condition or scope ('<if applicable>', '[IF YES]', '<for
-#: hospital-based sites>', '<or to the health of your family>'), an editing instruction ('<remove if not
-#: applicable>', '<add local regulation as applicable>') or examples ('[e.g., inpatient, mail, or phone]', '[insert
-#: device here, e.g. a fitness tracker]'). ⚠️ A qualifier on a place to write is NOT a note: '[Your E-mail (if
-#: applicable)]' asks for the e-mail - only a note that BEGINS with the condition is one.
-AUTHORING_NOTE = re.compile(r"^(?:(?:if|when|where|unless|for|or|only|remove|delete|omit|optional|note|see|use)\b|"
-                            r"e\.g\.|i\.e\.)", re.I)
-#: An editing scope inside a placeholder makes it the author's ('<add local regulation as applicable>'); so do examples,
-#: unless the placeholder names what to write: '[insert device here, e.g. a fitness tracker]' is the author's, '[Date of
-#: visit, e.g. DD/MM/YYYY]' asks for a date.
+#: hospital-based sites>', '<or to the health of your family>'), an editing instruction ('<remove if not applicable>')
+#: or an example ('[e.g., inpatient, mail, or phone]'). ⚠️ A qualifier on a place to write is NOT a note: '[Your
+#: E-mail (if applicable)]' asks for the e-mail - only a note that BEGINS with the condition is one. Words that also
+#: open what to write do not make a note: '[When the symptoms started]', '[Optional mobile number]', '[Note any
+#: allergies]', '[Use of walking aids]', '[Only if urgent]', '[Where treated]' (refutation 2026-09-30 L1:R1, L3:R3-02),
+#: nor does an example printed inside a placeholder that names what to write ('[relationship, e.g. mother]'); and a
+#: note is one only where note_in_place says so.
+AUTHORING_NOTE = re.compile(r"^(?:(?:if|unless|for|or|remove|delete|omit|see)\b|e\.g\.|i\.e\.)", re.I)
+#: An editing scope inside a placeholder makes it the author's ('<add local regulation as applicable>').
 AUTHORING_SCOPE = re.compile(r"\bas\s+(?:applicable|appropriate|needed)\b", re.I)
-AUTHORING_EXAMPLE = re.compile(r"\be\.g\.|\bi\.e\.", re.I)
 
 
 def authoring_note(inner: str) -> bool:
-    """Whether a placeholder's words are an author's note (AUTHORING_NOTE, AUTHORING_SCOPE, AUTHORING_EXAMPLE)."""
+    """Whether a placeholder's words are an author's note (AUTHORING_NOTE, AUTHORING_SCOPE)."""
     inner = (inner or "").strip()
-    return bool(AUTHORING_NOTE.search(inner) or AUTHORING_SCOPE.search(inner)
-                or AUTHORING_EXAMPLE.search(inner) and not FIELDISH.search(inner))
+    return bool(AUTHORING_NOTE.search(inner) or AUTHORING_SCOPE.search(inner))
+
+
+def answer_position(text: str, start: int) -> bool:
+    """Whether `start` follows a label's colon or a question mark: what is printed there answers that label."""
+    return bool(re.search(r"[:?]\s*$", text[:start]))
+
+
+def note_in_place(text: str, start: int, end: int) -> bool:
+    """Whether the bracketed or angled placeholder text[start:end] is an author's note WHERE IT IS PRINTED: its words are
+    a note (authoring_note), it qualifies printed words that follow it in its paragraph ('<if applicable> You would take
+    part ...', '[IF YES] What ethnic group ...?', 'Contact the committee <remove if not applicable> first'), and it is
+    not in an answer position. ⚠️ A note-worded placeholder standing alone, printed last, after a 'Label:' or after a
+    question is a place to write - 'Other: [If other, please specify]', 'Occupation: [e.g. teacher]', '[Optional:
+    your e-mail address]', 'Have you had surgery? [If yes, give details]' (refutation 2026-09-30 L1:R1, L3:R3-02).
+    Detector.authoring_placeholder never asks it about an explicit {{merge field}}: that is always a place to write."""
+    if answer_position(text, start) or not re.search(r"[A-Za-z0-9]", text[end:]):
+        return False
+    return authoring_note(text[start:end].strip("[]<>{} "))
 #: Personal pronouns: '[my child]' printed after 'my' is the same sentence reworded for another respondent.
 PERSON_WORDS = frozenset("i me my mine we us our ours you your yours yourself yourselves he him his she her hers "
                          "they them their theirs he/she him/her his/her".split())
+SECOND_PERSON = frozenset("you your yours yourself yourselves".split())
 #: An author's instruction group: '(* insert name of drug ... *)'. Placeholders inside it are the author's.
 INSTRUCTION_GROUP = re.compile(r"\(\*.*?(?:\*\)|$)", re.S)
 PLACEHOLDER_TEXT = re.compile(r"^(?:click (?:or tap )?here to enter (?:text|a date)\.?|choose an item\.?|click or tap to enter a date\.?|"
@@ -1310,43 +1334,33 @@ def many_evidence(texts, options):
                     scale = False
     return positive, unrepresented, bounded, scale
 
-SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b|\bsign(?:ed)? here\b", re.I)
+#: (A countersignature is a signature: 'Signed:<tab>Countersigned:' typed a name after the signature, L2:R2-01.)
+SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b|\bsign(?:ed)? here\b|\bcounter-?sign(?:ed|ature)?\b", re.I)
 INITIALS = re.compile(r"\binitials?\b|\binitial (?:the )?box", re.I)
 DATE_LABEL = re.compile(r"\b(?:date|dob|d\.o\.b|born)\b|mm/dd|dd/mm|yyyy|\bD[DT]\s*\((?:dictated|transcribed)\)", re.I)
 #: A placeholder whose own words ARE the signing act: '[Sign]', '[Signature]', '<e-signature>', '{{Sign here}}',
-#: '[Initials]'. ⚠️ Matched on the whole placeholder: '[Initial assessment]', '[Name of signatory]' and '[Sign-off date]'
-#: are not signing tokens. A placeholder that names a signature ('[Signature of investigator]') is one too, unless it
-#: also asks for a date.
-SIGNING_TOKEN = re.compile(r"(?:please\s+)?(?:e-?|electronic\s+|digital\s+)?(?:sign|signature|signed)"
-                           r"(?:\s+(?:here|below|above|name))?", re.I)
-INITIALS_TOKEN = re.compile(r"(?:please\s+)?initials?(?:\s+(?:here|below|above))?", re.I)
-#: An electronic-signature attestation: 'Electronically signed on <date> by:', 'Digitally signed by:', 'e-Signed by:'.
-ESIGN_ATTESTATION = re.compile(r"\b(?:electronically|digitally)\s+signed\b|\be-?signed\b", re.I)
+#: '[Countersign]', '[Sign name here]', '[Initials]' - and a signing act that is also dated ('[Sign and date]',
+#: '[Signature/Date]', '[Initial and date]'): the place is signed, so it is never typed. ⚠️ Matched on the whole
+#: placeholder: '[Initial assessment]', '[Name of signatory]' and '[Sign-off date]' are not signing tokens.
+SIGNING_TOKEN = re.compile(r"(?:please\s+)?(?:e-?|electronic\s+|digital\s+)?(?:counter-?)?(?:sign|signature|signed)"
+                           r"(?:\s+name)?(?:\s+(?:here|below|above))?(?:\s*(?:and|&|/)\s*date)?", re.I)
+INITIALS_TOKEN = re.compile(r"(?:please\s+)?initials?(?:\s+(?:here|below|above))?(?:\s*(?:and|&|/)\s*date)?", re.I)
+#: A placeholder that NAMES a signature - it begins or ends with it ('[Signature of investigator]', '[Investigator
+#: signature]', '[Patient to sign]') - unless it asks for a date ('[Date of signature]'). ⚠️ A placeholder that only
+#: mentions a signing is a name to write: '[Name of person who signed]' (refutation 2026-09-30 L1:R9).
+NAMED_SIGNATURE = re.compile(r"^(?:e-?|electronic\s+|digital\s+)?signature\b|\bsignature$|\bto\s+(?:counter-?)?sign$", re.I)
+#: An electronic-signature attestation: 'Electronically signed on <date> by:', 'Digitally signed by:', 'e-Signed by:',
+#: 'Signed electronically on <date> by:', 'Electronic signature on <date> by:' (refutation 2026-09-30 L3:R3-06).
+ESIGN_ATTESTATION = re.compile(r"\b(?:electronically|digitally)\s+signed\b|\be-?signed\b|"
+                               r"\bsigned\s+(?:electronically|digitally)\b|\b(?:electronic|digital)\s+signature\b", re.I)
 
 
-#: A colon-ended SENTENCE that introduces what follows ('Some of the side effects are:', 'If you choose to take part,
-#: you will need to:', 'Please indicate your agreement with the following items:') - never a label with an answer
-#: space after it. A question ('Have you ever smoked:', 'How was it delivered:') and a request to write or to choose
-#: ('If yes, specify:', 'Please describe:', 'If pain is present, select one severity:') are kept: those ARE answer places.
+#: A verb of running prose: a header or footer line holding one is printed text around its placeholders ('This project
+#: <insert acronym> has received funding'; see Detector.authoring_placeholder).
 LEAD_VERB = re.compile(r"\b(?:is|are|was|were|be|been|being|will|would|shall|should|may|might|must|can|could|do|does|"
                        r"did|has|have|had|need|needs|include|includes|want|wants|know|suggest|agree|happen|happens|"
                        r"remain|remains)\b", re.I)
-LEAD_SUBJECT = re.compile(r"\bI\b|\b(?:[Ww]e|[Yy]ou)\b")
-LEAD_REQUEST = re.compile(r"^(?:if\b[^,:]{0,80},\s*)?(?:please\s+)?(?:specify|describe|explain|list|state|give|provide|"
-                          r"indicate|enter|write|record|name|detail|comment|note|attach|select|choose|check|tick|mark|"
-                          r"circle|pick|cross|rate|answer|complete)\b", re.I)
-LEAD_QUESTION = re.compile(r"^(?:is|are|was|were|do|does|did|have|has|had|can|could|will|would|should|shall|may|how|what|"
-                           r"when|where|which|who|whom|whose|why)\b", re.I)
 TYPED_BULLET = re.compile(r"^\s*(?:[-\u2013\u2014\u2022\u25cf\u25cb\u25aa\u25a0\u25e6*]|o(?=\s))\s+")
-
-
-def sentence_lead(label: str) -> bool:
-    """Whether a colon-ended label reads as a sentence introducing what follows (see LEAD_VERB)."""
-    label = (label or "").strip()
-    if len(label.split()) < 5 or label.endswith("?") or LEAD_QUESTION.match(label) or LEAD_REQUEST.match(label):
-        return False
-    return bool(re.match(r"(?:please|if|once|unless)\b", label, re.I) or re.search(r"\bplease\b", label, re.I)
-                or LEAD_VERB.search(label) or LEAD_SUBJECT.search(label))
 
 
 def signing_token_kind(inner: str) -> str:
@@ -1356,7 +1370,7 @@ def signing_token_kind(inner: str) -> str:
         return "signature"
     if INITIALS_TOKEN.fullmatch(words):
         return "initials"
-    if SIGNATURE.search(words) and not DATE_LABEL.search(words):
+    if NAMED_SIGNATURE.search(words) and not DATE_LABEL.search(words):
         return "signature"
     return ""
 
@@ -2291,7 +2305,12 @@ class Detector:
                 self.add(Area("date", clean_label(label) or "Date", slot, {"type": "sdt_text", "date": True},
                               context=self.context_for(slot)))
             elif empty_like:
-                self.add(Area(self.kind_for(label), clean_label(label) or "Answer", slot, {"type": "sdt_text"},
+                # a control whose placeholder names the signing act ('Sign here', '[Signature]') is a signing place
+                # whatever its label ('Patient: [Sign here]' typed a name into it, refutation 2026-09-30 L2:R2-12)
+                kind = self.kind_for(label)
+                if kind not in SIGNING_KINDS and info["placeholder"]:
+                    kind = signing_token_kind(shown.strip("[]<>{} ")) or kind
+                self.add(Area(kind, clean_label(label) or "Answer", slot, {"type": "sdt_text"},
                               context=self.context_for(slot)))
             else:
                 self.notes.append("A content control holding fixed text was kept as printed: %s" % shown[:60])
@@ -4083,13 +4102,9 @@ class Detector:
                             break
                         opts.append(paras[j])
                         j += 1
-                    if len(opts) >= 2 and (sentence_lead(clean_label(qtext)) or any(
-                            len(self.text(o.el).split()) > 12 or len(self.text(o.el).split()) >= 4 and
-                            re.search(r"[.;]\s*(?:or|and)?\s*$", self.text(o.el).strip()) for o in opts)):
-                        # An instruction list, not options: its items are sentences ('Provide a brief title of
-                        # the study.', '... than the usual approach; or'), or its question is a lead-in sentence.
-                        i = j
-                        continue
+                    # ⚠️ Items that read as sentences stay options: a pain scale ('Mild pain that does not limit my
+                    # activity.') and self-rating statements ('I have no problems walking about.') are answers. A filter
+                    # reading such lists as instructions dropped whole questions (refutation 2026-09-30 L1:R4, removed).
                     if len(opts) >= 2:
                         # A conditional list followed by a printed guidance link
                         # describes routes to take; it is not an answer selection.
@@ -4641,11 +4656,6 @@ class Detector:
                                                  or BRACKET.fullmatch(txt))
                     guidance = bool(txt) and not placeholder and self.is_guidance_cell(c) and \
                         bool(self.row_label(tslot, r, c.info["col"]) or self.column_header(tslot, c.info["col"], r))
-                    if guidance and self.repeats_header_row(tslot, r, c):
-                        # '** Left Leg ** | DIAMETER (mm) | REFLUX TIME (ms)' repeating the table's first row: the
-                        # coloured cell is that header row's section heading, not an instruction to answer under.
-                        self.claimed.update(id(node) for node in c.el.iter())
-                        continue
                     if guidance and not self.row_label(tslot, r, c.info["col"]):
                         heading = self.column_header(tslot, c.info["col"], r)
                         if re.match(r"(?:the following (?:are|is) (?:an? )?(?:examples?|illustrations?)\b|(?:for (?:reference|information|illustration)\b)|"
@@ -4685,19 +4695,6 @@ class Detector:
                         continue
                     kind = (signing_token_kind(txt.strip("<>[]{} ")) if placeholder else "") or self.kind_for(name)
                     self.add(Area(kind, clean_label(name), c, target, context=self.context_for(c)))
-
-    def repeats_header_row(self, tslot, r, cell) -> bool:
-        """Whether row r prints the table's first row again - every non-empty cell other than `cell` has the text of
-        the first row's cell in the same column - so the row is a repeated header, `cell` its section heading."""
-        rows = self.grid(tslot)
-        first = min(rows) if rows else r
-        if r == first:
-            return False
-        head = {c.info["col"]: clean_label(self.cell_text(c)) for c in rows[first] if self.cell_text(c).strip()}
-        others = [(c.info["col"], clean_label(self.cell_text(c))) for c in rows[r]
-                  if c is not cell and self.cell_text(c).strip()]
-        return bool(others) and all(head.get(col) == text for col, text in others) and \
-            cell.info["col"] in head and head[cell.info["col"]] != clean_label(self.cell_text(cell))
 
     # An imperative to write, never a printed 'Note: ...' or 'Detail: ...' label; and a request for what to write
     # ('Note if ... present', 'Describe any findings') or where to write it ('describe here', 'explain below').
@@ -5206,8 +5203,10 @@ class Detector:
                     if not above:
                         return clean_label(txt)
                     # A signing caption under a blank cell stays that cell's caption when the text above is a
-                    # section caption spanning wider than the cell ('Assent of Minor:' over the signing row).
-                    if (SIGNATURE.search(txt) or INITIALS.search(txt)) and \
+                    # section caption spanning wider than the cell ('Assent of Minor:' over the signing row). ⚠️ Only a
+                    # caption that makes the cell a signing place: 'Signature/Date' or 'Initials/Date' would have made
+                    # it a typed date on the signing line (refutation 2026-09-30 L2:R2-03).
+                    if self.kind_for(clean_label(txt)) in SIGNING_KINDS and \
                             all(x.info["span"] > cell.info["span"] for x in above):
                         return clean_label(txt)
         return ""
@@ -5379,29 +5378,72 @@ class Detector:
                     self.claimed.add(id(b.el))
 
     def displaced_signing_line(self, paras, i, blanks, label):
-        """(paragraph slot, its one drawn blank) when a signing label's empty line(s) are followed - at most two empty
-        paragraphs after the label - by a line that is ONLY a drawn blank. None otherwise, and always for a label that
-        is not a signature or initials label ('Name', 'Date', 'Signature date' keep the lines below)."""
+        """(paragraph slot, its one drawn blank) when a signing label's empty line(s) are followed - after any number
+        of empty paragraphs - by a line that is ONLY a drawn blank. None otherwise, and always for a label that is not a
+        signature or initials label ('Name', 'Date', 'Signature date' keep the lines below). ⚠️ Also None when the
+        label is itself a caption printed under its own drawn line, or when the drawn line has a caption of its own
+        right under it ('____' / 'Signature of patient' / '' / '____' / 'Printed name': the second line is the printed
+        name's, refutation 2026-09-30 L1:R5)."""
         if not (SIGNATURE.search(label) or INITIALS.search(label)) or self.kind_for(label) not in SIGNING_KINDS:
             return None
-        prev, empty = blanks[-1], len(blanks)
+        above = self.index.by_el.get(id(paras[i].el.getprevious()))
+        if above is not None and above.kind == "p" and self.drawn_only(above):
+            return None
+        prev = blanks[-1]
         for nxt in paras[i + 1 + len(blanks):]:
             if nxt.el.getprevious() is not prev.el or id(nxt.el) in self.claimed \
                     or nxt.el.find(".//" + TXBX) is not None:
                 return None
             text, pieces = self.ptext(nxt.el)
             if not text.strip():
-                empty += 1
-                if empty > 2:
-                    return None
                 prev = nxt
                 continue
-            spans = self.blank_spans(text, pieces)
-            residue = "".join(ch for n, ch in enumerate(text) if not any(s <= n < e for s, e, _ in spans))
-            if len(spans) != 1 or clean_label(residue.replace("_", "")) or spans[0][2] not in ("blank", "utab"):
+            if not self.drawn_only(nxt) or self.caption_below(nxt):
                 return None
+            spans = self.blank_spans(text, pieces)
             return nxt, spans[0]
         return None
+
+    def signing_line(self, slot, prev_sib):
+        """(kind, label) when a line that is ONLY a drawn blank is a signing line although no unclaimed label above names
+        it: the caption printed right under it names a signing act ('______    ______' over 'Signature of Patient
+        Date', refutation 2026-09-30 L2:R2-09), or - with no caption under it - the signing label printed straight above
+        it ends with its colon and holds its place there ('Patient's signature:' over '______', L2:R2-08). Else None:
+        the line stays an ordinary answer - a caption naming anything else ('Printed name', 'Date') owns its line, and a
+        label with a drawn blank of its own ('Signature: ____') does not reach the next line."""
+        caption = self.caption_below(slot)
+        if caption:
+            for piece in re.split(r"\t+| {3,}", caption):
+                if self.kind_for(clean_label(piece)) in SIGNING_KINDS:
+                    return self.kind_for(clean_label(piece)), clean_label(piece)
+            return None
+        if prev_sib is not None and id(prev_sib.el) in self.claimed and prev_sib.kind == "p":
+            printed = self.text(prev_sib.el).strip()
+            above = clean_label(printed)
+            if printed.endswith(":") and above and len(above.split()) <= MAX_LABEL_WORDS and \
+                    self.kind_for(above) in SIGNING_KINDS:
+                return self.kind_for(above), above
+        return None
+
+    def drawn_only(self, slot) -> bool:
+        """A paragraph that is ONLY one drawn blank (underscores or an underlined gap)."""
+        text, pieces = self.ptext(slot.el)
+        spans = self.blank_spans(text, pieces)
+        residue = "".join(ch for n, ch in enumerate(text) if not any(s <= n < e for s, e, _ in spans))
+        return len(spans) == 1 and not clean_label(residue.replace("_", "")) and spans[0][2] in ("blank", "utab")
+
+    def caption_below(self, slot) -> str:
+        """The caption printed right under a drawn line: the next paragraph when it is short printed text with no blank,
+        box or object and no closing colon (a colon-ended line labels what follows it, not the line above)."""
+        nxt = self.index.by_el.get(id(slot.el.getnext()))
+        if nxt is None or nxt.kind != "p" or nxt.parent is not slot.parent:
+            return ""
+        text, pieces = self.ptext(nxt.el)
+        t = text.strip()
+        if not t or len(t.split()) > 12 or t.endswith(":") or BOX in t or CHECKED in t or "\x00" in t \
+                or self.blank_spans(text, pieces):
+            return ""
+        return t
 
     # 7. blanks and 'Label:' answers inside paragraphs ---------------------------------------------------------------
     def blank_spans(self, text, pieces):
@@ -5409,6 +5451,8 @@ class Detector:
         for rx, kind in ((SEGMENTED, "segmented"), (DIGIT_RUN, "segmented"), (DATE_BLANK, "segmented"),
                          (UNDERSCORES, "blank"), (DOTS, "blank"), (TOKEN, "token"), (BRACKET, "bracket"), (ANGLE, "angle")):
             for m in rx.finditer(text):
+                if rx is DATE_BLANK and not date_label_before(text, m.start()):
+                    continue                    # three groups after a label that is not a date: read piecewise
                 spans.append((m.start(), m.end(), kind))
         # underlined tabs / spaces (a drawn line)
         def run_underlined(run):
@@ -5417,15 +5461,19 @@ class Detector:
             return u is not None and (u.get(q("w:val")) or "single") != "none"
 
         def emphasis(first, last):
-            """An underlined space or two INSIDE an underlined phrase is the phrase's underline, not a drawn blank:
-            'Electronically Signed On <date> By:' and 'during the past 30 days' printed underlined. The run must be
-            spaces only, shorter than the three-space gap a printed answer space needs, and every visible neighbour
+            """ONE underlined space INSIDE an underlined phrase is the phrase's underline, not a drawn blank:
+            'Electronically Signed On <date> By:' and 'during the past 30 days' printed underlined. The run must be a
+            single space, it must not follow a label's colon or come before a unit (an answer position: 'Age:' + two
+            underlined spaces + 'years' keeps its blank, refutation 2026-09-30 L1:R11), and every visible neighbour
             must be underlined ordinary ink (a guidance-ink neighbour is a hint in the answer position: kept)."""
             if any(pieces[i].kind != "t" for i in range(first, last + 1)) or \
-                    pieces[last].end - pieces[first].start >= 3:
+                    pieces[last].end - pieces[first].start != 1:
                 return False
             near = [pieces[i] for i in (first - 1, last + 1) if 0 <= i < len(pieces)]
             near = [pc for pc in near if pc.kind == "t" and (pc.node.text or "").strip()]
+            if first and text[:pieces[first].start].rstrip().endswith(":") or \
+                    self.ANSWER_UNIT.match(text[pieces[last].end:].lstrip()):
+                return False                    # after a label's colon, or before a unit ('Height' _ 'cm'): a blank
             return bool(near) and all(run_underlined(pc.run) and not is_hint_run(pc.run) for pc in near)
 
         run_start = None
@@ -5497,15 +5545,8 @@ class Detector:
                 # the area above it, never the first line of an area the placeholders below it continue.
                 token_kind = signing_token_kind(text[spans[0][0]:spans[0][1]].strip("{}[]<> ")) \
                     if spans[0][2] in ("angle", "bracket", "token") else ""
-                if spans[0][2] in ("angle", "bracket", "token") and \
-                        authoring_note(text[spans[0][0]:spans[0][1]].strip("{}[]<> ")):
-                    # a line holding only an author's note ('[IF YES]', '<if applicable>') is printed text
-                    self.notes.append("Bracketed author's text was kept as printed (a condition, an example or "
-                                      "wording for another reader, not a place to write): %s. Location: %s"
-                                      % (text.strip()[:40], slot.id))
-                    self.claimed.add(id(p))           # nor the label of the line below it
-                    pending = None
-                    continue
+                # (A placeholder alone on its line is a place to write, whatever its words: '[Optional: your e-mail
+                # address]', '{{note}}' - see note_in_place.)
                 if token_kind:
                     inner = clean_label(text[spans[0][0]:spans[0][1]].strip("{}[]<> "))
                     self.add(Area(token_kind, inner or token_kind.capitalize(), slot,
@@ -5533,8 +5574,13 @@ class Detector:
                 if not label and spans[0][2] in ("angle", "bracket", "token"):
                     label = clean_label(text[spans[0][0]:spans[0][1]].strip("{}[]<> "))
                 label = label or "Answer"
-                area = Area(self.kind_for(label), label, slot, {"type": "span", "start": spans[0][0], "end": spans[0][1],
-                                                               "shape": spans[0][2]}, context=self.context_for(slot))
+                kind = self.kind_for(label)
+                signing = self.signing_line(slot, prev_sib) if spans[0][2] in ("blank", "utab") and \
+                    kind not in SIGNING_KINDS else None
+                if signing is not None:
+                    kind, label, label_p = signing[0], signing[1], None
+                area = Area(kind, label, slot, {"type": "span", "start": spans[0][0], "end": spans[0][1],
+                                                "shape": spans[0][2]}, context=self.context_for(slot))
                 self.add(area)
                 if label_p is not None and label != "Answer":
                     self.claimed.add(id(label_p.el))
@@ -5607,18 +5653,22 @@ class Detector:
         - running header/footer prose ('This project <insert acronym> has received funding');
         - a bracketed aside inside the printed wording of a grid row whose answer is in another cell ('oxycodone
           [OxyContin]'), unless it asks for something to be written (an instruction verb or a field word).
-        A placeholder standing alone, or after a 'Label:', is none of these: '[Your Address]', 'Name: [Name]'."""
+        A placeholder standing alone, or after a 'Label:', is none of these: '[Your Address]', 'Name: [Name]', and an
+        explicit {{merge field}} never is."""
         raw = text[s:e]
         inner = raw.strip("[]<>{} ")
-        if authoring_note(inner):
+        if raw.startswith("{"):
+            return ""
+        if note_in_place(text, s, e):
             return "note"
         if any(g.start() < s and e <= g.end() for g in INSTRUCTION_GROUP.finditer(text)):
             return "instruction"
         # later in the sentence an author's note governs ('<if applicable> ... for [X weeks]'), unless the placeholder
-        # asks for something to be written: '[IF YES] Date of diagnosis: [date]' keeps its '[date]'
-        if not _Bracket.VERB.match(inner) and not FIELDISH.search(inner) and \
-                any(x[1] <= s and x[2] in ("bracket", "angle", "token") and not re.search(r"[.!?]", text[x[1]:s])
-                    and authoring_note(text[x[0]:x[1]].strip("[]<>{} ")) for x in spans):
+        # asks for something to be written ('[IF YES] Date of diagnosis: [date]' keeps its '[date]') or answers a
+        # label ('[If applicable] Surgeon: [surgeon]', refutation 2026-09-30 L1:R2)
+        if not _Bracket.VERB.match(inner) and not FIELDISH.search(inner) and not answer_position(text, s) and \
+                any(x[1] <= s and x[2] in ("bracket", "angle") and not re.search(r"[.!?]", text[x[1]:s])
+                    and note_in_place(text, x[0], x[1]) for x in spans):
             return "note"
         in_prose = bool(re.search(r"[A-Za-z0-9\u2019'),]\s*$", text[:s]))
         if not in_prose:
@@ -5630,15 +5680,21 @@ class Detector:
             # 'I [we]', 'me [my child]' - never 'I, [your name], agree' (an appositive fill-in, with a comma) or
             # 'We [your practice name] confirm' (a field word)
             prev_word = before[-1].lower().strip("\u2019'")
-            if prev_word in PERSON_WORDS or len(words) > 1 and words[-1] in (prev_word, prev_word + "s", prev_word + "es"):
+            # ⚠️ A second-person placeholder after a first-person pronoun addresses the form's author, it does not
+            # reword the sentence: 'We [your organisation] agree' asks for the organisation (refutation L1:R10)
+            addressed = words[0] in SECOND_PERSON and prev_word in PERSON_WORDS and prev_word not in SECOND_PERSON
+            if not addressed and (prev_word in PERSON_WORDS or
+                                  len(words) > 1 and words[-1] in (prev_word, prev_word + "s", prev_word + "es")):
                 return "alternative"
         if slot.part != "word/document.xml" and not FIELDISH.search(inner) and \
                 LEAD_VERB.search(re.sub(r"\[[^\]]*\]|<[^>]*>", " ", text)):
             # running header/footer prose with a verb: 'This project <insert acronym> has received funding'
             return "header or footer"
         cell = self.host_cell(slot)
+        # (an aside qualifies printed words after it - 'oxycodone [OxyContin], hydrocodone'; a bracket printed last in
+        # the row wording is its place to write: 'Other [drug]', refutation 2026-09-30 L1:R10)
         if raw.startswith("[") and cell is not None and not _Bracket.VERB.match(inner) and not FIELDISH.search(inner) \
-                and self.row_answered_elsewhere(cell):
+                and re.search(r"[A-Za-z0-9]", text[e:]) and self.row_answered_elsewhere(cell):
             return "option wording"
         return ""
 
@@ -5646,14 +5702,26 @@ class Detector:
         made = 0
         format_hint = False
         blanks = list(spans)
+        relaxed = set()                          # answer gaps of labels read inside another label's gap (see below)
         # 'Label:' followed by a gap (>=1 tab or >=3 spaces) or the end of the paragraph, with nothing else drawn
         for m in self.LABEL_COLON.finditer(text):
             if self.fixed_link_introduction(slot):
                 continue
             end = m.end()
-            # The label starts at its first printed character: 'Yes    No    Initials:' after the answer gap of
-            # 'Circle Yes or No:' is a label of its own, not text inside that gap.
-            start = m.start(1) + len(m.group(1)) - len(m.group(1).lstrip())
+            start = m.start()
+            # A label printed inside another label's answer GAP ('Circle Yes or No:      Yes      No      Initials:')
+            # starts at its first printed character when it names a signing act - it is a signature or initials place
+            # of its own - or when that gap belongs to such a label ('...  Initials:          Date:'). ⚠️ Any other
+            # label there stays text inside the gap, as before: 'Signed:          Countersigned:' must not become a
+            # typed answer beside a signature (refutation 2026-09-30 L2:R2-01; 'Physician signature: ______ Date:' keeps
+            # its date, L2:R2-07). The same holds for a label printed straight after a drawn blank ('Name:____ Signed:').
+            gap = next((b for b in blanks if b[0] <= start < b[1]), None)
+            if gap is not None and gap[1] < m.end(1):
+                words = text[gap[1]:m.end(1)]
+                piece = re.split(r"\t+| {3,}", words.strip())[-1]
+                if self.kind_for(clean_label(piece)) in SIGNING_KINDS or gap[0] in relaxed:
+                    start = gap[1] + len(words) - len(words.lstrip())
+                    relaxed.add(end)             # where its own answer gap starts
             if any(s <= start < e or s <= end - 1 < e for s, e, _ in blanks):
                 continue
             rest = text[end:]
@@ -5684,7 +5752,7 @@ class Detector:
             return 0
         prose_words = len(re.findall(r"[A-Za-z]{2,}", "".join(ch for i, ch in enumerate(text)
                                                              if not any(s0 <= i < e0 for s0, e0, _ in blanks))))
-        kept, authored = [], []
+        kept, authored, authored_ends = [], [], []
         for s0, e0, kind in blanks:
             inner = text[s0:e0]
             if kind in ("bracket", "angle") and re.search(r"pre-?filled|pre-?populated|by (?:the )?sponsor", inner, re.I):
@@ -5692,6 +5760,7 @@ class Detector:
                 continue
             if kind in ("bracket", "angle", "token") and self.authoring_placeholder(slot, text, s0, e0, blanks):
                 authored.append(inner.strip()[:40])
+                authored_ends.append(e0)
                 continue
             if re.search(r"\bpage\s*_+\s*of\s*_+", text, re.I) and re.search(r"\bpage\s*$|\bof\s*$", text[:s0], re.I):
                 continue                          # 'Page ___ of ___' numbering lines
@@ -5707,12 +5776,14 @@ class Detector:
             if hyperlink_write(pieces, s, s if kind == "after_label" else e):
                 self.notes.append("An answer insertion inside a fixed hyperlink was left unassigned at " + slot.id)
                 continue
-            seg = text[prev_end:s]
+            # (an author's note printed before a label is not part of it: '[IF YES] Type of cancer: [cancer type]')
+            seg = text[max([prev_end] + [x for x in authored_ends if x <= s]):s]
             seg = re.split(r"[\x00" + BOX + CHECKED + "]", seg)[-1]
             seg = re.split(r"(?<=[.;!?])\s+(?=[A-Z(])", seg.strip())[-1]
-            if kind == "after_label" and n and blanks[n - 1][2] == "after_label" and blanks[n - 1][1] == prev_end:
-                # After the previous label's answer gap, printed words separated by gaps ('Yes    No    Initials:')
-                # are options or notes; this answer's label is the last of them.
+            if kind == "after_label" and s in relaxed:
+                # A label read inside the previous label's answer gap: the printed words before it, separated by gaps
+                # ('Yes    No    Initials:'), are options or notes; its label is the last of them. ⚠️ Only there: a
+                # label after a tab gap keeps all its words ('Signature of parent     (or guardian):', L2:R2-02).
                 seg = re.split(r"\t+| {3,}", seg.strip())[-1]
             label = clean_label(seg)
             if kind in ("token", "bracket", "angle", "hint") and not label:
@@ -5723,7 +5794,13 @@ class Detector:
             if not label:
                 nxt = blanks[n + 1][0] if n + 1 < len(blanks) else len(text)
                 after = clean_label(re.split(r"[\x00" + BOX + CHECKED + "]", text[e:nxt])[0])
-                label = after or clean_label(self.previous_paragraph_text(slot)) or "Answer"
+                above = clean_label(self.previous_paragraph_text(slot))
+                if after and text[e:nxt].strip().endswith(":") and self.kind_for(above) in SIGNING_KINDS:
+                    # '______        Date: ____' under 'Patient's signature:': 'Date:' labels the NEXT blank; the
+                    # leading line is the signature's (a date was typed on it, refutation 2026-09-30 L2:R2-10)
+                    label = above
+                else:
+                    label = after or above or "Answer"
             if kind == "after_label" and self.is_label_of_next_lines(slot, text):
                 continue
             if kind == "after_label" and not text[e:].strip() and self.lead_in(slot, label, text):
@@ -5792,36 +5869,24 @@ class Detector:
             return False
         rest = [clean_label(self.cell_text(c)) for c in self.grid(cell.parent).get(cell.info["row"], [])
                 if c.info["col"] > 0 and c.info["vmerge"] != "continue"]
-        return any(re.match(r"(?:print(?:ed)?\s+)?name\b", t, re.I) for t in rest) and \
+        return any(re.match(r"(?:(?:print(?:ed)?|full)\s+)?name\b", t, re.I) for t in rest) and \
             any(SIGNATURE.search(t) for t in rest)
 
-    def content_follows(self, slot) -> bool:
-        """Whether printed content follows a paragraph - a table, or (after at most one empty line) a paragraph that
-        is not only a drawn blank - or the paragraph ends its table cell. An empty or drawn line below it, or nothing
-        after it in the body, can be its answer space."""
-        node, empty = slot.el.getnext(), 0
-        while node is not None:
-            if node.tag == q("w:tbl"):
-                return True
-            if node.tag == q("w:p"):
-                text, pieces = self.ptext(node)
-                if not text.strip():
-                    empty += 1
-                    if empty > 1:
-                        return False
-                else:
-                    spans = self.blank_spans(text, pieces)
-                    residue = "".join(ch for n, ch in enumerate(text) if not any(a <= n < b for a, b, _ in spans))
-                    return not (spans and not clean_label(residue.replace("_", "")))
-            elif node.tag in (q("w:sdt"), q("w:sectPr")):
-                return False
-            node = node.getnext()
-        return self.owning_cell(slot) is not None
+    def printed_item(self, slot) -> bool:
+        """A printed LIST ITEM: a numbered paragraph (its own numbering) or a typed bullet, holding words - never a
+        label or a question (they are answer places of their own), a drawn blank, a box or an object."""
+        text, pieces = self.ptext(slot.el)
+        t = text.strip()
+        if not t or BOX in t or CHECKED in t or "\x00" in t or t.endswith((":", "?")) or self.blank_spans(text, pieces):
+            return False
+        return self.list_info(slot.el) is not None or bool(TYPED_BULLET.match(t))
 
     def lead_in(self, slot, label, text) -> str:
-        """Why a colon ending a paragraph introduces printed content rather than an answer space, else ''."""
-        if sentence_lead(label) and self.content_follows(slot):
-            return "sentence"
+        """Why a colon ending a paragraph introduces printed content rather than an answer space, else ''.
+        ⚠️ Not because the label reads as a SENTENCE: a rule reading colon-ended sentences ('Some of the side effects
+        are:') as lead-ins took the answer place of questionnaire labels worded the same way ('Reason you are seeking
+        care today:', 'Medications you are currently taking:', a long signing label) and was refuted in three lenses
+        and removed (refutation 2026-09-30 L1:R3, L3:R3-01, L2:R2-06): such a colon keeps its answer place."""
         if self.signer_row_heading(slot):
             return "signer row heading"
         if label.startswith("[") and "]" not in label:
@@ -5833,10 +5898,12 @@ class Detector:
         return ""
 
     def heads_following_block(self, slot, text) -> bool:
-        """'Pre-Radiotherapy:' over '- Dental Status:' items, 'Side effects:' (list item) over its deeper prose
-        items, and 'Formatting:' over another list's items. An item that is a label itself ('- Evolution:' over
-        '  - Stabilization:') keeps its own answer space. ⚠️ A label is never a heading because the NEXT label is one:
-        'Medication History:' over 'General Examination:' (over its list) is still answered after its colon."""
+        """'Pre-Radiotherapy:' over typed-bullet items that are labels themselves ('- Dental Status:  ', each with its
+        own answer space), and a list item over two or more DEEPER-level printed items ('Include 2 titles:' over its
+        lettered sentences). ⚠️ One item, a typed-bullet item that is not a label ('- include dates where known') and
+        another list's items at the same level ('Patient name:' over a numbered question) are not the label's content:
+        its answer stays after its colon (refutation 2026-09-30 L1:R7). An item that is a label itself keeps its own
+        answer space, and a label is never a heading because the NEXT label is one."""
         sibs, idx = self.para_neighbours(slot)
         if idx is None or idx + 1 >= len(sibs):
             return False
@@ -5845,17 +5912,23 @@ class Detector:
         if not nt:
             return False
         if TYPED_BULLET.match(nt) and not TYPED_BULLET.match(text):
-            return True
-        mine, theirs = self.list_info(slot.el), self.list_info(nxt.el)
-        if mine is not None and theirs is not None and not nt.endswith(":") and \
-                (theirs[0] != mine[0] or int(theirs[1]) > int(mine[1])):
-            return True
-        return False
+            item = TYPED_BULLET.sub("", nt, count=1).strip()
+            return item.endswith(":") and len(clean_label(item).split()) <= MAX_LABEL_WORDS
+        mine = self.list_info(slot.el)
+        if mine is None:
+            return False
+        deeper = []
+        for x in sibs[idx + 1:]:
+            info = self.list_info(x.el)
+            if info is None or int(info[1]) <= int(mine[1]):
+                break
+            deeper.append(x)
+        return len(deeper) >= 2 and all(self.printed_item(x) for x in deeper)
 
     def heads_answer_column(self, slot, label) -> bool:
         """A label printed in a table cell above cells that answer under it (an area below that is named after this
-        header, or a table_rows grid covering its column) or above printed values ('Summary of Revisions Made:' over
-        its rows; 'Comorbidities:' over 'Diabetes | Hypertension'): a column header, not an answer place."""
+        header, or a table_rows grid covering its column), or a caption spanning the options printed in the next row
+        ('Comorbidities:' over 'Diabetes | Hypertension'): a column header, not an answer place."""
         cell = self.host_cell(slot)
         key = clean_label(label).lower()
         if cell is None or self.owning_cell(slot) is not cell or not key:
@@ -5889,12 +5962,9 @@ class Detector:
         # a caption over the options printed in the next row, inside its own columns
         under = [c for c in rows.get(row + 1, []) if c.info["col"] >= col and c.info["col"] + c.info["span"] <= col + span
                  and c.info["vmerge"] != "continue"]
-        if span >= 2 and sum(map(printed, under)) >= 2:
-            return True
-        # a header over a column of printed values: the next two rows print values exactly under it
-        column = [next((c for c in rows.get(r, []) if c.info["col"] == col and c.info["span"] == span), None)
-                  for r in (row + 1, row + 2)]
-        return all(c is not None and printed(c) for c in column)
+        # ⚠️ Printed rows under a label cell are not, alone, a column header's values: 'Clinical findings:' over two
+        # printed instruction rows keeps its answer space (refutation 2026-09-30 L3:R3-04; that arm was removed).
+        return span >= 2 and sum(map(printed, under)) >= 2
 
     def is_label_of_next_lines(self, slot, text) -> bool:
         """'Findings:' heading a numbered list / a table / lines below rather than taking an answer after it."""
@@ -5918,8 +5988,9 @@ class Detector:
         self.rule_caption_signing_lines()
         self.rule_initial_boxes()
 
-    def top_rule(self, p) -> bool:
-        """Whether a paragraph draws a rule along its top edge: its own top border, else its style chain's."""
+    def top_rule(self, p, edge="top") -> bool:
+        """Whether a paragraph draws a rule along its `edge` (top, left, bottom, right): its own border, else its style
+        chain's. An unresolvable style chain draws none."""
         ppr = p.find(q("w:pPr"))
         props = [ppr]
         ref = ppr.find(q("w:pStyle")) if ppr is not None else None
@@ -5929,9 +6000,9 @@ class Detector:
                 return False
             props += [style.find(q("w:pPr")) for style in chain]
         for props_ in props:
-            top = props_.find(q("w:pBdr") + "/" + q("w:top")) if props_ is not None else None
-            if top is not None:
-                return (top.get(q("w:val")) or "none") not in ("none", "nil")
+            rule = props_.find(q("w:pBdr") + "/" + q("w:" + edge)) if props_ is not None else None
+            if rule is not None:
+                return (rule.get(q("w:val")) or "none") not in ("none", "nil")
         return False
 
     def rule_caption_signing_lines(self):
@@ -5957,6 +6028,14 @@ class Detector:
                                                                FLDCHAR, q("w:sym")) for node in line.el.iter()):
                 continue
             if not self.top_rule(cap.el) or self.top_rule(line.el):
+                continue
+            # ⚠️ A caption ruled along its sides too is a boxed notice ('Signed forms must be returned to reception'),
+            # and an empty line straight under a colon-ended label is that label's answer line ('Comments:' / '' /
+            # a ruled section heading): neither is a Signature Line (refutation 2026-09-30 L1:R6).
+            if self.top_rule(cap.el, "left") or self.top_rule(cap.el, "right"):
+                continue
+            above = line.el.getprevious()
+            if above is not None and above.tag == q("w:p") and self.text(above).strip().endswith(":"):
                 continue
             style = cap.el.find(q("w:pPr") + "/" + q("w:pStyle"))
             if style is not None and HEADING_STYLE.match(style.get(q("w:val")) or ""):
@@ -6882,18 +6961,35 @@ def write_sdt_text(sdt, answer):
     return True
 
 
+#: Paragraph properties an empty answer line may carry and still take an answer as the form shows it: alignment,
+#: indentation and paragraph spacing. Anything else - a style, a frame, a border, shading, an exact line height, a
+#: hidden or tiny mark - can hide or clip what is written there, so such a line is left alone.
+PLAIN_LINE_PPR = {"rPr", "jc", "ind", "spacing"}
+HIDDEN_RPR = {"vanish", "specVanish", "webHidden"}
+
+
 def empty_answer_line(tc):
-    """The first paragraph after the last printed paragraph of a cell when it is a plain empty line (the line the form
-    leaves under its instruction for the answer), else None. Plain: only paragraph properties (no section break) and
-    runs holding nothing but empty text - never a field, drawing, break, bookmark or control."""
+    """The first paragraph after the last printed paragraph of a cell when it is a PLAIN empty line (the line the form
+    leaves under its instruction for the answer), else None. Plain: at most alignment, indentation and spacing in its
+    paragraph properties (no style, and a spacing with no fixed line height), a paragraph mark that is neither hidden
+    nor sized, and runs holding nothing but empty text - never a field, drawing, break, bookmark or control.
+    ⚠️ A spacer line styled or sized to vanish (sz 2, a hidden style, an exact 1pt line) is not an answer line: the
+    answer written on it was invisible (refutation 2026-09-30 L1:R8, L2:R2-04)."""
     paras = tc.findall(q("w:p"))
     printed = [n for n, p in enumerate(paras) if text_of(p).strip()]
     if not printed or printed[-1] + 1 >= len(paras):
         return None
     p = paras[printed[-1] + 1]
     ppr = p.find(q("w:pPr"))
-    if ppr is not None and ppr.find(q("w:sectPr")) is not None:
-        return None
+    for ch in (ppr if ppr is not None else []):
+        name = etree.QName(ch).localname if isinstance(ch.tag, str) else ""
+        if name not in PLAIN_LINE_PPR:
+            return None
+        if name == "spacing" and (ch.get(q("w:line")) is not None or ch.get(q("w:lineRule")) is not None):
+            return None
+        if name == "rPr" and any(isinstance(x.tag, str) and etree.QName(x).localname in HIDDEN_RPR | {"sz", "szCs", "w"}
+                                 for x in ch):
+            return None
     for ch in p:
         if ch.tag == q("w:pPr"):
             continue
@@ -6916,14 +7012,12 @@ def write_cell(tc, answer, replace=False, whole=False, append=False, into_line=F
         if wraps_structure(tc):
             fail("The instruction cell contains another form structure.", "unsupported_layout")
         line = empty_answer_line(tc) if append and into_line and not whole else None
-        if line is not None:
-            # The form already leaves an empty line under its instruction: the answer goes on it, adding no paragraph.
-            replace_range(line, 0, 0, answer)
-            _unclip_row(tc)
-            return True
-        paragraph = etree.SubElement(tc, q("w:p"))
         source_run = next(p0.iter(R), None)
         props = source_run.find(q("w:rPr")) if source_run is not None else None
+        # The form already leaves an empty line under its instruction: the answer goes on it, adding no paragraph -
+        # the same run an appended paragraph gets, never the empty line's own (possibly struck, symbol-font or
+        # condensed) run properties.
+        paragraph = line if line is not None else etree.SubElement(tc, q("w:p"))
         paragraph.append(_new_run(_answer_rpr(props), answer))
         _unclip_row(tc)
         return True
