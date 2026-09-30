@@ -4656,6 +4656,11 @@ class Detector:
                                                  or BRACKET.fullmatch(txt))
                     guidance = bool(txt) and not placeholder and self.is_guidance_cell(c) and \
                         bool(self.row_label(tslot, r, c.info["col"]) or self.column_header(tslot, c.info["col"], r))
+                    if guidance and self.repeats_header_row(tslot, r, c):
+                        # '** Left Leg ** | DIAMETER (mm) | REFLUX TIME (ms)' repeating the table's first row as a
+                        # section header: the coloured cell is that section's heading, not an instruction to answer.
+                        self.claimed.update(id(node) for node in c.el.iter())
+                        continue
                     if guidance and not self.row_label(tslot, r, c.info["col"]):
                         heading = self.column_header(tslot, c.info["col"], r)
                         if re.match(r"(?:the following (?:are|is) (?:an? )?(?:examples?|illustrations?)\b|(?:for (?:reference|information|illustration)\b)|"
@@ -4695,6 +4700,29 @@ class Detector:
                         continue
                     kind = (signing_token_kind(txt.strip("<>[]{} ")) if placeholder else "") or self.kind_for(name)
                     self.add(Area(kind, clean_label(name), c, target, context=self.context_for(c)))
+
+    def repeats_header_row(self, tslot, r, cell) -> bool:
+        """Whether row r repeats the table's first row as a SECTION header, `cell` being its section heading: the first
+        row's cell in `cell`'s column is guidance ink too (the pair are section headings: '** Right Leg **', '** Left
+        Leg **'), every other printed cell of row r prints the first row's text in its column and is unclaimed printed
+        text (a column header, not an answer), rows of their own lie between the two, and `cell` is not an
+        instruction to write. ⚠️ Rows repeating printed cells without all of that are answer rows: '~Describe swelling |
+        Grade | Notes' under 'Item | Grade | Notes', adjacent instruction rows and '~Describe the largest lesion | Size |
+        Colour' (a repeated-header rule without these conditions took their answers)."""
+        heading = clean_label(self.cell_text(cell))
+        if self.INSTRUCTED.match(heading):
+            return False                        # an instruction to write is never a section heading
+        rows = self.grid(tslot)
+        first = min(rows) if rows else r
+        if r - first < 2:
+            return False
+        opening = next((c for c in rows[first] if c.info["col"] == cell.info["col"]), None)
+        if opening is None or not self.is_guidance_cell(opening):
+            return False
+        head = {c.info["col"]: clean_label(self.cell_text(c)) for c in rows[first] if self.cell_text(c).strip()}
+        others = [c for c in rows[r] if c is not cell and self.cell_text(c).strip()]
+        return bool(others) and all(head.get(c.info["col"]) == clean_label(self.cell_text(c))
+                                    and not self.cell_has_claim(c.el) for c in others)
 
     # An imperative to write, never a printed 'Note: ...' or 'Detail: ...' label; and a request for what to write
     # ('Note if ... present', 'Describe any findings') or where to write it ('describe here', 'explain below').
@@ -5873,13 +5901,12 @@ class Detector:
             any(SIGNATURE.search(t) for t in rest)
 
     def printed_item(self, slot) -> bool:
-        """A printed LIST ITEM: a numbered paragraph (its own numbering) or a typed bullet, holding words - never a
-        label or a question (they are answer places of their own), a drawn blank, a box or an object."""
+        """Whether a list item is PRINTED content: it holds words and is never a label or a question (answer places of
+        their own), a drawn blank, a box or an object."""
         text, pieces = self.ptext(slot.el)
         t = text.strip()
-        if not t or BOX in t or CHECKED in t or "\x00" in t or t.endswith((":", "?")) or self.blank_spans(text, pieces):
-            return False
-        return self.list_info(slot.el) is not None or bool(TYPED_BULLET.match(t))
+        return bool(t) and BOX not in t and CHECKED not in t and "\x00" not in t and not t.endswith((":", "?")) \
+            and not self.blank_spans(text, pieces)
 
     def lead_in(self, slot, label, text) -> str:
         """Why a colon ending a paragraph introduces printed content rather than an answer space, else ''.

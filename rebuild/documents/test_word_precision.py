@@ -599,6 +599,8 @@ class UnderlinedPhrase(unittest.TestCase):
                 self.assertEqual([f["locator"]["target"].get("shape") for f in fields], ["utab"])
         self.assertEqual(len(fields_of(build(underlined(("Weight", True), ("  ", True), ("kg", True))))), 1)
         self.assertEqual(len(fields_of(build(underlined(("Height", True), (" ", True), ("cm", True))))), 1)
+        self.assertEqual(len(fields_of(build(underlined(("Seen", True), ("  ", True), ("today", True))))), 1)
+        self.assertEqual(len(fields_of(build(underlined(("Name:", True), (" ", True), ("Jane", True))))), 1)
 
 
 class AuthorsBracketedText(unittest.TestCase):
@@ -636,6 +638,7 @@ class AuthorsBracketedText(unittest.TestCase):
                      "Mobility: [Use of walking aids]", "Allergies:\t[Note any known allergies]",
                      "Allergies: [Note any known allergies] and reactions",
                      "Ethnicity: White / Other [If other, please specify]", "The review is due {{when}} after discharge.",
+                     "The review happens {{if needed}} after discharge.",
                      "Referral details: [if any]", "Your next visit is on [when booked] at the clinic.",
                      "Bring your [optional carer's letter] to the visit.", "The form asks for [note of any allergies] here.",
                      "Staff will record [use of walking aids] at each visit.", "Call us [only if urgent] on the ward.",
@@ -959,7 +962,43 @@ class TableHeadingsAndAnswerLines(unittest.TestCase):
                 out = Document(io.BytesIO(filled(data))).tables[0]
                 self.assertEqual(out.cell(1, 0).text, "")
 
+    def test_heading_cell_of_a_repeated_section_header(self):
+        """K5 subset: '~** Lower Arm ** | WIDTH (mm) | FLOW (ms)' repeating the first row's section header after rows of
+        its own - the coloured cell is that section's heading, not an instruction cell to answer under."""
+        for second in ("~** Lower Arm **", "~** Upper Arm **"):
+            with self.subTest(second=second):
+                fields = fields_of(build(table([["~** Upper Arm **", "WIDTH (mm)", "FLOW (ms)"],
+                                                ["Vein at the elbow", "", ""], [second, "WIDTH (mm)", "FLOW (ms)"],
+                                                ["Vein at the elbow", "", ""]])))
+                self.assertFalse([f for f in fields if f["locator"]["slot"] == "b/tbl[0]/tr[2]/tc[0]"])
+                self.assertEqual(len([f for f in fields if f["locator"]["slot"].startswith("b/tbl[0]/tr[3]/")]), 2)
+
     def test_instruction_cells_in_rows_that_repeat_printed_cells_stay_answers(self):
+        """An instruction cell in a row whose other cells repeat the first row's is an answer place unless the row is a
+        section header: the first row's cell in its column is guidance ink too, rows of their own lie between, the
+        repeated cells are unclaimed printed text, and the cell is not an instruction to write."""
+        cases = (([["Item", "Grade", "Notes"], ["~Describe swelling", "Grade", "Notes"],
+                   ["~Describe redness", "Grade", "Notes"]], ["b/tbl[0]/tr[1]/tc[0]", "b/tbl[0]/tr[2]/tc[0]"]),
+                 ([["~Enter the left value", "mm", "ms"], ["Left", "", ""], ["~Enter the right value", "mm", "ms"],
+                   ["Right", "", ""]], None),
+                 ([["~Describe each lesion", "Size", "Colour"], ["Lesion 1", "", ""],
+                   ["~Describe the largest lesion", "Size", "Colour"], ["Lesion 2", "", ""]], ["b/tbl[0]/tr[2]/tc[0]"]),
+                 ([["~** Upper Arm **", "WIDTH (mm)", "FLOW (ms)"], ["~** Lower Arm **", "WIDTH (mm)", "FLOW (ms)"]],
+                  ["b/tbl[0]/tr[1]/tc[0]"]),
+                 ([["~Describe the left knee", "Yes", "No"], ["Knee", "", ""], ["~Describe the right knee", "Yes", "No"]],
+                  ["b/tbl[0]/tr[2]/tc[0]"]))
+        for rows, appended in cases:
+            with self.subTest(rows=rows):
+                data = build(table(rows))
+                base_like = [f["locator"]["slot"] for f in fields_of(data)
+                             if f["locator"]["target"]["type"] in ("cell_append", "cell_replace")
+                             and f["locator"]["slot"].endswith("/tc[0]")]
+                if appended is None:
+                    self.assertEqual(len(base_like), 2)
+                else:
+                    self.assertEqual([x for x in base_like if x in appended], appended)
+
+    def test_instruction_cells_in_rows_that_repeat_the_header_directly(self):
         """An instruction cell in a row whose other cells repeat the first row's ('~Describe swelling | Grade |
         Notes' under 'Item | Grade | Notes') is an answer place, as before (a repeated-header rule removed it)."""
         fields = fields_of(build(table([["Item", "Grade", "Notes"], ["~Describe swelling", "Grade", "Notes"],
