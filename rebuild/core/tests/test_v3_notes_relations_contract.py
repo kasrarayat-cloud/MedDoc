@@ -477,7 +477,10 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
                 ('Allergies: penicillin.\nShe is not allergic to latex.', clinic_form(), 'v3_5'),
                 ('Examination: tenderness over the lateral epicondyle.\nThere is no tenderness over the medial '
                  'epicondyle.', clinic_form(), 'v3_7'),
-                ('Plan: MRI of the right knee.\nShe does not want an MRI of the left knee.', clinic_form(), 'v3_9')):
+                ('Plan: MRI of the right knee.\nShe does not want an MRI of the left knee.', clinic_form(), 'v3_9'),
+                # a statement agreeing with the value, and a denial saying only that another finding is not there
+                ('Mental state: depressed.\nShe is depressed.', text('Mental state'), 'f'),
+                ('Examination: effusion seen.\nFracture: not seen.', clinic_form(), 'v3_7')):
             selected = notes.split('\n')[0]
             with self.subTest(notes=notes):
                 self.assert_filled(notes, fields, offered(notes, fields, {key: [selected]}),
