@@ -78,9 +78,10 @@ class TabIdentityPolicyTests(SimpleTestCase):
                 validate_identity(fields,{'old':{'text':'12/09/2026'}},self.actor)
 
     def test_the_signature_lines_it_must_still_recognise_are_untouched(self):
-        """The control on that narrowing: a date WORD alone must not disarm the guard, and a parenthetical naming a
-        clinician role keeps it."""
-        for label in ('Signature/Date', 'Signature (MD)', 'Signature (physician)', 'Electronically signed by'):
+        """The control on that narrowing: a date WORD alone must not disarm the guard, and a parenthetical that names
+        nobody else keeps it (the identity check fails closed)."""
+        for label in ('Signature/Date', 'Signature (print name)', 'Signature (MD)', 'Signature (consultant)',
+                      'Signed (GP)', 'Electronically signed by (print name)', 'Signed by (name)', 'Electronically signed by'):
             with self.subTest(label=label):
                 fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
                 with self.assertRaises(ValidationError):
@@ -94,14 +95,13 @@ class TabIdentityPolicyTests(SimpleTestCase):
                 fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
                 validate_identity(fields,{'old':{'text':'Legacy reviewed text'}},self.actor)
 
-    def test_a_parenthetical_that_names_no_clinician_role_is_not_the_finalizers(self):
-        """⚠️ L04: ANY parenthetical used to make a signature line the finalizer's, so `Signature (participant)` and
-        `Signature (mother)` demanded the finalizing clinician's own name in another person's signature place. Only a
-        parenthetical naming a clinician role (the rule's own `_ROLE` words) keeps identity now; an instruction such as
-        `(print name)` no longer does - such a line is a signature role on the legacy path instead (never generated,
-        generated or accepted text refused; the clinician's own typed entry exports)."""
-        for label in ('Signature (participant)', 'Signature (mother)', 'Signature (donor)', 'Signature (print name)',
-                      'Electronically signed by (print name)', 'Signed by (name)'):
+    def test_a_parenthetical_naming_another_person_is_not_the_finalizers(self):
+        """⚠️ L04: `Signature (participant)` and `Signature (mother)` demanded the finalizing clinician's own name in
+        another person's signature place. The persons who are NOT the finalizer are an exclusion list
+        (`NOT_THE_CLINICIAN`); any other parenthetical keeps the line the finalizer's (a narrowing to clinician-role
+        words was refuted: `Signed (Consultant)` and `Signature (GP)` stopped being identity rows)."""
+        for label in ('Signature (participant)', 'Signature (mother)', 'Signature (father)', 'Signature (donor)',
+                      'Signed by (witness)'):
             with self.subTest(label=label):
                 fields=[{'key':'old','label':label,'locator':{'paragraph':0}}]
                 validate_identity(fields,{'old':{'text':'Somebody Else'}},self.actor)

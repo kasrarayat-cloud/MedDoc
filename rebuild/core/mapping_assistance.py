@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from documents.service import assistance_outline, locate_fields
 from . import generation, v3_mapping, mapping_wire as wire
 from .security import private_path
-from .tab_review import signature_label
+from .tab_review import clinician_identity, signature_label
 from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_CONTEXT
 
 VERSION='blank-mapping-v3'
@@ -126,13 +126,16 @@ ADDITION_ROLE=('This place is a {what} place of the original form, so only a Sig
                'there.')
 NOT_AUTOMATIC=('A model proposal may replace only a field QuillMD found automatically; this field was added by a clinician '
                'or by an earlier proposal, so only the clinician changes it.')
-NOT_ORDINARY=('This field carries a signature, initials, protection or printed authorship/review requirement; a model '
-              'proposal cannot change it.')
+NOT_ORDINARY=('This field carries a signature, initials, protection, printed authorship/review requirement or the '
+              "finalizing clinician's signature label; a model proposal cannot change it.")
 ROLE_PLACE=('This field sits on a signing, initials, consent or protected place of the original form (or lacks its '
             'printed requirement); a model proposal cannot change it.')
 KIND_CHANGE='A model proposal may change a kind only among text, long text, date and time.'
 OPTIONS_CHANGE='A model proposal cannot change the printed options of a field.'
 LABEL_SOURCE='Label is not verbatim source wording.'
+#: The same label rule as a clinician's add (the engine's clean_label): a label that is only spaces, a colon or the
+#: printed blank line is no label - adopting ' ' as a label unasked the question and blocked the next correction.
+LABEL_SHAPE='Each field needs a label: printed wording, not only spaces, punctuation or a blank line.'
 OPTION_SOURCE='Option is not printed at this source slot.'
 DISMISSED_REASON='The same proposal marks its destination ({slot}) not an answer; it was not adopted.'
 #: How a change depends on others (D1-D6); a dependent change is held with every member it depends on, never first-come.
@@ -268,13 +271,19 @@ def validate_proposal(version,compiled,response):
             prior=originals.get(entry['key']) if entry['type']=='replacement' else None
             if target.label not in source and not (prior and target.label==prior['label']):
                 raise ValidationError(LABEL_SOURCE)
+            from documents.word_v3 import clean_label
+            label=clean_label(target.label,limit=MAX_MAPPING_LABEL)
+            if not label or not generation.question_key(label):raise ValidationError(LABEL_SHAPE)
             if any(not option or option not in source for option in target.options):
                 raise ValidationError(OPTION_SOURCE)
             if (signature_label(source) or prior and prior['kind'] in v3_mapping.SIGNING_KINDS) and target.kind not in v3_mapping.SIGNING_KINDS:
                 raise ValidationError(SIGNING_REASON)
             if prior is None:continue
             if prior.get('origin') not in (None,'','automatic'):raise ValidationError(NOT_AUTOMATIC)
-            if prior.get('kind') in v3_mapping.SIGNING_KINDS or prior.get('write_protected') or prior.get('answer_policy'):
+            # ⚠️ The finalizer's signature label ('Signature/Date') is identity whatever its kind: relabelling it
+            # ('Date') turned the identity check off and generation filled the signing place.
+            if prior.get('kind') in v3_mapping.SIGNING_KINDS or prior.get('write_protected') or prior.get('answer_policy') \
+                    or clinician_identity(prior):
                 raise ValidationError(NOT_ORDINARY)
             if prior['key'] in held_now:raise ValidationError(ROLE_PLACE)
             if target.kind!=prior['kind'] and not (target.kind in v3_mapping.TEXT_KINDS and prior['kind'] in v3_mapping.TEXT_KINDS):
@@ -284,7 +293,7 @@ def validate_proposal(version,compiled,response):
                     and not (prior['kind']=='checkbox' and not target.options):
                 raise ValidationError(OPTIONS_CHANGE)
             field=copy.deepcopy(prior)
-            field['label']=target.label
+            field['label']=label
             if prior['kind'] in v3_mapping.TEXT_KINDS:field['kind']=target.kind
             field['origin']='model_assisted'
             entry['field']=field
@@ -293,9 +302,24 @@ def validate_proposal(version,compiled,response):
     # ─── 3. dependence (D1-D6), never first-come ────────────────────────────────────────────────────────────────────
     removals={v.key:v.verdict for v in proposal.fields if v.verdict in ('not_answer','uncertain')}
     dismissed={v.slot for v in proposal.slots if v.verdict=='not_answer'}
+    def places_of(entry):
+        if entry['type']=='replacement' and entry['key'] in originals:return v3_mapping.mapped_slots([originals[entry['key']]])
+        return {entry['slot']} if entry['slot'] else set()
+    def field_of(entry):
+        return originals.get(entry['key']) if entry['type']=='replacement' else None
+    def collides(first,first_places,second,second_places):
+        # Two existing fields are compared by what they write (a span against a span on one line, a box against a
+        # box), never by the paragraph that holds them: 'Weight: ____ kg  Height: ____ cm' is two places.
+        if first is not None and second is not None:return overlaps(first,second)
+        return bool(first_places and second_places and any(v3_mapping.is_mapped(slot,second_places) for slot in first_places))
     for entry in changes:
-        if entry['error'] is None and entry['slot'] in dismissed:
-            entry['error']=DISMISSED_REASON.format(slot=entry['slot']);entry['check']='source'
+        # The change writes AT or INSIDE an area the same proposal marks not an answer (the date cell dismissed, the
+        # change naming the cell's paragraph). A dismissed paragraph INSIDE a covered cell is not the cell: the model
+        # may call the printed line inside a covered cell 'not an answer' while the cell's field stands.
+        where=places_of(entry)|({entry['slot']} if entry['slot'] else set())
+        hit=next((slot for slot in sorted(dismissed) if any(place==slot or place.startswith(slot+'/') for place in where)),None)
+        if entry['error'] is None and hit is not None:
+            entry['error']=DISMISSED_REASON.format(slot=hit);entry['check']='source'
     replacing={}
     for n,entry in enumerate(changes):
         if entry['type']=='replacement' and entry['key']:replacing.setdefault(entry['key'],[]).append(n)
@@ -308,9 +332,6 @@ def validate_proposal(version,compiled,response):
         changes[a]['with'].add(changes[b]['id']);changes[b]['with'].add(changes[a]['id'])
         changes[a]['why'].add(DEPENDENCE[why]);changes[b]['why'].add(DEPENDENCE[why])
         parent[find(a)]=find(b)
-    def places_of(entry):
-        if entry['type']=='replacement' and entry['key'] in originals:return v3_mapping.mapped_slots([originals[entry['key']]])
-        return {entry['slot']} if entry['slot'] else set()
     def labels_of(entry):
         if entry['field'] is not None:return {question_of(entry['field'])}
         if entry.get('target') is not None:return {generation.question_key(entry['target'].label)}
@@ -321,7 +342,7 @@ def validate_proposal(version,compiled,response):
             if entry['type']=='replacement' and key==entry['key']:continue
             theirs=v3_mapping.mapped_slots([original])
             # D3: lands on an existing field another change replaces, or one the proposal would drop.
-            if mine and any(v3_mapping.is_mapped(slot,theirs) for slot in mine):
+            if collides(field_of(entry),mine,original,theirs):
                 if key in replacing:
                     for other in replacing[key]:join(n,other,'displacement')
                 elif key in removals:
@@ -351,8 +372,7 @@ def validate_proposal(version,compiled,response):
         for b in range(a+1,len(changes)):
             first,second=changes[a],changes[b]
             if first['type']=='replacement' and first['key'] and first['key']==second['key']:join(a,b,'same_field')
-            left,right=places_of(first),places_of(second)
-            if left and right and any(v3_mapping.is_mapped(slot,right) for slot in left):join(a,b,'destination')
+            if collides(field_of(first),places_of(first),field_of(second),places_of(second)):join(a,b,'destination')
             if labels_of(first)&labels_of(second):join(a,b,'question')
             boxes_a,boxes_b=box_keys_of(first,originals),box_keys_of(second,originals)
             if boxes_a and boxes_b and any(boxes_a&group and boxes_b&group for group in groups):join(a,b,'options')

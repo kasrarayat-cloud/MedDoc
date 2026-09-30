@@ -506,7 +506,8 @@ class ModelProposals(V3Fixture, TestCase):
         signature = next(f for f in version.fields if f['kind'] == 'signature')
         plan = next(f for f in version.fields if f['label'] == 'Plan')
         manual = {**plan, 'origin': 'manual'}
-        automatic = {k: v for k, v in forged(data, 'b/p[1]', label='Signature').items() if k != 'origin'}
+        # (labelled 'Answer': a label the identity check reads as the finalizer's is refused earlier, by NOT_ORDINARY)
+        automatic = {k: v for k, v in forged(data, 'b/p[1]', label='Answer').items() if k != 'origin'}
         cases = (('signature kind', [signature, plan], signature, 'Signature', 'text', mapping.SIGNING_REASON),
                  ('manual field', [signature, manual], manual, 'Plan', 'text', mapping.NOT_AUTOMATIC),
                  ('kind to checkbox', [signature, plan], plan, 'Plan', 'checkbox', mapping.KIND_CHANGE),
@@ -551,3 +552,316 @@ class ModelProposals(V3Fixture, TestCase):
                                           'resolution_0': 'mapped', 'resolution_1': 'mapped'})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.latest(template).assistance['unresolved'], [])
+
+
+# ─── refutation round 1 (e555540d): each test is red on e555540d and names the finding it closes ─────────────────
+def framed(h1, inside, prompt=None):
+    doc = Document()
+    if h1:
+        doc.add_heading(h1, level=1)
+    if prompt:
+        doc.add_paragraph(prompt)
+    else:
+        doc.add_heading('Clinical details', level=2)
+    cell = box(doc).cell(0, 0)
+    for n, text in enumerate(inside):
+        (cell.paragraphs[0] if n == 0 else cell.add_paragraph()).add_run(text)
+    doc.add_heading('Management', level=2); doc.add_paragraph('Plan: ______')
+    return saved(doc)
+
+
+class Walk:
+    """generate -> review every row -> finalize, on the fixture generator (no provider)."""
+
+    def generated(self, version, notes):
+        self.assertEqual(self.new_encounter(version, notes=notes).status_code, 302)
+        e = Encounter.objects.latest('created_at')
+        enqueue(Encounter.objects.get(pk=e.pk), self.user); self.assertTrue(run_one())
+        e.refresh_from_db()
+        return e
+
+    def reviewed(self, e, version, typed=(), skip_signing=False):
+        post = {'revision': e.revision}
+        for f in version.fields:
+            if skip_signing and f.get('kind') in v3_mapping.SIGNING_KINDS:
+                continue
+            post['answer_' + f['key']] = dict(typed).get(f['label'], e.answers.get(f['key'], {}).get('text', ''))
+            post['reviewed_' + f['key']] = 'on'
+        response = self.client.post(f'/encounters/{e.pk}/save/', post)
+        e.refresh_from_db()
+        return response
+
+    def finalized(self, e):
+        response = self.client.post(f'/encounters/{e.pk}/finalize/', {'revision': e.revision, 'reviewed': 'on'}, follow=True)
+        e.refresh_from_db()
+        return response
+
+
+@override_settings(**TEST_SETTINGS)
+class LegacyRound1(Walk, V3Fixture, TestCase):
+    def test_l1f1_l1f5_signing_rows_are_never_generated_or_exported(self):
+        """L1:F1 (HIGH) and L1:F5: e555540d generated 'Dr Example' / 'JE' into these legacy rows and exported them."""
+        for label, value in (('Signed (Consultant)', 'Dr Example'), ('Signed (print name)', 'Dr Example'),
+                             ('Electronically signed (print name)', 'Dr Example'), ('Signed (GP)', 'Dr Example'),
+                             ('Signed (patient)', 'John Example'), ('Signed for and on behalf of', 'Dr Example'),
+                             ('Countersigned by consultant', 'Dr Example'), ('Signature and date', 'Dr Example'),
+                             ('Initial here', 'JE'), ('Initial each page', 'JE')):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic L1 ' + label)
+                by = self.by_label(version)
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                answer = e.answers[by[label]['key']]
+                self.assertEqual((answer['status'], answer['text']), ('missing', ''))
+                self.assertEqual(self.reviewed(e, version).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+                self.assertNotIn(value, part_text(private_path(e.export_path).read_bytes()))
+
+    def test_r2_06_a_numbered_initial_reading_is_generated(self):
+        """R2-06: 'Initial 12-lead ECG' was held as an initials row and never generated."""
+        template, version = self.uploaded(data=legacy_rows('Initial 12-lead ECG', 'Plan'), name='Synthetic R2-06')
+        e = self.generated(version, 'Initial 12-lead ECG: Sinus rhythm\nPlan: Rest.')
+        answer = e.answers[self.by_label(version)['Initial 12-lead ECG']['key']]
+        self.assertEqual((answer['status'], answer['text']), ('supported', 'Sinus rhythm'))
+
+    def test_r2_07_a_signer_row_with_a_parenthetical_keeps_the_finalizers_name_rule(self):
+        """R2-07: 'Electronically signed by (print name)' and 'Signed by (name)' accepted another clinician's name."""
+        for label in ('Electronically signed by (print name)', 'Signed by (name)', 'Signature (consultant)'):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic R2-07 ' + label)
+                e = self.generated(version, 'Plan: Rest.')
+                self.assertEqual(self.reviewed(e, version, typed={label: 'Dr Somebody Else'}).status_code, 302)
+                response = self.finalized(e)
+                self.assertIn('must match your signed-in clinician name', response.content.decode())
+                self.assertEqual(e.status, 'review')
+
+    def test_r2_08_a_signature_label_may_gain_a_clinicians_parenthetical(self):
+        """R2-08: renaming 'Signature' to 'Signature (consultant)' was refused as losing the signature label."""
+        for n, label in enumerate(('Signature (consultant)', 'Signature (print name)')):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows('Signature', 'Plan'), name='Synthetic R2-08 %d' % n)
+                by = self.by_label(version)
+                response = self.client.post(f'/templates/{template.pk}/', {
+                    'mapping_version': version.pk,
+                    'labels': json.dumps({by['Signature']['key']: label, by['Plan']['key']: 'Plan'})})
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(self.latest(template).number, 2)
+
+    def test_another_persons_parenthetical_is_not_the_finalizers(self):
+        from core.tab_review import clinician_identity
+        for label in ('Signature (participant)', 'Signature (mother)', 'Signature (father)', 'Signature (donor)',
+                      'Signed (patient)', 'Signed by (witness)'):
+            with self.subTest(label=label):
+                self.assertFalse(clinician_identity({'label': label}))
+        for label in ('Signed (Consultant)', 'Signature (GP)', 'Signed (print name)', 'Signature (registrar)'):
+            with self.subTest(label=label):
+                self.assertTrue(clinician_identity({'label': label}))
+
+
+@override_settings(**V3)
+class V3Round1(Walk, V3Fixture, TestCase):
+    def confirm_status(self, template, version):
+        return self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm', 'mapping_version': version.pk,
+                                                               'checked_every_field': 'on'}).status_code
+
+    def test_r2_01_a_frame_holding_ordinary_questions_is_confirmed_generated_and_exported(self):
+        """R2-01 (HIGH): the frame under 'Initial referral' was a signing box; confirmation listed all three fields."""
+        template, version = self.uploaded(data=framed('Initial referral', ('Presenting complaint: ______',
+                                          'Current medication: ______', 'Allergies: ______')), name='Synthetic R2-01')
+        self.assertEqual(self.confirm_status(template, version), 302)
+        e = self.generated(version, 'Presenting complaint: Chest pain\nCurrent medication: Aspirin\n'
+                                    'Allergies: None known\nPlan: Rest.')
+        self.assertEqual(self.reviewed(e, version).status_code, 302)
+        self.finalized(e)
+        self.assertEqual(e.status, 'finalized')
+        self.assertIn('Presenting complaint: Chest pain', part_text(private_path(e.export_path).read_bytes()))
+
+    def test_r2_02_a_printed_name_beside_a_signature_is_confirmed(self):
+        for n, text in enumerate(('Printed name:    Signature: ______', 'Consultant:    Signature: ______    Date: ______')):
+            with self.subTest(text=text):
+                template, version = self.uploaded(data=lines(text, 'Plan: ______'), name='Synthetic R2-02 %d' % n)
+                self.assertEqual(self.confirm_status(template, version), 302)
+
+    def test_r2_03_the_clinician_may_answer_an_initial_presentation_box(self):
+        doc = Document(); doc.add_heading('History', level=2); doc.add_paragraph('Describe the initial presentation?')
+        box(doc); doc.add_paragraph('Plan: ______')
+        template, version = self.uploaded(data=saved(doc), name='Synthetic R2-03')
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_add', 'mapping_version': version.pk,
+                                    'slot': BODY + 'b/tbl[0]/tr[0]/tc[0]', 'kind': 'long_text',
+                                    'label': 'Describe the initial presentation?'})
+        self.assertEqual(response.status_code, 302)
+
+    def test_r2_04_an_initial_reading_can_be_replaced_by_its_text_answer(self):
+        template, version = self.uploaded(data=lines('Initial GCS: ______', 'Plan: ______'), name='Synthetic R2-04')
+        gcs = self.by_label(version)['Initial GCS']
+        self.assertEqual(gcs['kind'], 'initials')
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
+                                                                  'remove_' + gcs['key']: 'on'})
+        self.assertEqual(response.status_code, 302)
+        latest = self.latest(template)
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_add', 'mapping_version': latest.pk,
+                                    'slot': BODY + 'b/p[1]', 'kind': 'text', 'label': 'Initial GCS'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.confirm_status(template, self.latest(template)), 302)
+
+    def test_r2_05_an_unlocked_control_inside_a_locked_frame_is_confirmed(self):
+        doc = Document(); doc.add_heading('Clinic record', level=2)
+        frame = OxmlElement('w:sdt'); pr = OxmlElement('w:sdtPr'); lock = OxmlElement('w:lock')
+        lock.set(qn('w:val'), 'contentLocked'); pr.append(lock); pr.append(OxmlElement('w:richText')); frame.append(pr)
+        content = OxmlElement('w:sdtContent'); frame.append(content)
+        p = doc.add_paragraph('Hospital number: ')
+        sdt = OxmlElement('w:sdt'); spr = OxmlElement('w:sdtPr'); alias = OxmlElement('w:alias')
+        alias.set(qn('w:val'), 'Hospital number'); spr.append(alias); spr.append(OxmlElement('w:showingPlcHdr'))
+        spr.append(OxmlElement('w:text')); sdt.append(spr); body = OxmlElement('w:sdtContent')
+        run = OxmlElement('w:r'); t = OxmlElement('w:t'); t.text = 'Click or tap here to enter text.'; run.append(t)
+        body.append(run); sdt.append(body); p._p.append(sdt); content.append(p._p)
+        doc.element.body.find(qn('w:sectPr')).addprevious(frame)
+        doc.add_paragraph('Plan: ______')
+        template, version = self.uploaded(data=saved(doc), name='Synthetic R2-05')
+        self.assertEqual(self.confirm_status(template, version), 302)
+
+    def test_l1f2_a_signature_and_date_line_is_never_generated(self):
+        """L1:F2 (HIGH): 'Signature and date: ____' was a date field; generation wrote 'Dr Example 30/09/2026'."""
+        template, version = self.uploaded(data=lines('Signature and date: ______________', 'Plan: ______'),
+                                          name='Synthetic L1F2')
+        self.confirm(template, version)
+        e = self.generated(version, 'Signature and date: Dr Example 30/09/2026\nPlan: Rest.')
+        field = self.by_label(version)['Signature and date']
+        self.assertEqual(field['kind'], 'signature')
+        self.assertEqual((e.answers[field['key']]['status'], e.answers[field['key']]['text']), ('missing', ''))
+
+    def test_l1f6_the_line_under_a_signature_caption_is_listed_at_confirmation(self):
+        """L1:F6(a): the engine's 'Answer' field on the writing line under 'Consultant signature:' sits on the signing
+        place; confirmation lists it, and after its removal the mapping confirms."""
+        doc = Document(); doc.add_heading('Clinic record', level=2); doc.add_paragraph('Consultant signature:')
+        doc.add_paragraph('____________________'); doc.add_paragraph('Plan: ______')
+        template, version = self.uploaded(data=saved(doc), name='Synthetic L1F6')
+        answer = next(f for f in version.fields if f['locator']['slot'] == 'b/p[2]')
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm', 'mapping_version': version.pk,
+                                                                   'checked_every_field': 'on'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(answer['label'], response.context['v3_error'])
+        self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
+                                                        'remove_' + answer['key']: 'on'})
+        self.assertEqual(self.confirm_status(template, self.latest(template)), 302)
+
+    def test_l1f7_a_typed_initial_in_a_log_tables_initials_column_is_refused(self):
+        """L1:F7: the initials column of 'Drug | Dose | Nurse initials' took typed 'JE' and exported it."""
+        doc = Document(); doc.add_heading('Medication log', level=2)
+        t = doc.add_table(rows=3, cols=3); t.style = 'Table Grid'
+        for c, h in enumerate(('Drug', 'Dose', 'Nurse initials')):
+            t.cell(0, c).text = h
+        doc.add_paragraph('Plan: ______')
+        template, version = self.uploaded(data=saved(doc), name='Synthetic L1F7')
+        self.confirm(template, version)
+        e = self.generated(version, 'Plan: Rest.')
+        log = next(f for f in version.fields if f['kind'] == 'table_rows')
+        response = self.reviewed(e, version, typed={log['label']: 'Paracetamol | 1 g | JE'}, skip_signing=True)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Nurse initials', response.content.decode())
+        self.assertEqual(self.reviewed(e, version, typed={log['label']: 'Paracetamol | 1 g |'}, skip_signing=True).status_code, 302)
+
+
+@override_settings(**MAPPING_SETTINGS)
+class ModelProposalsRound1(V3Fixture, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.config = generation.configuration()
+
+    def proposal(self, version, replaced=(), uncertain=(), dismissed=(), changes=()):
+        compiled = mapping.compile_request(version, self.config)
+        payload = json.loads(compiled['request']['messages'][0]['content'])
+        body = mapping.wire.fixture(payload)
+        fids = {f['key']: n for n, f in enumerate(payload['fields'])}
+        moved = {fids[k] for k in list(replaced) + list(uncertain)}
+        body['f']['k'] = [n for n in body['f']['k'] if n not in moved]
+        body['f']['r'] = sorted(fids[k] for k in replaced); body['f']['u'] = sorted(fids[k] for k in uncertain)
+        sids = {row['slot']: n for n, row in enumerate(payload['slots'])}
+        for slot in dismissed:
+            for verdict in ('c', 'u', 'n'):
+                body['s'][verdict] = [n for n in body['s'][verdict] if n != sids[slot]]
+            body['s']['n'] = sorted(body['s']['n'] + [sids[slot]])
+        body['x'] = [change(payload, fids, sids) for change in changes]
+        return mapping.validate_proposal(version, compiled, body)
+
+    @staticmethod
+    def relabel(key, slot, kind, start, end, role=0):
+        def build(payload, fids, sids):
+            sid = sids[BODY + slot]
+            return [fids[key], sid, mapping.wire.KINDS.index(kind), payload['text_refs'].index([sid, role, 0]), start, end, -1]
+        return build
+
+    def test_l3f1_a_replacement_label_is_printed_wording_not_spaces_or_a_blank_line(self):
+        """L3:F1: ' ', ':', ': ' and '______' were adopted as the label (question_key(' ') == ''), unasking the question."""
+        template, version = self.uploaded(data=lines('Pulse findings: ______', 'Plan: ______'), name='Synthetic L3F1')
+        pulse = self.by_label(version)['Pulse findings']
+        for name, (start, end) in (('space', (15, 16)), ('colon', (14, 15)), ('colon and space', (14, 16)),
+                                   ('blank line', (16, 22))):
+            with self.subTest(name=name):
+                result = self.proposal(version, replaced=[pulse['key']],
+                                       changes=[self.relabel(pulse['key'], 'b/p[1]', pulse['kind'], start, end)])
+                self.assertEqual(result['review']['changes'], [])
+                self.assertEqual(next(f for f in result['fields'] if f['key'] == pulse['key']), pulse)
+                self.assertIn(mapping.LABEL_SHAPE, ' '.join(r['reason'] for r in result['review']['unresolved']))
+        result = self.proposal(version, replaced=[pulse['key']],
+                               changes=[self.relabel(pulse['key'], 'b/p[1]', pulse['kind'], 0, 15)])
+        self.assertEqual(next(f for f in result['fields'] if f['key'] == pulse['key'])['label'], 'Pulse findings')
+
+    def test_l3f2_the_finalizers_signature_label_is_never_relabelled(self):
+        """L3:F2: 'Signature/Date' (identity) relabelled to 'Date' was adopted; generation then filled it."""
+        template, version = self.uploaded(data=lines('Signature/Date: ______', 'Plan: ______'), name='Synthetic L3F2')
+        signed = self.by_label(version)['Signature/Date']
+        stored = TemplateVersion.objects.create(template=template, number=2, contract='v3', created_by=self.user,
+            fields=[{**f, 'kind': 'date'} if f['key'] == signed['key'] else f for f in version.fields])  # before this repair
+        at = 'Signature/Date: ______'.index('Date')
+        result = self.proposal(stored, replaced=[signed['key']],
+                               changes=[self.relabel(signed['key'], 'b/p[1]', 'date', at, at + 4)])
+        self.assertEqual(result['review']['changes'], [])
+        self.assertIn(mapping.NOT_ORDINARY, ' '.join(r['reason'] for r in result['review']['unresolved']))
+
+    def test_l3f2_an_identity_label_on_a_place_with_no_role_is_never_relabelled(self):
+        """Where no role holds the place, only the identity check does: a stored automatic field labelled as the
+        finalizer's signature on the 'Pulse findings' line is never relabelled away from it by a model."""
+        template, version = self.uploaded(data=lines('Pulse findings: ______', 'Plan: ______'), name='Synthetic L3F2b')
+        pulse = self.by_label(version)['Pulse findings']
+        stored = TemplateVersion.objects.create(template=template, number=2, contract='v3', created_by=self.user,
+            fields=[{**f, 'label': 'Signed by'} if f['key'] == pulse['key'] else f for f in version.fields])
+        result = self.proposal(stored, replaced=[pulse['key']],
+                               changes=[self.relabel(pulse['key'], 'b/p[1]', pulse['kind'], 0, 14)])
+        self.assertEqual(result['review']['changes'], [])
+        self.assertEqual(next(f for f in result['fields'] if f['key'] == pulse['key'])['label'], 'Signed by')
+
+    def test_l3f3_two_answers_on_one_line_are_independent(self):
+        """L3:F3: 'Weight: ____ kg  Height: ____ cm' - dependence compared paragraphs, so a Height relabel was held for a
+        Weight verdict and two disjoint relabels held each other."""
+        text = 'Weight: ______ kg  Height: ______ cm'
+        template, version = self.uploaded(data=lines(text, 'Plan: ______'), name='Synthetic L3F3')
+        weight, height = version.fields[0], version.fields[1]
+        at = text.index('Height')
+        height_change = self.relabel(height['key'], 'b/p[1]', height['kind'], at, at + 6)
+        weight_change = self.relabel(weight['key'], 'b/p[1]', weight['kind'], 0, 6)
+        result = self.proposal(version, replaced=[height['key']], uncertain=[weight['key']], changes=[height_change])
+        self.assertEqual(result['review']['changes'], [{'key': height['key'], 'replacement': height['key']}])
+        adopted = next(f for f in result['fields'] if f['key'] == height['key'])
+        self.assertEqual((adopted['label'], adopted['locator']), ('Height', height['locator']))
+        result = self.proposal(version, replaced=[weight['key'], height['key']], changes=[height_change, weight_change])
+        self.assertEqual(sorted(c['key'] for c in result['review']['changes']), sorted([weight['key'], height['key']]))
+
+    def test_l3f4_a_change_inside_a_cell_the_proposal_dismisses_is_held(self):
+        """L3:F4: the proposal marked the date cell not an answer, and a relabel naming the cell's paragraph was adopted."""
+        doc = Document(); doc.add_heading('Section 3: Public protection', level=2)
+        t = doc.add_table(rows=2, cols=2); t.style = 'Table Grid'
+        t.cell(0, 0).text = 'Name of the lead agency'; t.cell(1, 0).text = 'Date the lead agency was informed'
+        doc.add_paragraph('Plan: ______')
+        template, version = self.uploaded(data=saved(doc), name='Synthetic L3F4')
+        date = next(f for f in version.fields if f['kind'] == 'date')
+        cell = date['locator']['slot']
+        result = self.proposal(version, replaced=[date['key']], dismissed=[BODY + cell],
+                               changes=[self.relabel(date['key'], cell + '/p[0]', 'date', 0, 20, role=2)])
+        self.assertEqual(result['review']['changes'], [])
+        self.assertIn('not an answer', ' '.join(r['reason'] for r in result['review']['unresolved']))
+        # The printed line INSIDE a covered cell called 'not an answer' is not the cell (the retained evidence/002
+        # response does exactly this): a relabel of the cell's field is still adopted.
+        result = self.proposal(version, replaced=[date['key']], dismissed=[BODY + cell + '/p[0]'],
+                               changes=[self.relabel(date['key'], cell, 'date', 0, 20, role=2)])
+        self.assertEqual(result['review']['changes'], [{'key': date['key'], 'replacement': date['key']}])

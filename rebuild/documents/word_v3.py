@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import io
 import re
+import unicodedata
 import zipfile
 from dataclasses import dataclass, field as dfield
 
@@ -1278,9 +1279,23 @@ def many_evidence(texts, options):
                     scale = False
     return positive, unrepresented, bounded, scale
 
-SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b|\bsign(?:ed)? here\b", re.I)
+#: ⚠️ 'countersigned' / 'cosigned' are signatures too ('co-signed' already was: the hyphen is a word boundary), and a
+#: non-breaking space is still a space ('Please sign\u00a0here' was read as text).
+SIGNATURE = re.compile(r"\bsignature\b|\b(?:counter|co)?signed\b|\bsign(?:ed)?\s+here\b", re.I)
 INITIALS = re.compile(r"\binitials?\b|\binitial (?:the )?box", re.I)
 DATE_LABEL = re.compile(r"\b(?:date|dob|d\.o\.b|born)\b|mm/dd|dd/mm|yyyy|\bD[DT]\s*\((?:dictated|transcribed)\)", re.I)
+#: ⚠️ A SIGNATURE (OR INITIALS) AND A DATE PRINTED AS ONE PLACE IS STILL A SIGNING PLACE. The date word used to remove
+#: the signing reading from the whole label, so 'Signature and date: ____', 'Patient signature / date' and 'Sign & date'
+#: became DATE fields and the export wrote 'Dr Example 30/09/2026' in the signing place. Only the two joined by 'and',
+#: '&', '+' or '/' - 'Signature date', 'Date of signature' and 'Date signed' stay date questions.
+_JOIN = r"(?:\band\b|&|\+|/)"
+SIGNATURE_DATE_PAIR = re.compile(
+    r"\b(?:(?:counter|co)?signed|signatures?)\b[^.;:?]*?" + _JOIN + r"\s*dated?\b"
+    r"|^\s*(?:please\s+)?sign\s*" + _JOIN + r"\s*dated?\b"
+    r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*(?:sign(?:ed|atures?)?|(?:counter|co)signed)\b", re.I)
+INITIALS_DATE_PAIR = re.compile(
+    r"\binitials\b[^.;:?]*?" + _JOIN + r"\s*dated?\b|\binitial\s*" + _JOIN + r"\s*dated?\b"
+    r"|\bdated?\b[^.;:?]*?" + _JOIN + r"\s*initials?\b", re.I)
 TIME_LABEL = re.compile(r"\btime\b|hh:mm|\(24.?h", re.I)
 LONG_LABEL = re.compile(r"\b(?:comments?|describe|description|details?|explain|notes?|summary|history|findings|plan|narrative|reason)\b", re.I)
 HEADING_STYLE = re.compile(r"^(?:heading|title|subtitle|toc)", re.I)
@@ -1359,6 +1374,11 @@ class Area:
     protection: str = ""
     complete_source: bool = False   # question-box source cannot be shortened by later metadata passes
     source_questions: list = dfield(default_factory=list)
+    # Read only by destination_roles (never serialised into a field): the paragraph the engine read this area's label
+    # from when that is another paragraph (a caption over its writing line), and whether its kind comes from printed
+    # structure (a drawn initials box) rather than from its label's wording.
+    label_slot: object = None
+    structural: bool = False
 
 
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
@@ -1464,9 +1484,6 @@ class Detector:
         self.notes: list[str] = []
         self.claimed: set = set()          # element ids already turned into an area (or used as its label)
         self.protected_regions: set[str] = set()
-        # Question boxes whose printed question or section reads as signing or consent (question_box_signing),
-        # recorded BEFORE the empty-cell check: a signing box is a destination role whatever it prints.
-        self.signing_boxes: dict[str, str] = {}
         self.floating_initials = False
         self._order = 0
         self._grid = {}
@@ -1863,7 +1880,11 @@ class Detector:
         self.claimed.add(id(area.slot.el))
 
     def kind_for(self, label: str) -> str:
-        label = label or ""
+        label = re.sub(r"\s+", " ", label or "")
+        if SIGNATURE_DATE_PAIR.search(label):
+            return "signature"
+        if INITIALS_DATE_PAIR.search(label):
+            return "initials"
         if SIGNATURE.search(label) and not DATE_LABEL.search(label):
             return "signature"
         if INITIALS.search(label) and not DATE_LABEL.search(label):
@@ -4777,6 +4798,25 @@ class Detector:
             return True
         return SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
 
+    def question_box_role_source(self, table):
+        """(printed question, section) over a one-cell box, read for the box's DESTINATION ROLE only (destination_roles).
+
+        Unlike rule_question_boxes' reading, a question paragraph holding a line break, a drawing or a field is still
+        read, and so is a header or footer box: those are never mapped by the engine (so nothing here becomes a label),
+        but a signing box printed that way is still a signing box. At most two empty paragraphs are skipped."""
+        node, skipped = table.el.getprevious(), 0
+        while node is not None and node.tag == q("w:p"):
+            raw = re.sub(r"\s+", " ", self.text(node)).strip()
+            if raw:
+                slot = self.index.by_el.get(id(node))
+                section = self.question_box_context(slot)[0] if slot is not None and slot.parent is None else ""
+                return raw, section
+            skipped += 1
+            if skipped > 2:
+                break
+            node = node.getprevious()
+        return "", ""
+
     def previous_question_source(self, question, raw, context):
         """Resolve only the immediately preceding, already owned question box.
 
@@ -4982,13 +5022,6 @@ class Detector:
                 # Existing author statements are just as protected as an empty
                 # author box, including when a forged mapping changes its kind.
                 self.protected_regions.add(cell.id)
-            if question is not None and cell.id not in self.signing_boxes:
-                # ⚠️ READ BEFORE THE EMPTY-CELL CHECK: a signing or consent box that holds a drawing or prints 'Use
-                # black ink' was skipped here and never read, so a mapping could write into it. Notes and areas are
-                # unchanged; the reading is only the box's destination role (destination_roles).
-                section = self.question_box_context(question)[0]
-                if self.question_box_signing(raw) or self.question_box_signing(section):
-                    self.signing_boxes[cell.id] = raw
             if not self.is_empty_cell(cell):
                 continue
             context, scope_problem = self.question_box_context(question) if question is not None else ("", "")
@@ -5231,7 +5264,7 @@ class Detector:
                     continue
                 kind = "long_text" if len(blanks) >= 2 and not signing else self.kind_for(label)
                 self.add(Area(kind, label, blanks[0], {"type": "paragraph"}, context=self.context_for(ps),
-                              extra_slots=blanks[1:]))
+                              extra_slots=blanks[1:], label_slot=ps))
                 self.claimed.add(id(ps.el))
                 for b in blanks:
                     self.claimed.add(id(b.el))
@@ -5564,7 +5597,7 @@ class Detector:
                       "in another row. Check each box against the original; QuillMD leaves it unchanged.")
             for n, _ in enumerate(rects, 1):
                 self.add(Area("initials", "Floating initials box %d (placement unresolved)" % n, c,
-                              {"type": "none", "drawing": n}, context=reason, protection=reason))
+                              {"type": "none", "drawing": n}, context=reason, protection=reason, structural=True))
             self.notes.append(reason + " Location: " + c.id + " (%d boxes)." % len(rects))
         for table in affected:
             # Empty cells in such a table can be spacers or sit under an overlapping
@@ -5594,7 +5627,8 @@ class Detector:
             header = clean_label(self.column_header(c.parent, c.info["col"], c.info["row"]))
             label = self.row_label(c.parent, c.info["row"], c.info["col"])
             if INITIALS.search(header + " " + label) or INITIALS.search(self.context_for(c)):
-                self.add(Area("initials", label or header or "Initials", c, {"type": "none"}, context=self.context_for(c)))
+                self.add(Area("initials", label or header or "Initials", c, {"type": "none"}, context=self.context_for(c),
+                              structural=True))
 
     def capacity_for(self, area):
         """Characters an area can show without breaking the page: headers/footers, text boxes and narrow or
@@ -5798,15 +5832,23 @@ def inspect(data: bytes) -> dict:
 #: ⚠️ WHETHER A DESTINATION MAY RECEIVE AN ANSWER IS A DIFFERENT QUESTION FROM WHETHER THE ANSWER IS SUPPORTED. A model
 #: (mapping or generation) never creates permission to write a signature, perform an attestation or change a protected
 #: area. The permission comes ONLY from structure this engine already reads in the ORIGINAL:
-#:   signing   - its signature and initials areas (a span area owns its line segment up to the next engine area, so
-#:               'Name: ____  Signature: ____' keeps Name answerable while 'Signature: ____ (use black ink)' holds the
-#:               whole segment), and a question box whose question or section reads as signing or consent
-#:               (question_box_signing, read before the empty-cell check - whatever the box prints);
-#:   protected - protected areas and regions, legacy form-field protection and locked content controls;
+#:   signing   - its signature and initials areas. A span area owns its line segment up to the next engine area,
+#:               measured by each neighbour's FULL printed extent ('Printed name:    Signature: ____' keeps Name
+#:               answerable; 'Signature: ____ (use black ink)' holds the whole segment). An inline control or legacy
+#:               field area owns its line segment the same way. A caption over a writing line owns the line under it,
+#:               and a writing line owns the caption the engine read its label from. The signing columns of a log
+#:               table, by their printed header. A one-cell box whose question or section reads as signing or consent
+#:               (the engine's question_box_signing, whatever the box prints), unless the engine maps answer areas
+#:               INSIDE it (then it is a frame holding questions, and those areas carry their own roles).
+#:   protected - protected areas and regions, legacy form-field protection, locked content controls (a control nested
+#:               inside one keeps its own lock) and picture content controls.
 #:   policy    - the printed patient-author role of a section and a printed review attestation cell (source_policy):
 #:               a field there must carry that same requirement.
-#: No wording reader is added: every source above already existed. Every gate re-inspects the original (never the
-#: stored mapping), so a removed engine field, a re-added manual field or a stored mapping cannot move a role.
+#: ⚠️ ONE WORDING READER DECIDES WHETHER A LABEL NAMES A SIGNING PLACE: signing_place (below), shared with the legacy
+#: default path. The engine's kind rule reads more labels as signature/initials than that (every 'Initial ...' reading,
+#: every '... signed' checklist state); such an area is still never generated, but it is not a role, so the clinician can
+#: remove it and add the answer the form asks for. Every gate re-inspects the original (never the stored mapping), so a
+#: removed engine field, a re-added manual field or a stored mapping cannot move a role.
 ROLE_SIGNING, ROLE_PROTECTED, ROLE_POLICY = "signing", "protected", "policy"
 ROLE_ORDER = (ROLE_SIGNING, ROLE_PROTECTED, ROLE_POLICY)
 ROLE_REFUSALS = {
@@ -5821,6 +5863,10 @@ ROLE_CODES = {ROLE_SIGNING: "protected_signing_area", ROLE_PROTECTED: "protected
 ROLE_REGION = "This area is protected on the original form and remains unchanged."
 ROLE_FORM_FIELD = "This legacy form field is protected on the original form and remains unchanged."
 ROLE_SIGNING_BOX = "Signing or consent box: it is completed by hand after the actual signing act."
+ROLE_PICTURE = ("This place holds a picture content control of the original form (a signature image or a photograph); "
+                "it takes no typed or generated answer.")
+ROLE_SIGNING_COLUMN = ("The column \"{header}\" is a signing or initials column of the original form: it never takes a typed "
+                       "or generated answer and is completed by hand. Clear that column.")
 
 
 def _place_id(part, path):
@@ -5927,6 +5973,8 @@ class _PlaceReader:
     def touches(self, place, role):
         pid, s, e = place
         rid, rs, re_ = role["place"], role["start"], role["end"]
+        if any(pid == x or pid.startswith(x + "/") for x in role.get("except") or ()):
+            return False
         if pid == rid:
             if rs is None or s is None:
                 return True
@@ -5958,6 +6006,27 @@ def destination_roles_of(package) -> list:
     return _role_reading(package)[0]
 
 
+def _extent(reader, field):
+    """Where a field's printed area lies, as reader.of reads it, except that an 'after_label' span keeps its whole printed
+    extent (the spaces or tab after its label), not only its insertion point: a neighbour's segment ends there."""
+    places = reader.of(field)
+    target = (field.get("locator") or {}).get("target") or {}
+    if target.get("type") == "span" and target.get("shape") == "after_label":
+        try:
+            start, end = int(target["start"]), int(target["end"])
+        except (KeyError, TypeError, ValueError):
+            return places
+        if end >= start:
+            return [(pid, start, end) if s is not None else (pid, s, e) for pid, s, e in places]
+    return places
+
+
+def _writing_line(text) -> bool:
+    """A paragraph printed only as a writing line: underscores, dots or dashes (at least three), nothing else."""
+    visible = re.sub(r"\s", "", text or "")
+    return len(visible) >= 3 and re.fullmatch(r"[_.\u2026\u2025\u00b7\-\u2013\u2014]+", visible) is not None
+
+
 def _role_reading(package):
     """(roles, the engine's own option groups as box keys - the boxes one engine choice area answers together)."""
     detector = Detector(package)
@@ -5967,10 +6036,11 @@ def _role_reading(package):
     engine = [area_to_field(n + 1, a) for n, a in enumerate(areas)]
     source_policy.annotate(detector, engine)
     roles = []
-    # Every paragraph offset an engine area occupies: the boundaries of a signing span's line segment.
-    occupied = {}
+    # Every paragraph offset an engine area occupies (by its full printed extent): the boundaries of a line segment.
+    occupied, engine_places = {}, set()
     for field in engine:
-        for pid, start, end in reader.of(field):
+        for pid, start, end in _extent(reader, field):
+            engine_places.add(pid)
             slot = index.by_id.get(pid)
             if start is None and slot is not None and slot.parent is not None and slot.kind in ("sdt", "ff"):
                 inner = reader.inline(slot.parent.id, pid)
@@ -5978,6 +6048,27 @@ def _role_reading(package):
                     occupied.setdefault(slot.parent.id, []).append((inner, field["key"]))
             elif start is not None:
                 occupied.setdefault(pid, []).append(((start, end), field["key"]))
+
+    def segment(pid, start, end, key):
+        # The line segment an area at [start, end) owns: from the end of the engine area before it to the start of the
+        # one after it (the paragraph's end included, where an insertion after the printed text would go).
+        others = [rng for rng, other in occupied.get(pid, []) if other != key]
+        low = max([b for a, b in others if b <= start], default=0)
+        pslot = index.by_id.get(pid)
+        length = len(reader.text(pslot)[0]) if pslot is not None and pslot.kind == "p" else end
+        high = min([a for a, b in others if a >= max(start, end)], default=length + 1)
+        return low, max(high, end, low + 1)
+
+    def line_role(cls, source, slot, reason, key):
+        # An inline content control or legacy field owns its line segment in the paragraph that holds it.
+        if slot is None or slot.parent is None or slot.kind not in ("sdt", "ff"):
+            return
+        inner = reader.inline(slot.parent.id, slot.id)
+        if inner is not None:
+            low, high = segment(slot.parent.id, inner[0], inner[1], key)
+            roles.append(_role(cls, source, slot.parent.id, low, high, reason))
+
+    signing = ROLE_REFUSALS[ROLE_SIGNING]
     for area, field in zip(areas, engine):
         places = reader.of(field)
         anchor = _place_id(field["locator"]["part"], field["locator"]["slot"])
@@ -5985,28 +6076,63 @@ def _role_reading(package):
             for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
                 roles.append(_role(ROLE_PROTECTED, "protected_area", pid, None, None, area.protection))
         elif area.kind in SIGNING_KINDS:
+            if not area.structural and detector.kind_for(area.label) == area.kind and not signing_place(area.label):
+                # The kind rule's reading of a clinical reading or a checklist state ('Initial GCS', 'Consent form
+                # signed'): never generated, but not a role - the clinician may replace it with the answer it asks.
+                continue
             for pid, start, end in places:
                 if start is None:
-                    roles.append(_role(ROLE_SIGNING, "signing_area", pid, None, None, ROLE_REFUSALS[ROLE_SIGNING]))
+                    roles.append(_role(ROLE_SIGNING, "signing_area", pid, None, None, signing))
+                    line_role(ROLE_SIGNING, "signing_area", index.by_id.get(pid), signing, field["key"])
                     continue
-                # The line segment this area owns: from the end of the engine area before it to the start of the one
-                # after it (the paragraph's end included, where an insertion after the printed text would go).
-                others = [rng for rng, key in occupied.get(pid, []) if key != field["key"]]
-                low = max([b for a, b in others if b <= start], default=0)
+                low, high = segment(pid, start, end, field["key"])
+                roles.append(_role(ROLE_SIGNING, "signing_area", pid, low, high, signing))
+                # A caption with no blank of its own ('Consultant signature:') is signed on the writing line under it.
                 pslot = index.by_id.get(pid)
-                length = len(reader.text(pslot)[0]) if pslot is not None and pslot.kind == "p" else end
-                high = min([a for a, b in others if a >= max(start, end)], default=length + 1)
-                roles.append(_role(ROLE_SIGNING, "signing_area", pid, low, max(high, end, low + 1),
-                                   ROLE_REFUSALS[ROLE_SIGNING]))
+                if pslot is not None and pslot.kind == "p" and not reader.text(pslot)[0][start:].strip():
+                    after = pslot.el.getnext()
+                    below = index.by_el.get(id(after)) if after is not None else None
+                    if below is not None and below.kind == "p" and below.parent is pslot.parent \
+                            and _writing_line(reader.text(below)[0]):
+                        roles.append(_role(ROLE_SIGNING, "signing_line", below.id, None, None, signing))
+            if area.label_slot is not None:
+                # The caption paragraph the engine read this writing line's label from belongs to the same place.
+                roles.append(_role(ROLE_SIGNING, "signing_caption", area.label_slot.id, None, None, signing))
     for region in sorted(detector.protected_regions):
         roles.append(_role(ROLE_PROTECTED, "protected_region", region, None, None, ROLE_REGION))
-    for cell in sorted(detector.signing_boxes):
-        roles.append(_role(ROLE_SIGNING, "question_box_signing", cell, None, None, ROLE_SIGNING_BOX))
+    for table in index.roots:
+        # A one-cell box whose printed question or section reads as signing or consent is a signing box, whatever it
+        # prints. The answer areas the engine maps INSIDE it (a frame holding 'Presenting complaint: ____') are excepted:
+        # each carries its own role, and the rest of the box stays the box's. A box the engine maps AS an answer is one
+        # its own (broader) signing reading let through, so it is no signing box.
+        cells = [c for c in table.children if c.kind == "tc"] if table.kind == "tbl" else []
+        if len(cells) != 1 or len(table_rows_of(table.el)) != 1:
+            continue
+        cell = cells[0]
+        if cell.id in engine_places:
+            continue
+        question, section = detector.question_box_role_source(table)
+        if signing_box_reading(question) or signing_box_reading(section):
+            role = _role(ROLE_SIGNING, "question_box_signing", cell.id, None, None, ROLE_SIGNING_BOX)
+            inside = sorted(pid for pid in engine_places if pid.startswith(cell.id + "/"))
+            if inside:
+                role["except"] = inside
+            roles.append(role)
     for slot in index.slots:
         if slot.kind == "ff" and ff_text_protection(slot.el):
             roles.append(_role(ROLE_PROTECTED, "form_field_protection", slot.id, None, None, ROLE_FORM_FIELD))
         elif slot.kind == "sdt" and slot.info.get("locked") and slot.info.get("type") != "checkbox":
-            roles.append(_role(ROLE_PROTECTED, "locked_control", slot.id, None, None, LOCKED_CONTROL))
+            role = _role(ROLE_PROTECTED, "locked_control", slot.id, None, None, LOCKED_CONTROL)
+            # ⚠️ A control nested inside a locked one keeps its OWN lock: the form's author left it unlocked to be
+            # answered (a locked frame around unlocked answer controls), so only the frame's own content is protected.
+            nested = [x.id for x in index.slots if x.kind == "sdt" and x.id.startswith(slot.id + "/")
+                      and not x.info.get("locked")]
+            if nested:
+                role["except"] = nested
+            roles.append(role)
+        if slot.kind == "sdt" and slot.info.get("type") == "picture":
+            roles.append(_role(ROLE_PROTECTED, "picture_control", slot.id, None, None, ROLE_PICTURE))
+            line_role(ROLE_PROTECTED, "picture_control", slot, ROLE_PICTURE, None)
     for root, source in source_policy.section_sources(detector).items():
         if source:
             roles.append(_role(ROLE_POLICY, "source_policy", root, None, None, ROLE_REFUSALS[ROLE_POLICY],
@@ -6018,6 +6144,22 @@ def _role_reading(package):
                 roles.append(_role(ROLE_POLICY, "attestation", pid, None, None, ROLE_REFUSALS[ROLE_POLICY],
                                    {"attestation": policy["attestation"],
                                     "attestation_source": policy["attestation_source"]}))
+        target = field["locator"]["target"]
+        table = index.by_id.get(_place_id(field["locator"]["part"], target.get("table"))) \
+            if target.get("type") == "table_rows" else None
+        if table is not None and target.get("rows"):
+            # A log table's signing or initials column ('Nurse initials'), read from its printed header.
+            rows = set(target["rows"])
+            for col in target.get("columns") or []:
+                header = option_text(detector.column_header(table, col, min(rows)))
+                if not signing_place(header):
+                    continue
+                for cell in table.children:
+                    if cell.kind == "tc" and cell.info["col"] == col and cell.info["row"] in rows:
+                        role = _role(ROLE_SIGNING, "signing_column", cell.id, None, None,
+                                     ROLE_SIGNING_COLUMN.format(header=header))
+                        role.update(table=table.id, column=col, header=header)
+                        roles.append(role)
     choices = [sorted(box_key(box) for box in field["locator"]["target"].get("boxes", []))
                for field in engine if field["kind"] in ("choice", "multi_choice", "checkbox")
                and field["locator"]["target"].get("type") == "checkboxes"]
@@ -6047,6 +6189,9 @@ def role_violations(reader, fields, roles) -> dict:
             continue
         places = reader.of(field)
         near = [r for pid in dict.fromkeys(_root_of(p[0]) for p in places) for r in by_root.get(pid, [])]
+        if ((field.get("locator") or {}).get("target") or {}).get("type") == "table_rows":
+            # A log table's answer covers its signing column only when a row puts text there: fill judges the rows.
+            near = [r for r in near if r["source"] != "signing_column"]
         for cls in ROLE_ORDER:
             hit = next((r for r in near if r["class"] == cls and not role_allows(field, r)
                         and any(reader.touches(place, r) for place in places)), None)
@@ -6068,25 +6213,74 @@ def destination_roles(data: bytes, fields=None) -> dict:
             "violations": role_violations(reader, fields or [], roles), "choices": choices}
 
 
-#: ⚠️ THE LEGACY DEFAULT PATH'S ROLE READER IS THE ENGINE'S OWN KIND RULE (Detector.kind_for), with its two MEASURED
-#: over-reads removed by RESTRICTING its own patterns - no new words: 'signed' is a signature only when 'by' follows it
-#: ('Consent form signed', 'Time signed' are checklist states: 13 of 15 were read as signatures), and a lone 'initial'
-#: followed by another word is the adjective ('Initial assessment', 'Initial dose': 12 of 12 were read as initials).
-#: Every match of these two is also a match of SIGNATURE / INITIALS. The v3 kind rule itself is unchanged.
-LEGACY_SIGNATURE = re.compile(r"\bsignature\b|\bsigned\b(?=.*\bby\b)|\bsign(?:ed)? here\b", re.I)
-LEGACY_INITIALS = re.compile(r"\binitials\b|\binitial (?:the )?box|\binitial\b(?!\s+[^\W\d_])", re.I)
+#: ⚠️ THE ONE READER OF WHETHER A PRINTED LABEL NAMES A SIGNING PLACE (a signature or initials area): the legacy default
+#: path's role (never generated; generated or accepted text refused) and, on contract v3, whether an area the kind rule
+#: typed signature/initials is a destination role. It FAILS CLOSED: every label naming a signature, 'signed by',
+#: initials or a signature/initials-and-date place is a signing place, and only two POSITIONAL readings are released,
+#: each measured as a clinical reading rather than a place:
+#:   - 'signed' closing a label after other words, with no agent: a checklist state ('Consent form signed', 'Time
+#:     signed', 'Signed consent in notes' - a leading 'signed' followed by an ordinary word);
+#:   - 'initial' followed by an ordinary word or a number: the adjective ('Initial assessment', 'Initial 12-lead ECG').
+#: An ordinary word is anything outside a CLOSED class of function words (_ACT_WORDS: where or what an imperative 'sign'
+#: or 'initial' acts on) - so 'Signed (Consultant)', 'Initial here', 'Initial each page', 'Sign here' stay places.
+#: ⚠️ The earlier restriction ('signed' only with a later 'by'; 'initial' before ANY word) released 'Signed (GP)', 'Signed
+#: (patient)', 'Initial here' and 'Initial each page', and generation filled them. Declared residuals, held (never
+#: generated; the clinician types the value, and it exports): 'Consent form signed by patient', 'Patient signature
+#: obtained', 'Troponin (initial)', 'Troponin — Initial', 'Initial / repeat', a bare 'Initial' - the same wording prints
+#: a real signing place ('Note signed by attending physician', 'Patient signature', 'Nurse (initial)', 'Initial:').
+_ACT_WORDS = ("here|there|below|above|beside|overleaf|opposite|each|every|all|both|the|this|these|those|if|to|where"
+              "|when")
+_INVISIBLE = re.compile("[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]")
+SIGNATURE_PLACE = re.compile(r"\bsignatures?\b", re.I)
+SIGNED_PLACE = re.compile(
+    r"^(?:please\s+)?(?:electronically\s+|digitally\s+)?(?:counter-?|co-?|e-?)?signed"
+    r"(?=\s*$|\s*[^\w\s]|\s+(?:" + _ACT_WORDS + r"|and|or|by|for|on|off)\b)"
+    r"|\b(?:counter-?|co-?)?signed\b.*\bby\b"
+    r"|\bsign(?:ed)?\s+(?:" + _ACT_WORDS + r")\b"
+    r"|^(?:please\s+)?sign\s*(?:\band\b|\bor\b|&|\+|/)", re.I)
+INITIALS_PLACE = re.compile(r"\binitials\b|\binitial(?=\s*$|\s*[^\w\s]|\s+(?:box|" + _ACT_WORDS + r"|and|or)\b)", re.I)
+#: The measured over-read of the engine's question_box_signing: the adjective 'initial' ('Describe the initial
+#: presentation?', a section 'Initial assessment'). A signing verb still governs once it is removed.
+ADJECTIVE_INITIAL = re.compile(r"\binitial(?=\s+(?!(?:box|" + _ACT_WORDS + r"|and|or)\b)[^\W_])", re.I)
+BOX_SIGNING_VERB = re.compile(r"\b(?:counter|under|co|re)[ -]?sign|\bsign(?:ed|ing|off|offs)\b|\bsign\s+(?:"
+                              + _ACT_WORDS + r")\b", re.I)
+
+
+def _plain(label) -> str:
+    text = unicodedata.normalize("NFKC", str(label or ""))
+    return clean_label(_INVISIBLE.sub("", text), limit=1000).casefold()
+
+
+def signing_place(label) -> str:
+    """'signature', 'initials' or '' for a PRINTED label (see the section comment above)."""
+    text = _plain(label)
+    if not text:
+        return ""
+    if SIGNATURE_DATE_PAIR.search(text):
+        return "signature"
+    if INITIALS_DATE_PAIR.search(text):
+        return "initials"
+    if DATE_LABEL.search(text):
+        return ""
+    if SIGNATURE_PLACE.search(text) or SIGNED_PLACE.search(text):
+        return "signature"
+    if INITIALS_PLACE.search(text):
+        return "initials"
+    return ""
 
 
 def legacy_role_kind(label) -> str:
-    """'signature', 'initials' or '' for a legacy field's PRINTED label (kind_for's date exclusion kept)."""
-    label = label or ""
-    if DATE_LABEL.search(label):
-        return ""
-    if LEGACY_SIGNATURE.search(label):
-        return "signature"
-    if LEGACY_INITIALS.search(label):
-        return "initials"
-    return ""
+    """The legacy default path's role for a field's PRINTED label: signing_place."""
+    return signing_place(label)
+
+
+def signing_box_reading(text) -> bool:
+    """Whether a box's printed question or section makes it a signing box: the engine's own question_box_signing (the
+    reading that declines to map it), less the adjective 'initial' - never wider than the engine's own reading."""
+    if not text or not Detector.question_box_signing(text):
+        return False
+    reading = ADJECTIVE_INITIAL.sub(" ", text)
+    return reading == text or bool(Detector.question_box_signing(reading) or BOX_SIGNING_VERB.search(reading))
 
 
 # ─── fill ──────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -6819,7 +7013,10 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     legacy_protected = {identity: reason for identity, reason in legacy_protected.items() if reason}
     # ⚠️ THE ORIGINAL'S DESTINATION ROLES, read before anything is written and never from the mapping: a stored or
     # forged field on a signing, protected or policy place is refused by its span, not by its paragraph.
-    role_refusals = role_violations(_PlaceReader(index), fields, destination_roles_of(package))
+    original_roles = destination_roles_of(package)
+    role_refusals = role_violations(_PlaceReader(index), fields, original_roles)
+    # A log table's signing or initials column takes no text in any row (its answer rows are judged, not its mapping).
+    signing_columns = {(r["table"], r["column"]): r["reason"] for r in original_roles if r["source"] == "signing_column"}
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -6986,6 +7183,11 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
                     nth = sum(1 for j in range(i) if printed[j].strip() == printed[i].strip())
                     ops.append((anchor.el, 0, lambda el=anchor.el, o=printed[i], k=nth: mark_option_text(el, o, k), part))
             elif kind == "table_rows":
+                table_id = "%s#%s" % (field["locator"]["part"], target.get("table"))
+                for values in answer if isinstance(answer, list) else []:
+                    for column, value in zip(target.get("columns") or [], values if isinstance(values, list) else []):
+                        if str(value or "").strip() and (table_id, column) in signing_columns:
+                            fail(signing_columns[(table_id, column)], ROLE_CODES[ROLE_SIGNING])
                 ops.append((anchor.el, 0, lambda f=field, a=answer: write_table_rows(index, f, a), part))
             else:
                 fail("This answer area cannot be filled automatically.", "unsupported_layout")

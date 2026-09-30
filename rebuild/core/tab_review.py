@@ -18,11 +18,15 @@ _ROLE = r"(?:physician|provider|surgeon|clinician|attending|resident|doctor|md|d
 #: signature", because `Signature date` and `Date of signature` are DATE questions — refusing to
 #: finalize them unless they equal the clinician's name would be a false rejection, and this
 #: file has already shipped one of those.
-#: ⚠️ A PARENTHETICAL MAKES A LABEL THE FINALIZER'S ONLY WHEN IT NAMES A CLINICIAN ROLE (the same `_ROLE` words the
-#: other arms use). Any parenthetical used to pass, so `Signature (participant)` and `Signature (mother)` were identity
-#: rows and finalization demanded - or wrote - the finalizing clinician's own name in another person's signature place.
+#: ⚠️ ANY PARENTHETICAL KEEPS A SIGNATURE LINE THE FINALIZER'S, UNLESS IT NAMES SOMEBODY ELSE (`NOT_THE_CLINICIAN`,
+#: below) OR A DATE (`QUALIFIER`). The identity check FAILS CLOSED: a parenthetical that names no one it knows is read
+#: as the finalizer's. A narrowing to parentheticals naming a clinician-role word (2026-09-30) was refuted the same day:
+#: `Signed (Consultant)`, `Signature (GP)`, `Signed (print name)`, `Electronically signed by (print name)` all stopped
+#: being identity rows - generation filled a consultant's signature line from the notes and finalization accepted
+#: another clinician's name. The persons that are NOT the finalizer are the exclusion list, and a miss there costs a
+#: signature line left for the hand (never a name written that the finalizer did not sign).
 SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
-    rf"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\((?:the )?{_ROLE}\))?",
+    r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",
     rf"{_ROLE}'?s? sign(?:ature|ed)(?: by)?",
     rf"sign(?:ature|ed)(?: by| of)? (?:the )?{_ROLE}",
     r"signature ?/ ?date",
@@ -33,8 +37,11 @@ SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
 #: one is a FALSE REFUSAL: `validate_identity` would then demand the finalizing clinician's own
 #: name in a witness or patient signature line and refuse the document until it got it.
 #: `Signed by (witness)` matched the qualifier arm and did exactly that. Measured.
+#: `participant`, `mother`, `father` and `donor` were measured missing (`Signature (participant)` demanded the
+#: finalizer's own name in a research participant's signature place).
 NOT_THE_CLINICIAN = re.compile(
-    r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer)\b')
+    r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer|participant|mother|father|'
+    r'donor)\b')
 
 
 #: ⚠️ THE QUALIFIER ARM IS CONTENT-BLIND, AND THAT REOPENED THE BOUND THIS FILE CLAIMS.
