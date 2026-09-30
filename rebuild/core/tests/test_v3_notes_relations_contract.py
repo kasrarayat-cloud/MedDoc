@@ -533,6 +533,18 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
             asked = [v3('v3_1', label, 'text')]
             with self.subTest(label=label):
                 self.assert_filled(notes, asked, offered(notes, asked, {'v3_1': [notes]}), {'v3_1': notes})
+        # A question asking what is so now takes no simple past, dated or not; the present and a perfect answer it.
+        for label, notes, held in (
+                (order_form()[0]['label'], 'The tribunal placed the patient on a community treatment order.', True),
+                (order_form()[0]['label'], 'The patient is subject to a community treatment order.', False),
+                ('Current medication', 'The patient was started on warfarin.', True),
+                ('Current medication', 'The patient has been on warfarin since 2019.', False)):
+            asked = [v3('v3_1', label, 'long_text')]
+            with self.subTest(label=label, notes=notes):
+                if held:
+                    self.assert_held(notes, asked, {'v3_1': [notes]}, 'v3_1')
+                else:
+                    self.assert_filled(notes, asked, offered(notes, asked, {'v3_1': [notes]}), {'v3_1': notes})
         # A history field and a question about a past event keep a dated past statement.
         fields = clinic_form()
         notes = U[1] + ' ' + U[2]

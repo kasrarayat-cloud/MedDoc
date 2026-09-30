@@ -3391,6 +3391,10 @@ def v3_bound_by_destination(field, unit, at):
     return any(wanted == direction and event & word_roots(match[2]) for wanted, event in required)
 
 
+#: A question asking what is so now: read only to HOLD a simple-past statement (`v3_relation_causes`, DATED PAST).
+V3_NOW_QUESTION = re.compile(LETTER_BEFORE + r'(?:currently|current|presently|now|still|at\s+present)' + LETTER_AFTER, re.I)
+
+
 def v3_current_state_field(field):
     """A question about the patient's CURRENT state: a label that is not a history or a plan, names no past time and
     does not open as a question carrying its own tense ('When was the patient last seen ...?', 'Has the patient ...' do;
@@ -3471,7 +3475,10 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
       DATED PAST: a statement in the simple past (its finite verb, not a perfect: 'has been on warfarin since 2019'
             is current) dated to the past, or an ended habit, for a current-state question
             (`v3_current_state_field`): 'The patient had right knee pain last year.', 'The patient used to smoke.';
-            and any simple-past unlabelled statement for a Plan question ('She tolerated the procedure well.').
+            any simple past or ended habit, dated or not, for a question asking what is so now (`V3_NOW_QUESTION`:
+            'Does a Community Treatment Order (CTO) currently apply to this person?' / 'The tribunal placed the
+            patient on a community treatment order.'); and any simple-past unlabelled statement for a Plan question
+            ('She tolerated the procedure well.').
       DEPENDS: a later unit that depends on this one (`v3_actors` 'dependent': it points back, opens with a
             connective, has no content word, or has no complement and no subject but a personal pronoun):
             'It was postponed.', 'Not anymore.', 'But he quit only last month.', 'She quit last month.'. For a text
@@ -3512,7 +3519,10 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                             and not (field is not None and v3_bound_by_destination(field, unit, at))
                             for at in info['bounded']):
         causes.append((unit, 'syntax_incomplete'))
-    if field is not None and v3_current_state_field(field) and (info['habitual'] or (info['finite_past'] and info['past_time'])):
+    if field is not None and (
+            (v3_current_state_field(field) and (info['habitual'] or (info['finite_past'] and info['past_time'])))
+            # a question that asks what is so NOW ('Does a CTO currently apply ...?'): any simple past or ended habit
+            or (V3_NOW_QUESTION.search(str(field.get('label') or '')) and (info['finite_past'] or info['habitual']))):
         causes.append((unit, None))
     # A completed event is not a plan ('She tolerated the procedure well.' selected into Plan): an unlabelled statement in
     # the past tense, for a Plan question.
