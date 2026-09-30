@@ -3475,7 +3475,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
       DATED PAST: a statement in the simple past (its finite verb, not a perfect: 'has been on warfarin since 2019'
             is current) dated to the past, or an ended habit, for a current-state question
             (`v3_current_state_field`): 'The patient had right knee pain last year.', 'The patient used to smoke.';
-            any simple past or ended habit, dated or not, for a question asking what is so now (`V3_NOW_QUESTION`:
+            any simple past ('used to' included), dated or not, for a question asking what is so now (`V3_NOW_QUESTION`:
             'Does a Community Treatment Order (CTO) currently apply to this person?' / 'The tribunal placed the
             patient on a community treatment order.'); and any simple-past unlabelled statement for a Plan question
             ('She tolerated the procedure well.').
@@ -3521,8 +3521,9 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
         causes.append((unit, 'syntax_incomplete'))
     if field is not None and (
             (v3_current_state_field(field) and (info['habitual'] or (info['finite_past'] and info['past_time'])))
-            # a question that asks what is so NOW ('Does a CTO currently apply ...?'): any simple past or ended habit
-            or (V3_NOW_QUESTION.search(str(field.get('label') or '')) and (info['finite_past'] or info['habitual']))):
+            # a question that asks what is so NOW ('Does a CTO currently apply ...?'): any simple past ('used to' too);
+            # a present statement of a former state ('She is a former smoker.') answers it
+            or (V3_NOW_QUESTION.search(str(field.get('label') or '')) and info['finite_past'])):
         causes.append((unit, None))
     # A completed event is not a plan ('She tolerated the procedure well.' selected into Plan): an unlabelled statement in
     # the past tense, for a Plan question.

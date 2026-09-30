@@ -536,6 +536,7 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         # A question asking what is so now takes no simple past, dated or not; the present and a perfect answer it.
         for label, notes, held in (
                 (order_form()[0]['label'], 'The tribunal placed the patient on a community treatment order.', True),
+                (order_form()[0]['label'], 'The patient used to be subject to a community treatment order.', True),
                 (order_form()[0]['label'], 'The patient is subject to a community treatment order.', False),
                 ('Current medication', 'The patient was started on warfarin.', True),
                 ('Current medication', 'The patient has been on warfarin since 2019.', False)):
