@@ -514,7 +514,7 @@ KILLING = (
     ('OPPOSED cessation passive', 'one:Medications',
      'The patient takes warfarin. Warfarin was stopped last month.',
      'f', 'The patient takes warfarin.', None),
-    ('OPPOSED cessation hung on its noun', 'one:Presenting complaint',
+    ('DEPENDS a cessation the parse leaves bare', 'one:Presenting complaint',
      'The patient presents with chest pain. The pain resolved yesterday.',
      'f', 'The patient presents with chest pain.', None),
     ('OPPOSED cessation as a complement', 'one:Presenting complaint',
@@ -572,12 +572,14 @@ CONTROLS = (
      'The patient is a smoker.', 'The patient is a smoker.', None),
     ("the patient's own statement naming another person", 'clinic', 'The patient and her husband smoke. Smoker: Yes.',
      'Smoker: Yes.', 'Yes', YES),
-    ("another person's cessation hung on its noun", 'one:Presenting complaint',
+    ("another person's cessation", 'one:Presenting complaint',
      "The patient presents with chest pain. Her husband's cough resolved yesterday.",
      'The patient presents with chest pain.', 'The patient presents with chest pain.', None),
-    ("another person's cessation as a complement", 'one:Presenting complaint',
-     "The patient presents with chest pain. Her husband's cough is resolved.",
-     'The patient presents with chest pain.', 'The patient presents with chest pain.', None),
+    ('a quantified thing set apart from what was said', 'one:Anticoagulation',
+     'The patient takes warfarin. The patient takes nothing else.',
+     'The patient takes warfarin.', 'The patient takes warfarin.', None),
+    ('a class denial naming another printed question', 'pmh+allergies', 'The patient has asthma. The patient has no allergies.',
+     'The patient has asthma.', 'The patient has asthma.', None),
     ('a quantified denial of another predicate and thing', 'one:Medications', 'The patient takes warfarin. No fever.',
      'The patient takes warfarin.', 'The patient takes warfarin.', None),
     ("a clause stating the destination's own time", 'prodrome', 'The patient reports intermittent buzzing before the '
@@ -603,6 +605,8 @@ class EveryArm(Floors, SimpleTestCase):
                 fields = one('History of present illness')
             elif exemption == 'a denial naming another printed question':
                 fields = one('Medications') + [v3('g', 'Allergies', 'text', 'Community care review')]
+            elif form == 'pmh+allergies':
+                fields = one('Past medical history') + [v3('g', 'Allergies', 'text', 'Community care review')]
             elif form == 'prodrome':
                 fields = [v3('f', 'Other:', 'text', 'Current headache > Which symptoms occur before the headache begins?')]
             else:

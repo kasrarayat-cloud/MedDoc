@@ -466,9 +466,9 @@ def _floor_reading(words, root, lem=None, txt=None):
       'intention': a future modal, 'going to', an intention word (`INTENTION_WORDS`) or a pending-status phrase
           (`PENDING_PHRASES` under on/in/under/at)."""
     # Every cessation in the statement, wherever the parser puts it: a verb ending its subject or object ('Methadone was
-    # stopped.', 'She stopped the methadone.'), a participle the parser hangs on the noun it ends ('The pain resolved
-    # yesterday.' parses as the noun 'pain' with 'resolved' modifying it), a copula's complement ('The pain is
-    # resolved.'), or a phrasal verb by its particle ('came off warfarin', 'gave up smoking').
+    # stopped.', 'She stopped the methadone.'), or a phrasal verb by its particle ('came off warfarin', 'gave up
+    # smoking'). One whose ended thing the parse does not attach to it ('The pain resolved yesterday.' parses as the
+    # noun 'pain' with 'resolved' modifying it) names nothing, so it holds as a bare cessation (DEPENDS).
     # each word's lemma and folded spelling, read once (`lem`, `txt`: the caller's, by token index)
     lem = lem if lem is not None else {t.i: _lemma(t) for t in words}
     txt = txt if txt is not None else {t.i: _fold(t.text) for t in words}
@@ -484,12 +484,6 @@ def _floor_reading(words, root, lem=None, txt=None):
                 ended |= {_lemma(x) for x in child.subtree if x.pos_ in CONTENT}
         for child in particle:
             ended |= {_lemma(x) for grand in child.children if grand.dep_ == 'pobj' for x in grand.subtree
-                      if x.pos_ in CONTENT}
-        if t.dep_ in ('acl', 'relcl', 'amod') and t.head.i != t.i:
-            inner = {x.i for x in t.subtree}
-            ended |= {_lemma(x) for x in t.head.subtree if x.i not in inner and x.pos_ in CONTENT}
-        if t.dep_ in ('acomp', 'attr', 'oprd') and t.head.i != t.i:
-            ended |= {_lemma(x) for c in t.head.children if c.dep_ in ('nsubj', 'nsubjpass') for x in c.subtree
                       if x.pos_ in CONTENT}
     ended -= {'patient'}
     # A CLASS denial denies by a quantifier ('takes no anticoagulants', 'has had no pain', 'has never smoked', 'none',
@@ -511,10 +505,7 @@ def _floor_reading(words, root, lem=None, txt=None):
     denial_nouns, denial_heads = set(), set()
     for q in quantifiers:
         if q.dep_ == 'det' and q.head.i != q.i:
-            # the noun phrase's own head ('no relationship changes' parses 'no' onto 'relationship', a modifier)
             noun = q.head
-            while noun.dep_ in ('compound', 'amod', 'nmod') and noun.head.i != noun.i and noun.head.pos_ in ('NOUN', 'PROPN'):
-                noun = noun.head
             denial_nouns.add(_lemma(noun))
             if noun.head.i != noun.i:
                 denial_heads.add(_lemma(noun.head))
