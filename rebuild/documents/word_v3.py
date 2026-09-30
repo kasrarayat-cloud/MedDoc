@@ -5368,7 +5368,7 @@ class Detector:
                     continue
                 kind = "long_text" if len(blanks) >= 2 and not signing else self.kind_for(label)
                 parts = [self.kind_for(clean_label(x)) for x in re.split(r"\t+| {3,}", txt) if clean_label(x)]
-                if len(parts) >= 2 and any(k in SIGNING_KINDS for k in parts):
+                if any(k in SIGNING_KINDS for k in parts):
                     # 'Recorder Signature:<tabs>Date:' over one shared line: the line holds a signature, so it is
                     # never a typed date or text answer (a label 'Date of signature' alone stays a date)
                     kind = next(k for k in parts if k in SIGNING_KINDS)
