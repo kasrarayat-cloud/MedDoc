@@ -618,10 +618,10 @@ class VetoControls(SimpleTestCase):
                 with self.subTest(notes=notes, other=other):
                     self.assertEqual(self.outcome(notes, 'Smoking status', ['The patient smokes.'], other=other),
                                      ('conflict', ''))
-            # (F14, recorded: the application's own readers do not hold a non-copular opposite the model calls
-            # independent — the keyed contract makes the veto expressible, never effective; paid sends measure it)
-            self.assertEqual(self.outcome(notes, 'Smoking status', ['The patient smokes.']),
-                             ('supported', 'The patient smokes.'))
+            # (F14 closed 2026-09-30: the relation floors hold a non-copular opposite the model calls independent -
+            # 'smokes' / 'does not smoke' (OPPOSED SAME TOPIC), and 'quit smoking last year' (a cessation of what it
+            # claims) - whatever it says; `g.v3_relation_causes`)
+            self.assertEqual(self.outcome(notes, 'Smoking status', ['The patient smokes.']), ('conflict', ''))
         # a copular opposite is held by the application whatever the model says
         notes = 'The patient is suicidal. The patient is not suicidal.'
         self.assertEqual(self.outcome(notes, 'Risk to self', ['The patient is suicidal.']), ('conflict', ''))
