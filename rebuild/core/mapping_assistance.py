@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from documents.service import assistance_outline, locate_fields
 from . import generation, v3_mapping, mapping_wire as wire
 from .security import private_path
-from .tab_review import clinician_identity, signature_label
+from .tab_review import another_signers_line, clinician_identity, signature_label
 from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_CONTEXT
 
 VERSION='blank-mapping-v3'
@@ -114,6 +114,29 @@ def overlaps(first,second):
             return bool({box_key(x) for x in at.get('boxes',[])} & {box_key(x) for x in bt.get('boxes',[])})
     left=v3_mapping.mapped_slots([first]);right=v3_mapping.mapped_slots([second])
     return any(v3_mapping.is_mapped(slot,right) for slot in left)
+
+def model_overlaps(fields,before):
+    """THE ONE V1 OVERLAP RULE for a mapping a model proposal contributed to, read by validate_proposal AND by
+    validate_mapping (the resolve step): every pair of fields that write to the same place (`overlaps`) where at least
+    one is a model field, UNLESS the same two fields, at the same places, already wrote to the same place in `before` -
+    the mapping the proposal was judged against, by key.
+
+    ⚠️ ONE RULE, BECAUSE TWO DISAGREED (refutation of a32243eb, RR3-03). The proposal excused the engine's own
+    pre-existing overlap ('Hospital number: <inline control>    Weight: ______ kg': overlaps() compares a span with an
+    inline control by paragraph) and adopted a Weight relabel; the resolve step did not excuse it, so every area
+    decision was refused and the version could never be confirmed. A replacement keeps its prior field's locator, so
+    its overlaps are exactly its prior's; a pair with a field `before` did not have, or whose place moved, is judged
+    as new."""
+    prior={f['key']:f for f in before}
+    out=[]
+    for i,a in enumerate(fields):
+        for b in fields[i+1:]:
+            if 'model_assisted' not in (a.get('origin'),b.get('origin')) or not overlaps(a,b):continue
+            pa,pb=prior.get(a['key']),prior.get(b['key'])
+            if (pa is not None and pb is not None and pa.get('locator')==a.get('locator')
+                    and pb.get('locator')==b.get('locator') and overlaps(pa,pb)):continue
+            out.append((a,b))
+    return out
 
 SIGNING_REASON='Signature or initials areas cannot become generated answers.'
 #: Why a model change was not adopted. A model never creates permission to write somewhere: an ADDITION is always the
@@ -281,9 +304,10 @@ def validate_proposal(version,compiled,response):
             if prior is None:continue
             if prior.get('origin') not in (None,'','automatic'):raise ValidationError(NOT_AUTOMATIC)
             # ⚠️ The finalizer's signature label ('Signature/Date') is identity whatever its kind: relabelling it
-            # ('Date') turned the identity check off and generation filled the signing place.
+            # ('Date') turned the identity check off and generation filled the signing place. Another named person's
+            # signature line ('Signed (mother, DOB)') is held from generation by its label the same way.
             if prior.get('kind') in v3_mapping.SIGNING_KINDS or prior.get('write_protected') or prior.get('answer_policy') \
-                    or clinician_identity(prior):
+                    or clinician_identity(prior) or another_signers_line(prior):
                 raise ValidationError(NOT_ORDINARY)
             if prior['key'] in held_now:raise ValidationError(ROLE_PLACE)
             if target.kind!=prior['kind'] and not (target.kind in v3_mapping.TEXT_KINDS and prior['kind'] in v3_mapping.TEXT_KINDS):
@@ -399,11 +423,11 @@ def validate_proposal(version,compiled,response):
                                                                'answer_policy','source_questions','source_instructions','max_chars')):
             hold(n,'A replacement must keep its field\'s place; it was not adopted.')
     fields=result(adopted)
-    # V1: no overlap across the resulting mapping that an adopted field is part of.
+    # V1: no NEW overlap across the resulting mapping that an adopted field is part of (model_overlaps, the one rule).
+    clashes=model_overlaps(fields,list(originals.values()))
     for n in list(adopted):
-        mine=changes[n]['field']
-        if any(overlaps(mine,other) for other in fields if other['key']!=mine['key']
-               and not overlaps(originals[changes[n]['key']],other)):hold(n,'Proposed destination overlaps another field.')
+        mine=changes[n]['field']['key']
+        if any(mine in (a['key'],b['key']) for a,b in clashes):hold(n,'Proposed destination overlaps another field.')
     # V5 (per field): a box the form does not have, or a checkbox that is not on a box.
     for n in list(adopted):
         field=changes[n]['field']
@@ -493,10 +517,17 @@ def validate_mapping(version,fields,outline_rows):
     from . import destination_roles
     problems=[]
     if len({f['key'] for f in fields})!=len(fields):problems.append('two fields share one key')
-    # V1 over the fields a model proposal put there: the engine's own fields may legitimately share a line (a span and
-    # the printed boxes beside it), and a clinician's add refuses a mapped place, so only a model field is judged here.
-    clashes=sorted({v3_mapping.label_of(a) for i,a in enumerate(fields) for b in fields[i+1:]
-                    if 'model_assisted' in (a.get('origin'),b.get('origin')) and overlaps(a,b)})
+    # V1 over the fields a model proposal put there, by the SAME rule the proposal was judged by (model_overlaps): the
+    # engine's own fields may legitimately share a line (a span and the printed boxes or control beside it), and a
+    # clinician's add refuses a mapped place, so only a model field's NEW overlap is refused. The mapping the proposal
+    # was judged against is the assisted version's recorded base; without one, no overlap is excused.
+    from .models import TemplateVersion
+    base=None
+    if str((version.assistance or {}).get('base_version') or ''):
+        try:base=TemplateVersion.objects.filter(pk=version.assistance['base_version'],template_id=version.template_id).first()
+        except (ValueError,ValidationError):base=None
+    clashes=sorted({v3_mapping.label_of(f) for pair in model_overlaps(fields,base.fields if base is not None else [])
+                    for f in pair})
     if clashes:problems.append('these fields write to the same place: '+', '.join(clashes))
     boxes=v3_mapping.missing_boxes(fields,outline_rows)+v3_mapping.checkboxes_off_box(fields)
     if boxes:problems.append('these checkbox fields do not point at a printed box: '+', '.join(boxes))

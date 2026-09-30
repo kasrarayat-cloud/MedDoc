@@ -6220,14 +6220,15 @@ def destination_roles(data: bytes, fields=None) -> dict:
 #: each measured as a clinical reading rather than a place:
 #:   - 'signed' closing a label after other words, with no agent: a checklist state ('Consent form signed', 'Time
 #:     signed', 'Signed consent in notes' - a leading 'signed' followed by an ordinary word);
-#:   - 'initial' followed by an ordinary word or a number: the adjective ('Initial assessment', 'Initial 12-lead ECG').
+#:   - 'initial' followed by an ordinary word or a number: the adjective ('Initial assessment', 'Initial 12-lead ECG');
+#:   - 'initial' closing a label after a dash separator: a qualifier ('Troponin — Initial', DASH_QUALIFIER_INITIAL).
 #: An ordinary word is anything outside a CLOSED class of function words (_ACT_WORDS: where or what an imperative 'sign'
 #: or 'initial' acts on) - so 'Signed (Consultant)', 'Initial here', 'Initial each page', 'Sign here' stay places.
 #: ⚠️ The earlier restriction ('signed' only with a later 'by'; 'initial' before ANY word) released 'Signed (GP)', 'Signed
 #: (patient)', 'Initial here' and 'Initial each page', and generation filled them. Declared residuals, held (never
 #: generated; the clinician types the value, and it exports): 'Consent form signed by patient', 'Patient signature
-#: obtained', 'Troponin (initial)', 'Troponin — Initial', 'Initial / repeat', a bare 'Initial' - the same wording prints
-#: a real signing place ('Note signed by attending physician', 'Patient signature', 'Nurse (initial)', 'Initial:').
+#: obtained', 'Troponin (initial)', 'Initial / repeat', a bare 'Initial' - the same wording prints a real signing place
+#: ('Note signed by attending physician', 'Patient signature', 'Nurse (initial)', 'Initial:').
 _ACT_WORDS = ("here|there|below|above|beside|overleaf|opposite|each|every|all|both|the|this|these|those|if|to|where"
               "|when")
 _INVISIBLE = re.compile("[\u00ad\u180e\u200b-\u200f\u2060-\u2064\ufeff]")
@@ -6242,6 +6243,12 @@ INITIALS_PLACE = re.compile(r"\binitials\b|\binitial(?=\s*$|\s*[^\w\s]|\s+(?:box
 #: The measured over-read of the engine's question_box_signing: the adjective 'initial' ('Describe the initial
 #: presentation?', a section 'Initial assessment'). A signing verb still governs once it is removed.
 ADJECTIVE_INITIAL = re.compile(r"\binitial(?=\s+(?!(?:box|" + _ACT_WORDS + r"|and|or)\b)[^\W_])", re.I)
+#: A closing 'initial' after a DASH separator is a qualifier of the printed question ('Troponin — Initial' beside
+#: 'Troponin — Repeat'): a NARROWING of INITIALS_PLACE's closing arm, never a new signing word (refutation of
+#: a32243eb, usefulness: 43fcf214 generated this reading and a32243eb held it). Released like 'signed' closing a label
+#: after other words - and with the same declared cost: '<person> — Initial' is released too, exactly as 43fcf214
+#: released it. 'Initial' alone, 'Initial:', '(initial)' and 'Nurse initial' stay places.
+DASH_QUALIFIER_INITIAL = re.compile(r"(?<=\w)\s*[\u2013\u2014]\s*initial\s*$|(?<=\w)\s+-\s+initial\s*$", re.I)
 BOX_SIGNING_VERB = re.compile(r"\b(?:counter|under|co|re)[ -]?sign|\bsign(?:ed|ing|off|offs)\b|\bsign\s+(?:"
                               + _ACT_WORDS + r")\b", re.I)
 
@@ -6264,7 +6271,7 @@ def signing_place(label) -> str:
         return ""
     if SIGNATURE_PLACE.search(text) or SIGNED_PLACE.search(text):
         return "signature"
-    if INITIALS_PLACE.search(text):
+    if INITIALS_PLACE.search(DASH_QUALIFIER_INITIAL.sub("", text)):
         return "initials"
     return ""
 

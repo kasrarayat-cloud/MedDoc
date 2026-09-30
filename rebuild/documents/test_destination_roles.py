@@ -276,11 +276,11 @@ class LegacyRoleKind(unittest.TestCase):
                         'Date consent signed']
     INITIAL_READINGS = ['Initial assessment', 'Initial dose', 'Initial reading', 'Initial GCS', 'Initial observations',
                         'Initial impression', 'Initial plan', 'Initial presentation', 'Initial management',
-                        'Initial lactate']
+                        'Initial lactate', 'Troponin — Initial']
     SIGNING = ['Signature', 'Patient signature', 'Witness signature', 'Consultant signature', 'Signed by',
                'Signature of examining clinician', "Participant's signature", 'First doctor signature',
                'Signed off by consultant', 'Sign here', 'Initials', 'Clinician initials', 'Initial the box',
-               'Initial:', 'Troponin — Initial']
+               'Initial:']
 
     def test_checklist_states_and_adjectives_are_not_roles(self):
         for label in self.CHECKLIST_SIGNED + self.INITIAL_READINGS:
@@ -373,7 +373,7 @@ class SigningPlaceReader(unittest.TestCase):
         signature', 'Nurse (initial)', 'Initial:'). Held means never generated; a typed value still exports."""
         for label in ('Consent form signed by patient', 'Drug chart signed by prescriber', 'Patient signature obtained',
                       'Witness signature obtained', 'Troponin (initial)', 'Lactate (initial)', 'Initial / repeat',
-                      'Troponin \u2014 Initial', 'Initial'):
+                      'Initial'):
             with self.subTest(label=label):
                 self.assertNotEqual(w.signing_place(label), '')
 
@@ -696,3 +696,32 @@ class ReadingsReleased(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# ─── salvage of a32243eb (b2): usefulness on the legacy default path, the dash-qualified reading ───────────────────
+class DashQualifiedInitial(unittest.TestCase):
+    """PC07 / PC18: 43fcf214 generated 'Troponin — Initial' and a32243eb held it as an initials place. The closing
+    'initial' after a dash separator is released (a narrowing of INITIALS_PLACE, no new signing word); every other
+    closing or bare 'initial' stays a place."""
+
+    def test_the_dash_qualified_reading_is_released(self):
+        for label in ('Troponin — Initial', 'Troponin – Initial', 'Troponin - Initial', 'Lactate — initial:',
+                      'Troponin—Initial'):
+            with self.subTest(label=label):
+                self.assertEqual(w.signing_place(label), '')
+                self.assertEqual(w.legacy_role_kind(label), '')
+
+    def test_every_other_initial_place_stays_held(self):
+        for label in ('Initial', 'Initial:', 'Initials', 'Nurse initial', 'Nurse (initial)', 'Troponin (initial)',
+                      'Troponin — Initials', 'Initial — Troponin', 'Initial here', 'Troponin-Initial',
+                      'Lactate — initial here', 'Nurse initials — Initial'):
+            with self.subTest(label=label):
+                self.assertEqual(w.signing_place(label), 'initials')
+
+    def test_the_declared_cost_a_person_before_the_dash_is_released_as_on_43fcf214(self):
+        # Declared, not hidden: the reader cannot tell 'Nurse' from 'Troponin'; 43fcf214 generated both.
+        self.assertEqual(w.signing_place('Nurse — Initial'), '')
+
+    def test_the_v3_kind_rule_is_unchanged(self):
+        # On contract v3 the area stays an initials field (never generated); only its role is released.
+        self.assertEqual(w.Detector.kind_for(None, 'Troponin — Initial'), 'initials')

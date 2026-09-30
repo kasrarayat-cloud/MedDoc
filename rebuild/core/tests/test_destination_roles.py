@@ -865,3 +865,210 @@ class ModelProposalsRound1(V3Fixture, TestCase):
         result = self.proposal(version, replaced=[date['key']], dismissed=[BODY + cell + '/p[0]'],
                                changes=[self.relabel(date['key'], cell, 'date', 0, 20, role=2)])
         self.assertEqual(result['review']['changes'], [{'key': date['key'], 'replacement': date['key']}])
+
+
+# ─── salvage of a32243eb (b2): the two regressions vs 43fcf214 and the legacy usefulness narrowing ─────────────────
+OTHER_SIGNERS_DATED = (('Signature (participant, dd/mm/yyyy)', 'John Example 30/09/2026'),
+                       ('Signed (mother, DOB)', 'Jane Example 01/01/1990'))
+
+
+@override_settings(**TEST_SETTINGS)
+class SalvageLegacy(Walk, V3Fixture, TestCase):
+    def test_rr1_10_another_named_signers_dated_line_is_never_generated(self):
+        """RR1-10 (MEDIUM, regression vs 43fcf214): a32243eb generated and exported these; 43fcf214 held them (identity).
+        Still not the finalizer's identity row: a clinician's typed value finalizes and exports."""
+        for n, (label, value) in enumerate(OTHER_SIGNERS_DATED):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=legacy_rows(label, 'Plan'), name='Synthetic RR1-10 %d' % n)
+                field = self.by_label(version)[label]
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                answer = e.answers[field['key']]
+                self.assertEqual((answer['status'], answer['text']), ('missing', ''))
+                self.assertEqual(answer['reason'], destination_roles.ROLE_NOT_GENERATED)
+                self.assertEqual(self.reviewed(e, version).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+                self.assertNotIn(value, part_text(private_path(e.export_path).read_bytes()))
+                typed = self.generated(version, 'Plan: Rest.')
+                self.assertEqual(self.reviewed(typed, version, typed={label: value}).status_code, 302)
+                self.finalized(typed)
+                self.assertEqual(typed.status, 'finalized')
+                self.assertIn(value, part_text(private_path(typed.export_path).read_bytes()))
+
+    def test_pc07_a_dash_qualified_initial_reading_is_generated_as_on_43fcf214(self):
+        """PC07 / PC18 usefulness: a32243eb held 'Troponin — Initial' (never generated); 43fcf214 generated it."""
+        template, version = self.uploaded(data=legacy_rows('Troponin — Initial', 'Initial', 'Plan'),
+                                          name='Synthetic PC07 dash')
+        by = self.by_label(version)
+        e = self.generated(version, 'Troponin — Initial: 12 ng/L\nInitial: JE\nPlan: Rest.')
+        troponin, initial = e.answers[by['Troponin — Initial']['key']], e.answers[by['Initial']['key']]
+        self.assertEqual((troponin['status'], troponin['text']), ('supported', '12 ng/L'))
+        self.assertEqual((initial['status'], initial['text']), ('missing', ''))    # a bare 'Initial' stays a place
+        self.assertEqual(self.reviewed(e, version).status_code, 302)
+        self.finalized(e)
+        self.assertEqual(e.status, 'finalized')
+        exported = part_text(private_path(e.export_path).read_bytes())
+        self.assertIn('12 ng/L', exported)
+        self.assertNotIn('JE', exported)
+
+    def test_rr1_10_the_legacy_request_does_not_ask_it(self):
+        """Layer 1 (core.destination_roles.legacy_reason): the row is never asked; its label is a context label."""
+        template, version = self.uploaded(data=legacy_rows('Signed (mother, DOB)', 'Plan'), name='Synthetic RR1-10 ask')
+        asked = {f['label']: f for f in destination_roles.generation_fields(version)}
+        self.assertEqual(asked['Signed (mother, DOB)']['destination_role'], {'reason': destination_roles.ROLE_NOT_GENERATED})
+        self.assertNotIn('destination_role', asked['Plan'])
+        questions, context, _ = generation.v3_generation_fields(list(asked.values()))
+        self.assertEqual([f['label'] for f in questions], ['Plan'])
+        self.assertIn('Signed (mother, DOB)', context)
+
+    def test_rr1_10_the_validator_holds_it_on_any_path(self):
+        """Layer 2 (the generation validator, where 43fcf214 held identity): a field that reaches generation unmarked
+        (a caller that did not prepare it) is still answered 'missing' with the reason."""
+        template, version = self.uploaded(data=legacy_rows('Signature (participant, dd/mm/yyyy)', 'Plan'), name='Synthetic RR1-10 v')
+        fields = [dict(f) for f in version.fields]
+        answers = generation.generate('Signature (participant, dd/mm/yyyy): John Example 30/09/2026\nPlan: Rest.', fields,
+                                      generation.configuration(fields))[0]
+        by = self.by_label(version)
+        self.assertEqual((answers[by['Signature (participant, dd/mm/yyyy)']['key']]['status'],
+                          answers[by['Signature (participant, dd/mm/yyyy)']['key']]['reason']),
+                         ('missing', destination_roles.ROLE_NOT_GENERATED))
+        self.assertEqual(answers[by['Plan']['key']]['status'], 'supported')
+
+    def test_rr1_10_identity_is_unchanged_for_other_persons(self):
+        from core.tab_review import another_signers_line, clinician_identity, signature_label
+        for label in ('Signature (participant, dd/mm/yyyy)', 'Signed (mother, DOB)', 'Signature (patient)', 'Signed by (witness)'):
+            with self.subTest(label=label):
+                self.assertFalse(clinician_identity({'label': label}))
+                self.assertTrue(another_signers_line({'label': label}))
+        for label in ('Signed (Consultant)', 'Signature (GP)', 'Signature date', 'Date of signature', 'Signature (patient, date)',
+                      'Patient signature', 'Consent obtained by (name and grade)', 'Babinski sign'):
+            with self.subTest(label=label):
+                self.assertFalse(another_signers_line({'label': label}))
+        self.assertTrue(signature_label('Signed (Consultant)'))
+
+
+@override_settings(**V3)
+class SalvageV3(Walk, V3Fixture, TestCase):
+    def test_rr1_10_another_named_signers_dated_line_is_never_generated_on_v3(self):
+        for n, (label, value) in enumerate(OTHER_SIGNERS_DATED):
+            with self.subTest(label=label):
+                template, version = self.uploaded(data=lines(label + ': ______________', 'Plan: ______'),
+                                                  name='Synthetic RR1-10 v3 %d' % n)
+                field = self.by_label(version)[label]
+                self.confirm(template, version)          # not a role place: confirmable, as on 43fcf214
+                e = self.generated(version, f'{label}: {value}\nPlan: Rest.')
+                answer = e.answers[field['key']]
+                self.assertEqual((answer['status'], answer['text']), ('missing', ''))
+                self.assertEqual(answer['reason'], destination_roles.ROLE_NOT_GENERATED)
+                self.assertEqual(self.reviewed(e, version).status_code, 302)
+                self.finalized(e)
+                self.assertEqual(e.status, 'finalized')
+                self.assertNotIn(value, part_text(private_path(e.export_path).read_bytes()))
+
+
+def control_line(before, alias, after):
+    """'<before><inline plain-text content control><after>' as one paragraph."""
+    doc = Document(); doc.add_heading('Clinic record', level=2)
+    p = doc.add_paragraph(before)
+    sdt = OxmlElement('w:sdt'); pr = OxmlElement('w:sdtPr'); a = OxmlElement('w:alias'); a.set(qn('w:val'), alias)
+    pr.append(a); pr.append(OxmlElement('w:showingPlcHdr')); pr.append(OxmlElement('w:text')); sdt.append(pr)
+    content = OxmlElement('w:sdtContent'); r = OxmlElement('w:r'); t = OxmlElement('w:t')
+    t.text = 'Click or tap here to enter text.'; r.append(t); content.append(r); sdt.append(content); p._p.append(sdt)
+    r = OxmlElement('w:r'); t = OxmlElement('w:t'); t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+    t.text = after; r.append(t); p._p.append(r)
+    doc.add_paragraph('Plan: ______')
+    return saved(doc)
+
+
+@override_settings(**MAPPING_SETTINGS)
+class SalvageResolveOverlap(V3Fixture, TestCase):
+    """RR3-03 (MEDIUM, regression vs 43fcf214): validate_proposal V1 excused the engine's own pre-existing overlap and
+    adopted a relabel; the resolve step's V1 did not, so the version could never be confirmed. One rule now
+    (mapping_assistance.model_overlaps)."""
+
+    def setUp(self):
+        super().setUp()
+        self.config = generation.configuration()
+
+    def assisted(self, template, version, replace, text):
+        compiled = mapping.compile_request(version, self.config)
+        payload = json.loads(compiled['request']['messages'][0]['content'])
+        body = mapping.wire.fixture(payload)
+        fid = next(i for i, f in enumerate(payload['fields']) if f['key'] == replace['key'])
+        body['f']['k'] = [n for n in body['f']['k'] if n != fid]; body['f']['r'] = [fid]
+        body['x'] = [ModelProposals.change(payload, replace['locator']['slot'], text, kind=replace['kind'], fid=fid)]
+        proposal = mapping.validate_proposal(version, compiled, body)
+        new = TemplateVersion.objects.create(template=template, number=version.number + 1, fields=proposal['fields'],
+            contract='v3', review_requirements=version.review_requirements, created_by=self.user,
+            assistance={**proposal['review'], 'job_id': 'synthetic', 'base_version': str(version.pk), 'simulated': True})
+        return proposal, new
+
+    def resolve(self, template, new):
+        mapped = v3_mapping.mapped_slots(new.fields)
+        post = {'action': 'resolve', 'mapping_version': new.pk}
+        for n, row in enumerate(new.assistance['unresolved']):
+            post['resolution_%d' % n] = 'mapped' if row.get('key') or v3_mapping.is_mapped(row['slot'], mapped) \
+                else 'not_answer'
+        return self.client.post(f'/templates/{template.pk}/assistance/', post)
+
+    def test_rr3_03_a_relabel_beside_an_inline_control_resolves_and_confirms(self):
+        template, version = self.uploaded(data=control_line('Hospital number: ', 'Hospital number', '    Weight: ______ kg'),
+                                          name='Synthetic RR3-03')
+        weight = self.by_label(version)['Weight']
+        other = self.by_label(version)['Hospital number']
+        self.assertTrue(mapping.overlaps(weight, other))      # the engine's own overlap (compared by paragraph)
+        proposal, new = self.assisted(template, version, weight, 'Weight')
+        self.assertEqual(proposal['review']['changes'], [{'key': weight['key'], 'replacement': weight['key']}])
+        self.assertEqual(self.resolve(template, new).status_code, 302)
+        latest = self.latest(template)
+        self.assertEqual(latest.number, new.number + 1)
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm', 'mapping_version': latest.pk,
+                                                                   'checked_every_field': 'on'})
+        self.assertEqual(response.status_code, 302)
+
+    def test_a_new_overlap_of_a_model_field_is_still_refused_at_resolve(self):
+        """The control: an overlap the base mapping did NOT have (here a model field moved onto its neighbour's place)."""
+        template, version = self.uploaded(data=lines('Weight: ______ kg  Height: ______ cm', 'Plan: ______'),
+                                          name='Synthetic RR3-03 control')
+        weight, height = version.fields[0], version.fields[1]
+        self.assertFalse(mapping.overlaps(weight, height))
+        moved = {**weight, 'locator': copy.deepcopy(height['locator']), 'origin': 'model_assisted'}
+        fields = [moved if f['key'] == weight['key'] else f for f in version.fields]
+        new = TemplateVersion.objects.create(template=template, number=2, fields=fields, contract='v3',
+            created_by=self.user, assistance={'unresolved': [{'slot': BODY + weight['locator']['slot'], 'key': '',
+                                                             'reason': 'Unresolved source area', 'text': ''}],
+                                              'base_version': str(version.pk)})
+        response = self.client.post(f'/templates/{template.pk}/assistance/',
+                                    {'action': 'resolve', 'mapping_version': new.pk, 'resolution_0': 'mapped'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('write to the same place', response.content.decode())
+        self.assertEqual(self.latest(template).pk, new.pk)
+
+    def test_rr1_10_another_persons_signature_line_is_never_relabelled_by_a_model(self):
+        template, version = self.uploaded(data=lines('Signed (mother, DOB): ______________', 'Plan: ______'),
+                                          name='Synthetic RR1-10 relabel')
+        signed = self.by_label(version)['Signed (mother, DOB)']
+        self.assertEqual(signed['kind'], 'date')
+        compiled = mapping.compile_request(version, self.config)
+        payload = json.loads(compiled['request']['messages'][0]['content'])
+        body = mapping.wire.fixture(payload)
+        fid = next(i for i, f in enumerate(payload['fields']) if f['key'] == signed['key'])
+        body['f']['k'] = [n for n in body['f']['k'] if n != fid]; body['f']['r'] = [fid]
+        # 'DOB' is printed wording of that line and no identity label: adopted, generation would write a date there.
+        body['x'] = [ModelProposals.change(payload, signed['locator']['slot'], 'DOB', kind='date', fid=fid)]
+        result = mapping.validate_proposal(version, compiled, body)
+        self.assertEqual(result['review']['changes'], [])
+        self.assertIn(mapping.NOT_ORDINARY, ' '.join(r['reason'] for r in result['review']['unresolved']))
+
+    def test_one_rule_proposal_and_resolve_read_model_overlaps(self):
+        template, version = self.uploaded(data=control_line('Hospital number: ', 'Hospital number', '    Weight: ______ kg'),
+                                          name='Synthetic RR3-03 rule')
+        weight, control = self.by_label(version)['Weight'], self.by_label(version)['Hospital number']
+        relabelled = {**weight, 'origin': 'model_assisted'}
+        # the engine's own overlap, same places: excused
+        self.assertEqual(mapping.model_overlaps([relabelled, control], version.fields), [])
+        # no base recorded: nothing is excused
+        self.assertEqual(len(mapping.model_overlaps([relabelled, control], [])), 1)
+        # a place that moved is judged as new, even where the prior places overlapped too
+        moved = {**relabelled, 'locator': copy.deepcopy(control['locator'])}
+        self.assertEqual(len(mapping.model_overlaps([moved, control], version.fields)), 1)

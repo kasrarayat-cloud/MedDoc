@@ -3214,7 +3214,8 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         governance=heading_governance(notes,labels)
         index=occurrence_index(notes,labels,units,parsed_units)
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
-    from .tab_review import clinician_identity
+    from .tab_review import clinician_identity, another_signers_line
+    from .destination_roles import ROLE_NOT_GENERATED
     output={}; used_numbered={}
     by_id={unit['id']:unit for unit in units}
     parsed_of={unit['id']:parsed for unit,parsed in zip(units,parsed_units)}
@@ -3299,6 +3300,10 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),numbered
         if clinician_identity(field):
             output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,
                               'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
+            continue
+        # Another person's signature line ('Signature (participant, dd/mm/yyyy)') is signed by hand, never generated.
+        if another_signers_line(field):
+            output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,'reason':ROLE_NOT_GENERATED}
             continue
         label=question_key(field['label'])
         allowed={}; explicit={}
@@ -3511,11 +3516,15 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
     governance=heading_governance(notes,labels,lexical=not word_form,per_sentence=False,
                                   questions=question_labels(fields) if word_form else frozenset())
     index=occurrence_index(notes,labels)
-    from .tab_review import clinician_identity
+    from .tab_review import clinician_identity, another_signers_line
+    from .destination_roles import ROLE_NOT_GENERATED
     for item in selections.fields:
         if clinician_identity(next(f for f in fields if f['key']==item.key)):
             output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,
                               'reason':'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'}
+            continue
+        if another_signers_line(next(f for f in fields if f['key']==item.key)):
+            output[item.key]={'text':'','status':'missing','evidence':[],'reviewed':False,'reason':ROLE_NOT_GENERATED}
             continue
         if injection:
             output[item.key]={'text':'','status':'conflict','evidence':[],'reviewed':False,'reason':'Instruction-like source text requires manual review.'}; continue

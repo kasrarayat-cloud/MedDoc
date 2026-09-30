@@ -99,13 +99,15 @@ def printed(field, roles):
 
 
 def legacy_reason(field, row):
-    """Why a legacy field is never generated (its printed label is identity, a signature or initials), or ''."""
-    from .tab_review import clinician_identity
+    """Why a legacy field is never generated (its printed label is identity, a signature or initials, or another named
+    person's signature line - tab_review.another_signers_line), or ''."""
+    from .tab_review import another_signers_line, clinician_identity
     if not row:
         return ''
-    if clinician_identity({**field, 'label': row['printed_label']}):
+    printed_field = {**field, 'label': row['printed_label']}
+    if clinician_identity(printed_field):
         return IDENTITY_NOT_GENERATED
-    return ROLE_NOT_GENERATED if row.get('role') else ''
+    return ROLE_NOT_GENERATED if row.get('role') or another_signers_line(printed_field) else ''
 
 
 def held(version, *, fresh=False):

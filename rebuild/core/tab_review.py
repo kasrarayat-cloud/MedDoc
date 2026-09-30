@@ -54,14 +54,39 @@ QUALIFIER = re.compile(r'\(([^)]*)\)')
 DATE_QUESTION = re.compile(r'\b(?:date|dated|time|day)\b')
 
 
-def signature_label(label):
-    text = re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(TRAILING).strip().casefold()
-    if NOT_THE_CLINICIAN.search(text):
-        return False
+def _normal(label):
+    return re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(TRAILING).strip().casefold()
+
+
+def signature_line(label):
+    """Whether a label prints a SIGNATURE LINE, whoever signs it: SIGNATURE_PATTERNS with the date-qualifier exclusion,
+    BEFORE the not-the-clinician exclusion. `signature_label` is this reading less `NOT_THE_CLINICIAN`, unchanged."""
+    text = _normal(label)
     inner = QUALIFIER.search(text)
     if inner and DATE_QUESTION.search(inner.group(1)):
         return False
     return any(pattern.fullmatch(text) for pattern in SIGNATURE_PATTERNS)
+
+
+def signature_label(label):
+    if NOT_THE_CLINICIAN.search(_normal(label)):
+        return False
+    return signature_line(label)
+
+
+def another_signers_line(field):
+    """A signature line the label names as somebody else's (`NOT_THE_CLINICIAN`): not the finalizer's identity row, and
+    never generated from notes either - it is signed by hand by the person it names.
+
+    ⚠️ THE EXCLUSION LIST DECIDES WHOSE SIGNATURE IT IS, NEVER WHETHER IT IS ONE (refutation of a32243eb, RR1-10).
+    Widening `NOT_THE_CLINICIAN` by 'participant', 'mother', 'father' and 'donor' correctly stopped demanding the
+    finalizer's own name in those lines, but it also took them out of the only hold 43fcf214 gave them (identity), and
+    a date word the identity qualifier does not know ('dd/mm/yyyy', 'DOB', 'born') took them out of the role reader:
+    'Signature (participant, dd/mm/yyyy)' and 'Signed (mother, DOB)' were generated and exported. This reads the SAME
+    patterns as identity - no new wording - and holds from generation exactly the lines 43fcf214 held (plus the
+    exclusion list's own persons, whose lines are signing places too); a clinician's typed value still exports."""
+    label = (field or {}).get('label')
+    return bool(NOT_THE_CLINICIAN.search(_normal(label))) and signature_line(label)
 
 
 def clinician_identity(field):
