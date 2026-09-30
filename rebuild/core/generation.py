@@ -2448,9 +2448,8 @@ def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresol
     coupling for review, not a semantic contradiction classifier.
 
     `view` (a dict, filled when given; 2026-09-30, read only by the ordinary relation reader's self-reference):
-    'mentions' {label: ids of the units whose own words name it, in blocks not owned by it} and 'owned' {label: ids of
-    the units of the blocks it owns}. A referencing block in which no single unit names the label gives every one of
-    its units (the reference is the block's)."""
+    'mentions' {label: ids of the units whose own words name it, in blocks not owned by it}. A referencing block in
+    which no single unit names the label gives every one of its units (the reference is the block's)."""
     patterns, visit_purposes = {}, {}
     for label in named:
         variants = {label}
@@ -2483,10 +2482,8 @@ def v3_related_source_blocks(blocks, named, parsed, barriers, ambiguous, unresol
     for index, targets in references.items():
         for target in targets: referring.setdefault(target, set()).add(index)
     if view is not None:
-        mentions, owned = view.setdefault('mentions', {}), view.setdefault('owned', {})
+        mentions = view.setdefault('mentions', {})
         for index, block in enumerate(blocks):
-            if block['owner'] is not None:
-                owned.setdefault(block['owner'], set()).update(u['id'] for u in block['units'])
             for target in references[index]:
                 found = set()
                 for position, u in enumerate(block['units']):
@@ -3301,17 +3298,18 @@ def v3_actor_patients(units, actors, parsed):
     clinical supervisor saw the patient ...', is the literal reader's) - and in every case a complete clause (no
     dangling last word), NO
     other person named anywhere earlier in the note or in the unit itself (a clinician included), no other-person or
-    disagreeing reading of the unit, and no hedge, hypothetical modal, ended habit, conditional or pointing scope word
-    or self-correction in it (`v3_actors.HEDGES`, `HEDGE_MODALS`, 'used to', `INHERITED_SCOPE`, `SCOPE_POINTER`,
-    `SELF_CORRECTION`), and no UNSETTLED word but `V3_SETTLED_WORDS` ('The patient is subject to the arrangements
-    tomorrow.' is not). A bounding clause is read per destination by the caller. Labelled lines and 'Label is ...'
+    disagreeing reading of the unit, and no hedge, hypothetical modal, conditional or pointing scope word or
+    self-correction in it (`v3_actors.HEDGES`, `HEDGE_MODALS`, `INHERITED_SCOPE`, `SCOPE_POINTER`, `SELF_CORRECTION`),
+    and no UNSETTLED word but `V3_SETTLED_WORDS` ('The patient is subject to the arrangements tomorrow.' is not). An
+    ended habit ('used to') is the patient's too: `v3_relation_causes` holds it for a current-state question. A bounding
+    clause is read per destination by the caller. Labelled lines and 'Label is ...'
     sentences name their own question and are not read here."""
     found = set()
     for unit in units:
         uid = unit['id']
         info, state = actors['units'][uid], actors['resolved'][uid]
         if (not info['readable'] or info['other'] or info['mentions_other'] or state.get('self_other')
-                or state.get('other_ever') or info['hedged'] or info['habitual']):
+                or state.get('other_ever') or info['hedged']):
             continue
         kind, actor = info['kind'], state.get('actor')
         if not ((kind in ('patient', 'pronoun') and actor == 'patient')
@@ -3374,12 +3372,11 @@ def v3_bound_by_destination(field, unit, at):
 
 
 def v3_current_state_field(field):
-    """A question about the patient's CURRENT state: a noun-phrase label that is not a history or a plan, and not a
-    question carrying its own tense ('When was the patient last seen ...?', 'Has the patient ...'). Read only to HOLD a
-    dated past statement (`v3_relation_causes`)."""
-    raw = str(field.get('label') or '').strip()
-    label = question_key(raw)
-    if label in GENERAL_NARRATIVE_FIELDS or raw.endswith('?'):
+    """A question about the patient's CURRENT state: a label that is not a history or a plan and carries no tense of its
+    own ('When was the patient last seen ...?', 'Has the patient ...' do; 'Right knee' and 'Right knee pain?' do not).
+    Read only to HOLD a dated past statement (`v3_relation_causes`)."""
+    label = question_key(field.get('label'))
+    if label in GENERAL_NARRATIVE_FIELDS:
         return False
     if re.search(LETTER_BEFORE + r'(?:history|past|previous|prior|ever|when|since|last|date|dated|onset)' + LETTER_AFTER,
                  label, re.I):
@@ -3493,6 +3490,7 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 causes.append((other, None))
                 break
     return causes
+
 
 def v3_complete_statement(reading, unit, scoped):
     """Identical syntax allowance for generation and stored draft governance.

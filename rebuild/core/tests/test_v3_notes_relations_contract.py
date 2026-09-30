@@ -201,6 +201,13 @@ class FirstDecisions(Settled, SimpleTestCase):
                                 ('45-year-old man presents with cough. ' + U[4], U[4]),
                                 (U[1] + ' She possibly takes ibuprofen.', 'She possibly takes ibuprofen.'),
                                 (U[1] + ' She may take ibuprofen.', 'She may take ibuprofen.'),
+                                (U[1] + ' She may have taken ibuprofen.', 'She may have taken ibuprofen.'),
+                                (U[1] + ' She apparently takes ibuprofen.', 'She apparently takes ibuprofen.'),
+                                (U[1] + ' She perhaps takes ibuprofen.', 'She perhaps takes ibuprofen.'),
+                                # a unit naming another person is never the patient's by this reader
+                                (U[1] + ' The patient takes warfarin for her husband.',
+                                 'The patient takes warfarin for her husband.'),
+                                (U[1] + ' She takes warfarin with her husband.', 'She takes warfarin with her husband.'),
                                 (U[1] + ' She used to take ibuprofen.', 'She used to take ibuprofen.')):
             with self.subTest(notes=notes):
                 self.assert_held(notes, fields, {'v3_4': [selected]}, 'v3_4')
@@ -224,6 +231,14 @@ class FirstDecisions(Settled, SimpleTestCase):
         self.assert_held(notes, fields, {'v3_5': [U[5]]}, 'v3_5')
         notes = U[1] + ' She has a penicillin allergy. Allergies: latex.'
         self.assert_held(notes, fields, {'v3_5': ['She has a penicillin allergy.']}, 'v3_5')
+        # Another unit naming the question keeps it coupled; alone, the answer names only its own question; and a
+        # qualified field is never self-referenced.
+        notes = U[1] + ' She has a penicillin allergy. Referral to the allergy clinic is planned.'
+        self.assert_held(notes, fields, {'v3_5': ['She has a penicillin allergy.']}, 'v3_5')
+        notes = U[1] + ' She has a penicillin allergy.'
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_5': ['She has a penicillin allergy.']}),
+                           {'v3_5': 'She has a penicillin allergy.'})
+        self.assert_held(notes, clinic_form(v3_5='Family history'), {'v3_5': ['She has a penicillin allergy.']}, 'v3_5')
         # One general destination sharing the Examination's context is not a form title: the context qualifies.
         cardio = [v3('v3_1', 'Plan', 'long_text', 'Cardiovascular examination'),
                   v3('v3_2', 'Examination', 'long_text', 'Cardiovascular examination')]
@@ -417,6 +432,10 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         smoker = [v3('v3_1', 'Smoker', 'choice', '', ['Yes', 'No'])]
         self.assert_held('The patient used to smoke.', smoker, {'v3_1': ['The patient used to smoke.']}, 'v3_1',
                          choices={'v3_1': ['v3_1:0']})
+        # A noun-phrase question carries no tense of its own.
+        pain = [v3('v3_1', 'Right knee pain?', 'text')]
+        notes = 'The patient had right knee pain last year.'
+        self.assert_held(notes, pain, {'v3_1': [notes]}, 'v3_1')
         # A history field and a question about a past event keep a dated past statement.
         fields = clinic_form()
         notes = U[1] + ' ' + U[2]
@@ -458,6 +477,10 @@ class HoldOnlyFloors(Settled, SimpleTestCase):
         notes = 'The patient smokes. Her husband does not smoke.'
         self.assert_filled(notes, fields, offered(notes, fields, {'v3_6': ['The patient smokes.']}, choices=YES),
                            {'v3_6': 'Yes'})
+        # A presentation line opening with 'This is' does not point back at the labelled line before it.
+        notes = 'Allergies: none known.\nThis is a 30-year-old female seen for headaches.'
+        self.assert_filled(notes, fields, offered(notes, fields, {'v3_5': ['Allergies: none known.']}),
+                           {'v3_5': 'none known.'})
         # Another person's same topic does not hold the patient's own explicit statement.
         notes = 'Her husband has asthma. The patient has asthma.'
         self.assert_filled(notes, fields, offered(notes, fields, {'v3_3': ['The patient has asthma.']}),

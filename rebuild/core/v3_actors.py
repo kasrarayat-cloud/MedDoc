@@ -40,7 +40,7 @@ debaefd9 supported them only because it had no actor reader at all).
 contract) reads a UNIQUE resolution to the patient as positive patient evidence (`generation.v3_actor_patients`, read by
 `v3_field_relations.read`): an explicit-patient statement, a personal pronoun whose antecedent is the patient, or a
 thing/subjectless/topic statement, with no other person named anywhere earlier or in the unit, and no hedge,
-hypothetical, ended habit, unsettled or scope word. There, the model's per-unit relations say what else is independent,
+hypothetical, unsettled or scope word. There, the model's per-unit relations say what else is independent,
 and `generation.v3_relation_causes` keeps this module's holds for the unit. The default path reads it exactly as before.
 
 STATED RESIDUALS (none of them releases anything): a sentence whose subject is the EXPLICIT patient and that names
@@ -406,6 +406,7 @@ def _dangling(words):
     """Whether a statement stops on a function word (by its tag or its spelling): it is not complete. Only HOLDS."""
     last = next((t for t in reversed(words) if not t.is_punct and not t.is_space), None)
     return last is None or last.pos_ in ('CCONJ', 'SCONJ', 'ADP', 'DET', 'AUX', 'PART') or _fold(last.text) in DANGLING_WORDS
+
 
 def _negated_fragment(root):
     """A verbless statement denying what it names ('No MAPPA involvement.', 'No known drug allergies.'): the keys of

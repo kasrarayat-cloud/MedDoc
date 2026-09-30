@@ -380,15 +380,15 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         literal_ids = complete_ids(field, ordered, reading)
         # 2026-09-30: the actor reader's unique resolution to the patient is positive patient evidence too
         # (`g.v3_actor_patients`: an explicit-patient statement, a pronoun whose antecedent is the patient, or a thing or
-        # subjectless statement with no other person anywhere before it, and no hedge, hypothetical, ended habit or
-        # scope word), when every bounding clause in it states this destination's own printed time.
+        # subjectless statement with no other person anywhere before it, and no hedge, hypothetical, unsettled or scope
+        # word). A bounding clause in it holds the answer later (`g.v3_relation_causes`, BOUNDED) unless it states this
+        # destination's own printed time.
         actors = reading.get('actor_patients', frozenset())
         # For Examination, Assessment and Medications (the destinations the source-subject reader knows), a thing,
         # subjectless or topic statement is this field's only when it names it ('On examination there is ...'): 'The
         # lesion was excised under local anesthesia and closed with sutures.' is not an examination (N06, I1).
         key = g.question_key(label)
         actor_ids = {u['id'] for u in ordered if u['id'] in actors
-                     and all(g.v3_bound_by_destination(field, u, at) for at in reading['actors'][u['id']]['bounded'])
                      and (key not in g.CLINICAL_SUBJECT_FIELDS
                           or reading['actors'][u['id']]['kind'] in ('patient', 'pronoun')
                           or reading.get('own_subjects', {}).get(u['id']) == key)}
@@ -442,14 +442,13 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
                     and reading['patients'].get(u['id']) for u in ordered))
         # 2026-09-30: the coupling is this answer naming its OWN question and nothing else ('No known drug allergies.'
-        # for Allergies, inside a block the form's title left unowned): no other unit names the question, no block owns
-        # it, and every selected unit is the patient's by either reader. A qualified field ('Allergies' under 'Family
-        # history') is never one.
+        # for Allergies, inside a block the form's title left unowned): no other unit names the question, and every
+        # selected unit is the patient's by either reader. A qualified field ('Allergies' under 'Family history') is
+        # never one. (A block the question owns always continues the answer: its label is a shared word, below.)
         view = reading.get('relation_view') or {}
         self_reference = self_reference or bool(
             chosen and related and len(group) == 1
             and g.v3_field_qualifier(field, reading.get('form_title')) in ('', key)
-            and not view.get('owned', {}).get(key)
             and view.get('mentions', {}).get(key, set()) <= chosen
             and all(reading['blocks'][reading['block_of'][u['id']]]['owner'] is None
                     and (reading['patients'].get(u['id']) or u['id'] in actor_ids) for u in ordered)
