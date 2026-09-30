@@ -71,9 +71,10 @@ FUNCTION_SHA256 = {
     # 0031: the 0003 body plus the confirmation gate (an unconfirmed contract v3 mapping starts no document) and the
     # hold (a document on one is never finalized).
     'quillmd_encounter_guard': '580e426b543a237ad47fd28b427b522eae312320259793b7f3052101d33c55ae',
-    # 0032: the 0025 body plus one path, a hold replayed from the journal keeping its journaled custodian when its
-    # 'imported' replay marker names this exact hold. Releases are unchanged.
-    'quillmd_hold_instruction': 'c1b8fb005193dc8c15b12650e76ce189c4a38b5df5eb3370e627af304e919812',
+    # 0032: the 0025 body plus one path, a hold or release replayed from the journal whose replay marker names this
+    # exact row (its journaled custodian, or the replaying one only when that account is absent; a release only when
+    # the two markers' signed entries name two custodians). Every other hold or release keeps 0025's rules.
+    'quillmd_hold_instruction': '519d29c84134b93600a90c01293f7acf7a8d19e863b84484e3fb04bded606984',
     'quillmd_job_financial_guard': 'bbc4d75781636526a07bdbb1d4e705eb642a57c81776161b192dad88c1b8dd26',
     'quillmd_livemode_guard': '231e4fd6d5f23b0b38d9b4353add5b26cb31b62c571ccb0987e06705cf6b32cf',
     'quillmd_mapping_job_scope_guard': '0ebc170e576db208a2c8fea78fa2c46652aead48ef2a88af27bb21254cfc7954',
@@ -87,7 +88,9 @@ FUNCTION_SHA256 = {
     'quillmd_disposition_reference': 'd8091118ccf9ad4ed1e00604ce628216fb5f5b3b36e47125a5319486f344cd97',
     'quillmd_disposition_target': '9f3949efe49112a1f02594dcfb53dd71ba8379131829578988840cc6230588c1',
     'quillmd_execution_instruction': '417bcc1b439787326df46c391db750fbaa5e5d8f65e8ea69c1b26e0a109c3aa1',
-    'quillmd_restore_import': 'f1a0b593ce909c72b2d9b40118c15efa5cfdacac61fa58aceac8932e28ac115f',
+    'quillmd_restore_import': '503a47b91f8c453a0452f3b87b4e30a0d49f4f547e36862008812ac7dd3332bb',
+    # 0032: a hold replayed 'target_absent' applies when its target row is inserted again with its id.
+    'quillmd_restore_absent_hold': '19ba238b0a2ed70262a2a1f03e10186f324db8a5d6c5b87f7284086e740b420a',
 }
 
 GUARDS = (
@@ -179,4 +182,8 @@ GUARDS = (
     ('core_restoreadmission', 'restoreadmission_append_only', 'quillmd_append_only', 27),
     ('core_restoreadmission', 'restoreadmission_insert', 'quillmd_restore_import', 7),
     ('core_restoreadmission', 'restoreadmission_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_organization', 'organization_absent_hold', 'quillmd_restore_absent_hold', 7),
+    ('core_department', 'department_absent_hold', 'quillmd_restore_absent_hold', 7),
+    ('core_patient', 'patient_absent_hold', 'quillmd_restore_absent_hold', 7),
+    ('core_encounter', 'encounter_absent_hold', 'quillmd_restore_absent_hold', 7),
 )

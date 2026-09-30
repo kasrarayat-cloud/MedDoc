@@ -22,7 +22,7 @@ except ImportError:
 
 LIVE = 'quillmd-production.c1a2b3c4d5e6.us-east-1.rds.amazonaws.com'
 DRILL = 'quillmd-production-drill-20261101t0300.c1a2b3c4d5e6.us-east-1.rds.amazonaws.com'
-#: This release's guard count (88 since 0032); every restore below declares it.
+#: This release's guard count (92 since 0032); every restore below declares it.
 RELEASE = len(restore_check.integrity_contract.GUARDS)
 
 

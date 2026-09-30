@@ -37,9 +37,11 @@ class HoldJournalFixture(ExecutionFixture):
             path.write_bytes(scope[6])
 
     def older_backup(self, action):
-        """Run `action`, then roll back its database effects: an exact backup taken before it. The journal survives."""
+        """Run `action` as committed work (its after-commit steps included), then roll back its database effects: an
+        exact backup taken before it. The journal survives."""
         with transaction.atomic():
-            result = action()
+            with TestCase.captureOnCommitCallbacks(execute=True):
+                result = action()
             transaction.set_rollback(True)
         return result
 
@@ -68,7 +70,7 @@ class HoldJournalFixture(ExecutionFixture):
 class HoldJournal(HoldJournalFixture, TestCase):
     def setUp(self): self.setup_journal()
 
-    def test_hold_and_release_are_signed_entries_fsynced_before_their_rows(self):
+    def test_a_hold_is_fsynced_before_its_row_and_a_release_only_after_its_row_committed(self):
         events = []
         real_fsync = j.os.fsync
         def fsync(descriptor):
@@ -84,9 +86,14 @@ class HoldJournal(HoldJournalFixture, TestCase):
                 patch.object(m.RetentionHold.objects, 'create', side_effect=row(m.RetentionHold)), \
                 patch.object(m.RetentionHoldRelease.objects, 'create', side_effect=row(m.RetentionHoldRelease)):
             hold = self.patient_hold()
-            release = retention.release_hold(self.second, hold.pk, 'b'*64)
-        self.assertEqual(events, ['fsync', 'fsync', ('row', 'RetentionHold', True),
-                                  'fsync', 'fsync', ('row', 'RetentionHoldRelease', True)])
+            with self.captureOnCommitCallbacks() as after_commit:
+                release = retention.release_hold(self.second, hold.pk, 'b'*64)
+            # The release row is written while the journal still holds only the hold; its entry waits for the commit.
+            self.assertEqual(events, ['fsync', 'fsync', ('row', 'RetentionHold', True), ('row', 'RetentionHoldRelease', False)])
+            self.assertEqual([j.kind(e) for e in j.verified()], ['hold'])
+            for callback in after_commit: callback()
+        self.assertEqual(events, ['fsync', 'fsync', ('row', 'RetentionHold', True), ('row', 'RetentionHoldRelease', False),
+                                  'fsync', 'fsync'])
         entries = j.verified(self.fresh())  # every signature and the chain verify against an independent checkpoint
         self.assertEqual([j.kind(e) for e in entries], ['hold', 'release'])
         self.assertEqual(entries[0]['body']['hold'], retention.hold_record(hold))
@@ -122,22 +129,29 @@ class HoldJournal(HoldJournalFixture, TestCase):
         other, approved = self.approved()
         self.assertEqual(x.execute(self.admin, approved.pk, self.fresh()).outcome, 'empty_draft_deleted')
 
-    def test_a_configured_journal_that_is_missing_or_unverifiable_refuses_the_hold_and_records_nothing(self):
+    def test_a_configured_journal_that_is_missing_or_unverifiable_never_refuses_the_hold_nor_is_rewritten(self):
+        # Preservation first (L2:R2-2, L1:P4): the hold is recorded here, the failure logged; the journal is untouched.
         missing = Path(self.journal_temp.name) / 'missing.jsonl'
-        with override_settings(DISPOSITION_JOURNAL_PATH=str(missing)), self.assertRaises(ValidationError):
-            self.patient_hold()
+        with override_settings(DISPOSITION_JOURNAL_PATH=str(missing)), self.assertLogs('core.retention', 'ERROR'):
+            first = self.patient_hold()
         self.assertFalse(missing.exists())  # a hold never creates or re-initializes a journal
         record = {'id': str(uuid.uuid4()), 'scope': 'global', 'target_id': None, 'authority_sha256': 'a'*64,
                   'request_key': str(uuid.uuid4()), 'created_by': str(self.admin.pk)}
         self.write(dict(self.entry(1, p.ZERO, j.HOLD, 'hold', record), signature='0'*128))  # an entry nobody signed
-        with self.assertRaises(ValidationError): self.patient_hold()
-        self.assertFalse(m.RetentionHold.objects.exists())
+        before = self.path.read_bytes()
+        with self.assertLogs('core.retention', 'ERROR'):
+            second = retention.create_hold(self.admin, 'patient', self.other[3].pk, 'a'*64, uuid.uuid4())
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(set(m.RetentionHold.objects.values_list('pk', flat=True)), {first.pk, second.pk})
+        self.assertEqual([m.AuditEvent.objects.get(action='retention.hold_created', target=str(row.pk)).details['journaled']
+                          for row in (first, second)], [False, False])
 
     def test_a_release_is_journaled_after_its_hold_even_for_a_hold_recorded_before_the_journal(self):
         with override_settings(DISPOSITION_JOURNAL_PATH=''):
             hold = self.patient_hold()
         self.assertEqual(j.verified(), [])
-        release = retention.release_hold(self.second, hold.pk, 'b'*64)
+        with self.captureOnCommitCallbacks(execute=True):
+            release = retention.release_hold(self.second, hold.pk, 'b'*64)
         entries = j.verified()
         self.assertEqual([j.kind(e) for e in entries], ['hold', 'release'])
         self.assertEqual(entries[0]['body']['hold'], retention.hold_record(hold))
@@ -207,7 +221,7 @@ class HoldReplay(HoldJournalFixture, TestCase):
             m.RetentionHoldReplay.objects.create(record_id=orphan['id'], hold_id=orphan['hold_id'], event='release',
                 outcome='target_absent', journal_entry=forged, entry_sha256='c'*64, created_by=self.admin)
 
-    def test_an_inactive_journaled_custodian_keeps_the_hold_and_its_release_needs_an_active_second_custodian(self):
+    def test_inactive_journaled_custodians_keep_their_names_on_the_replayed_hold_and_release(self):
         def hold_then_release():
             hold = self.patient_hold(); retention.release_hold(self.second, hold.pk, 'b'*64); return hold
         hold = self.older_backup(hold_then_release)
@@ -216,10 +230,11 @@ class HoldReplay(HoldJournalFixture, TestCase):
                                               verified_at=self.base, is_staff=True)
         with self.quarantine():
             report = x.replay(replayer, self.fresh())
-        self.assertEqual((report['holds_imported'], report['releases_deferred']), (1, 1))
+        # A journaled release is a committed one (L1:P1): it is imported, never deferred into a hold nobody can end.
+        self.assertEqual((report['holds_imported'], report['releases_imported']), (1, 1))
         self.assertEqual(m.RetentionHold.objects.get().created_by_id, self.admin.pk)  # the journaled custodian, not the replayer
-        self.assertFalse(m.RetentionHoldRelease.objects.exists())
-        self.assertTrue(retention.active_holds(encounter_id=self.encounter.pk).filter(pk=hold.pk).exists())
+        self.assertEqual(m.RetentionHoldRelease.objects.get().created_by_id, self.second.pk)
+        self.assertFalse(retention.active_holds(encounter_id=self.encounter.pk).filter(pk=hold.pk).exists())
         self.assertTrue(self.restore_check()['holds']['passed'])
 
     def test_a_hold_whose_custodian_account_is_absent_is_imported_under_the_replaying_custodian(self):

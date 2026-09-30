@@ -8,9 +8,15 @@
   a passing restore check and complete replay claimed in the report, the checkpoint naming the recorded journal head,
   and every hold or release a marker says was imported or present actually here. Signatures are checked by the
   application against independently configured keys, as for tombstones (0030).
-- quillmd_hold_instruction keeps 0025's body and adds one path: a hold replayed from the journal keeps its journaled
-  custodian, whose account may be inactive in an older restored database, when its 'imported' marker (inserted first)
-  names exactly this hold. A release never takes that path; it still needs an active second custodian.
+- quillmd_hold_instruction keeps 0025's body and adds one path, for a hold or release replayed from the journal whose
+  replay marker (validated by its own guard and inserted first) names exactly that row: the row may name its journaled
+  custodian, whose account may be inactive in an older restored database, or, only when that account is absent here,
+  the custodian who replayed it. A replayed release is accepted even when the restored hold's recorder is the same
+  account, provided the two markers' signed entries name two different custodians: the journal's own two-person rule.
+  Every other hold or release keeps 0025's rules (an active custodian; a second one to release).
+- quillmd_restore_absent_hold (BEFORE INSERT on organization, department, patient and encounter rows): a hold the replay
+  recorded 'target_absent' applies the moment its target is inserted again with its id (a data-damage reconcile), with
+  its journaled release after it, both from their verbatim markers. Nothing else is inserted and nothing is removed.
 
 Reversal refuses while any replay marker or admission exists. It also refuses first, with 0031's own message, while v3
 mapping evidence exists: every rollback toward the previous release is refused at 0031, and refusing here keeps that
@@ -98,10 +104,6 @@ BEGIN
   ELSIF NEW.outcome='imported' THEN
    IF EXISTS(SELECT 1 FROM core_retentionholdrelease WHERE hold_id=NEW.hold_id)
    THEN RAISE EXCEPTION 'An imported release is recorded before its row'; END IF;
-  ELSIF NEW.outcome='deferred' THEN
-   IF NOT EXISTS(SELECT 1 FROM core_retentionhold WHERE id=NEW.hold_id)
-      OR EXISTS(SELECT 1 FROM core_retentionholdrelease WHERE hold_id=NEW.hold_id)
-   THEN RAISE EXCEPTION 'A deferred release leaves its restored hold active'; END IF;
   ELSIF NEW.outcome='target_absent' THEN
    IF NOT EXISTS(SELECT 1 FROM core_retentionholdreplay r WHERE r.record_id=NEW.hold_id AND r.event='hold' AND r.outcome='target_absent')
    THEN RAISE EXCEPTION 'Only the release of an absent target is recorded without its row'; END IF;
@@ -124,28 +126,83 @@ BEGIN
   IF NEW.organization_id IS NOT NULL THEN PERFORM id FROM core_organization WHERE id=NEW.organization_id FOR KEY SHARE; END IF;
  END IF;
  PERFORM pg_advisory_xact_lock(716849203517);
- -- A hold replayed from the independent journal keeps its journaled custodian, whose account may be inactive in an
- -- older restored database: its 'imported' marker, validated by its own guard and inserted first, names this exact
- -- hold. Only a hold (more preservation) takes this path; a release needs an active second custodian here.
+ -- A hold or release replayed from the independent journal: its replay marker, validated by its own guard and
+ -- inserted first, keeps the signed entry verbatim and names this exact row. The row names the journaled custodian,
+ -- whose account may be inactive in an older restored database, or, only when that account is absent here, the
+ -- custodian who replayed it. A hold recorded 'target_absent' takes this path once its target exists again.
  IF TG_TABLE_NAME='core_retentionhold' THEN
   imported := EXISTS(SELECT 1 FROM core_retentionholdreplay r WHERE r.record_id=NEW.id AND r.event='hold'
-   AND r.outcome='imported' AND r.journal_entry->'body'->'hold'->>'created_by'=NEW.created_by_id::text
+   AND r.outcome IN ('imported','target_absent')
+   AND (r.journal_entry->'body'->'hold'->>'created_by'=NEW.created_by_id::text
+        OR (NEW.created_by_id=r.created_by_id AND NOT EXISTS(SELECT 1 FROM core_user u
+            WHERE u.id::text=r.journal_entry->'body'->'hold'->>'created_by')))
    AND r.journal_entry->'body'->'hold'->>'authority_sha256'=NEW.authority_sha256
    AND r.journal_entry->'body'->'hold'->>'request_key'=NEW.request_key::text
    AND r.journal_entry->'body'->'hold'->>'scope'=NEW.scope
    AND (r.journal_entry->'body'->'hold'->>'target_id') IS NOT DISTINCT FROM
        COALESCE(NEW.organization_id,NEW.department_id,NEW.patient_id,NEW.encounter_id)::text);
+ ELSE
+  -- A replayed release ends preservation only as its source did: the journal's two-person rule is proved on the two
+  -- markers' signed entries, whose custodians differ even where both rows here name the replaying custodian.
+  imported := EXISTS(SELECT 1 FROM core_retentionholdreplay r WHERE r.record_id=NEW.id AND r.event='release'
+   AND r.outcome IN ('imported','target_absent') AND r.hold_id=NEW.hold_id
+   AND r.journal_entry->'body'->'release'->>'authority_sha256'=NEW.authority_sha256
+   AND (r.journal_entry->'body'->'release'->>'created_by'=NEW.created_by_id::text
+        OR (NEW.created_by_id=r.created_by_id AND NOT EXISTS(SELECT 1 FROM core_user u
+            WHERE u.id::text=r.journal_entry->'body'->'release'->>'created_by')))
+   AND EXISTS(SELECT 1 FROM core_retentionholdreplay h WHERE h.record_id=NEW.hold_id AND h.event='hold'
+       AND h.journal_entry->'body'->'hold'->>'created_by' IS DISTINCT FROM r.journal_entry->'body'->'release'->>'created_by'));
  END IF;
  IF NEW.authority_sha256 !~ '^[0-9a-f]{64}$' OR NOT (imported OR EXISTS (
   SELECT 1 FROM core_user WHERE id=NEW.created_by_id AND is_active AND is_staff AND verified_at IS NOT NULL
  )) THEN RAISE EXCEPTION 'Invalid preservation authority'; END IF;
  IF TG_TABLE_NAME='core_retentionholdrelease' THEN
   SELECT created_by_id INTO maker FROM core_retentionhold WHERE id=NEW.hold_id;
-  IF maker IS NULL OR maker=NEW.created_by_id THEN RAISE EXCEPTION 'A second custodian must release preservation'; END IF;
+  IF maker IS NULL OR (maker=NEW.created_by_id AND NOT imported)
+  THEN RAISE EXCEPTION 'A second custodian must release preservation'; END IF;
  END IF;
  RETURN NEW;
 END; $$;
 
+CREATE FUNCTION quillmd_restore_absent_hold() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE held record; ended record; target text;
+BEGIN
+ target := CASE TG_TABLE_NAME WHEN 'core_organization' THEN 'organization' WHEN 'core_department' THEN 'department'
+  WHEN 'core_patient' THEN 'patient' WHEN 'core_encounter' THEN 'encounter' END;
+ -- A replay recorded this journaled hold 'target_absent' (its target was created after the restored backup). The row
+ -- being inserted is that target again, with its id: the hold applies from now on, and its journaled release after
+ -- it, each exactly as its verbatim marker states and through the marker path of quillmd_hold_instruction.
+ FOR held IN SELECT r.record_id, r.created_by_id, r.journal_entry->'body'->'hold' AS entry FROM core_retentionholdreplay r
+   WHERE r.event='hold' AND r.outcome='target_absent' AND r.journal_entry->'body'->'hold'->>'scope'=target
+     AND r.journal_entry->'body'->'hold'->>'target_id'=NEW.id::text
+     AND NOT EXISTS(SELECT 1 FROM core_retentionhold x WHERE x.id=r.record_id)
+   ORDER BY r.created_at, r.record_id
+ LOOP
+  INSERT INTO core_retentionhold(id,created_at,scope,organization_id,department_id,patient_id,encounter_id,
+                                 authority_sha256,created_by_id,request_key)
+  VALUES(held.record_id, now(), target,
+   CASE WHEN target='organization' THEN NEW.id END, CASE WHEN target='department' THEN NEW.id END,
+   CASE WHEN target='patient' THEN NEW.id END, CASE WHEN target='encounter' THEN NEW.id END,
+   held.entry->>'authority_sha256',
+   CASE WHEN EXISTS(SELECT 1 FROM core_user u WHERE u.id::text=held.entry->>'created_by')
+        THEN (held.entry->>'created_by')::uuid ELSE held.created_by_id END,
+   (held.entry->>'request_key')::uuid);
+  FOR ended IN SELECT r.record_id, r.created_by_id, r.journal_entry->'body'->'release' AS entry
+    FROM core_retentionholdreplay r WHERE r.event='release' AND r.outcome='target_absent' AND r.hold_id=held.record_id
+  LOOP
+   INSERT INTO core_retentionholdrelease(id,created_at,hold_id,authority_sha256,created_by_id)
+   VALUES(ended.record_id, now(), held.record_id, ended.entry->>'authority_sha256',
+    CASE WHEN EXISTS(SELECT 1 FROM core_user u WHERE u.id::text=ended.entry->>'created_by')
+         THEN (ended.entry->>'created_by')::uuid ELSE ended.created_by_id END);
+  END LOOP;
+ END LOOP;
+ RETURN NEW;
+END; $$;
+
+CREATE TRIGGER organization_absent_hold BEFORE INSERT ON core_organization FOR EACH ROW EXECUTE FUNCTION quillmd_restore_absent_hold();
+CREATE TRIGGER department_absent_hold BEFORE INSERT ON core_department FOR EACH ROW EXECUTE FUNCTION quillmd_restore_absent_hold();
+CREATE TRIGGER patient_absent_hold BEFORE INSERT ON core_patient FOR EACH ROW EXECUTE FUNCTION quillmd_restore_absent_hold();
+CREATE TRIGGER encounter_absent_hold BEFORE INSERT ON core_encounter FOR EACH ROW EXECUTE FUNCTION quillmd_restore_absent_hold();
 CREATE TRIGGER retentionholdreplay_insert BEFORE INSERT ON core_retentionholdreplay FOR EACH ROW EXECUTE FUNCTION quillmd_restore_import();
 CREATE TRIGGER retentionholdreplay_append_only BEFORE UPDATE OR DELETE ON core_retentionholdreplay FOR EACH ROW EXECUTE FUNCTION quillmd_append_only();
 CREATE TRIGGER retentionholdreplay_no_truncate BEFORE TRUNCATE ON core_retentionholdreplay FOR EACH STATEMENT EXECUTE FUNCTION quillmd_preservation_no_truncate();
@@ -164,6 +221,11 @@ DROP TRIGGER retentionholdreplay_no_truncate ON core_retentionholdreplay;
 DROP TRIGGER restoreadmission_insert ON core_restoreadmission;
 DROP TRIGGER restoreadmission_append_only ON core_restoreadmission;
 DROP TRIGGER restoreadmission_no_truncate ON core_restoreadmission;
+DROP TRIGGER organization_absent_hold ON core_organization;
+DROP TRIGGER department_absent_hold ON core_department;
+DROP TRIGGER patient_absent_hold ON core_patient;
+DROP TRIGGER encounter_absent_hold ON core_encounter;
+DROP FUNCTION quillmd_restore_absent_hold();
 ''' + 'CREATE OR REPLACE FUNCTION quillmd_hold_instruction()'
     + _0025.SQL.split('CREATE FUNCTION quillmd_hold_instruction()', 1)[1].split('CREATE FUNCTION quillmd_preserve_clinical_row()', 1)[0]
     + 'DROP FUNCTION quillmd_restore_import();')

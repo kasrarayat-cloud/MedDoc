@@ -13,8 +13,8 @@ class ReleaseIntegrityContract(TestCase):
             context = cursor.fetchall()
         report = integrity_contract.assess(rows,context,len(integrity_contract.GUARDS))
         self.assertTrue(report['passed'],report)
-        self.assertEqual(report['found'],88)
-        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),22)
+        self.assertEqual(report['found'],92)
+        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),23)
 
     def test_batch_guards_and_composed_preservation_body_fail_closed_when_changed(self):
         def read():
@@ -52,7 +52,7 @@ class ReleaseIntegrityContract(TestCase):
             return integrity_contract.assess(rows, context, len(integrity_contract.GUARDS))
         self.assertTrue(assess()['passed'])
         for name in ('quillmd_execution_instruction', 'quillmd_disposition_target', 'quillmd_disposition_reference',
-                     'quillmd_restore_import', 'quillmd_hold_instruction'):
+                     'quillmd_restore_import', 'quillmd_hold_instruction', 'quillmd_restore_absent_hold'):
             with self.subTest(name=name), transaction.atomic():
                 with connection.cursor() as cursor:
                     cursor.execute(f'CREATE OR REPLACE FUNCTION {name}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$;')
@@ -75,7 +75,11 @@ class ReleaseIntegrityContract(TestCase):
                 ('replay insert disabled', 'ALTER TABLE core_retentionholdreplay DISABLE TRIGGER retentionholdreplay_insert'),
                 ('admission append-only disabled', 'ALTER TABLE core_restoreadmission DISABLE TRIGGER restoreadmission_append_only'),
                 ('admission truncate guard dropped', 'DROP TRIGGER restoreadmission_no_truncate ON core_restoreadmission'),
-                ('hold guard reverted to 0025', reverted)):
+                ('hold guard reverted to 0025', reverted),
+                ('absent-target hold disabled', 'ALTER TABLE core_encounter DISABLE TRIGGER encounter_absent_hold'),
+                ('absent-target hold dropped', 'DROP TRIGGER patient_absent_hold ON core_patient'),
+                ('absent-target hold on a department disabled', 'ALTER TABLE core_department DISABLE TRIGGER department_absent_hold'),
+                ('absent-target hold on an organization dropped', 'DROP TRIGGER organization_absent_hold ON core_organization')):
             with self.subTest(label), transaction.atomic():
                 with connection.cursor() as cursor: cursor.execute(statement)
                 self.assertFalse(assess()['passed'])

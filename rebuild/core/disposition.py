@@ -1,12 +1,13 @@
 """Bounded review proposals. Nothing in this module grants destruction authority."""
 import hashlib
 import json
+import os
 import uuid
 from pathlib import Path
 from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ValidationError, PermissionDenied
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, connection, transaction
 from django.db.models import Q
 from . import models as m, retention
 from .security import audit
@@ -188,9 +189,11 @@ def review(actor,plan_id,expected_digest,decision,evidence):
     return row
 
 _ADMITTED=set()
+_ACCOUNTED={}
 
 def quarantined():
-    """Quarantine lifts only against a RestoreAdmission record for the selected restore instance.
+    """Quarantine lifts only against a RestoreAdmission record for the selected restore instance, and only while this
+    database still accounts for everything the independent journal preserves.
 
     QUILLMD_RESTORE_QUARANTINE=1 always quarantines. With it off, a configured QUILLMD_RESTORE_INSTANCE_ID still
     quarantines until core.restore_admission has recorded that instance's admission; an unreadable id or database is
@@ -204,11 +207,40 @@ def quarantined():
 def restore_admitted(instance):
     try:key=str(uuid.UUID(str(instance)))
     except (ValueError,TypeError,AttributeError):return False
-    if key in _ADMITTED:return True
-    try:found=m.RestoreAdmission.objects.filter(instance_id=key).exists()
-    except DatabaseError:return False
-    if found:_ADMITTED.add(key)
-    return found
+    if key not in _ADMITTED:
+        try:found=m.RestoreAdmission.objects.filter(instance_id=key).exists()
+        except DatabaseError:return False
+        if not found:return False
+        _ADMITTED.add(key)
+    return journal_accounted(key)
+
+def journal_accounted(key):
+    """Admission is not a one-time latch: the journal can grow after it (another host's hold, a release, a hold whose
+    commit failed here). The admitted target serves only while every journaled hold and release is in this database
+    or recorded by a replay marker (retention.unaccounted_journal_records); otherwise it is quarantined again until the
+    replay, which runs while quarantined, imports it. A missing, unconfigured or unverifiable journal is quarantined.
+
+    Re-checked whenever the journal file changes (it is append-only; any change of identity, size or time re-reads
+    it). A hold being committed on this host is journaled first, under the preservation lock: outside a transaction
+    the check waits for that lock before it believes a hold is missing, so a concurrent request is not quarantined by
+    this host's own hold. Inside a transaction it does not wait (it could invert the global lock order) and answers
+    quarantined until the hold commits."""
+    path=getattr(settings,'DISPOSITION_JOURNAL_PATH','')
+    if not path:return False
+    try:meta=os.stat(path)
+    except OSError:return False
+    identity=(key,str(path),meta.st_dev,meta.st_ino,meta.st_size,meta.st_mtime_ns)
+    if _ACCOUNTED.get(key)==identity:return True
+    try:
+        missing=retention.unaccounted_journal_records()
+        if missing and not connection.in_atomic_block:
+            with transaction.atomic():
+                retention.lock_preservation()
+                missing=retention.unaccounted_journal_records()
+    except (ValidationError,DatabaseError):return False
+    if missing:return False
+    _ACCOUNTED[key]=identity
+    return True
 
 def require_processing():
     if quarantined():raise ValidationError('This restored target is quarantined; processing is unavailable.')

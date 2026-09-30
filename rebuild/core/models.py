@@ -148,8 +148,9 @@ class RetentionHoldReplay(Entity):
     """The imported-hold marker: one journaled hold or release replayed into a quarantined restored database.
 
     Scalar identities, like a tombstone's, because the journaled target may be absent from an older backup. The outcome
-    states what this database holds for the entry (present, imported, target_absent, or a deferred release that leaves
-    the hold active). Append-only; the signed entry is kept verbatim and never contains clinical prose.
+    states what this database holds for the entry (present, imported, or target_absent: the hold, and its release, then
+    apply if that target is inserted again). Append-only; the signed entry is kept verbatim and never contains clinical
+    prose.
     """
     record_id=models.UUIDField(unique=True)
     hold_id=models.UUIDField()

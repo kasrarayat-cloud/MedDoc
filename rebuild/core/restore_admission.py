@@ -6,6 +6,8 @@ the operator selected:
 - the complete independent journal verifies against a fresh (unexpired, trusted, exact-head) checkpoint;
 - every journaled disposition instruction has its exact tombstone here (disposition_execution.replay);
 - every journaled hold, and each release after its hold, has its replay marker and the row that marker states;
+- (after admission) quarantine lifts only while this database still accounts for every journaled hold and release
+  (disposition.restore_admitted): a journal that grows past it quarantines the target again until replay imports it;
 - no journal target is visible: no document row for one lacks its tombstone, and the application filter shows none;
 - the release-bound production restore check passes, including the journaled-hold section.
 
@@ -41,26 +43,19 @@ def selected_instance(instance_id):
 
 
 def _hold_state(record):
-    """(missing, unreplayed) for one journaled hold and its release, judged against their replay markers."""
+    """(missing, unreplayed) for one journaled hold and its release, judged by the same readers replay uses."""
     hold = record['hold']
     marker = m.RetentionHoldReplay.objects.filter(entry_sha256=p.digest(record['hold_entry'])).first()
     if marker is None: return 0, 1
     row = m.RetentionHold.objects.filter(pk=hold['id']).first()
-    if marker.outcome in ('imported', 'present'):
-        missing = row is None or {k: v for k, v in retention.hold_record(row).items() if k != 'created_by'} != {
-            k: v for k, v in hold.items() if k != 'created_by'}
-    else:
-        missing = marker.outcome != 'target_absent' or row is not None or retention._hold_target_exists(hold)
+    missing = not retention.hold_marker_consistent(marker, row, hold)
     unreplayed = 0
     if record['release'] is not None:
-        release = record['release']
         released = m.RetentionHoldReplay.objects.filter(entry_sha256=p.digest(record['release_entry'])).first()
         if released is None: unreplayed = 1
         else:
             actual = m.RetentionHoldRelease.objects.filter(hold_id=hold['id']).first()
-            exact = actual is not None and (str(actual.pk), actual.authority_sha256) == (release['id'], release['authority_sha256'])
-            missing = missing or not {'imported': exact, 'present': exact, 'deferred': actual is None or exact,
-                                      'target_absent': marker.outcome == 'target_absent'}.get(released.outcome, False)
+            missing = missing or not retention.release_marker_consistent(released, marker.outcome, actual, record['release'])
     return int(missing), unreplayed
 
 
