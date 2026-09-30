@@ -69,6 +69,12 @@ def enabled():
     return bool(getattr(settings, 'V3_FIELD_RELATIONS', False))
 
 
+def records_enabled():
+    """Whether STORED relation records are read (`read`): `settings.V3_FIELD_RELATIONS_RECORDS`, which a model-string
+    rollback leaves on (quillmd.application_profile.field_relations_records); new generations still need `enabled()`."""
+    return bool(getattr(settings, 'V3_FIELD_RELATIONS_RECORDS', enabled()))
+
+
 def require_config(config):
     if not enabled() or config.get('ordinary_field_contract') != CONTRACT:
         raise ValidationError('Ordinary field interpretation is disabled or its quote has changed.')
@@ -311,7 +317,7 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
     empty = {'ids': set(), 'warnings': [], 'valid': False, 'value': None, 'self_reference': False, 'syntax_ids': set()}
     if record is None: return empty
     units = reading['units']; refused = {**empty, 'warnings': units or [reading['source']]}
-    if not enabled() or not isinstance(record, str) or len(record) > 50000: return refused
+    if not records_enabled() or not isinstance(record, str) or len(record) > 50000: return refused
     try:
         value = signing.loads(record, salt=SALT)
         if not isinstance(value, dict) or set(value) != {'contract', 'binding', 'model', 'key', 'competitors', 'competing_output', 'selection'}:

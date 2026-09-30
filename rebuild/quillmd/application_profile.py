@@ -211,3 +211,33 @@ def stripe_live_problems(env, *, allowed_hosts, secret_key, webhook_secret, app_
     if origin:
         problems.append(f'QUILLMD_APP_BASE_URL {origin} (Checkout returns the payer there)')
     return problems
+
+
+#: The one model the ordinary field-relations contract is qualified for (core.generation.SONNET_5).
+FIELD_RELATIONS_MODEL = 'claude-sonnet-5'
+
+
+def field_relations(env):
+    """QUILLMD_V3_FIELD_RELATIONS: whether NEW ordinary-note generations may run the field-relations v2 contract.
+
+    Set, it decides exactly as before: '1' is on and any other value is off. Unset, it is on exactly when this
+    deployment sends LIVE requests to claude-sonnet-5 on anthropic, spelled exactly; the settings defaults, fixture mode,
+    claude-sonnet-4-6 (the installed release) and every other model keep it off. Whatever it says, only a claude-sonnet-5
+    configuration attaches the contract (`core.generation.configuration`), so with any other model a '1' still sends the
+    default request. Read from the same environment every other AI_* setting is read from."""
+    value = env.get('QUILLMD_V3_FIELD_RELATIONS')
+    if value is not None:
+        return value == '1'
+    return (env.get('QUILLMD_AI_MODE', 'fixture') == 'live' and env.get('QUILLMD_AI_PROVIDER', 'anthropic') == 'anthropic'
+            and env.get('QUILLMD_AI_MODEL', 'gpt-4.1-mini') == FIELD_RELATIONS_MODEL)
+
+
+def field_relations_records(env):
+    """Whether STORED field-relations drafts are still read by the page, save and finalization. Separate from
+    `field_relations`, which decides only what NEW generations send: with the variable unset, rolling the model string back
+    from claude-sonnet-5 turns new relation generations off, and must not turn the drafts they already made into held
+    answers (their signed records are validated by the same reader, floors included, either way). An explicit
+    QUILLMD_V3_FIELD_RELATIONS decides both, so any value but '1' stays the kill switch for stored records too. A
+    deployment that never ran the contract has no such record, so this reads nothing there."""
+    value = env.get('QUILLMD_V3_FIELD_RELATIONS')
+    return True if value is None else value == '1'
