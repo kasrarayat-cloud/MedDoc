@@ -110,14 +110,12 @@ def generation_refusal(version):
 def admission_refusals(version):
     """(refusal, layout_refusal) for a NEW generation request: core.jobs.enqueue only.
 
-    `refusal` is generation_refusal's answer, from one fresh inspection. `layout_refusal` is fill's OWN answer, asked only
-    when that inspection still reports `layout_pending` (documents.service keeps it only when the inspection counted a
-    tab-column candidate AND the verifier did not verify it now: not configured, unreachable, or not verified):
-    export_needs_verifier runs the real export path on the original with one non-empty answer, and refuses only if fill
-    then refuses for want of the verifier. The inspection's count is not that answer — fill's reader can withdraw what it
-    counted, and those forms export with no verifier (refutation FV:F1) — so it only decides whether to ask. A verified
-    inspection carries no `layout_pending` and is admitted as before. The stored upload note is never read here: a
-    verifier configured since is honoured and one lost since is caught.
+    `refusal` is generation_refusal's answer, from one fresh inspection. `layout_refusal` is fill's OWN answer, asked
+    whenever that inspection counted a tab-column candidate (counted_tab_column): export_needs_verifier runs the real
+    export path on the original with one non-empty answer, and refuses only if fill then refuses for want of the
+    verifier. The inspection's count is not that answer — fill's reader can withdraw what it counted, and those forms
+    export with no verifier (refutation FV:F1) — so it only decides whether to ask. The stored upload note is never read
+    here: a verifier configured since is honoured and one lost since is caught.
 
     ⚠️ THE CALLER RAISES `layout_refusal` ONLY FOR A REQUEST THAT WOULD TAKE A NEW HOLD — after its own replay answers
     (an admitted request re-posted from a stale page stays that request) and never after admission. Once admitted the
@@ -125,9 +123,25 @@ def admission_refusals(version):
     itself (word_v3.fill), so the draft can be exported when it answers again.
     """
     refusal, inspection = _source_refusal(version)
-    if refusal or not inspection.get('layout_pending'):
+    if refusal or not counted_tab_column(inspection):
         return refusal, ''
     return '', export_needs_verifier(version)
+
+
+def counted_tab_column(inspection):
+    """Whether a fresh inspection counted a tab-column candidate: when it did, admission asks fill (export_needs_verifier).
+
+    documents.service says so in one of two ways. Not verified now (no verifier, unreachable, or 'not verified'): the
+    inspection keeps `layout_pending`. VERIFIED now: the response is replaced by the verifier's own, `layout_pending` is
+    dropped and its `layout_receipt` is the only sign left.
+
+    ⚠️ A VERIFIED INSPECTION IS NOT A VERIFIED EXPORT (refutation L1:RF1:F1). The verifier verifies an export against the
+    STORED mapping and its field receipts, and refuses every export of a mapping whose tab-column question was renamed
+    ('A tab-column mapping changed; verify its complete source again.') or whose receipts name an earlier renderer
+    profile ('Missing, changed or stale source/profile receipt') — while it still verifies the inspection of the same
+    original. Read from `layout_pending` alone, both were admitted, held, sent and charged, then refused at
+    finalization. So a verified inspection asks fill too; a verifier that verifies the export admits the request."""
+    return bool(inspection.get('layout_pending')) or 'layout_receipt' in inspection
 
 
 def export_needs_verifier(version):

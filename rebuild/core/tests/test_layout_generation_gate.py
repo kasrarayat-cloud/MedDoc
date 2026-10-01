@@ -11,9 +11,12 @@ and before any provider call, and its refusal says why.
 candidates without fill's reader; fill's reader (proposal mode) withdraws a candidate whose complete question or section
 passes the mapping limit, and that form exports with NO verifier — while the verifier's own preparer refuses it, so a
 configured verifier never helps. Admission refused such forms permanently. It now asks the export path itself
-(v3_mapping.export_needs_verifier) whenever the fresh inspection still reports `layout_pending`, and refuses only when
-export refuses for want of the verifier. For the same reason the encounter page no longer explains the layout from the
-stored note (it cannot tell the two apart), and the inspection-time note keeps the base wording.
+(v3_mapping.export_needs_verifier) whenever the fresh inspection counted a tab-column candidate, and refuses only when
+export refuses for want of the verifier. That includes an inspection the verifier VERIFIED (refutation L1:RF1:F1): it
+carries the verifier's receipt instead of `layout_pending`, and the verifier can still refuse every export of the stored
+mapping (a renamed tab-column question, receipts from an earlier renderer profile). For the same reason (FV:F1) the
+encounter page no longer explains the layout from the stored note (it cannot tell the two apart), and the
+inspection-time note keeps the base wording.
 
 ⚠️ ADMISSION ONLY. The first version put this refusal inside `v3_mapping.generation_refusal`, which the worker, the batch
 before EVERY part and the batch at adoption also call. A verifier outage after a send then discarded output already paid
@@ -24,6 +27,7 @@ the true cost, and finalization asks the verifier itself. Pinned below in both d
 Synthetic only: python-docx forms with one tab-column row (the D10 shape) and ordinary text cells, and the two over-limit
 shapes of FV:F1. The provider client is patched; its call count is the evidence that nothing was sent.
 """
+import hashlib
 import io
 import json
 import uuid
@@ -672,3 +676,169 @@ class OverLimitShapesWithAnAnsweringVerifier(OverLimitShapes, V3Fixture, TestCas
             self.assertTrue(verifier.called)
         self.assertFalse(Job.objects.exists())
         self.assertFalse(Reservation.objects.exists())
+
+
+# ─── L1:RF1:F1: a verified INSPECTION is not a verified EXPORT ────────────────────────────────────────────────────────
+#: documents.service replaces an inspection the verifier verified with the verifier's own answer: `layout_pending` is
+#: gone and its `layout_receipt` is the only sign that the inspection counted a tab-column candidate. The verifier can
+#: still refuse EVERY export of the stored mapping: a tab-column question renamed on the mapping page (its preparer:
+#: 'A tab-column mapping changed; verify its complete source again.', mapping_mismatch) or field receipts from an earlier
+#: renderer profile (its receipt check: 'Missing, changed or stale source/profile receipt'). 54d1bf6c asked fill only on
+#: `layout_pending`, so these were admitted, held, sent and charged, then refused at finalization.
+RENDERER_LATER = 'sha256:' + hashlib.sha256(b'SYNTHETIC: a later renderer image').hexdigest()
+
+
+def stub_render(workspace):
+    """Stands in for documents.layout_server.render (docker + LibreOffice): the five bounded files it must produce."""
+    out = workspace / 'rendered'
+    out.mkdir(mode=0o700)
+    for name, body in (('document.pdf', b'%PDF-1.4 synthetic\n'), ('instrumented.pdf', b'%PDF-1.4 synthetic\n'),
+                       ('fonts.sha256', b'1' * 64 + b'  /usr/share/fonts/synthetic.ttf\n'),
+                       ('font-families.txt', b'Synthetic\n'), ('font-resolution.txt', b'sans-serif\tSynthetic\n')):
+        (out / name).write_bytes(body)
+    return out
+
+
+class RenderlessVerifier:
+    """The REAL documents.layout_server.qualify — the isolated preparer (worker.py layout_prepare), the renderer profile,
+    the receipts and the receipt check — with only the renderer (docker + LibreOffice) and the rendered-PDF proof replaced
+    (the proof passes and holds nothing). Its answer reaches the application as the real transport hands it over: any
+    refusal is the transport's 'not verified' (layout_unresolved); a verified answer is (response, document)."""
+
+    def __init__(self, test):
+        import tempfile
+        from pathlib import Path
+        directory = tempfile.TemporaryDirectory(prefix='quillmd-layout-evidence-')
+        test.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.calls = []
+
+    def __call__(self, raw, mapping=None, answers=None):
+        import base64
+        from documents import layout_server
+        from documents.service import DocumentError
+        real_worker = layout_server.worker
+
+        def worker(workspace, name):
+            return {'passed': True, 'held': []} if name == 'layout_pdf_worker.py' else real_worker(workspace, name)
+        request = {'source': base64.b64encode(raw).decode(), 'mapping': mapping, 'answers': answers}
+        mode = 'inspection' if mapping is None else 'export'
+        with patch.object(layout_server, 'render', stub_render), patch.object(layout_server, 'worker', worker):
+            try:
+                response = layout_server.qualify(request, self.root)
+            except Exception:
+                self.calls.append((mode, sorted(answers or {}), 'not verified'))
+                raise DocumentError(UNRESOLVED, 'layout_unresolved') from None
+        self.calls.append((mode, sorted(answers or {}), 'verified'))
+        return response, base64.b64decode(response['document'])
+
+
+@override_settings(**dict(LIVE, **ABSENT_WITNESS))
+class AVerifiedInspectionIsNotAVerifiedExport(V3Fixture, TestCase):
+    """L1:RF1:F1. D10's miniature under a verifier that VERIFIES the fresh inspection and refuses the stored mapping's
+    export. Admission must ask fill (and so the verifier, for the export) here too, and refuse before any hold."""
+
+    def setUp(self):
+        super().setUp()
+        deny = patch('socket.socket.connect', side_effect=AssertionError('Network denied')); deny.start()
+        self.addCleanup(deny.stop)
+        self.verifier = RenderlessVerifier(self)
+        verifier = patch('documents.layout_transport.verify_document', side_effect=self.verifier)
+        verifier.start(); self.addCleanup(verifier.stop)
+
+    def ready(self, variant):
+        from core.security import private_path
+        from documents import inspect_template, layout_server
+        template, version = self.uploaded(data=mixed_form(), name='SYNTHETIC verified inspection ' + variant)
+        self.assertEqual([(f['label'], bool(f.get('layout_verified'))) for f in version.fields],
+                         [('Finding', True), ('Reason for visit', False), ('Plan', False)])
+        if variant == 'renamed':
+            post = {'action': 'v3_save', 'mapping_version': version.pk}
+            for field in version.fields:
+                post['label_' + field['key']] = field['label'] + (' (knee)' if field.get('layout_candidate') else '')
+                post['kind_' + field['key']] = field['kind']
+            self.assertEqual(self.client.post(f'/templates/{template.pk}/', post).status_code, 302)
+            version = self.latest(template)
+            self.assertEqual([f['label'] for f in version.fields], ['Finding (knee)', 'Reason for visit', 'Plan'])
+        version = self.confirm(template, version)
+        if variant == 'profile':
+            later = patch.object(layout_server, 'IMAGE', RENDERER_LATER); later.start(); self.addCleanup(later.stop)
+        self.assertEqual(self.new_encounter(version, notes=NOTES).status_code, 302)
+        encounter = Encounter.objects.latest('created_at')
+        # The fresh inspection admission reads is VERIFIED: no `layout_pending`, the verifier's receipt instead.
+        fresh = inspect_template(private_path(template.original_path), engine='v3')
+        self.assertEqual((fresh.get('layout_pending'), 'layout_receipt' in fresh), (None, True))
+        return template, version, encounter
+
+    def refused_at_generate(self, variant):
+        template, version, encounter = self.ready(variant)
+        before = money(self.user)
+        self.verifier.calls.clear()
+        with patch('anthropic.Anthropic') as provider:
+            page = self.client.get(f'/encounters/{encounter.pk}/')
+            response = self.client.post(f'/encounters/{encounter.pk}/generate/',
+                                        {'revision': encounter.revision, 'usage_quote': page.context['usage_quote']},
+                                        follow=True)
+            if Job.objects.filter(encounter=encounter).exists():
+                self.fail(LayoutGenerationGate.charge_then_refuse(self, encounter, provider))
+            self.assertFalse(provider.called)
+        self.assertEqual([str(m) for m in response.context['messages']], [v3_mapping.GENERATION_LAYOUT_REFUSAL])
+        # Admission asked the verifier for the export (fill's gate fired on the probe) and it refused.
+        self.assertIn(('export', [v3_mapping.LAYOUT_PROBE_KEY], 'not verified'), self.verifier.calls)
+        self.assertFalse(Reservation.objects.exists())
+        self.assertFalse(Usage.objects.exists())
+        self.assertFalse(ProviderReceipt.objects.exists())
+        self.assertFalse(LedgerEntry.objects.filter(job__isnull=False).exists())
+        self.assertEqual(money(self.user), before)
+        self.assertEqual(v3_mapping.admission_refusals(version), ('', v3_mapping.GENERATION_LAYOUT_REFUSAL))
+        self.assertEqual(v3_mapping.generation_refusal(version), '')
+        # The refusal's words are true: one typed answer in an ordinary text field is refused at export by the verifier.
+        encounter.refresh_from_db()
+        payload = {'revision': encounter.revision}
+        for field in version.fields:
+            payload['answer_' + field['key']] = 'Typed by the clinician.' if field['label'] == 'Plan' else ''
+            payload['reviewed_' + field['key']] = 'on'
+        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/save/', payload).status_code, 302)
+        encounter.refresh_from_db()
+        final = self.client.post(f'/encounters/{encounter.pk}/finalize/', {'revision': encounter.revision, 'reviewed': 'on'},
+                                 follow=True)
+        self.assertIn(UNRESOLVED, [str(m) for m in final.context['messages']])
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.status, 'review')
+
+    def test_a_renamed_tab_column_question_is_refused_before_any_hold_or_provider_call(self):
+        self.refused_at_generate('renamed')
+
+    def test_receipts_from_an_earlier_renderer_profile_are_refused_before_any_hold_or_provider_call(self):
+        self.refused_at_generate('profile')
+
+    def test_positive_control_the_verified_mapping_is_admitted_charged_and_exported(self):
+        """The same form, mapping and renderer as uploaded: the verifier verifies the export, so admission admits it."""
+        import zipfile
+        from core.jobs import run_one
+        template, version, encounter = self.ready('control')
+        self.assertEqual(v3_mapping.export_needs_verifier(version), '')
+        self.assertIn(('export', [v3_mapping.LAYOUT_PROBE_KEY], 'verified'), self.verifier.calls)
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        with patch('anthropic.Anthropic') as provider:
+            provider.return_value.messages.create.side_effect = provider_reply
+            response = self.client.post(f'/encounters/{encounter.pk}/generate/',
+                                        {'revision': encounter.revision, 'usage_quote': page.context['usage_quote']},
+                                        follow=True)
+            self.assertEqual([str(m) for m in response.context['messages']],
+                             ['Generation queued. Refresh this page to view the result.'])
+            self.assertTrue(run_one())
+            self.assertEqual(provider.return_value.messages.create.call_count, 1)
+        job = Job.objects.get(encounter=encounter)
+        self.assertEqual((job.state, job.error), ('succeeded', ''))
+        self.assertTrue(Usage.objects.get(job=job).charged_cost > 0)
+        encounter.refresh_from_db()
+        status, messages = finalize(self, encounter)
+        self.assertEqual(status, 'finalized', messages)
+        download = self.client.get(f'/encounters/{encounter.pk}/export/')
+        self.assertEqual(download.status_code, 200)
+        xml = zipfile.ZipFile(io.BytesIO(b''.join(download.streaming_content))).read('word/document.xml')
+        written = [v['text'] for v in encounter.answers.values() if (v or {}).get('text')]
+        self.assertTrue(written)
+        for text in written:
+            self.assertIn(text.split('\n')[0].encode(), xml)
