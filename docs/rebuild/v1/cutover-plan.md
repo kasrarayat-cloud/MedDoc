@@ -289,12 +289,18 @@ none needs a retention period, schedule or duration.
    Every journaled release was committed at its source, so it is imported and the hold ends as it
    did there; a hold or release whose custodian's account is absent from the restored database is
    recorded by the administrator running the replay, and its marker keeps the signed entry.
+   Every journaled redaction (`core/redaction.py`) is re-applied in journal order with the holds and
+   releases: the restored document's content is emptied again, its code suggestions removed, its
+   tombstone imported from the signed entry, and the listed file bytes removed from the restored
+   volume when they still have the journaled digest. A release journaled after its target was put
+   back is applied too (NEW-1, 2026-10-01).
 5. **Check:** `manage.py restore_admission --instance-id <UUID> --custodian <administrator email>
    --checkpoint <checkpoint file> --expected-triggers <release count> --check-only`. It prints a
    counts-only report and exits non-zero naming any blocker: `restore_check_failed` (the release's
    production restore check, including every journaled hold being present or recorded absent),
    `tombstone_replay_incomplete`, `hold_replay_incomplete`, `release_replay_incomplete`,
-   `journal_target_visible`. The release count for this build is 92 (`len(ops.integrity_contract.GUARDS)`).
+   `redaction_replay_incomplete`, `journal_target_visible`. The release count for this build is 107
+   (`len(ops.integrity_contract.GUARDS)`: 92 plus 0033's ten redaction guards and 0034's five coding-ledger guards).
 6. **Admit:** the same command without `--check-only` writes the one append-only `RestoreAdmission`
    record for that instance (the database refuses its update, deletion or truncation, and refuses a
    report it can disprove). If the journal grew after the replay, for example a new hold, replay
