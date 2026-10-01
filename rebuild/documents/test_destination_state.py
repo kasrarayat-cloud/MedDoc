@@ -525,6 +525,28 @@ class RealFormShapes(unittest.TestCase):
             self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
 
 
+class PositiveControls(unittest.TestCase):
+    """Ordinary answers beside the new readings keep generating (refuter batteries' over-hold shapes)."""
+
+    def test_a_square_bracket_hint_inside_a_question_is_the_forms_own_hint(self):
+        for text in ('Ethnicity: White / Other [If other, please specify]', 'Have you had surgery? [If yes, give details]',
+                     'Mobility aid: [e.g. walking stick, frame]', 'Referral details: [if any]'):
+            with self.subTest(text=text):
+                fields, rep = report(lines(text))
+                self.assertTrue(generated(fields[0], rep))
+
+    def test_options_beside_a_signature_caption_are_no_part_of_it(self):
+        blob = lines('Reviewed: ☐ Yes ☐ No    Signature: ______')
+        fields, rep = report(blob)
+        reviewed = by_label(fields)['Reviewed']
+        self.assertEqual(reviewed['kind'], 'choice')
+        self.assertTrue(generated(reviewed, rep))
+
+    def test_a_sentence_before_a_caption_is_not_its_caption(self):
+        fields, rep = report(lines('Report digitally signed. Transcribed by: ________'))
+        self.assertTrue(generated(by_label(fields)['Transcribed by'], rep))
+
+
 class LegacyEngineRoles(unittest.TestCase):
     """The legacy 'roles' operation reads the label cell's printed words (paragraphs and line breaks as spaces), its
     stacked captions one by one, and the labels beside it in its table."""

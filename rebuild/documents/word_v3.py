@@ -2338,7 +2338,7 @@ class Detector:
             chunk = re.sub(r"[_\uff3f\u2017\u2500\u2501\u2015\u00af\u203e.\u2026\u00b7\x00]{2,}|\x00", " ", chunk)
             return clean_label(chunk)
         before = text[:start]
-        own = re.split(r"[_\uff3f\u2017\u2026\x00]{2,}|\x00|\.{5,}|>>|\]", before)[-1]
+        own = re.split(r"[_\uff3f\u2017\u2026\x00]{2,}|\x00|\.{5,}|>>|\]|(?<=[.!?])\s+", before)[-1]
         return words(own), words(before)
 
     def assign_destinations(self):
@@ -2429,8 +2429,11 @@ class Detector:
                 st = destination_state(content)
                 if st["state"] != STATE_ORDINARY:
                     state, caption = dict(st, basis="placeholder:" + st["basis"]), clean_label(content)
-                elif self._WORDING_NOTE.match(content) or (shape == "angle" and previous_note.get(area.slot.id) is not None
-                                                           and not text[previous_note[area.slot.id]:target["start"]].strip()):
+                elif shape == "angle" and (self._WORDING_NOTE.match(content) or (
+                        previous_note.get(area.slot.id) is not None
+                        and not text[previous_note[area.slot.id]:target["start"]].strip())):
+                    # Only an ANGLE placeholder is an author's template note ('<if POS collects genetic data>'); a square
+                    # bracket inside a question is the form's own hint to the person answering ('[If yes, give details]').
                     state = _state(STATE_UNCERTAIN, "wording_note", "signature")
                     caption = clean_label(content)
                 if shape == "angle" and (state is not None and state["basis"] == "wording_note"):
@@ -2526,7 +2529,10 @@ class Detector:
             text = self.ptext(slot.el)[0]
             if ":" not in text or len(text) > 400:
                 continue
-            marks = [m for m in re.finditer(r"(?:^|(?<=\s))([^\s:\t][^:\t]{0,40}?):", text)]
+            # A label is the words just before a colon, after the last box, object, tab or run of spaces: the
+            # printed options of a question beside it ('Reviewed: ☐ Yes ☐ No    Signature:') are never part of it.
+            marks = [m for m in re.finditer(r"(?:^|(?<=[\s\x00" + BOX + CHECKED + r"]))([^\s:\t\x00" + BOX + CHECKED +
+                                            r"](?:[^:\t\x00" + BOX + CHECKED + r" ]| (?! ))" + r"{0,40}?):", text)]
             for i, m in enumerate(marks):
                 label = clean_label(m.group(1))
                 st = destination_state(label) if label else None
