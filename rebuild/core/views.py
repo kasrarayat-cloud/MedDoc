@@ -32,6 +32,7 @@ from .context import integration_status
 from . import batch_jobs, generation_batch
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full,LATE_RECEIPT_ACTION
 from .billing import available_balance
+from .admin_authority import reenrolment_open
 from . import wm_review
 from . import v3_mapping
 from documents.mapping_limits import MAX_MAPPING_LABEL, MAX_MAPPING_INPUT_UNITS
@@ -268,7 +269,9 @@ def login_view(request):
                     device=TOTPDevice.objects.select_for_update().filter(user=user,confirmed=True).first()
                     if device:
                         if not device.verify_token(form.cleaned_data['otp']): user=None
-                    elif user.is_staff: user=None
+                    # An administrator without one signs in only to re-enrol after a DECLARED reset, on the
+                    # administration surface, inside its window (core.admin_authority.reenrolment_open).
+                    elif user.is_staff and not reenrolment_open(user): user=None
                     else: enrol=True
             if user and user.verified_at and (not settings.ADMIN_SITE or user.is_staff):
                 auth_login(request,user)
