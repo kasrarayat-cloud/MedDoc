@@ -1354,3 +1354,59 @@ class RepairLegacyUsefulness(Walk, V3Fixture, TestCase):
                 self.finalized(e)
                 self.assertEqual(e.status, 'finalized')
                 self.assertIn(value, part_text(private_path(e.export_path).read_bytes()))
+
+
+@override_settings(**V3)
+class RoleReportReuse(V3Fixture, TestCase):
+    """Integrated-candidate refutation R2-1: every v3 review save re-ran the isolated parser (5-11x slower than
+    43fcf214). A verified reading of the same, unchanged original is reused across requests of one process."""
+
+    def setUp(self):
+        super().setUp()
+        destination_roles._PROCESS_REPORTS.clear()
+
+    def counted(self):
+        import documents.service as service
+        real = service.destination_roles
+        calls = []
+
+        def counting(*args, **kwargs):
+            calls.append(args[0])
+            return real(*args, **kwargs)
+        return calls, patch.object(service, 'destination_roles', counting)
+
+    def test_a_second_request_reuses_the_reading_of_an_unchanged_original(self):
+        template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic reuse')
+        calls, counting = self.counted()
+        with counting:
+            first = destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+            second = destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))   # a new request's object
+        self.assertEqual(first, second)
+        self.assertEqual(len(calls), 1)
+
+    def test_a_changed_mapping_or_a_replaced_file_is_read_again(self):
+        import os
+        template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic reread')
+        calls, counting = self.counted()
+        with counting:
+            destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+            fields = [dict(f) for f in version.fields]
+            fields[0]['label'] = fields[0]['label'] + ' (renamed)'
+            destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk), fields)
+            path = private_path(template.original_path)
+            stat = os.stat(path)
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+            destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        self.assertEqual(len(calls), 3)
+
+    def test_an_unreadable_original_is_still_refused_after_a_cached_reading(self):
+        import os
+        template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic unreadable')
+        destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        path = private_path(template.original_path)
+        os.rename(path, str(path) + '.aside')
+        try:
+            with self.assertRaises((DocumentError, ValidationError, OSError)):
+                destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        finally:
+            os.rename(str(path) + '.aside', path)

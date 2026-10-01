@@ -10,6 +10,9 @@ Gates: manual add (the engine's locate refuses), mapping confirmation, mapping-a
 field on a role place is never asked), review save and finalization (generated or accepted text there is refused; on the
 legacy path a clinician's own typed value is allowed and exports), and the v3 fill itself.
 """
+import collections
+import threading
+
 from django.core.exceptions import ValidationError
 
 from . import v3_mapping
@@ -23,6 +26,12 @@ IDENTITY_NOT_GENERATED = 'Signature requires explicit review by the finalizing c
 GENERATION_HELD_REFUSAL = ('This form\'s mapping places an answer area on a signing, initials, consent or protected place '
                            'of the original form (or without its printed requirement): {labels}. Nothing was sent or '
                            'charged. Correct the mapping on the form\'s page and confirm it again.')
+
+
+#: Verified role readings of unchanged originals, reused across requests by this process (see report()).
+_PROCESS_REPORTS = collections.OrderedDict()
+_PROCESS_LOCK = threading.Lock()
+_PROCESS_LIMIT = 128
 
 
 def applies(version):
@@ -40,8 +49,9 @@ def report(version, fields=None):
         return None
     fields = list(version.fields if fields is None else fields)
     engine = 'v3' if v3_mapping.is_v3_version(version) else 'legacy'
+    path = private_path(version.template.original_path)
     # The original and a mapping version are immutable, so one reading serves every gate of one request (generation
-    # asks three) - kept on this in-memory version object only, keyed by the exact mapping it judged.
+    # asks three) - kept on this in-memory version object, keyed by the exact mapping it judged.
     key = hashlib.sha256(json.dumps([engine, version.template.sha256, fields], sort_keys=True, default=str).encode()).hexdigest()
     cache = getattr(version, '_destination_role_reports', None)
     if cache is None:
@@ -52,7 +62,26 @@ def report(version, fields=None):
             pass
     if key in cache:
         return copy.deepcopy(cache[key])
-    result = destination_roles(private_path(version.template.original_path), fields, engine=engine)
+    # ⚠️ AND ACROSS REQUESTS, IN THIS PROCESS (integrated-candidate refutation R2-1): every v3 review save re-ran the
+    # isolated parser under the encounter row lock, 5-11x slower than 43fcf214. The report is a pure function of the
+    # original's bytes, the mapping and the engine, so a reading of the SAME file is reused: the key adds the template,
+    # its recorded digest and the file's identity on disk (inode, size, mtime). A missing or replaced file is a miss and
+    # is read afresh (an unreadable original still refuses), and fill/finalization re-inspect the file themselves.
+    import os
+    try:
+        stat = os.stat(path)
+        process_key = (key, str(version.template.pk), stat.st_ino, stat.st_size, stat.st_mtime_ns)
+    except OSError:
+        process_key = None
+    if process_key is not None:
+        with _PROCESS_LOCK:
+            hit = _PROCESS_REPORTS.get(process_key)
+            if hit is not None:
+                _PROCESS_REPORTS.move_to_end(process_key)
+        if hit is not None:
+            cache[key] = copy.deepcopy(hit)
+            return copy.deepcopy(hit)
+    result = destination_roles(path, fields, engine=engine)
     if result.get('sha256') != version.template.sha256:
         raise ValidationError('Original integrity check failed.')
     if engine == 'v3' and result.get('contract') != v3_mapping.CONTRACT:
@@ -60,6 +89,11 @@ def report(version, fields=None):
     if engine == 'legacy' and not isinstance(result.get('legacy_roles'), dict):
         raise ValidationError('Original integrity check failed.')
     cache[key] = copy.deepcopy(result)
+    if process_key is not None:
+        with _PROCESS_LOCK:
+            _PROCESS_REPORTS[process_key] = copy.deepcopy(result)
+            while len(_PROCESS_REPORTS) > _PROCESS_LIMIT:
+                _PROCESS_REPORTS.popitem(last=False)
     return result
 
 
