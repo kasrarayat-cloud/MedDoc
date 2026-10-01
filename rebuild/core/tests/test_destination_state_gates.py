@@ -364,3 +364,90 @@ class ModelProposalTestGaps(V3Fixture, TestCase):
                                        changes=[self.relabel(field['key'], field['locator']['slot'], 'text', 0, len(label))])
                 self.assertEqual(result['review']['changes'], [])
                 self.assertEqual(next(f for f in result['fields'] if f['key'] == field['key']), field)
+
+
+@override_settings(**V3)
+class RepairOf39bdb9f0Gates(Walk, V3Fixture, TestCase):
+    """L2:R2-03 / L3:RF3-04 (refutation of 39bdb9f0): an UNCERTAIN hold - the signer's own consent choice, or the
+    clinician's own text field on an uncertain place - is narrowed out of generation natively (a write_protected copy
+    that contract v3 never asks and answers 'missing' with its reason), so it no longer refuses the whole
+    ordinary-relations generation or the area review of an assisted mapping. A PROTECTED violation still refuses both,
+    as on f5fe720f. The complete-form plan asks the STORED fields, so it still refuses any hold (handed off)."""
+
+    RELATIONS = {'ordinary_field_contract': 'ordinary-field-relations-v2'}
+
+    def held_copy(self, asked, key):
+        return next(f for f in asked if f['key'] == key)
+
+    def assert_narrowed_not_refused(self, template, version, key):
+        from core.views import v3_outline
+        asked = destination_roles.generation_fields(version)
+        held = self.held_copy(asked, key)
+        self.assertTrue(held.get('write_protected'))
+        self.assertNotIn(key, [f['key'] for f in generation.v3_generation_fields(asked)[0]])
+        answer = generation.v3_adopted([held], {}, 'Plan: Rest.', [])[key]
+        self.assertEqual((answer['status'], answer['text'], answer['reason']),
+                         ('missing', '', destination_roles.UNCERTAIN_NOT_GENERATED))
+        self.assertEqual(destination_roles.generation_refusal(version, asked, self.RELATIONS), '')
+        mapping.validate_mapping(version, version.fields, v3_outline(template))     # does not raise
+        self.assertIn(key, destination_roles.v3_held(version))                      # the stored-field plan still refuses
+
+    def test_r2_03_a_signers_consent_choice_does_not_refuse_the_relations_contract(self):
+        template, version = self.uploaded(data=lines('I agree that my samples may be kept in a biobank:  ☐ Yes   ☐ No',
+                                                     'Consent obtained?  ☐ Yes  ☐ No', 'Diagnosis: ______',
+                                                     'Plan: ______'), name='Synthetic R2-03')
+        version = self.confirm(template)
+        choice = next(f for f in version.fields if f['label'].startswith('I agree'))
+        self.assert_narrowed_not_refused(template, version, choice['key'])
+
+    def test_rf3_04_a_clinicians_text_field_on_an_uncertain_place_does_not_refuse_review_or_relations(self):
+        template, version = self.uploaded(data=lines('Signed off by consultant: ______', 'Plan: ______'),
+                                          name='Synthetic RF3-04')
+        field = self.by_label(version)['Signed off by consultant']
+        self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
+                                                        'remove_' + field['key']: 'on'})
+        self.assertEqual(self.client.post(f'/templates/{template.pk}/', {
+            'action': 'v3_add', 'mapping_version': self.latest(template).pk, 'slot': BODY + 'b/p[1]', 'kind': 'text',
+            'label': 'Signed off by consultant'}).status_code, 302)
+        version = self.confirm(template)
+        added = self.by_label(version)['Signed off by consultant']
+        self.assertIn(added['key'], destination_roles.v3_uncertain(version))
+        self.assert_narrowed_not_refused(template, version, added['key'])
+
+    def test_a_protected_violation_still_refuses_relations_and_review(self):
+        from core.views import v3_outline
+        data = lines('Please complete in block capitals.', '______________________', 'Signature of clinician',
+                     '______________________', 'Name and grade')
+        template, version = self.uploaded(data=data, name='Synthetic protected stale')
+        line = next(f for f in version.fields if f['locator']['slot'] == 'b/p[2]')
+        stored = TemplateVersion.objects.create(template=template, number=2, contract='v3', created_by=self.user,
+                                                fields=[{**f, 'kind': 'text', 'label': 'Please complete in block capitals.'}
+                                                        if f['key'] == line['key'] else f for f in version.fields])
+        asked = destination_roles.generation_fields(stored)
+        self.assertTrue(destination_roles.generation_refusal(stored, asked, self.RELATIONS))
+        with self.assertRaises(Exception) as refused:
+            mapping.validate_mapping(stored, stored.fields, v3_outline(template))
+        self.assertIn('signing, initials, consent or protected place', str(refused.exception))
+
+    def test_r1_11_a_pdf_field_named_as_a_signing_place_is_never_generated(self):
+        """L1:R1-11 (on f5fe720f too): a PDF field with no tooltip is labelled by its name; 'PatientSignature',
+        'Initials_2' and 'Signature1' read as no signing place and were generated, finalized and exported."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from core.models import Template
+        from core.tests.test_destination_roles import pdf_form
+        names = ('PatientName', 'PatientSignature', 'Initials_2', 'Signature1', 'Plan')
+        response = self.client.post('/templates/upload/', {'name': 'Synthetic R1-11 pdf', 'department': self.department.pk,
+                                    'synthetic_only': 'on', 'file': SimpleUploadedFile('form.pdf', pdf_form(
+                                        [(name, name) for name in names]))})
+        self.assertEqual(response.status_code, 302)
+        version = Template.objects.get(name='Synthetic R1-11 pdf').versions.get(number=1)
+        by = self.by_label(version)
+        e = self.generated(version, '\n'.join(f'{name}: LEAK-{n}' for n, name in enumerate(names)))
+        for name in ('PatientSignature', 'Initials_2', 'Signature1'):
+            with self.subTest(name=name):
+                answer = e.answers[by[name]['key']]
+                self.assertEqual((answer['status'], answer['text'], answer.get('reason')),
+                                 ('missing', '', destination_roles.ROLE_NOT_GENERATED))
+        for name in ('PatientName', 'Plan'):
+            with self.subTest(control=name):
+                self.assertEqual(offered(e.answers[by[name]['key']]), f'LEAK-{names.index(name)}')

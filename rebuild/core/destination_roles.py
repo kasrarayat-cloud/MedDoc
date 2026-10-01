@@ -16,6 +16,11 @@ Initials field may sit there (a text field is refused at confirmation, save, fil
 generated, shown on the review page with what needs review; generated or accepted text is refused at save and
 finalization, and a clinician's own typed value is allowed (v3: after the clinician replaces the engine's Signature or
 Initials field by a text field). The reading is versioned (ROLE_READING) and is never applied to a finalized export.
+
+ROLES-3: an uncertain hold is narrowed out of generation natively (a write_protected copy, answered 'missing' with its
+reason) and no longer refuses the ordinary-relations generation (generation_refusal) or the area review of an assisted
+mapping (v3_held with fields); a protected violation still refuses both. The complete-form plan, which asks the STORED
+fields, still refuses every hold (v3_held without fields).
 """
 import collections
 import threading
@@ -145,12 +150,18 @@ def v3_uncertain(version, fields=None):
 
 
 def v3_held(version, fields=None):
-    """{key: reason} for every field of a contract v3 mapping that is never GENERATED for its place: protected
-    (v3_protected) or uncertain (v3_uncertain). A complete-form plan and a model-assisted mapping refuse them."""
+    """{key: reason} - for the version's STORED mapping (fields=None): every field never GENERATED for its place,
+    protected (v3_protected) or uncertain (v3_uncertain); the complete-form plan, which asks the stored fields, refuses
+    them. For a mapping the clinician's area decisions produce (fields given - mapping assistance's validate_mapping):
+    the protected fields only, exactly what confirmation refuses.
+
+    ⚠️ roles-3 (L3:RF3-04): with the uncertain fields as well, the area review of an assisted mapping refused every form
+    that carries the signer's consent choice or the clinician's own text field on an uncertain place - fields
+    confirmation accepts and generation narrows out natively - so the review could never be saved."""
     result = report(version, fields)
     if not result:
         return {}
-    held = {key: UNCERTAIN_NOT_GENERATED for key in (result.get('held') or {})}
+    held = {} if fields is not None else {key: UNCERTAIN_NOT_GENERATED for key in (result.get('held') or {})}
     held.update({key: row['reason'] for key, row in (result.get('violations') or {}).items()})
     return held
 
@@ -265,9 +276,18 @@ def generation_fields(version):
 
 def generation_refusal(version, fields, config):
     """A contract whose request binds the complete catalogue (ordinary relations) cannot silently drop a field; refuse
-    before anything is sent when any field is held."""
+    before anything is sent when a field sits on a PROTECTED place (a stored text field the confirmation gate would
+    refuse today - f5fe720f's refusal, unchanged).
+
+    ⚠️ roles-3 (L2:R2-03, L3:RF3-04): an UNCERTAIN hold is not dropped silently - its write_protected copy is part of
+    the catalogue the contract sends, never asked (v3_generation_fields) and answered 'missing' with its reason
+    (v3_adopted) - so it no longer refuses the whole generation of a form that carries the signer's consent choice or
+    the clinician's own text field on an uncertain place."""
     from . import generation
-    labels = [v3_mapping.label_of(f) for f in fields if f.get('write_protected') and
+    if not any(f.get('write_protected') for f in fields):
+        return ''
+    protected = v3_protected(version) if v3_mapping.is_v3_version(version) else {}
+    labels = [v3_mapping.label_of(f) for f in fields if f.get('write_protected') and f['key'] in protected and
               not next((o for o in version.fields if o['key'] == f['key'] and o.get('write_protected')), None)]
     if labels and config.get('ordinary_field_contract') and generation.natural_v3(version.fields):
         return GENERATION_HELD_REFUSAL.format(labels=', '.join(labels[:12]))

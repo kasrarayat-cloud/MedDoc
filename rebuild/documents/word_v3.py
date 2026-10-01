@@ -2333,16 +2333,19 @@ class Detector:
     _CONNECTOR = re.compile(r"^(?:by|on|at|of|and|the|date|time)?$", re.I)
 
     def _inline_caption(self, area):
-        """(the words printed just before an inline area since the previous blank, the paragraph's words before it) -
-        placeholders, writing lines and objects removed - or None when the area is not inline in a paragraph."""
+        """(the words printed just before an inline area since the previous blank, the paragraph's words before it, the
+        same own words with their tabs kept, a caption printed in parentheses just after the area) - placeholders,
+        writing lines and objects removed - or None when the area is not inline in a paragraph."""
         target = area.target or {}
         if area.slot.kind == "p" and target.get("type") == "span" and isinstance(target.get("start"), int):
             text, start = self.ptext(area.slot.el)[0], target["start"]
+            end = target.get("end") if isinstance(target.get("end"), int) else start
         elif area.slot.kind in ("sdt", "ff") and area.slot.parent is not None and area.slot.parent.kind == "p":
             text, pieces = self.ptext(area.slot.parent.el)
-            start = next((pc.start for pc in pieces if pc.kind == "obj" and pc.node is area.slot.el), None)
-            if start is None:
+            piece = next((pc for pc in pieces if pc.kind == "obj" and pc.node is area.slot.el), None)
+            if piece is None:
                 return None
+            start, end = piece.start, piece.end
         else:
             return None
         def words(chunk):
@@ -2351,7 +2354,8 @@ class Detector:
             return clean_label(chunk)
         before = text[:start]
         own = re.split(r"[_\uff3f\u2017\u2026\x00]{2,}|\x00|\.{5,}|>>|\]|(?<=[.!?])\s+", before)[-1]
-        return words(own), words(before)
+        after = re.match(r"[_\uff3f\u2017\u2026.\s]*\(([^()\x00]{1,60})\)", text[end:])
+        return words(own), words(before), own.strip(), (words(after.group(1)) if after else "")
 
     def assign_destinations(self):
         """roles-2: the destination state of every engine area, from its label AND its structure, recorded on the area
@@ -2398,21 +2402,33 @@ class Detector:
                     state, caption = st, cap
                     covered.add((area.slot.id, start, end))
                     break
-            # (2) a table cell: its label cell read with its paragraphs as words, its table and row as structure.
+            # (2) a table cell: its label cell read with its paragraphs as words; its column header read as itself.
             cell = self.host_cell(area.slot)
             if state is None and cell is not None and target.get("type") in ("cell", "cell_replace", "cell_append") \
                     and cell.id not in boxes:
-                spaced, siblings, unit = self._cell_context(cell)
+                spaced = self._cell_context(cell)
                 base = destination_state(area.label)
-                st = destination_state(spaced, siblings=siblings, unit=unit, lines=self._cell_lines) if spaced else base
+                st = destination_state(spaced, lines=self._cell_lines) if spaced else base
                 caption_for = spaced
                 if spaced and re.sub(r"\W", "", spaced).casefold() != re.sub(r"\W", "", area.label).casefold():
                     # The label joins the row label and its column header ('Nurse — Initials', 'Troponin (initial) —
-                    # Result'): each is read as itself, with its own neighbours, and the stricter reading decides - the
-                    # engine's joined wording is no printed label ('Troponin (initial) — Result' read as one closes no
-                    # qualifier). A header the row label does not explain keeps the joined reading as well.
-                    header, header_siblings = self._header_context(cell)
-                    readings = [st, destination_state(header, siblings=header_siblings, unit=unit)] if header else [st, base]
+                    # Result'): each is read as itself and the stricter reading decides - the engine's joined wording is
+                    # no printed label ('Troponin (initial) — Result' read as one closes no qualifier). A header the
+                    # row label does not explain keeps the joined reading as well.
+                    header = clean_label(self.column_header(cell.parent, cell.info["col"], cell.info["row"]))
+                    head_state = destination_state(header) if header else base
+                    if head_state["basis"] == "bare_initial":
+                        # ⚠️ roles-3 (L2:R2-05, L3:RF3-01): a column headed 'Initial' is each row's first reading in a
+                        # lab table and each row's initials in an observations chart ('Observation | 0h | 4h |
+                        # Initial'): uncertain - never generated, the clinician may type it. f5fe720f held it from
+                        # generation (its kind was initials) and allowed a text field there.
+                        head_state = _state(STATE_UNCERTAIN, "column_initial", "initials")
+                    elif header and _agent_only(header) and re.search(r"\b(?:sign|initial)", _plain(spaced)):
+                        # a person's column over a row that signs or initials ('BP (initial)' under 'Nurse'): that
+                        # person's initials for the row (L1:R1-07; f5fe720f read the joined label, held)
+                        head_state = _state(STATE_PROTECTED, "person_column", "initials" if re.search(
+                            r"\binitial", _plain(spaced)) else "signature")
+                    readings = [st, head_state]
                     st = max(readings, key=lambda x: STATE_RANK[x["state"]])
                     if st["state"] == STATE_ORDINARY and not any(x["basis"] in ORDINARY_EVIDENCE for x in readings):
                         st = base
@@ -2436,13 +2452,28 @@ class Detector:
                         state, caption = _state(STATE_PROTECTED, "signing_box_person", "signature"), own
             # (4) the caption printed just before an inline area: its own words, or - where they are only a connector
             #     ('By:', '>', 'on') - the paragraph's words before it. A date keeps its date (PC02).
-            inline = self._inline_caption(area) if state is None and area.kind != "date" else None
+            inline = self._inline_caption(area) if state is None else None
             if inline is not None:
-                own_words, prefix = inline
+                own_words, prefix, own_line, trailing = inline
                 reading = prefix if self._CONNECTOR.match(own_words) else own_words
-                st = destination_state(reading) if reading else None
+                # Captions a tab separates before the blank: the one just before it is the blank's own ('Date<tab>
+                # Signature: ____' is the signature's line, not the date question 'Date Signature' - roles-3,
+                # L3:RF3-05; 'Signature of patient<tab>Date: ____' is the date's).
+                segments = [x for x in re.split(r"\t+", own_line) if clean_label(x)]
+                tab_caption = clean_label(segments[-1]) if len(segments) > 1 and reading == own_words else None
+                if tab_caption is not None:
+                    reading = tab_caption
+                st = destination_state(reading) if reading and (area.kind != "date" or tab_caption) else None
                 if st is not None and st["state"] != STATE_ORDINARY:
                     state, caption = dict(st, basis="caption:" + st["basis"]), clean_label(reading)
+                elif trailing:
+                    # a caption printed in parentheses after the line ('Patient: ______ (signature)', 'Witness:
+                    # ______ (sign)') names the place the line is (roles-3, L1:R1-12; generated on f5fe720f too):
+                    # uncertain - the words before the line still say whose
+                    st = destination_state(trailing)
+                    if st["state"] != STATE_ORDINARY:
+                        state = _state(STATE_UNCERTAIN, "trailing_caption:" + st["basis"], st["kind"] or "signature")
+                        caption = clean_label(area.label)
             # (5) a placeholder's own words, or an author's note about the printed wording.
             shape = target.get("shape")
             if state is None and target.get("type") == "span" and shape in ("angle", "bracket") and area.slot.kind == "p":
@@ -2566,19 +2597,10 @@ class Detector:
                 out.append((slot.id, start, end, dict(st, basis="inline_caption:" + st["basis"]), label))
         return out
 
-    def _header_context(self, cell):
-        """(the answer cell's column header, the other column headers of its header row)."""
-        table, row, col = cell.parent, cell.info["row"], cell.info["col"]
-        header = clean_label(self.column_header(table, col, row))
-        others = []
-        for c in self.grid(table).get(0, []):
-            if c.info["col"] != col and self.cell_text(c):
-                others.append(clean_label(self.cell_text(c)))
-        return header, others
-
     def _cell_context(self, cell):
-        """(the row's label cell read with its paragraphs and line breaks as spaces, the other row labels of the table,
-        whether the row or the answer's column prints a unit)."""
+        """The row's label cell read with its paragraphs and line breaks as spaces (and its own lines in
+        self._cell_lines). ⚠️ roles-3: the table's other row labels and a unit printed elsewhere in the row or column are
+        no longer read (L1:R1-03, L1:R1-04, L3:RF3-01)."""
         def spaced(c):
             return re.sub(r"\s+", " ", " ".join(self.text(p.el) for p in c.children if p.kind == "p")).strip()
         table, row, col = cell.parent, cell.info["row"], cell.info["col"]
@@ -2594,17 +2616,7 @@ class Detector:
         # answer cell, not the date question 'Signature date')
         self._cell_lines = [line for p in (label_cell.children if label_cell is not None else []) if p.kind == "p"
                             for line in re.split(r"\n", self.text(p.el)) if line.strip()]
-        siblings = []
-        for r, cells in self.grid(table).items():
-            if r == row:
-                continue
-            first = sorted(cells, key=lambda c: c.info["col"])
-            if first and self.is_label_cell(first[0]):
-                siblings.append(spaced(first[0]))
-        row_text = " ".join(self.cell_text(c) for c in self.grid(table).get(row, []) if c is not label_cell and c is not cell)
-        header = self.column_header(table, col, row)
-        unit = bool(UNIT_TOKEN.search(row_text) or UNIT_TOKEN.search(header or ""))
-        return own, siblings, unit
+        return own
 
     def qualify_sides(self):
         """A side printed in another row cell or its heading belongs to the question used for source matching.
@@ -6859,8 +6871,8 @@ def base_role(label) -> str:
 #: arm leaked a signing place ('Nurse — Initial', 'Witness sign'), every fail-closed arm over-held a clinical label
 #: ('Troponin (initial)', 'Consent form signed by patient'). The difference here is where a vocabulary miss lands:
 #:   ordinary  - generated. ONLY on positive evidence of a clinical or checklist reading (ORDINARY_EVIDENCE): an
-#:               attributive or sequence-option 'initial', a measured head or a printed unit before a qualifier
-#:               'initial', a state participle closing a signature ('... signature obtained'), a document subject of
+#:               attributive or sequence-option 'initial', a measured head or a unit printed in the label itself
+#:               before or after a qualifier 'initial', a state participle closing a signature ('... signature obtained'), a document subject of
 #:               'signed' with a person agent ('Consent form signed by patient'), a scientific 'signature'. A label the
 #:               grammar does not decide keeps f5fe720f's reading (base_role) - never a new release.
 #:   protected - a signing, initials, attestation or consent ACTION place: a person's signature/initials/sign ('Nurse
@@ -6874,14 +6886,25 @@ def base_role(label) -> str:
 #: The vocabularies below only ever ADD evidence: a PERSON miss lands in uncertain or in f5fe720f's reading, a MEASURE or
 #: DOCUMENT miss lands in uncertain or in f5fe720f's reading - never in ordinary. A model's proposal never moves a place
 #: out of protected or uncertain: every gate reads the state from the ORIGINAL's printed label and structure.
-#: Structure decides as well (Detector.assign_destinations): a sequence word beside a bare 'Initial' in the same table,
-#: a unit in the row, a caption printed under or over a writing line, a signing box, a two-paragraph label cell.
-ROLE_READING = "roles-2"
+#: Structure decides as well (Detector.assign_destinations): a caption printed under, over or after a writing line, a
+#: signing box, a two-paragraph label cell, a column header read as itself (a column headed 'Initial' is uncertain; a
+#: person's column over a row that initials is that person's place), tab-separated captions.
+#: ⚠️ roles-3 (the refutation of 39bdb9f0): a release that kept failing is dropped, and each regression vs f5fe720f is
+#: repaired by restoring f5fe720f's reading for its input class - never by another word list. Dropped: a bare 'Initial'
+#: released by the labels beside it in its table ('Day 1', '15 min', 'Follow-up', 'Repeat', and - through a reused
+#: object id - labels of OTHER tables); a unit printed elsewhere in the row or column. Narrowed: the heads a closing
+#: 'initial' measures (_MEASURED: quantities, never a care task or a drug - 'Mouth care (initial)'), the options of an
+#: option list (no checking ordinal - 'Initial / 2nd check'), a person read as the head of a phrase rather than any word
+#: in it ('Patient weight — Initial' is a measurement), a document signed by a title awaiting a name ('signed by Dr').
+#: Added holds (generated on f5fe720f too): 'Sign (patient)', 'Parent/guardian sign', 'Day nurse signed', 'Signature of
+#: patient, date', a PDF field named 'PatientSignature', a caption in parentheses after a line, tab-separated captions
+#: of a legacy tab line.
+ROLE_READING = "roles-3"
 STATE_ORDINARY, STATE_PROTECTED, STATE_UNCERTAIN = "ordinary", "protected", "uncertain"
 STATE_RANK = {STATE_ORDINARY: 0, STATE_UNCERTAIN: 1, STATE_PROTECTED: 2}
 #: The bases that establish an ordinary reading on evidence; every other ordinary basis is f5fe720f's reading (and on
 #: contract v3 leaves the kind rule's kind unchanged: a fallback never turns a signing kind into an answer).
-ORDINARY_EVIDENCE = frozenset({"sequence_option", "attributive", "sequence_sibling", "measure_unit", "measure_head",
+ORDINARY_EVIDENCE = frozenset({"sequence_option", "attributive", "measure_unit", "measure_head",
                                "signature_state", "scientific_signature", "signed_document", "document_signed_by",
                                "document_signed", "count_question", "time_question", "initialled_state"})
 SIGNING_TOKEN = re.compile(r"sign|initial|consent|agree|assent|authori[sz]|allow|permi", re.I)
@@ -6897,8 +6920,9 @@ CONSENT_DECLARATION = re.compile(r"^(?:i|we)\s+(?:(?:hereby|do|also|fully|freely
                                  r"(?:allow|permit)\s+(?:us|them|the\s+\w+(?:\s+\w+)?)\s+to)\b", re.I)
 _DW = r"[^\W\d_]"
 _PERSON = (r"(?:patient|pt|witness|nurse|staff\s+nurse|charge\s+nurse|nurse\s+in\s+charge|rn|rgn|rmn|en|hca|hcsw|"
-           r"nursing|staff|doctor|dr|consultant|registrar|spr|sho|fy1|fy2|f1|f2|ct1|ct2|st\d|resident|intern|attending|"
-           r"fellow|physician|surgeon|anaesthetist|anesthetist|anaesthesiologist|anesthesiologist|midwife|sister|"
+           r"nursing|staff|doctor|doc|docs|dr|consultant|registrar|spr|sho|fy1|fy2|f1|f2|ct1|ct2|st\d|resident|intern|attending|"
+           r"fellow|physician|surgeon|anaesthetist|anesthetist|anaes|anaesth|anaesthesiologist|anesthesiologist|midwife|"
+           r"sister|"
            r"matron|clinician|practitioner|gp|pharmacist|technician|radiographer|sonographer|physiotherapist|physio|"
            r"therapist|ot|slt|dietitian|dietician|psychologist|psychiatrist|paramedic|odp|scrub|runner|porter|"
            r"assistant|student|trainee|supervisor|manager|lead|co-?ordinator|officer|worker|assessor|examiner|reviewer|"
@@ -6918,18 +6942,17 @@ _TEMPORAL = r"(?:time|date|day|when)"
 _STATE = (r"(?:obtained|received|present|absent|checked|verified|confirmed|completed|documented|recorded|seen|"
           r"attached|scanned|provided|given|available|missing|done|collected|filed|on\s+file|in\s+(?:the\s+)?notes|"
           r"in\s+place|on\s+record)")
-_SEQUENCE = (r"(?:repeat(?:ed)?|follow[- ]?up|f/u|subsequent|ongoing|final|peak|current|latest|last|previous|prior|"
-             r"baseline|second|2nd|third|3rd|later|continuing|maintenance|interim|review|new|end|discharge|"
+#: The other options of an option list that make 'initial' one of a measurement's or a visit's readings ('Initial /
+#: repeat', 'Visit type (initial/follow-up)', 'Troponin (0h / initial)'). ⚠️ roles-3 (L1:R1-02): 'second', '2nd', 'final',
+#: 'last', 'review', 'new', 'current', 'previous', 'discharge' are NOT here - a checking record prints 'Initial / 2nd check',
+#: 'Initial / final', 'Review / initial' as two people's initials, and f5fe720f held them.
+_SEQUENCE = (r"(?:repeat(?:ed)?|follow[- ]?up|f/u|subsequent|ongoing|baseline|maintenance|interim|continuing|"
              r"\d+\s*(?:h|hr|hrs|hours?|mins?|minutes?|days?|weeks?)|day\s*\d+|week\s*\d+)")
-#: A sibling row or column that makes a bare 'Initial' a measurement's first reading: a repeat or a timed reading only.
-#: 'Second', 'Final', 'Review', 'New' are deliberately absent - an approvals or checking table prints 'Initial' and
-#: 'Second' (or 'Final') as two people's initials.
-_SEQUENCE_SIBLING = (r"(?:repeat(?:ed)?|follow[- ]?up|peak|subsequent|baseline|\d+\s*(?:h|hr|hrs|hours?|mins?|minutes?|days?|"
-                     r"weeks?)|day\s*\d+|week\s*\d+)")
 _SEQUENCE_ADJ = (r"(?:ongoing|subsequent|continuing|follow[- ]?up|final|later|maintenance|repeat(?:ed)?|current|"
                  r"long[- ]term)")
-#: The heads of a measured or recorded clinical value ('Troponin (initial)'): evidence only. Ambiguous one- and two-
-#: letter abbreviations (K, Na, Ca, Mg, HR, RR, CT, PT - 'Pt' is a patient) are deliberately absent.
+#: Clinical nouns an attributive 'initial' qualifies ('Initial assessment', 'Initial and ongoing management'): evidence
+#: only, and only for 'initial' BEFORE them - where f5fe720f generated the label anyway unless an 'and' or 'or' followed.
+#: Ambiguous one- and two-letter abbreviations (K, Na, Ca, Mg, HR, RR, CT, PT - 'Pt' is a patient) are deliberately absent.
 _MEASURE = (r"(?:troponin|trop|hs-?trop|hs-?troponin|lactate|lac|dose|doses|dosage|rate|weight|wt|height|bmi|bp|"
             r"blood\s+pressure|pulse|heart\s+rate|resp(?:iratory)?\s+rate|temperature|temp|spo2|sats|saturations?|o2|"
             r"oxygen|fio2|gcs|news2?|pews|score|pain|glucose|cbg|ketones|hb|haemoglobin|hemoglobin|wcc|wbc|neutrophils|"
@@ -6939,10 +6962,24 @@ _MEASURE = (r"(?:troponin|trop|hs-?trop|hs-?troponin|lactate|lac|dose|doses|dosa
             r"cholesterol|ldl|hdl|triglycerides|urate|ecg|qtc|qrs|lvef|peak\s+flow|pefr|fev1|fvc|volume|output|intake|"
             r"fluids?|bolus|infusion|insulin|heparin|antibiotics?|drug|medication|regimen|treatment|therapy|management|"
             r"assessment|presentation|diagnosis|impression|observations|obs|examination|exam|history|complaint|"
-            r"symptoms?|findings?|imaging|x-?ray|mri|scan|ultrasound|echo|visit|appointment|consultation|attendance|"
+            r"symptoms?|findings?|imaging|x-?ray|mri|scan|ultrasound|echo|visits?|appointments?|consultation|attendance|"
             r"encounter|episode|stage|grade|size|diameter|length|measurement|reading|value|result|level|count|"
             r"concentration|titre|culture|sample|specimen|test|investigations?|results?|bloods|lfts?|u\s*&\s*es?|fbc|"
-            r"abg|vbg|cxr|plans?|care|triage|response|rhythm|work-?up|contact|referral|resuscitation|analgesia)")
+            r"abg|vbg|cxr|plans?|care|triage|response|rhythm|work-?up|contact|referral|resuscitation|analgesia|"
+            r"review|pressure)")
+#: ⚠️ roles-3 (L1:R1-01): the heads a CLOSING 'initial' qualifies as a measurement's first reading ('Troponin (initial)',
+#: 'Dose (initial)', 'Weight — Initial'): a closed set of measured QUANTITIES - analytes, vital signs, scores, a dose, a
+#: rate. Never a task somebody performs and initials ('Mouth care (initial)', 'Insulin (initial)', 'Obs (initial)',
+#: 'Swab count (initial)', 'Care plan (initial)' - a nursing or drug chart's initials column, held by f5fe720f). A head
+#: outside this set keeps 'initial' uncertain; its vocabulary misses land there, never in ordinary.
+_MEASURED = (r"(?:troponin|trop|hs-?trop|hs-?troponin|lactate|lac|dose|doses|dosage|rate|weight|wt|height|bmi|bp|"
+             r"blood\s+pressure|pressure|pulse|heart\s+rate|resp(?:iratory)?\s+rate|temperature|temp|spo2|sats|"
+             r"saturations?|fio2|gcs|news2?|pews|score|glucose|cbg|ketones|hb|haemoglobin|hemoglobin|wcc|wbc|"
+             r"neutrophils|crp|pct|procalcitonin|esr|creatinine|egfr|urea|sodium|potassium|chloride|bicarbonate|hco3|"
+             r"pco2|po2|base\s+excess|inr|aptt|aptr|fibrinogen|d-?dimer|platelets|plt|ck|cpk|ast|alt|alp|ggt|bilirubin|"
+             r"bili|albumin|protein|amylase|lipase|magnesium|calcium|phosphate|ferritin|tsh|t4|bnp|nt-?pro-?bnp|hba1c|"
+             r"cholesterol|ldl|hdl|triglycerides|urate|qtc|qrs|lvef|peak\s+flow|pefr|fev1|fvc|volume|stage|grade|size|"
+             r"diameter|length|measurement|reading|value|result|level|concentration|titre)")
 _SCIENCE = (r"(?:gene|genes|genetic|genomic|expression|molecular|mutational|mutation|transcriptional|transcriptomic|"
             r"proteomic|metabolomic|metabolic|immune|inflammatory|epigenetic|methylation|radiomic|spectral|isotopic|"
             r"viral|bacterial|microbial|tumou?r|prognostic|predictive|rna|dna|mrna|mirna|cytokine|interferon)")
@@ -6964,12 +7001,14 @@ def _state(state, basis, kind=""):
 
 
 def _person(text) -> bool:
-    """Whether the words name a person: an optional article, an optional qualifier word, a person noun (possessive or
-    plural), an optional number ('Nurse 2', 'Checker 1'). A temporal first word ('Time patient ...') is no person."""
+    """Whether the words name a person: an optional article, an optional qualifier word (and a number: 'Day 1 nurse'), a
+    person noun (possessive or plural), an optional number ('Nurse 2', 'Checker 1'). A time or date word first ('Time
+    patient ...', 'Date patient ...') is no person - 'Day' is (roles-3, L1:R1-05: 'Day nurse signed' is the day nurse's
+    signing place, and it had read as the time question 'Day ... signed')."""
     text = _plain(text).strip(" ,;:/-–—().")      # an abbreviation's period ('Dr. sign') is no part of the noun
-    if re.match(_TEMPORAL + r"\b", text):
+    if re.match(r"(?:time|date|when)\b", text):
         return False
-    return re.fullmatch(r"(?:(?:the|a|an|each|every|both|all)\s+)?(?:" + _DW + r"[\w'-]*\s+)?" + _PERSON +
+    return re.fullmatch(r"(?:(?:the|a|an|each|every|both|all)\s+)?(?:" + _DW + r"[\w'-]*\s+(?:\d+\s+)?)?" + _PERSON +
                         r"(?:\s*\(?\d+\)?|\s+x\s*\d)?", text) is not None
 
 
@@ -6984,8 +7023,42 @@ def _agent_only(text) -> bool:
     return bool(text) and all(p and _person(re.sub(r"^(?:both|either)\s+", "", p)) for p in parts)
 
 
-def _initial_state(t, siblings, unit):
-    """The strictest state a singular 'initial' gives the label (None when there is none)."""
+def _signer_named(post) -> bool:
+    """Whether the words after an imperative 'sign' (or 'sign-off') name its signer: a person in parentheses, after a
+    dash or colon, or after 'by', 'for' or 'on behalf of' ('(patient)', '- witness', 'by consultant', 'for patient')."""
+    who = re.sub(r"^[\s(\[:\-–—,]*(?:(?:by|for|on\s+behalf\s+of)\s+)?", "", _plain(post))
+    who = who.strip(" )]:.?")
+    return bool(who) and _agent_only(who)
+
+
+#: A title awaiting the signer's name ('signed by Dr ______'): the place is the signer's identity, never a role noun.
+_TITLE_WORD = r"(?:dr|mr|mrs|ms|miss|mx|prof|professor|sir|dame|rev)"
+#: Where an imperative 'initial' + what one initials points ('Initial changes here', 'Initial pages overleaf').
+_EDIT_PLACE = r"(?:here|there|below|above|beside|overleaf|opposite|made|each|every|all|both|this|these|those)"
+
+
+def _head_person(head) -> bool:
+    """Whether a head phrase NAMES a person rather than mentioning one (roles-3, L2:R2-02): its words are persons only
+    ('Nurse', 'Charge nurse', 'Parent/guardian'), its last word is a person ('Checked by nurse'), or a parenthetical in
+    it is ('Given (nurse)'). 'Patient weight', 'PT/INR', 'Donor Hb' and 'Pt lactate' name a measurement."""
+    head = _plain(head).strip(" ,;:/-–—.")
+    if not head:
+        return False
+    bare = re.sub(r"\([^)]*\)", " ", head).strip()
+    words = re.split(r"[\s/]+", bare)
+    return (_agent_only(bare) or bool(words and _person(words[-1]))
+            or any(_agent_only(x) for x in re.findall(r"\(([^)]*)\)", head)))
+
+
+def _initial_state(t):
+    """The strictest state a singular 'initial' gives the label (None when there is none).
+
+    ⚠️ roles-3: f5fe720f's reading for every input class the refutation of 39bdb9f0 showed a release cannot carry -
+    a bare 'Initial' is the initials place whatever its table or neighbours print (L1:R1-03, L3:RF3-01..03: 'Follow-up',
+    'Day 1', '15 min', 'Repeat' beside it, and labels from OTHER tables through a reused object id); a unit printed
+    elsewhere in the row or column is no evidence (L1:R1-04: 'Morphine 5 mg IV | Second check (initial)'); a closing
+    'initial' after a head that is no measured quantity is uncertain (L1:R1-01: 'Mouth care (initial)', 'Insulin:
+    initial', 'Mouth care — initial' - the dash release f5fe720f's legacy reading gave, which its v3 reading did not)."""
     found = None
     for m in re.finditer(r"\binitial\b", t):
         before, after = t[:m.start()], t[m.end():]
@@ -6998,18 +7071,22 @@ def _initial_state(t, siblings, unit):
         elif re.match(r"\s*(?:/|\bor\b|\bvs\.?|\bversus\b|\bthen\b)\s*" + _SEQUENCE + r"\b", after) or \
                 re.search(_SEQUENCE + r"\s*(?:/|\bor\b|\bvs\.?)\s*$", before):
             st = _state(STATE_ORDINARY, "sequence_option")
-        elif re.match(r"\s+(?:and|&|/|or)\s+" + _SEQUENCE_ADJ + r"\s+" + _DW, after):
+        elif re.match(r"\s+(?:and|&|/|or)\s+" + _SEQUENCE_ADJ + r"\s+" + _DW, after) and \
+                any(re.fullmatch(_MEASURE, x.strip(".-,;:()")) for x in after.split()[2:5]):
+            # 'Initial and ongoing management', 'Initial & repeat troponin': a clinical noun the two adjectives share
+            # ('Initial and final check' names two people's checks: f5fe720f's reading)
             st = _state(STATE_ORDINARY, "attributive")
         elif word and not re.fullmatch(r"box|and|or|" + _ACT, word.group(1)):
             # 'initial' before a word: an attributive adjective ('Initial assessment') only on evidence - a measured or
-            # recorded clinical head within the next three words. The imperative 'initial' + what one initials
-            # ('Initial changes', 'Initial page') is the place; 'initial' + a person ('Initial nurse') is uncertain; a
-            # preposition ('Initial on admission') or an unknown word keeps f5fe720f's reading.
+            # recorded clinical head within the next three words. The imperative 'initial' + what one initials, closing
+            # the label ('Initial changes', 'Initial page') is the place; 'initial' + persons only ('Initial nurse') is
+            # uncertain; a preposition ('Initial on admission') or an unknown word keeps f5fe720f's reading.
             phrase = re.split(r"[),;:/]", re.sub(r"\([^)]*\)", " ", after))[0].split()[:3]
             first = word.group(1)
-            if re.fullmatch(_EDIT_OBJECT, first):
+            rest = re.split(r"[),;:]", re.sub(r"\([^)]*\)", " ", after))[0].strip()
+            if re.fullmatch(_EDIT_OBJECT, first) and (len(phrase) == 1 or re.fullmatch(_EDIT_PLACE, phrase[1])):
                 st = _state(STATE_PROTECTED, "initial_action", "initials")
-            elif any(_person(x) for x in phrase[:2]):
+            elif _agent_only(rest):
                 st = _state(STATE_UNCERTAIN, "initial_person", "initials")
             elif re.fullmatch(_PREPOSITION, first):
                 base = base_role(t)
@@ -7020,27 +7097,26 @@ def _initial_state(t, siblings, unit):
             else:
                 base = base_role(t)
                 st = _state(STATE_PROTECTED, "base", base) if base else _state(STATE_ORDINARY, "attributive_unverified")
-        elif re.fullmatch(r"\s*(?:\(\s*[^)]*\)\s*)?[\W_]*", after):
+        elif re.fullmatch(r"\s*\)?\s*(?:\(\s*[^)]*\)\s*)?[\W_]*", after):
             head = re.sub(r"[\s(\[–—\-:,]+$", "", before).strip()
-            last = re.split(r"[\s(]+", head)[-1] if head else ""
-            unit_here = unit or UNIT_TOKEN.search(after) is not None or \
+            last = re.split(r"[\s(/]+", head)[-1] if head else ""
+            qualifier = re.match(r"\s*\(([^)]*)\)", after)
+            own_unit = UNIT_TOKEN.search(after) is not None or \
                 re.search(r"\([^)]*" + _UNIT + r"[^)]*\)", before) is not None
-            if not head:
-                if any(re.fullmatch(_SEQUENCE_SIBLING + r"[\W_]*", _plain(s)) for s in siblings or ()):
-                    st = _state(STATE_ORDINARY, "sequence_sibling")
-                else:
-                    st = _state(STATE_PROTECTED, "bare_initial", "initials")
-            elif _has_person(head):
+            if not head and not (qualifier is not None and _agent_only(qualifier.group(1))):
+                # a bare 'Initial', 'Initial:': the initials place
+                st = _state(STATE_PROTECTED, "bare_initial", "initials")
+            elif not head or _head_person(head) or (qualifier is not None and _agent_only(qualifier.group(1))):
+                # a person's initials: 'Nurse (initial)', 'Initial (witness)', 'Charge nurse — Initial
                 st = _state(STATE_PROTECTED, "person_initial", "initials")
             elif re.search(r"\bby$", head):
                 # an agent phrase closing on 'by' ('Checked by — Initial', 'Given by - initial'): the agent's initials
                 st = _state(STATE_PROTECTED, "agent_initial", "initials")
-            elif unit_here:
+            elif own_unit:
+                # a unit printed in the label itself ('Troponin — Initial (ng/L)', 'Fibre initial (mg)')
                 st = _state(STATE_ORDINARY, "measure_unit")
-            elif re.fullmatch(_MEASURE, last) or re.fullmatch(_MEASURE, head):
+            elif re.fullmatch(_MEASURED, last) or re.fullmatch(_MEASURED, head):
                 st = _state(STATE_ORDINARY, "measure_head")
-            elif DASH_QUALIFIER_INITIAL.search(t):
-                st = _state(STATE_ORDINARY, "dash_qualifier")          # f5fe720f released it; kept, not widened
             else:
                 st = _state(STATE_UNCERTAIN, "unknown_head_initial", "initials")
         else:
@@ -7053,13 +7129,20 @@ def _initial_state(t, siblings, unit):
 
 def destination_state(label, *, siblings=(), unit=False, lines=()) -> dict:
     """{'state': ordinary|protected|uncertain, 'basis', 'kind' (signature|initials for a held place), 'reading'} for a
-    PRINTED label (see the section comment). `siblings`: the printed labels beside it in the same table or block
-    (structure); `unit`: whether its row or column prints a unit; `lines`: the label cell's own paragraphs and line
-    breaks (and the captions a tab separates on one line), when it has several - two captions stacked in one label
-    cell ('Signature' over 'Date', or 'Signature of patient<tab>Date') and one caption wrapped onto two lines ('Date of'
-    over 'signature') print the same words, so a line that alone holds the place while the whole reads ordinary leaves
-    it UNCERTAIN (residual L1:F1, legacy half). The same holds for the captions a run of writing blanks separates in
-    one printed label ('Sign: ______ Date: ______' read as words is the date question 'Sign Date').
+    PRINTED label (see the section comment). `lines`: the label cell's own paragraphs and line breaks (and the captions
+    a tab separates on one line), when it has several - two captions stacked in one label cell ('Signature' over
+    'Date', or 'Signature of patient<tab>Date') and one caption wrapped onto two lines ('Date of' over 'signature')
+    print the same words, so a line that alone holds the place while the whole reads ordinary WITHOUT evidence leaves it
+    UNCERTAIN (residual L1:F1, legacy half). The same holds for the captions a run of writing blanks, or of three or
+    more spaces, separates in one printed label ('Sign: ______ Date: ______' read as words is the date question 'Sign
+    Date'). A whole that reads ordinary ON EVIDENCE is one caption wrapped ('Initial' over 'assessment', 'Consent form'
+    over 'signed?' - roles-3, L2:R2-06: f5fe720f generated both).
+
+    ⚠️ `siblings` and `unit` are accepted and NOT read (roles-3). The labels beside a bare 'Initial' in its table and a
+    unit printed elsewhere in its row or column were release evidence on roles-2; the refutation of 39bdb9f0 released
+    initials columns through both ('Day 1 | __ | Initial | __', 'Morphine 5 mg IV | Second check (initial)') and
+    through labels of OTHER tables read by a reused object id (L1:R1-03, L1:R1-04, L3:RF3-01..03). f5fe720f read
+    neither, and neither is read now.
 
     A placeholder's or an author's note's own brackets ('[Sign]', '<Signature, date>', '{Sign here}'): a label printed
     wholly inside them is read as its own words, and a bracketed part of a longer label ('Consent confirmed [Sign and
@@ -7069,12 +7152,12 @@ def destination_state(label, *, siblings=(), unit=False, lines=()) -> dict:
     enclosed = _ENCLOSED.fullmatch(text)
     if enclosed:
         text = next(g for g in enclosed.groups() if g is not None)
-    whole = _destination_state(text, siblings=siblings, unit=unit)
+    whole = _destination_state(text)
     if whole["state"] != STATE_ORDINARY:
         return whole
     captions = [part for x in ([x for x in lines if _plain(x)] or [text]) for part in _CAPTION_GAP.split(x)
                 if _plain(part)]
-    if len(captions) > 1:
+    if len(captions) > 1 and whole["basis"] not in ORDINARY_EVIDENCE:
         held = [st for x in captions if (st := _destination_state(x))["state"] != STATE_ORDINARY]
         if held:
             return _state(STATE_UNCERTAIN, "stacked_caption", held[0]["kind"] or "signature")
@@ -7090,10 +7173,17 @@ def destination_state(label, *, siblings=(), unit=False, lines=()) -> dict:
 #: writing blanks that separate two captions printed in one label.
 _BRACKETED = re.compile(r"\[([^\[\]]*)\]|<([^<>]*)>|\{([^{}]*)\}")
 _ENCLOSED = re.compile(r"\s*(?:\[([^\[\]]*)\]|<([^<>]*)>|\{([^{}]*)\})[\s:：.]*")
-_CAPTION_GAP = re.compile(r"\t+|_{3,}|\.{5,}|…{2,}")
+_CAPTION_GAP = re.compile(r"\t+|_{3,}|\.{5,}|…{2,}| {3,}")
+#: ⚠️ roles-3 (L1:R1-10): a signing place and its date printed as ONE caption with a separator between them
+#: ('Signature of patient, date', 'Signature of witness – Date', 'Patient signature (date)', 'Sign below and date',
+#: 'Initial(s) / date'): the date question arm read them before the place, generated on both engines (f5fe720f too).
+#: The head before the separator is read alone; a head that holds the place makes the whole that place. A date the
+#: head does not sign ('Date of signature', 'Signature date', 'Consent form signed, date') stays a date question.
+_SIGNING_AND_DATE = re.compile(r"^(?P<head>.+?)\s*(?:,|;|/|\(|–|—|\s-\s|&|\+|\band\b|\bwith\b)\s*(?:and\s+)?"
+                               r"(?:the\s+)?(?:dated?|date\s+signed|date\s*(?:/|&|and|,)\s*time)\s*\)?[\s:.?]*$")
 
 
-def _destination_state(label, *, siblings=(), unit=False) -> dict:
+def _destination_state(label) -> dict:
     t = _plain(label)
     if not t or not SIGNING_TOKEN.search(t):
         return _state(STATE_ORDINARY, "no_signing_word")
@@ -7117,6 +7207,11 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
     if re.search(r"^(?:(?:the\s+)?" + _PERSON + r"\s+)?(?:date\s+and\s+)?initials\s+(?:and|&|/|\+|,)\s*dated?\b"
                  r"(?!\s+of\s+birth)", t) or re.search(r"\bdated?\s+(?:and|&|/|\+|,)\s*initials\s+of\b", t):
         return _state(STATE_PROTECTED, "signing_and_date", "initials")
+    pair = _SIGNING_AND_DATE.match(t)
+    if pair and SIGNING_TOKEN.search(pair.group("head")):
+        head = _destination_state(pair.group("head"))
+        if head["state"] != STATE_ORDINARY:
+            return _state(head["state"], "signing_and_date", head["kind"] or "signature")
     # 2. A date question that mentions signing ('Date signed', 'Date of signature'): f5fe720f's reading.
     if DATE_LABEL.search(t):
         return _state(STATE_ORDINARY, "date_question")
@@ -7152,7 +7247,8 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
         pre, post = t[:m.start()].strip(), t[m.end():].strip()
         closing = not post or _EMPTY.fullmatch(post) is not None or re.fullmatch(_CLOSE, " " + post) is not None
         st = None
-        if re.match(_TEMPORAL + r"\b", pre) and not re.search(r"\bby\s*$", post):
+        if re.match(_TEMPORAL + r"\b", pre) and not re.search(r"\bby\s*$", post) and \
+                not (_person(pre) or _agent_only(pre)):
             st = _state(STATE_ORDINARY, "time_question")
         elif not pre or pre == "please":
             if closing:
@@ -7178,7 +7274,10 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
             st = _state(STATE_PROTECTED, "person_signed", "signature")
         elif re.match(r"by\b", post):
             agent = post[2:].strip()
-            if agent and _agent_only(agent) and re.search(r"\b" + _DOCUMENT + r"\b", pre) and not _has_person(pre):
+            if agent and _agent_only(agent) and re.search(r"\b" + _DOCUMENT + r"\b", pre) and not _has_person(pre) \
+                    and not re.search(r"\b" + _TITLE_WORD + r"\b", agent):
+                # 'Consent form signed by patient' (a checklist state); never 'signed by Dr ______' - the title awaits
+                # the signer's name (roles-3, L1:R1-06: f5fe720f held it)
                 st = _state(STATE_ORDINARY, "document_signed_by")
         elif closing and re.search(r"\b(?:" + _DOCUMENT + r"|" + _TEMPORAL + r")$", pre) and not _person(pre):
             st = _state(STATE_ORDINARY, "document_signed")
@@ -7187,12 +7286,12 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
             st = _state(STATE_PROTECTED, "base", base) if base else _state(STATE_ORDINARY, "base")
         states.append(st)
     # 7. 'sign': the imperative or a person's place; the clinical noun ('Babinski sign', 'Sign of infection') is not.
-    for m in re.finditer(r"\bsigns?\b(?!-)|\bsign[- ]off\b|\bsigning\b", t):
+    for m in re.finditer(r"\bsign[- ]off\b|\bsigns?\b(?!-)|\bsigning\b", t):
         word = m.group(0)
         pre, post = t[:m.start()].strip(), t[m.end():].strip()
         st = None
         if re.fullmatch(r"sign[- ]off", word):
-            if _person(pre) or re.match(r"by\s+" + _PERSON, post):
+            if _person(pre) or _agent_only(pre) or re.match(r"by\s+" + _PERSON, post) or (not pre and _signer_named(post)):
                 st = _state(STATE_PROTECTED, "person_sign_off", "signature")
             elif pre and re.fullmatch(r"[\w'-]+(?:\s+[\w'-]+)?", pre) and _EMPTY.fullmatch(post):
                 # '<someone> sign-off' with a head the vocabulary does not know: the role cannot be established.
@@ -7201,7 +7300,7 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
             if re.match(_ACT + r"\b", post):
                 st = _state(STATE_PROTECTED, "sign_action", "signature")
         elif word == "signs":
-            if _person(pre) and (not post or _EMPTY.fullmatch(post) or re.match(_ACT + r"\b", post)):
+            if (_person(pre) or _agent_only(pre)) and (not post or _EMPTY.fullmatch(post) or re.match(_ACT + r"\b", post)):
                 st = _state(STATE_PROTECTED, "person_signs", "signature")
         else:
             person_to = re.search(r"\b(?:to|should|must|shall|will|may|can|is\s+to|are\s+to)$", pre) is not None and \
@@ -7221,7 +7320,12 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
             elif imperative and re.match(r"to\s+(?:confirm|agree|acknowledge|consent|say|indicate|show|accept|"
                                          r"declare)\b", post):
                 st = _state(STATE_PROTECTED, "sign_action", "signature")
-            elif _person(pre) and (not post or _EMPTY.fullmatch(post) or re.match(_ACT + r"\b", post)):
+            elif not pre and _signer_named(post):
+                # 'Sign (patient)', 'Sign - witness', 'Sign: patient', 'Sign by consultant', 'Sign for patient': the
+                # named signer's place (roles-3, L1:R1-08; generated on f5fe720f too)
+                st = _state(STATE_PROTECTED, "sign_person", "signature")
+            elif (_person(pre) or _agent_only(pre)) and (not post or _EMPTY.fullmatch(post) or re.match(_ACT + r"\b", post)):
+                # a person, or persons joined ('Parent/guardian sign', 'Nurse & doctor sign' - roles-3, L1:R1-09)
                 st = _state(STATE_PROTECTED, "person_sign", "signature")
             elif re.search(r"\bto$", pre) and (not post or _EMPTY.fullmatch(post)):
                 # '<someone> to sign' closing the label: an instruction to sign, whoever the vocabulary knows.
@@ -7237,7 +7341,7 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
         states.append(st)
     # 8. 'initial' (singular).
     if not re.search(r"\binitials\b", t):
-        st = _initial_state(t, siblings, unit)
+        st = _initial_state(t)
         if st is not None:
             states.append(st)
     if not states:
@@ -7246,17 +7350,17 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
     return max(states, key=lambda s: STATE_RANK[s["state"]])
 
 
-def legacy_role_kind(label, *, siblings=()) -> str:
+def legacy_role_kind(label, *, siblings=()) -> str:  # (siblings accepted, not read: roles-3)
     """The legacy default path's role kind for a field's PRINTED label: 'signature' or 'initials' when the destination
     state holds it (protected or uncertain), else ''. Both engines read the same decision (destination_state); a label
     the state reads ordinary on evidence is generated on both, a held label is generated on neither."""
-    state = destination_state(label, siblings=siblings)
+    state = destination_state(label)
     return state["kind"] if state["state"] != STATE_ORDINARY else ""
 
 
-def legacy_destination(label, *, siblings=(), lines=()) -> dict:
+def legacy_destination(label, *, siblings=(), lines=()) -> dict:  # (siblings accepted, not read: roles-3)
     """{'role', 'state', 'basis', 'reading'} for a legacy field's PRINTED label (the 'roles' operation)."""
-    state = destination_state(label, siblings=siblings, lines=lines)
+    state = destination_state(label, lines=lines)
     return {"role": state["kind"] if state["state"] != STATE_ORDINARY else "", "state": state["state"],
             "basis": state["basis"], "reading": ROLE_READING}
 

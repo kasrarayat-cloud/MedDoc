@@ -702,21 +702,67 @@ def _printed_lines(paragraph):
         elif node.tag in (qn("w:br"), qn("w:cr")):
             out.append("".join(line)); line = []
     out.append("".join(line))
-    return [re.sub(r"[^\S\t]+", " ", x).strip() for x in out]
+    # a run of three or more spaces separates two captions as a tab does ('Signature of patient<spaces>Date')
+    return [re.sub(r"[^\S\t]+", " ", re.sub(r" {3,}", "\t", x)).strip() for x in out]
 
 
-def legacy_roles(fields, mapping, cells=()):
+def _field_name_words(name):
+    """A PDF field's name read as words when it is its only label ('PatientSignature' -> 'Patient Signature',
+    'Initials_2' -> 'Initials 2', 'Signature1' -> 'Signature 1'): run together, no reader sees a signing place in it
+    (roles-3, L1:R1-11 - generated and exported on f5fe720f too)."""
+    text = re.sub(r"[_.\[\]\-]+", " ", str(name or ""))
+    text = re.sub(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Za-z])(?=\d)|(?<=\d)(?=[A-Za-z])", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _tab_label_lines(field, paragraphs):
+    """A legacy tab-form field's printed label line, its tabs kept ('Patient signature<tab><tab>Date:'): the engine's
+    own label joins the runs with no separator ('Patient signatureDate', roles-3 L3:RF3-05), which reads as no signing
+    place. None when the field takes its label from a heading."""
+    tab = (field.get("locator") or {}).get("tab_form") or {}
+    if tab.get("grouping") != "label" or not tab.get("anchors"):
+        return None
+    anchor = tab["anchors"][0]
+    local = {}
+    for paragraph in paragraphs:
+        part = str(paragraph.part.partname).lstrip("/")
+        index = local.get(part, 0)
+        local[part] = index + 1
+        if part != anchor.get("part") or index != anchor.get("paragraph"):
+            continue
+        runs = paragraph._p.findall(qn("w:r"))
+        at = anchor.get("run")
+        if not isinstance(at, int) or not 0 <= at < len(runs):
+            return None
+        prior = max((i for i, run in enumerate(runs[:at]) if _answer_tab(run)), default=-1)
+        out = []
+        for run in runs[prior + 1:at]:
+            for node in run:
+                if node.tag == qn("w:t"):
+                    out.append(node.text or "")
+                elif node.tag == qn("w:tab"):
+                    out.append("\t")
+        return re.sub(r"[^\S\t]+", " ", re.sub(r" {3,}", "\t", "".join(out))).strip()
+    return None
+
+
+def legacy_roles(fields, mapping, cells=(), paragraphs=()):
     """The legacy default path's destination roles for a STORED mapping, read from a fresh inspection of the original:
-    each field's PRINTED label (the inspected label cell read with its paragraphs and line breaks as spaces, never the
-    mapping's edited label) and its roles-2 destination state (word_v3.legacy_destination: ordinary, protected or
-    uncertain, with the signing kind of a held place as 'role'), read with the labels beside it in the same table (a
-    sequence word beside a bare 'Initial'). The mapping must be this original's."""
+    each field's PRINTED label (the inspected label cell read with its paragraphs and line breaks as spaces, a tab-form
+    line with its captions, a PDF field's name as words - never the mapping's edited label) and its destination state
+    (word_v3.legacy_destination: ordinary, protected or uncertain, with the signing kind of a held place as 'role').
+    The mapping must be this original's.
+
+    ⚠️ roles-3 (L3:RF3-02): the labels beside a field in its table are no longer read. They were grouped by id() of an
+    lxml proxy, which Python reuses once a proxy is freed, so a bare 'Initial:' read 'Repeat' from ANOTHER table and was
+    released in 13 of 20 fresh interpreters - and a sibling never established the role anyway (L1:R1-03)."""
     if not isinstance(mapping, list) or structure(fields) != structure(mapping):
         fail("The field mapping does not match this original. Reinspect and create a new mapping version.", "mapping_mismatch")
-    printed, table_of, stacked = {}, {}, {}
+    printed, stacked = {}, {}
     for field in fields:
         printed[field["key"]] = field["label"]
-        number = (field.get("locator") or {}).get("cell")
+        locator = field.get("locator") or {}
+        number = locator.get("cell")
         if isinstance(number, int) and 0 <= number < len(cells):
             answer = cells[number][0]
             answer = getattr(answer, "_tc", answer)
@@ -728,17 +774,17 @@ def legacy_roles(fields, mapping, cells=()):
                 # its own paragraphs and line breaks: two captions stacked in one label cell are read one by one
                 stacked[field["key"]] = [line for p in label_cell.iter(qn("w:p"))
                                          for line in _printed_lines(p) if line]
-            table = next((a for a in answer.iterancestors() if a.tag == qn("w:tbl")), None)
-            table_of[field["key"]] = id(table) if table is not None else None
-        elif "tab_form" in (field.get("locator") or {}):
-            table_of[field["key"]] = "tab_form"
+        elif "tab_form" in locator:
+            line = _tab_label_lines(field, paragraphs)
+            if line and re.sub(r"\s", "", line).rstrip(":") == re.sub(r"\s", "", field["label"]).rstrip(":"):
+                printed[field["key"]] = re.sub(r"\s+", " ", line).strip().rstrip(":").strip()
+                stacked[field["key"]] = [line]
+        elif "pdf_field" in locator:
+            printed[field["key"]] = _field_name_words(field["label"]) or field["label"]
     out = {}
     for field in fields:
         key = field["key"]
-        group = table_of.get(key)
-        siblings = [printed[other["key"]] for other in fields
-                    if other["key"] != key and group is not None and table_of.get(other["key"]) == group]
-        row = word_v3.legacy_destination(printed[key], siblings=siblings, lines=stacked.get(key, ()))
+        row = word_v3.legacy_destination(printed[key], lines=stacked.get(key, ()))
         out[key] = {"printed_label": printed[key], **row}
     return {"legacy_roles": out, "reading": word_v3.ROLE_READING}
 
@@ -801,7 +847,8 @@ def process(workspace, request):
             document, paragraphs, cells, fields, _ = legacy
             result["fields"] = fields
     if request["operation"] == "roles":
-        return legacy_roles(fields, request.get("mapping"), cells if fmt == "docx" else ())
+        return legacy_roles(fields, request.get("mapping"), cells if fmt == "docx" else (),
+                            paragraphs if fmt == "docx" else ())
     validate_mapping(fields, request["mapping"], answers)
     if fmt == "docx":
         fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)

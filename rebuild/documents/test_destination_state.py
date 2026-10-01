@@ -205,24 +205,26 @@ class TheEighteenAndTheSeventeen(unittest.TestCase):
 
 
 class Structure(unittest.TestCase):
-    """The same decision from structure: a sequence word beside a bare 'Initial', a unit in the row."""
+    """The same decision from structure: a row label and its column header each read as itself.
 
-    def test_a_bare_initial_beside_a_sequence_word_is_a_qualifier(self):
-        blob = two_col(['Initial', 'Repeat', 'Plan'])
-        fields, rep = report(blob)
-        initial = by_label(fields)['Initial']
-        self.assertEqual(initial['kind'], 'text')
-        self.assertTrue(generated(initial, rep))
-        self.assertEqual(w.legacy_role_kind('Initial', siblings=['Repeat', 'Plan']), '')
-        # alone, it is the initials place
-        fields, rep = report(two_col(['Initial', 'Plan']))
-        self.assertEqual(by_label(fields)['Initial']['kind'], 'initials')
-        self.assertEqual(w.legacy_role_kind('Initial', siblings=['Plan']), 'initials')
+    roles-3: a sequence word beside a bare 'Initial' in its table and a unit printed elsewhere in the row are no longer
+    evidence (the refutation of 39bdb9f0 released initials columns through both - RepairOf39bdb9f0)."""
+
+    def test_a_bare_initial_is_the_initials_place_beside_a_sequence_word_too(self):
+        for rows in (['Initial', 'Repeat', 'Plan'], ['Initial', 'Plan']):
+            with self.subTest(rows=rows):
+                fields, rep = report(two_col(rows))
+                initial = by_label(fields)['Initial']
+                self.assertEqual(initial['kind'], 'initials')
+                self.assertFalse(generated(initial, rep))
+                self.assertEqual(w.legacy_role_kind('Initial', siblings=rows[1:]), 'initials')
 
     def test_a_lab_table_reads_its_row_label_and_column_header_each_as_itself(self):
-        """'Troponin (initial)' in a results table with a 'Result' column and a units column is a measurement (the
-        engine's joined label 'Troponin (initial) — Result' closes no qualifier); 'Nurse (initial)' and 'Nurse
-        initials' rows, and an 'Initials' column, stay held; an 'Initial' column beside 'Repeat' is a qualifier."""
+        """'Troponin (initial)' in a results table with a 'Result' column is a measurement (the engine's joined label
+        'Troponin (initial) — Result' closes no qualifier); 'Nurse (initial)' and 'Nurse initials' rows, and an
+        'Initials' column, stay held. roles-3: 'Fibre initial' is no measurement because a units column prints 'mg'
+        (uncertain), and an 'Initial' column beside 'Repeat' is uncertain (an observations chart prints the same
+        column for initials)."""
         def lab(rows, headers):
             doc = Document(); table = doc.add_table(rows=len(rows) + 1, cols=len(headers)); table.style = 'Table Grid'
             for c, h in enumerate(headers):
@@ -236,11 +238,14 @@ class Structure(unittest.TestCase):
                                   ('Nurse (initial)', '', '')), ('Test', 'Result', 'Units')))
         by = by_label(fields)
         self.assertTrue(generated(by['Troponin (initial) — Result'], rep))
-        self.assertTrue(generated(by['Fibre initial — Result'], rep))
+        self.assertFalse(generated(by['Fibre initial — Result'], rep))
+        self.assertIn(by['Fibre initial — Result']['key'], rep['uncertain_places'])
         self.assertFalse(generated(by['Nurse initials — Result'], rep))
         self.assertFalse(generated(by['Nurse (initial) — Result'], rep))
         fields, rep = report(lab((('Troponin', '', ''),), ('Analyte', 'Initial', 'Repeat')))
-        self.assertTrue(generated(by_label(fields)['Troponin — Initial'], rep))
+        self.assertFalse(generated(by_label(fields)['Troponin — Initial'], rep))
+        self.assertIn(by_label(fields)['Troponin — Initial']['key'], rep['uncertain_places'])
+        self.assertTrue(generated(by_label(fields)['Troponin — Repeat'], rep))
         fields, rep = report(lab((('Nurse', '', ''),), ('Staff', 'Initials', 'Date')))
         self.assertFalse(generated(by_label(fields)['Nurse — Initials'], rep))
         self.assertTrue(generated(by_label(fields)['Nurse — Date'], rep))
@@ -248,11 +253,12 @@ class Structure(unittest.TestCase):
     def test_a_person_beside_a_sequence_word_stays_held(self):
         self.assertEqual(w.legacy_role_kind('Nurse initial', siblings=['Repeat']), 'initials')
 
-    def test_an_unknown_head_is_uncertain_and_a_unit_makes_it_a_measurement(self):
+    def test_an_unknown_head_is_uncertain_and_its_own_unit_makes_it_a_measurement(self):
         self.assertEqual(w.destination_state('Wristband (initial)')['state'], 'uncertain')
         self.assertEqual(w.destination_state('Phlebotomist (initial)')['state'], 'protected')     # a person's head
         self.assertEqual(w.destination_state('Fibre initial (mg)')['basis'], 'measure_unit')
-        self.assertEqual(w.destination_state('Fibre initial', unit=True)['state'], 'ordinary')
+        # a unit elsewhere in the row or column is not read (roles-3, L1:R1-04)
+        self.assertEqual(w.destination_state('Fibre initial', unit=True)['state'], 'uncertain')
         # a person never becomes a measurement, unit or not
         self.assertEqual(w.destination_state('Nurse (initial) (mg)')['state'], 'protected')
 
@@ -700,7 +706,8 @@ class LegacyEngineRoles(unittest.TestCase):
         for label in ('Dr. sign', 'Pt. sign', 'Dr.sign'):
             with self.subTest(label=label):
                 self.assert_held_on_both(label, 'protected', 'person_sign')
-        self.assertEqual(w.destination_state('Consent form signed by Dr.')['state'], 'ordinary')
+        # the title awaits the signer's name: the signer's place, as on f5fe720f (roles-3, L1:R1-06)
+        self.assertEqual(w.destination_state('Consent form signed by Dr.')['state'], 'protected')
 
     def test_an_agent_phrase_before_an_initial_and_joined_persons_before_signed(self):
         """'Checked by — Initial' (the earlier repair's must-hold list) was generated into the legacy row on f5fe720f
@@ -714,10 +721,341 @@ class LegacyEngineRoles(unittest.TestCase):
             with self.subTest(control=label):
                 self.assert_generated_on_both(label)
 
-    def test_a_sequence_word_beside_a_bare_initial_in_the_same_table(self):
+    def test_a_bare_initial_beside_a_sequence_word_in_the_same_table_is_held(self):
         rows = self.roles(two_col(['Initial', 'Repeat', 'Plan']))
-        self.assertEqual((rows['Initial']['state'], rows['Initial']['basis']), ('ordinary', 'sequence_sibling'))
+        self.assertEqual((rows['Initial']['state'], rows['Initial']['basis']), ('protected', 'bare_initial'))
         self.assertEqual(self.roles(two_col(['Initial', 'Plan']))['Initial']['state'], 'protected')
+
+
+def legacy_roles_of(blob):
+    """{label: legacy 'roles' row} from the legacy engine's inspection and roles operation of a DOCX or a PDF."""
+    import tempfile
+    from pathlib import Path
+    from . import engine
+    fmt = 'pdf' if blob[:4] == b'%PDF' else 'docx'
+    with tempfile.TemporaryDirectory() as tmp:
+        ws = Path(tmp); (ws / ('input.' + fmt)).write_bytes(blob)
+        found = engine.process(ws, {'operation': 'inspect', 'format': fmt, 'engine': 'legacy'})
+        roles = engine.process(ws, {'operation': 'roles', 'format': fmt, 'engine': 'legacy', 'mapping': found['fields'],
+                                    'answers': {}})
+    return {f['label']: roles['legacy_roles'][f['key']] for f in found['fields']}
+
+
+def legacy_tab_lines(*labels):
+    """Legacy tab-form lines: each label's runs (its tabs kept) then an underlined answer tab."""
+    doc = Document(); doc.add_paragraph('Examination')
+    for text in labels + ('Plan:',):
+        p = tabbed(doc.add_paragraph(), text + ' ')
+        r = p.add_run(); r.underline = True; r._r.append(OxmlElement('w:tab'))
+    return data(doc)
+
+
+def grid(headers, rows, *, separate=False):
+    """A bordered table with a header row (or, separate=True, one two-column table per row with no header)."""
+    doc = Document(); doc.add_heading('Clinic record', level=2)
+    if separate:
+        for row in rows:
+            table = doc.add_table(rows=1, cols=len(row)); table.style = 'Table Grid'
+            for c, v in enumerate(row):
+                table.cell(0, c).text = v
+            doc.add_paragraph('')
+    else:
+        table = doc.add_table(rows=len(rows) + (1 if headers else 0), cols=len(headers or rows[0]))
+        table.style = 'Table Grid'
+        for c, h in enumerate(headers or ()):
+            table.cell(0, c).text = h
+        for r, row in enumerate(rows, start=1 if headers else 0):
+            for c, v in enumerate(row):
+                table.cell(r, c).text = v
+    doc.add_paragraph('Plan: ______')
+    return data(doc)
+
+
+def pdf_named(names):
+    """A fillable PDF whose text fields carry no tooltip: the engine labels each by its field name."""
+    from reportlab.pdfgen import canvas
+    buffer = io.BytesIO(); c = canvas.Canvas(buffer); y = 780
+    for name in names:
+        c.acroForm.textfield(name=name, x=200, y=y - 8, width=300, height=22, fontName='Helvetica', fontSize=10)
+        y -= 60
+    c.showPage(); c.save(); return buffer.getvalue()
+
+
+class RepairOf39bdb9f0(unittest.TestCase):
+    """The refutation of 39bdb9f0 (L1:R1-01..R1-12, L2:R2-01..R2-06, L3:RF3-01..RF3-05). Each regression vs f5fe720f is
+    repaired by restoring f5fe720f's reading for its input class - a release narrowed to its own evidence, or a release
+    whose evidence kept failing (a bare 'Initial' beside its table's other labels, a unit printed elsewhere in the row)
+    dropped. Each pre-existing leak is held with an ordinary positive control. Red on 39bdb9f0."""
+
+    def assert_held(self, label, *, protected=False, **kw):
+        reading = w.destination_state(label, **kw)
+        self.assertNotEqual(reading['state'], 'ordinary', (label, reading))
+        if protected:
+            self.assertEqual(reading['state'], 'protected', (label, reading))
+        self.assertTrue(w.legacy_role_kind(label, **{k: v for k, v in kw.items() if k == 'siblings'}), label)
+
+    def assert_ordinary(self, label, **kw):
+        reading = w.destination_state(label, **kw)
+        self.assertEqual(reading['state'], 'ordinary', (label, reading))
+        self.assertEqual(w.legacy_role_kind(label), '', label)
+
+    def assert_v3(self, blob, held, generated_labels=('Plan',)):
+        fields, rep = report(blob)
+        by = by_label(fields)
+        for label in held:
+            self.assertFalse(generated(by[label], rep), (label, by[label]['kind']))
+        for label in generated_labels:
+            self.assertTrue(generated(by[label], rep), label)
+            self.assertIn(SYN, xml(w.fill(blob, fields, {by[label]['key']: SYN})))
+        return fields, rep
+
+    def test_l1_r1_01_a_care_task_or_a_drug_before_initial_is_no_measurement(self):
+        for label in ('Mouth care (initial)', 'Pressure area care (initial)', 'Insulin (initial)', 'Medication (initial)',
+                      'Drug (initial)', 'Obs (initial)', 'Swab count (initial)', 'Catheter care (initial)',
+                      'Care plan (initial)', 'Mouth care: initial', 'Insulin: initial', 'Mouth care — initial',
+                      'Pressure area care — initial', 'Mouth care - initial'):
+            with self.subTest(label=label):
+                self.assert_held(label)
+                self.assert_v3(lines(label + ': ______'), [label])
+                self.assertNotEqual(legacy_roles_of(two_col([label, 'Plan']))[label]['state'], 'ordinary')
+        for label in ('Troponin (initial)', 'Lactate (initial)', 'Dose (initial)', 'Hb (initial)', 'Weight — Initial',
+                      'Pain score (initial)', 'Troponin: initial', 'Rate (initial)'):
+            with self.subTest(control=label):
+                self.assert_ordinary(label)
+
+    def test_l1_r1_02_a_checking_ordinal_beside_initial_is_no_sequence_option(self):
+        for label in ('Initial / 2nd check', 'Review / initial', 'Initial / Second', 'Initial/2nd', 'Initial or second check',
+                      'Initial / final', 'Initial/review', 'Initial / last', 'Initial and final check'):
+            with self.subTest(label=label):
+                self.assert_held(label)
+        self.assert_v3(lines('Initial / 2nd check: ______', 'Review / initial: ______'),
+                       ['Initial / 2nd check', 'Review / initial'])
+        for label in ('Initial / repeat', 'Visit type (initial/follow-up)', 'Initial or subsequent encounter',
+                      'Troponin (0h / initial)', 'Encounter: initial / subsequent', 'Initial and final diagnosis',
+                      'Initial & maintenance dose'):
+            with self.subTest(control=label):
+                self.assert_ordinary(label)
+
+    def test_l1_r1_03_l3_rf3_01_a_bare_initial_is_held_whatever_its_neighbours(self):
+        for siblings in ((), ('Diagnosis', 'Follow-up'), ('Follow-up:',), ('Baseline',), ('Day 1',), ('15 min',),
+                         ('Repeat',), ('Repeat', 'Plan'), ('Observation', '0h', '4h'), ('2 weeks',)):
+            for label in ('Initial', 'Initial:', 'Initial (witness)', 'Initial (nurse)', 'Initial (patient)',
+                          'Initial (checker)', 'Initial (RN)', 'Initial (staff nurse)'):
+                with self.subTest(label=label, siblings=siblings):
+                    self.assert_held(label, protected=True, siblings=siblings)
+        # both engines, the same table as a sequence word, and a one-row table printing it beside a timed reading
+        for blob in (two_col(['Initial', 'Repeat', 'Plan']), two_col(['Repeat', 'Plan', 'Initial:']),
+                     two_col(['Diagnosis', 'Follow-up', 'Initial'])):
+            rows = legacy_roles_of(blob)
+            initial = next(k for k in rows if k.startswith('Initial'))
+            self.assertEqual(rows[initial]['state'], 'protected', initial)
+            fields, rep = report(blob)
+            self.assertFalse(any(generated(f, rep) for f in fields if f['label'].startswith('Initial')))
+            self.assertTrue(all(generated(f, rep) for f in fields if not f['label'].startswith('Initial')))
+        rows = legacy_roles_of(grid(None, [('15 min', '', 'Initial', '')]))
+        self.assertEqual(rows['Initial']['state'], 'protected')
+        rows = legacy_roles_of(legacy_tab_lines('Diagnosis:', 'Follow-up:', 'Initial:'))
+        self.assertEqual(rows['Initial']['state'], 'protected')
+        self.assertEqual(rows['Diagnosis']['state'], 'ordinary')
+
+    def test_l3_rf3_02_the_legacy_reading_never_depends_on_object_identity(self):
+        """Separate tables 'Repeat', 'Plan' and 'Initial:': the legacy reading grouped labels by id() of an lxml proxy,
+        which Python reuses once a proxy is freed - so 'Initial:' read its neighbours from OTHER tables in 13 of 20 fresh
+        interpreters. A colliding id is forced here; nothing structural may change the reading."""
+        from unittest.mock import patch
+        from . import engine
+        blob = grid(None, [('Repeat', ''), ('Plan', ''), ('Initial:', '')], separate=True)
+        with patch.object(engine, 'id', create=True, new=lambda obj: 1):
+            rows = legacy_roles_of(blob)
+        self.assertEqual(rows['Initial:']['state'], 'protected')
+        self.assertEqual(legacy_roles_of(blob)['Initial:']['state'], 'protected')
+
+    def test_l2_r2_05_l3_rf3_01_a_column_headed_initial_is_uncertain(self):
+        """A column headed 'Initial' is each row's first reading in a lab table and each row's initials in an
+        observations chart ('Observation | 0h | 4h | Initial'): never generated; f5fe720f held it from generation and let
+        the clinician add a text field there, and so does an uncertain place."""
+        for headers, row in ((('Observation', '0h', '4h', 'Initial'), ('BP', '', '', '')),
+                             (('Measure', 'Initial', '3 months', '6 months'), ('HbA1c', '', '', '')),
+                             (('Analyte', 'Initial', 'Repeat'), ('Troponin', '', ''))):
+            with self.subTest(headers=headers):
+                blob = grid(headers, [row])
+                fields, rep = report(blob)
+                cell = by_label(fields)[row[0] + ' — Initial']
+                self.assertFalse(generated(cell, rep))
+                self.assertIn(cell['key'], rep['uncertain_places'])
+                ordinary = [f for f in fields if f['label'].startswith(row[0]) and f['key'] != cell['key']]
+                self.assertTrue(ordinary and all(generated(f, rep) for f in ordinary))
+
+    def test_l1_r1_04_a_unit_printed_elsewhere_in_the_row_or_column_is_no_evidence(self):
+        for label in ('Second check (initial)', 'Checked (initial)', 'Given (initial)', 'Given — initial'):
+            with self.subTest(label=label):
+                self.assert_held(label, unit=True)
+        fields, rep = report(grid(('Drug', 'Check', 'Value'), [('Morphine 5 mg IV', 'Second check (initial)', ''),
+                                                                ('Insulin 6 units SC', 'Checked (initial)', '')]))
+        for f in fields:
+            if 'initial' in f['label'].casefold():
+                self.assertFalse(generated(f, rep), f['label'])
+        fields, rep = report(grid(('Item', 'Value (mg)'), [('Given (initial)', '')]))
+        self.assertFalse(generated(by_label(fields)['Given (initial) — Value (mg)'], rep))
+        # a unit printed in the label itself, and a measured head, are evidence
+        for label in ('Troponin — Initial (ng/L)', 'Fibre initial (mg)', 'Insulin (initial) (units)'):
+            with self.subTest(control=label):
+                self.assert_ordinary(label)
+
+    def test_l1_r1_05_a_day_or_night_person_signed_is_that_persons_signing_place(self):
+        for label in ('Day nurse signed', 'Day nurse signed:', 'Day staff signed', 'Day surgeon signed', 'Day 1 nurse signed',
+                      'Night nurse signed', 'Day nurse sign', 'Day nurse signs'):
+            with self.subTest(label=label):
+                self.assert_held(label, protected=True)
+        self.assert_v3(lines('Day nurse signed: ______'), ['Day nurse signed'])
+        for label in ('Time signed', 'Date signed', 'Time patient signed'):
+            with self.subTest(control=label):
+                self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
+
+    def test_l1_r1_06_a_title_awaiting_a_name_is_the_signers_identity(self):
+        for label in ('Consent form signed by Dr.', 'Form signed by Dr', 'Prescription signed by Dr.',
+                      'Letter signed by Mr'):
+            with self.subTest(label=label):
+                self.assert_held(label, protected=True)
+        self.assert_v3(lines('Consent form signed by Dr. ______', 'Form signed by Dr ______ (name)'),
+                       ['Consent form signed by Dr.', 'Form signed by Dr'])
+        for label in ('Consent form signed by patient', 'Drug chart signed by prescriber', 'Consent signed by both parents',
+                      'Prescription signed by pharmacist'):
+            with self.subTest(control=label):
+                self.assert_ordinary(label)
+
+    def test_l1_r1_08_sign_naming_its_signer_is_the_signers_place(self):
+        for label in ('Sign (patient)', 'Sign-off (consultant)', 'Sign (witness)', 'Sign (Dr)', 'Sign (consultant)',
+                      'Sign - patient', 'Sign: patient', 'Sign by consultant', 'Sign for patient', 'Sign off (consultant)'):
+            with self.subTest(label=label):
+                self.assert_held(label, protected=True)
+                self.assertNotEqual(legacy_roles_of(two_col([label, 'Plan']))[label]['state'], 'ordinary')
+        self.assert_v3(lines('Sign (patient): ______', 'Sign-off (consultant): ______'),
+                       ['Sign (patient)', 'Sign-off (consultant)'])
+        for label in ('Babinski sign', 'Sign of infection', 'Signs of sepsis', 'Sign (positive)'):
+            with self.subTest(control=label):
+                self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
+
+    def test_l1_r1_09_persons_joined_or_qualified_before_sign_are_the_signers(self):
+        for label in ('Parent/guardian sign', 'Patient or carer sign', 'Nurse / midwife sign', 'Doctor/nurse sign',
+                      'Nurse & doctor sign', 'Doc sign', 'Anaes sign', 'Day nurse sign', 'Parent/guardian signed',
+                      'Nurse sign'):
+            with self.subTest(label=label):
+                self.assert_held(label, protected=True)
+                self.assertNotEqual(legacy_roles_of(two_col([label, 'Plan']))[label]['state'], 'ordinary')
+        for label in ('Babinski sign', "Murphy's sign", 'Kernig sign', "Trousseau's sign"):
+            with self.subTest(control=label):
+                self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
+
+    def test_l1_r1_10_a_signing_place_joined_to_its_date_is_one_place(self):
+        for label in ('Signature of patient, date', 'Signature of witness – Date', 'Signature (patient), date',
+                      'Signature of person obtaining consent, date', 'Signature of interpreter - date',
+                      'Initials of nurse, date', 'Patient signature (date)', 'Sign below and date', 'Initial(s) / date',
+                      'Signature, date'):
+            with self.subTest(label=label):
+                self.assert_held(label, protected=True)
+                self.assertNotEqual(legacy_roles_of(two_col([label, 'Plan']))[label]['state'], 'ordinary')
+        self.assert_held('Signature of patient' + ' ' * 20 + 'Date')
+        self.assert_held('Signature of patient\tDate')
+        self.assert_v3(lines('Signature of patient, date: ______', 'Initials of nurse, date: ______'),
+                       ['Signature of patient, date', 'Initials of nurse, date'])
+        for label in ('Date of signature', 'Signature date', 'Date signed', 'Consent form signed, date',
+                      'Patient signature obtained, date', 'Date and time signed'):
+            with self.subTest(control=label):
+                self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
+
+    def test_l1_r1_11_a_pdf_field_named_as_a_signing_place(self):
+        rows = legacy_roles_of(pdf_named(['PatientName', 'PatientSignature', 'Initials_2', 'Signature1', 'Plan']))
+        for name in ('PatientSignature', 'Initials_2', 'Signature1'):
+            with self.subTest(name=name):
+                self.assertEqual(rows[name]['state'], 'protected', rows[name])
+        for name in ('PatientName', 'Plan'):
+            with self.subTest(control=name):
+                self.assertEqual(rows[name]['state'], 'ordinary', rows[name])
+
+    def test_l1_r1_12_a_caption_printed_after_or_under_the_line(self):
+        fields, rep = self.assert_v3(lines('Patient: ______ (signature)', 'Witness: ______ (sign)'), ['Patient', 'Witness'])
+        doc = Document(); doc.add_heading('Consent record', level=2)
+        doc.add_paragraph(LINE); doc.add_paragraph('Sign (patient)')
+        doc.add_paragraph(''); doc.add_paragraph('Diagnosis: ______')
+        doc.add_paragraph(LINE); doc.add_paragraph('Parent/guardian sign')
+        doc.add_paragraph('Plan: ______')
+        blob = data(doc)
+        fields, rep = report(blob)
+        lined = [f for f in fields if f['label'] not in ('Diagnosis', 'Plan')]
+        self.assertTrue(all(not generated(f, rep) for f in lined), [(f['label'], f['kind']) for f in lined])
+        self.assertTrue(all(generated(f, rep) for f in fields if f['label'] in ('Diagnosis', 'Plan')))
+        # a hint in parentheses after the line is no signing caption
+        self.assert_v3(lines('Diagnosis: ______ (if known)'), [], ['Diagnosis', 'Plan'])
+
+    def test_l2_r2_01_initial_before_a_persons_assessment_is_attributive(self):
+        for label in ('Initial nursing assessment', 'Initial patient assessment', 'Initial patient observations',
+                      'Initial doctor review', 'Initial consultant review', 'Initial patient weight', 'Initial patient GCS',
+                      'Initial PA chest X-ray', 'Initial physio assessment'):
+            with self.subTest(label=label):
+                self.assert_ordinary(label)
+                self.assertEqual(legacy_roles_of(two_col([label, 'Plan']))[label]['state'], 'ordinary')
+        for label in ('Initial nurse', 'Initial (nurse)', 'Initial staff'):
+            with self.subTest(held=label):
+                self.assert_held(label)
+
+    def test_l2_r2_02_a_persons_measurement_before_initial_is_a_measurement(self):
+        for label in ('Patient weight — Initial', 'Patient temperature — Initial', 'Patient GCS — Initial',
+                      'Patient BP – initial', 'PT/INR — Initial', 'PA pressure — Initial', "Mother's weight — Initial",
+                      'Donor Hb — Initial', 'Pt lactate — initial'):
+            with self.subTest(label=label):
+                self.assert_ordinary(label)
+                self.assertEqual(legacy_roles_of(two_col([label, 'Plan']))[label]['state'], 'ordinary')
+        for label in ('PT — Initial', 'Nurse — Initial', 'Charge nurse — Initial', 'Checked by nurse — Initial',
+                      'Nurse (RN) — initial', 'Given (nurse) — initial'):
+            with self.subTest(held=label):
+                self.assert_held(label, protected=True)
+
+    def test_l2_r2_04_initial_before_a_noun_phrase_that_is_no_edit_object(self):
+        for label in ('Initial line of treatment', 'Initial line of therapy', 'Initial changes on ECG',
+                      'Initial changes on CXR', 'Initial forms of presentation', 'Initial entry wound',
+                      'Initial additions to treatment'):
+            with self.subTest(label=label):
+                self.assert_ordinary(label)
+        for label in ('Initial changes', 'Initial each page', 'Initial changes here', 'Initial all entries'):
+            with self.subTest(held=label):
+                self.assert_held(label, protected=True)
+
+    def test_l2_r2_06_one_caption_wrapped_is_read_whole_where_the_whole_has_evidence(self):
+        for label, parts in (('Initial assessment', ['Initial', 'assessment']),
+                             ('Consent form signed?', ['Consent form', 'signed?']),
+                             ('Lactate (initial)', ['Lactate', '(initial)'])):
+            with self.subTest(label=label):
+                self.assertEqual(w.destination_state(label, lines=parts)['state'], 'ordinary')
+                self.assertEqual(legacy_roles_of(two_col(['|'.join(parts), 'Plan']))[''.join(parts)]['state'], 'ordinary')
+        # two captions stacked stay uncertain; a label with no evidence keeps the stacked reading (declared)
+        for label, parts in (('Signature date', ['Signature', 'Date']), ('Babinski sign', ['Babinski', 'sign'])):
+            with self.subTest(held=label):
+                self.assertEqual(w.destination_state(label, lines=parts)['state'], 'uncertain')
+
+    def test_l3_rf3_05_tab_separated_captions_on_a_legacy_tab_line_are_read_one_by_one(self):
+        rows = legacy_tab_lines('Patient signature\t\tDate:', 'Date\tSignature:', 'Consultant signature\tDate signed:',
+                                'Witness\tInitial:')
+        roles = legacy_roles_of(rows)
+        for label, row in roles.items():
+            with self.subTest(label=label):
+                if label == 'Plan':
+                    self.assertEqual(row['state'], 'ordinary')
+                else:
+                    self.assertNotEqual(row['state'], 'ordinary', (label, row))
+                    self.assertIn(' ', row['printed_label'], row)          # its captions, not the joined runs
+        controls = legacy_roles_of(legacy_tab_lines('Date\tTime:', 'Consent form signed by patient:'))
+        self.assertTrue(all(row['state'] == 'ordinary' for row in controls.values()), controls)
+        fields, rep = report(lines('Date\tSignature: ______'))
+        self.assertFalse(generated(fields[0], rep), fields[0])
+
+    def test_l1_r1_07_a_person_column_over_an_initial_row_is_that_persons_initials(self):
+        fields, rep = report(grid(('Observation', 'Nurse', 'Doctor'), [('BP (initial)', '', '')]))
+        for f in fields:
+            if f['label'].startswith('BP'):
+                self.assertFalse(generated(f, rep), f['label'])
+        fields, rep = report(grid(('Observation', 'Nurse', 'Doctor'), [('BP', '', '')]))
+        self.assertTrue(all(generated(f, rep) for f in fields if f['label'].startswith('BP')))
 
 
 class Versioned(unittest.TestCase):
