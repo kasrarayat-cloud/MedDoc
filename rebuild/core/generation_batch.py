@@ -70,8 +70,8 @@ def refuse(message):
 def require_config(config):
     if not enabled() or config.get('generation_batch_contract') != CONTRACT:
         refuse('Large-form generation is disabled or the quote predates its contract.')
-    if config.get('provider') != 'anthropic' or config.get('model') != g.SONNET_5:
-        refuse('Large-form generation requires the exact native claude-sonnet-5 model.')
+    if config.get('provider') != 'anthropic' or config.get('model') not in g.NATIVE_MODELS:
+        refuse('Large-form generation requires the exact native claude-sonnet-5 or claude-sonnet-5-5 model.')
     if not g.v3_natural_contract(config) or config.get('prompt_version') not in g.TAB_PROMPT_VERSIONS:
         refuse('Large-form generation requires the complete-source v3 contract.')
     g.job_request_profile(config)
@@ -358,7 +358,10 @@ def plan_for(encounter, config):
 
 
 def parse_part(plan, ordinal, response):
-    if response.get('model') != g.SONNET_5 or response.get('stop_reason') != 'end_turn':
+    # The model judged is the one the plan's own request named: a response from any other model, and every stop but a
+    # complete end_turn (refusal, max_tokens, model_context_window_exceeded), is refused and nothing is adopted.
+    if (plan['config'].get('model') not in g.NATIVE_MODELS or response.get('model') != plan['config']['model']
+            or response.get('stop_reason') != 'end_turn'):
         raise ValidationError('Provider model or completion does not match the complete-form request.')
     blocks = response.get('content', [])
     if any(b.get('type') == 'refusal' for b in blocks):
@@ -406,7 +409,7 @@ def assemble(plan, responses, *, read_options=None):
         from . import v3_field_relations as ordinary
         combined = ordinary.FieldSelections(fields=selections)
         ordinary_records = ordinary.records(plan['notes'], plan['fields'], plan['context_labels'],
-                                             plan['units'], combined, g.SONNET_5)
+                                             plan['units'], combined, plan['config']['model'])
     records = {}
     if plan['history_targets']:
         from . import v3_history_context as history

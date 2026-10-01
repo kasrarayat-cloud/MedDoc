@@ -14,7 +14,7 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 from pydantic import BaseModel, ConfigDict, StrictInt
 
-from .generation import UnitSelection
+from .generation import NATIVE_MODELS, UnitSelection
 
 CONTRACT = 'ordinary-history-context-v1'
 MAX_UNITS = 64
@@ -57,8 +57,8 @@ def refuse_request(config):
     """This prepared contract cannot silently ride a legacy model rollback."""
     if not enabled(config):
         raise ValidationError('History context was switched off; generate again.')
-    if config.get('provider') != 'anthropic' or config.get('model') != 'claude-sonnet-5':
-        raise ValidationError('History context requires the exact native claude-sonnet-5 model.')
+    if config.get('provider') != 'anthropic' or config.get('model') not in NATIVE_MODELS:
+        raise ValidationError('History context requires the exact native claude-sonnet-5 or claude-sonnet-5-5 model.')
 
 
 def targets(fields, units):

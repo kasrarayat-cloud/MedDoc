@@ -72,8 +72,9 @@ def enabled():
 def require_config(config):
     if not enabled() or config.get('ordinary_field_contract') != CONTRACT:
         raise ValidationError('Ordinary field interpretation is disabled or its quote has changed.')
-    if config.get('provider') != 'anthropic' or config.get('model') != g.SONNET_5:
-        raise ValidationError('Ordinary field interpretation requires the exact native claude-sonnet-5 model.')
+    if config.get('provider') != 'anthropic' or config.get('model') not in g.NATIVE_MODELS:
+        raise ValidationError('Ordinary field interpretation requires the exact native claude-sonnet-5 or '
+                              'claude-sonnet-5-5 model.')
     if config.get('history_context_contract'):
         raise ValidationError('Two distinct context contracts cannot interpret the same request.')
     if not g.v3_natural_contract(config):
@@ -283,7 +284,7 @@ def records(notes, catalogue, context, units, selections, model):
     repeated) refuses the WHOLE response; a field whose selection disagrees with its relations (`disagrees`) is
     recorded as returned and held by `read`, never adopted, and no other field changes. `competing_output` carries
     every competing repeated question's CLAIM (`claimed`), its own included, never only its selection."""
-    if not enabled() or model != g.SONNET_5:
+    if not enabled() or model not in g.NATIVE_MODELS:
         raise ValidationError('Ordinary interpretation provenance is unavailable.')
     asked = g.v3_generation_fields(catalogue)[0]
     if len(selections.fields) != len(asked) or {f.key for f in selections.fields} != {f['key'] for f in asked}:
@@ -318,7 +319,7 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             return refused
         catalogue = reading.get('catalogue', reading['fields'])
         field = next((f for f in catalogue if f['key'] == value['key']), None)
-        if (value['contract'] != CONTRACT or value['model'] != g.SONNET_5 or not field
+        if (value['contract'] != CONTRACT or value['model'] not in g.NATIVE_MODELS or not field
                 or value['binding'] != binding(reading['source']['quote'], catalogue, reading['context_labels'])
                 or g.question_key(field['label']) != g.question_key(label)
                 or (field_key is not None and field_key != field['key'])): return refused
@@ -417,13 +418,16 @@ def generate(notes, fields, config, *, context_labels=(), requirements=()):
     cost, units, recorded = g.anthropic_settlement(response, rate, config)
     raw = {'anthropic_response': response, 'ordinary_field_contract': CONTRACT,
            'notes': notes, 'fields': compiled['asked'], 'full_catalogue': fields,
-           'context_labels': compiled['context']}
+           'context_labels': compiled['context'], 'requested_model': config['model']}
     return raw, cost, units, recorded, f"anthropic:{config['model']}", getattr(response, '_request_id', None) or '', False
 
 
 def validated(result):
     response = result['anthropic_response']
-    if (result['ordinary_field_contract'] != CONTRACT or response.model != g.SONNET_5
+    # The model judged is the one the request named (a result built before `requested_model` existed named claude-sonnet-5,
+    # the only model this contract was sent to then); a response from any other model is never adopted.
+    requested = result.get('requested_model', g.SONNET_5)
+    if (result['ordinary_field_contract'] != CONTRACT or requested not in g.NATIVE_MODELS or response.model != requested
             or response.stop_reason != 'end_turn' or any(block.type == 'refusal' for block in response.content)):
         raise ValidationError('Ordinary field response model or completion is unqualified; no answers adopted.')
     notes, catalogue, context = result['notes'], result['full_catalogue'], result['context_labels']

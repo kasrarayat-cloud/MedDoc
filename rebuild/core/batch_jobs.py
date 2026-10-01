@@ -137,7 +137,7 @@ def fixture_response(plan, part):
         # No invented semantic partitions in the deterministic fixture.
         body['history_context'] = [{'key':key,'units':[{'unit_id':u['id'],'relation':'unresolved'}
                 for u in plan['units']]} for key in plan['history_targets'] if key in part.field_ids]
-    return {'id':'fixture_'+str(part.pk),'model':g.SONNET_5,'stop_reason':'end_turn',
+    return {'id':'fixture_'+str(part.pk),'model':plan['config']['model'],'stop_reason':'end_turn',
             'content':[{'type':'text','text':json.dumps(body)}], 'synthetic_source':'deterministic-batch-fixture'}
 
 
@@ -176,7 +176,7 @@ def store_response(batch, part, raw, receipt, *, request_id=''):
             model=str(raw.get('model','')),stop_reason=str(raw.get('stop_reason','')),
             provider_resource_id=str(raw.get('id','')))
         if receipt is None:
-            job.provider=f'anthropic:{g.SONNET_5}';job.provider_request_id=request_id
+            job.provider=f"anthropic:{batch.plan['config']['model']}";job.provider_request_id=request_id
             job.provider_resource_id=str(raw.get('id',''))
             job.result_path=path;job.result_sha256=sha
             job.save(update_fields=['provider','provider_request_id','provider_resource_id','result_path','result_sha256'])
@@ -328,7 +328,7 @@ def run_one():
             except Exception:
                 store_response(batch,part,raw,None,request_id=getattr(response,'_request_id',None) or '')
                 raise
-            receipt={'provider':f'anthropic:{g.SONNET_5}','provider_request_id':getattr(response,'_request_id',None) or '',
+            receipt={'provider':f"anthropic:{plan['config']['model']}",'provider_request_id':getattr(response,'_request_id',None) or '',
                 'provider_resource_id':getattr(response,'id','') or '', 'actual_cost':cost,'units':units,'rates':rates,'simulated':False}
         else:
             raw=fixture_response(plan,part)
