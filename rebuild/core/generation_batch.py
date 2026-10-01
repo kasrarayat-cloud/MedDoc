@@ -17,6 +17,13 @@ from . import generation as g, v3_mapping
 
 LEGACY_CONTRACT = 'v3-generation-batch-v1'
 CONTRACT = 'v3-generation-batch-v2'
+#: 2026-10-01: the ordinary field-relations contract's OWN field batches. A relations quote whose complete answer exceeds
+#: one bounded response (`needed`: `v3_field_relations.response_bound` over the profile's max_output_tokens, a D30-sized
+#: note of 13+ units) is split into requests of whole field groups, each carrying the complete catalogue, every source
+#: unit and the same rules; one immutable job per part, each held, sent once and settled on its own; the form is adopted
+#: only when every part's answer is complete and the union validates (`batch_jobs.finish`). It does not need the generic
+#: large-form flag (V3_GENERATION_BATCHES): the relations contract is the switch.
+RELATIONS_PARTS_CONTRACT = 'ordinary-field-relations-parts-v1'
 CONSTRAINTS = 'v3-form-constraints-v1'
 MAX_PARTS = 8
 MAX_FIELDS = 100
@@ -67,7 +74,22 @@ def refuse(message):
     raise ValidationError(message + ' Nothing was sent or charged.')
 
 
+def relations_parts(config):
+    """Whether a quote's large-form plan is the relations contract's own field batches (`RELATIONS_PARTS_CONTRACT`): an
+    ordinary field-relations quote made without the generic large-form contract."""
+    config = config or {}
+    return bool(config.get('ordinary_field_contract')) and config.get('generation_batch_contract') is None
+
+
 def require_config(config):
+    if relations_parts(config):
+        from . import v3_field_relations as ordinary
+        ordinary.require_config(config)
+        if config.get('prompt_version') not in g.TAB_PROMPT_VERSIONS:
+            refuse('Large-form generation requires the complete-source v3 contract.')
+        g.job_request_profile(config)
+        g.rates(config)
+        return
     if not enabled() or config.get('generation_batch_contract') != CONTRACT:
         refuse('Large-form generation is disabled or the quote predates its contract.')
     if config.get('provider') != 'anthropic' or config.get('model') not in g.NATIVE_MODELS:
@@ -147,6 +169,16 @@ def constraints(version, *, live=False):
     return manifest
 
 
+def plan_constraints(version, config, *, live=False):
+    """The form-wide rules a plan carries: the qualified manifest (`constraints`, refused when missing) - except for the
+    relations contract's own field batches of a form with NO manifest, which carry None exactly as that contract's single
+    request does (`v3_field_relations.compile_request`); the parts then keep every field of one printed question or
+    section together (`partitions`, by_context) and the union is validated as one answer."""
+    if relations_parts(config) and getattr(version, 'generation_constraints', None) is None:
+        return None
+    return constraints(version, live=live)
+
+
 def constraint_values(field, values):
     """Predicate values must be representable by this actual mapped field."""
     kind = field.get('kind')
@@ -217,7 +249,10 @@ def effective_values(manifest, fields, answers, read_options):
 
 
 def validate_constraints(manifest, answers, fields, *, read_options=None):
-    """Whole-result/save/export invariant; no model declaration can waive a rule."""
+    """Whole-result/save/export invariant; no model declaration can waive a rule. A relations field batch of a form with no
+    manifest (`plan_constraints`: None) has no qualified rule to check, exactly like that contract's single request."""
+    if manifest is None:
+        return
     effective = effective_values(manifest, fields, answers, read_options)
     for rule in manifest['rules']:
         if rule['kind'] == 'max_active_groups':
@@ -240,8 +275,9 @@ def check_answers(version, answers):
         validate_constraints(manifest, answers, version.fields, read_options=option_reader(version))
 
 
-def partitions(fields, *, fits=None):
+def partitions(fields, *, fits=None, by_context=False):
     groups = {}
+    contexts = {}
     for field in fields:
         locator = field.get('locator') or {}
         part, slot = locator.get('part'), locator.get('slot')
@@ -250,6 +286,10 @@ def partitions(fields, *, fits=None):
         # Keep the entire outer physical row (including nested content) together.
         row = re.match(r'^(.*?/tr\[\d+\])(?:/|$)', slot)
         group = (part, row.group(1) if row else slot)
+        # The relations contract's own field batches (no qualified form-wide rules) also keep every field printed under
+        # ONE question or section in ONE request: its fields are answered together, as in the single request.
+        if by_context and isinstance(field.get('context'), str) and field['context'].strip():
+            group = contexts.setdefault(' '.join(field['context'].split()), group)
         groups.setdefault(group, []).append(field['key'])
     parts, current = [], []
     for group in groups.values():
@@ -272,11 +312,14 @@ def request(plan, ordinal):
     config = plan['config']
     ids = plan['parts'][ordinal - 1]['field_ids']
     contract = plan.get('contract')
-    if contract not in (LEGACY_CONTRACT, CONTRACT) or config.get('generation_batch_contract') != contract:
+    if contract == RELATIONS_PARTS_CONTRACT:
+        if not relations_parts(config):
+            refuse('The stored batch request contract is unknown or inconsistent.')
+    elif contract not in (LEGACY_CONTRACT, CONTRACT) or config.get('generation_batch_contract') != contract:
         refuse('The stored batch request contract is unknown or inconsistent.')
     if config.get('ordinary_field_contract'):
         from . import v3_field_relations as ordinary
-        if contract != CONTRACT or plan['history_targets']:
+        if contract not in (CONTRACT, RELATIONS_PARTS_CONTRACT) or plan['history_targets']:
             refuse('Ordinary relations require the current single complete-form contract.')
         compiled = ordinary.compile_request(plan['notes'], plan['fields'], config,
             context_labels=[r['label'] for r in plan['requirements']], requirements=plan['requirements'],
@@ -315,7 +358,7 @@ def plan_for(encounter, config):
         refuse('The full field catalogue is invalid or exceeds its limit.')
     if len(encounter.notes) > 50000 or not encounter.notes.strip():
         refuse('The source notes are empty or exceed the complete-source limit.')
-    manifest = constraints(version, live=config['mode'] == 'live')
+    manifest = plan_constraints(version, config, live=config['mode'] == 'live')
     asked, context, _ = g.v3_generation_fields(fields, [r['label'] for r in version.review_requirements])
     units = g.source_units(encounter.notes, asked, context_labels=context)[0]
     fits = None
@@ -326,8 +369,9 @@ def plan_for(encounter, config):
         def fits(ids):
             return (ordinary.response_bound([indexed[key] for key in ids], units) <=
                     config['request_profile']['max_output_tokens'])
-    groups = partitions(asked, fits=fits)
-    plan = {'contract': CONTRACT, 'encounter_id': str(encounter.pk), 'revision': encounter.revision,
+    groups = partitions(asked, fits=fits, by_context=relations_parts(config) and manifest is None)
+    plan = {'contract': RELATIONS_PARTS_CONTRACT if relations_parts(config) else CONTRACT,
+        'encounter_id': str(encounter.pk), 'revision': encounter.revision,
         'mapping_version_id': str(version.pk), 'mapping_sha256': digest(fields),
         'original_sha256': version.template.sha256, 'notes': encounter.notes,
         'notes_sha256': hashlib.sha256(encounter.notes.encode()).hexdigest(),

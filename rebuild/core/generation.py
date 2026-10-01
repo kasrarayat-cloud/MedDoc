@@ -472,7 +472,7 @@ def configuration(fields=None):
     # New ordinary authorizations only. Existing 8k/16k snapshots reconstruct
     # unchanged; non-v3 callers retain their original model profile. On each native model the ordinary profile replaces
     # only its no-up-front-thinking request (claude-sonnet-5: disabled; claude-sonnet-5-5: between_tools).
-    if (getattr(settings,'V3_FIELD_RELATIONS',False) and (fields is None or natural_v3(fields))
+    if (field_relations_enabled(config['model']) and (fields is None or natural_v3(fields))
             and config['provider']=='anthropic' and config['model'] in NATIVE_MODELS
             and config['request_profile'].get('thinking')==NO_UP_FRONT_THINKING[config['model']]):
         config['request_profile']={**config['request_profile'], 'profile':ORDINARY_PROFILES[config['model']],
@@ -495,11 +495,26 @@ def configuration(fields=None):
     # The contract is built for the native models only: with any other model (the installed claude-sonnet-4-6 path) the
     # flag leaves the default request, where it used to refuse every ordinary v3 generation before any request. Built is
     # not qualified: the flag stays off until its live qualification on the model actually configured.
-    if getattr(settings,'V3_FIELD_RELATIONS',False) and config['provider']=='anthropic' and config['model'] in NATIVE_MODELS:
+    if field_relations_enabled(config['model']) and config['provider']=='anthropic' and config['model'] in NATIVE_MODELS:
         from .v3_field_relations import CONTRACT
         config['ordinary_field_contract']=CONTRACT
         config['pricing_version']=ordinary_pricing_version(config['pricing_version'],CONTRACT)
     return config
+
+
+def field_relations_enabled(model=None):
+    """Whether ordinary v3 notes are interpreted under the field-relations contract (`v3_field_relations`) for `model` (by
+    default the configured model): ONE answer for configuration, the relation reader of stored drafts, the large-form
+    path and governance.
+
+    QUILLMD_V3_FIELD_RELATIONS='1' (settings.V3_FIELD_RELATIONS) turns it on for both native models, as before.
+    2026-10-01: for claude-sonnet-5-5 it is the DEFAULT when the switch is unset (settings.V3_FIELD_RELATIONS_SWITCH is
+    None, `quillmd.application_profile.field_relations_switch`) and '0' turns it off; real data mode must state the
+    switch (`real_mode_problems`). A settings module that does not define V3_FIELD_RELATIONS_SWITCH predates the default
+    and keeps the explicit-'1'-only rule. claude-sonnet-5 keeps that rule; every other model never takes the contract."""
+    if getattr(settings,'V3_FIELD_RELATIONS',False): return True
+    switch=getattr(settings,'V3_FIELD_RELATIONS_SWITCH',False)
+    return switch is None and (model if model is not None else getattr(settings,'AI_MODEL',None))==SONNET_5_5
 
 
 def ordinary_pricing_version(previous,contract):
@@ -1909,7 +1924,7 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
     `index` None: `evidence` alone."""
     if len(governance) > 11 and evidence:
         scope = governance[11]
-        warnings = list(scope['corrections'])
+        warnings = v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, field_key, answer_text)
         warnings += v3_preceding_warnings(scope.get('preceding'), label, evidence,
                                           history_context=history_context, answer_text=answer_text,
                                           ordinary_relation=ordinary_relation, field_key=field_key)
@@ -1966,6 +1981,74 @@ def judged_context(governance, notes, index, label, evidence, *, history_context
     return None if found is None else list(found)
 
 
+#: 2026-10-01: a BARE BACKWARD REPAIR - 'Sorry, I mean amoxicillin.' - names one known non-person thing
+#: (`v3_actors.SOLE_NOUNS`) and nothing else: no pointer, no quantifier, no person, no other correction word.
+V3_BARE_REPAIR = re.compile(r'(?:(?:sorry|oops)\s*,?\s+)?i\s+mean(?:t)?\s+(?P<value>[^\W\d_][^\W\d_\-]*'
+                            r'(?:[ \-][^\W\d_][^\W\d_\-]*){0,2})\s*[.!]?', re.I)
+V3_LABELLED_THEN_REPAIR = re.compile(r'(?P<head>[^.!?\n]*[:\uff1a][^.!?\n]*[.!])[ \t]+(?P<tail>[^\n]+)')
+
+
+def v3_bare_repairs(reading, notes):
+    """Ids of correction units that are a bare backward repair of the labelled value RIGHT BEFORE them (READ ONLY for a
+    valid ordinary relation, `v3_relation_corrections`): 'Allergies: penicillin. Sorry, I mean amoxicillin.' (the repair
+    on the labelled line), or 'Sorry, I mean amoxicillin.' alone on the line after 'Allergies: penicillin.' with no
+    blank line between. Such a repair replaces the value it follows; it cannot change a line written AFTER it. Every
+    other correction ('Strike the next entry.', 'Sorry, the next one is wrong.', 'Sorry, I meant both legs.', a repair
+    after an unlabelled sentence) is read as before, note-wide."""
+    found = reading.get('_bare_repairs')
+    if found is not None:
+        return found
+    from .v3_actors import SOLE_NOUNS
+    units, colon, position = reading['units'], reading['colon'], reading['position']
+    found = set()
+    for unit in units:
+        quote = unit['quote']
+        if not v3_note_correction(quote) or v3_record_retraction(quote):
+            continue
+        tail, after_labelled = None, False
+        if V3_BARE_REPAIR.fullmatch(quote):
+            at = position[unit['id']]
+            previous = units[at - 1] if at > 0 else None
+            if (previous is not None and colon[previous['id']] and reading['parsed'][previous['id']]
+                    and not v3_note_correction(previous['quote'])
+                    and not BLANK_LINE.search(notes, previous['end'], unit['start'])):
+                tail, after_labelled = quote, True
+        elif colon[unit['id']] and reading['parsed'][unit['id']]:
+            split = V3_LABELLED_THEN_REPAIR.fullmatch(quote)
+            if split and V3_BARE_REPAIR.fullmatch(split['tail']) and not v3_note_correction(split['head']):
+                tail, after_labelled = split['tail'], True
+        if not after_labelled:
+            continue
+        value = V3_BARE_REPAIR.fullmatch(tail)['value']
+        words = [w.casefold() for w in re.findall(r'[^\W\d_]+', value)]
+        if words and all(w in SOLE_NOUNS or (w.endswith('s') and w[:-1] in SOLE_NOUNS) for w in words):
+            found.add(unit['id'])
+    reading['_bare_repairs'] = found
+    return found
+
+
+def v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, field_key, answer_text):
+    """The note's corrections that govern an answer (`judged_context`): every one, note-wide, as before - except, for an
+    answer whose ordinary relation record is valid, a bare backward repair (`v3_bare_repairs`) written wholly BEFORE
+    every line of the answer ('Allergies: penicillin. Sorry, I mean amoxicillin.' above 'Smoker: No.'). It still
+    governs everything before it and its own line, and every other correction is unchanged."""
+    corrections = list(scope['corrections'])
+    reading = scope.get('preceding')
+    if not corrections or ordinary_relation is None or not reading:
+        return corrections
+    spans = [v3_evidence_span(entry) for entry in evidence]
+    if not spans or any(span is None for span in spans):
+        return corrections
+    bare = v3_bare_repairs(reading, notes)
+    if not bare:
+        return corrections
+    from .v3_field_relations import read as ordinary_read
+    if not ordinary_read(reading, label, evidence, ordinary_relation, text=answer_text, field_key=field_key)['valid']:
+        return corrections
+    start = min(span[0] for span in spans)
+    return [unit for unit in corrections if not (unit['id'] in bare and unit['end'] <= start)]
+
+
 def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_units=None, v3_parsed=None):
     """The note's governance for this form, computed once: on the qualified Word form labelled lines never govern,
     and the answered-question exception reads answers the way this form's validator does. Its last element is the
@@ -1996,7 +2079,7 @@ def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_unit
             note_units = [{'id': 0, 'quote': notes, 'start': 0, 'end': len(notes)}]
             corrections = note_units
         preceding = v3_preceding_reading(notes, asked, context, note_units, v3_parsed)
-        if getattr(settings, 'V3_FIELD_RELATIONS', False): preceding['catalogue'] = fields
+        if field_relations_enabled(): preceding['catalogue'] = fields
         result += ({'units': note_units, 'corrections': corrections, 'preceding': preceding},)
     return result
 
@@ -2909,10 +2992,14 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     # ⚠️ ROUND 3 (2026-09-29): EVERYTHING BELOW ONLY EVER HOLDS (`v3_added_causes`, `v3_scope_selection`). Everything
     # above is debaefd9's reading, unchanged.
     # Who each unit may be about: ONE run over the whole note (`v3_actors`), never reset at a blank line (RR5, X1).
-    from .v3_actors import read as actors_read
+    from .v3_actors import read as actors_read, sole_patient, SOLE_OPENER
     explicit_patient = {u['id'] for u in units if EXPLICIT_PATIENT_SUBJECT.match(u['quote']) or u['id'] in age_presentations}
+    # 2026-10-01, RELATION PATH ONLY: the presenting opener with an article ('A 45-year-old man presents with cough.') is
+    # read as the presented patient by the relation floors and the single-patient scope; the default path's age grammar
+    # and everything it reads are unchanged.
+    openers = frozenset(u['id'] for u in units if u['id'] not in age_presentations and SOLE_OPENER.match(u['quote']))
     actors = actors_read(units, groups, colon=colon, parsed=parsed, subjects=subjects, explicit=explicit_patient,
-                         ages=age_presentations)
+                         ages=age_presentations, openers=openers)
     # PRE-2: a labelled value naming a side, an identity or an error ('Left knee: wrong side.', 'Allergies: wrong
     # patient.') is not PLAIN for rule (a): it may change what came before it.
     strict_plain = [is_plain and not v3_identity_value(parsed[u['id']][1]) for u, is_plain in zip(units, plain_values)]
@@ -3049,6 +3136,10 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'claim_keys': claim_keys, 'negated_keys': negated_keys, 'predicates': predicates,
             'labelled_claims': labelled_claims, 'dependent_reach': dependent_reach,
             'elicited_frames': v3_elicited_frames(units), 'field_label_keys': field_label_keys,
+            # 2026-10-01, READ ONLY BY THE ORDINARY FIELD-RELATIONS READER AND FLOORS: the note's positively established
+            # single-patient scope (`v3_actors.sole_patient`; empty when not established).
+            'sole_patient': sole_patient(units, actors['units'], subjects=subjects, parsed=parsed, colon=colon),
+            'openers': openers,
             'conditional_spans': conditional_spans, 'conditional_units': conditional_units,
             'conditional_multisentence': conditional_multisentence, 'conditional_unsafe': conditional_unsafe,
             'inherited_causes': [cause for cause in getattr(units, 'scope_causes', ())
@@ -3176,8 +3267,12 @@ def v3_preceding_warnings(reading, label, evidence, *, history_context=None, ans
                         side_warnings(matches[0], selected.values()) + policy_warnings(matches[0], selected.values()) +
                         temporal_warnings(matches[0], selected.values()))
         if answer_text is not None:
-            warnings.update((unit['id'], unit) for unit in
-                option_warnings(matches[0], reading['units'], selected.values(), str(answer_text).splitlines()))
+            # (2026-10-01) a valid relation record reads an option's polarity as its reader does (`option_view`).
+            from .v3_field_relations import option_view
+            found = option_warnings(matches[0], option_view(reading, reading['units'], ordinary['valid']),
+                                    option_view(reading, list(selected.values()), ordinary['valid']),
+                                    str(answer_text).splitlines())
+            warnings.update((unit['id'], reading['units'][reading['position'][unit['id']]]) for unit in found)
     warnings.update((unit['id'], unit) for unit in history['warnings'])
     warnings.update((unit['id'], unit) for unit in ordinary['warnings'])
     if len(matches) > 1 and selected and not ordinary['valid']:
@@ -3652,11 +3747,35 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     field = next((f for f in matches if f['key'] == field_key), None) if field_key is not None else None
     field = field if field is not None else (matches[0] if len(matches) == 1 else None)
     elicited = (label, uid) in reading.get('_literal_elicited', ())
+    # 2026-10-01: a note whose single-patient scope is POSITIVELY established (`v3_actors.sole_patient`: every nominal
+    # word known to name no person, one gender, the patient presented first) has nobody else in it, so the actor run's
+    # 'other' / 'ambiguous' for a pronoun after an article opener ('A 45-year-old man presents ... He ...') is not
+    # another person: no unit of it is skipped as somebody else's below, and none is held as one.
+    sole = reading.get('sole_patient') or frozenset()
     # ACTOR (`other_floor`: the actor reader's other-person reading, with an age presentation's own noun the patient)
-    if (info['other_floor'] or state.get('self_other')) and not elicited:
+    if (info['other_floor'] or state.get('self_other')) and not elicited and uid not in sole:
         causes.append((unit, 'other_person'))
-    if info['kind'] == 'pronoun' and state.get('actor') in ('other', 'ambiguous'):
+    if info['kind'] == 'pronoun' and state.get('actor') in ('other', 'ambiguous') and uid not in sole:
         causes.append((state.get('hold_cause') or unit, None))
+    # UNANCHORED OTHER PERSON (2026-10-01; closes C4 and P4): a statement whose own subject is not the explicit patient (a
+    # labelled line, a 'Label is ...' sentence, a thing, a pronoun) written after another person's statement, in a note
+    # that has not presented the patient before it ('Her sister was seen in oncology last month. Assessment is breast
+    # cancer.'; 'His father had a heart attack at 55. He has asthma. Allergies: none known.'): nothing in the note
+    # says it is the patient's, whatever the model called the other line.
+    if info['kind'] != 'patient' and uid not in sole:
+        first_other = None
+        for other in units[:reading['position'][uid]]:
+            found, seen = actors[other['id']], resolved[other['id']]
+            if ((found['readable'] and ((found['kind'] == 'patient' and seen.get('actor') == 'patient')
+                                        or found['main_patient']))
+                    or other['id'] in reading.get('openers', ())):
+                first_other = None
+                break                       # the note presents the patient before this statement (its main subject)
+            if first_other is None and (not found['readable'] or found['other_floor'] or seen.get('self_other')
+                                        or (found['kind'] == 'pronoun' and seen.get('actor') == 'other')):
+                first_other = other
+        if first_other is not None:
+            causes.append((first_other, None))
     # BOUNDED
     if not elicited and any(not (field is not None and v3_bound_by_destination(field, unit, at)) for at in info['bounded']):
         causes.append((unit, 'syntax_incomplete'))
@@ -3685,8 +3804,9 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
     for other in [units[position[oid]] for oid in sorted(v3_opposed_candidates(reading, uid), key=position.__getitem__)]:
         oid = other['id']
         found = actors[oid]
-        if (oid == uid or not found['readable'] or found['other_floor'] or resolved[oid].get('self_other')
-                or (found['kind'] == 'pronoun' and resolved[oid].get('actor') == 'other')):
+        if (oid == uid or not found['readable'] or (oid not in sole and (
+                found['other_floor'] or resolved[oid].get('self_other')
+                or (found['kind'] == 'pronoun' and resolved[oid].get('actor') == 'other')))):
             continue
         theirs = reading['predicates'][oid]
         if (mine_claim & reading['negated_keys'][oid] or mine_negated & reading['claim_keys'][oid]
@@ -3696,8 +3816,8 @@ def v3_relation_causes(reading, unit, label, selected, field_key=None):
                 # a cessation of what it claims; one a text answer selects with it is part of that answer (its history)
                 or (found['ceased_keys'] & mine_claim and not (text_answer and oid in selected))):
             causes.append((other, None))
-    # ANOTHER PERSON'S SAME TOPIC
-    if info['kind'] not in ('patient', 'pronoun'):
+    # ANOTHER PERSON'S SAME TOPIC (none in a single-patient note)
+    if info['kind'] not in ('patient', 'pronoun') and uid not in sole:
         topic = mine_claim | info['keys']
         # ... in the run before it, back to the last explicit-patient statement (which ends another person's run).
         for other in reversed(units[:reading['position'][uid]]):

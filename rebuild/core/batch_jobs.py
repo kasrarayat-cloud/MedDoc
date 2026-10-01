@@ -121,7 +121,8 @@ def current_plan(batch):
             or b.digest(e.template_version.fields) != plan['mapping_sha256']):
         raise ValidationError('The source or clinician decisions changed; no further part may be sent.')
     if refusal := v3_mapping.generation_refusal(e.template_version): raise ValidationError(refusal)
-    b.constraints(e.template_version, live=plan['config']['mode']=='live')
+    if b.plan_constraints(e.template_version, plan['config'], live=plan['config']['mode']=='live') != plan['constraints']:
+        raise ValidationError('The form-wide rules changed; no further part may be sent.')
     if list(g.source_units(plan['notes'],plan['asked'],context_labels=plan['context_labels'])[0]) != plan['units']:
         raise ValidationError('The source-unit reader changed; no part may reinterpret stored source IDs.')
     return plan

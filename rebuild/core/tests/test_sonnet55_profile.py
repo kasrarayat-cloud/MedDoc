@@ -48,7 +48,9 @@ from core.tests.test_sonnet5_profile import (FIELDS, NOTES, PRICE_ENV, ROLLBACK_
 REAL_ANTHROPIC = anthropic.Anthropic
 MODEL = 'claude-sonnet-5-5'
 #: The default 5.5 configuration: the settings defaults (thinking 'disabled', effort 'medium') at the list rates.
-SONNET_55 = dict(SONNET_5, AI_MODEL=MODEL)
+#: (2026-10-01) claude-sonnet-5-5 takes the ordinary field-relations contract by default once settings expose the switch
+#: (core.generation.field_relations_enabled); these profile tests pin the DEFAULT request, so they state the switch off.
+SONNET_55 = dict(SONNET_5, AI_MODEL=MODEL, V3_FIELD_RELATIONS_SWITCH=False)
 BETWEEN = {'type': 'between_tools'}
 ADAPTIVE = {'type': 'adaptive', 'display': 'omitted'}
 
@@ -319,7 +321,9 @@ class Sonnet55Wire(SimpleTestCase):
 
     @contextlib.contextmanager
     def live(self, base, **overrides):
-        """The settings of one path at claude-sonnet-5-5, with the pinned price environment."""
+        """The settings of one path at claude-sonnet-5-5, with the pinned price environment (the field-relations switch
+        stated off unless a test sets it: these tests pin each path's request)."""
+        overrides.setdefault('V3_FIELD_RELATIONS_SWITCH', False)
         with override_settings(**{**base, 'AI_MODEL': MODEL, **overrides}), patch.dict(os.environ, PRICE_ENV):
             yield
 
@@ -642,7 +646,7 @@ class Sonnet55Price(SimpleTestCase):
 
 def mapping_settings():
     from core.tests.test_mapping_assistance import SETTINGS
-    return {**SETTINGS, 'AI_MODEL': MODEL}
+    return {**SETTINGS, 'AI_MODEL': MODEL, 'V3_FIELD_RELATIONS_SWITCH': False}
 
 
 def mapping_fixture():
@@ -711,7 +715,7 @@ def batch_fixture():
 
 def batch_settings():
     from core.tests.test_generation_batch import SETTINGS
-    return {**SETTINGS, 'AI_MODEL': MODEL}
+    return {**SETTINGS, 'AI_MODEL': MODEL, 'V3_FIELD_RELATIONS_SWITCH': False}
 
 
 @override_settings(**batch_settings())

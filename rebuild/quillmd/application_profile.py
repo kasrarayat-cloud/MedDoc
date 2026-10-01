@@ -70,6 +70,15 @@ def flag(env, name, default='0'):
     return choice(env, name, ('0', '1'), default) == '1'
 
 
+def field_relations_switch(env):
+    """QUILLMD_V3_FIELD_RELATIONS as an explicit switch: None when unset (claude-sonnet-5-5 then takes the ordinary
+    field-relations contract by default, `core.generation.field_relations_enabled`), True for '1', False for '0'.
+    Anything else refuses instead of meaning off."""
+    if not raw(env, 'QUILLMD_V3_FIELD_RELATIONS'):
+        return None
+    return flag(env, 'QUILLMD_V3_FIELD_RELATIONS')
+
+
 def welcome_credit(env):
     """QUILLMD_WELCOME_CREDIT as an exact Decimal in whole cents, 0 to WELCOME_CREDIT_MAX."""
     text = raw(env, 'QUILLMD_WELCOME_CREDIT', WELCOME_CREDIT_DEFAULT)
@@ -184,6 +193,11 @@ def real_mode_problems(env, *, allowed_hosts, session_cookie_secure, csrf_cookie
     origin = explicit_origin_problem(env, app_base_url, allowed_hosts)
     if origin:
         problems.append(f'QUILLMD_APP_BASE_URL {origin}')
+    # 2026-10-01: claude-sonnet-5-5 takes the ordinary field-relations contract by DEFAULT (unset switch). Real data
+    # mode never inherits a contract from a model string: the production environment states it ('0' or '1'), and the
+    # production renderer accepts that name (ops/deployment_profile.APPLICATION_FEATURE_FLAGS).
+    if raw(env, 'QUILLMD_AI_MODEL') == 'claude-sonnet-5-5' and not raw(env, 'QUILLMD_V3_FIELD_RELATIONS'):
+        problems.append("QUILLMD_V3_FIELD_RELATIONS must be set to '0' or '1' with claude-sonnet-5-5 in real mode")
     return problems
 
 

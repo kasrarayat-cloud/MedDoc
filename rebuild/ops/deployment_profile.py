@@ -88,6 +88,9 @@ FIXED = {
 # setting (preview gate credentials, preview auth) cannot be carried into production by copy.
 APPLICATION_FEATURE_FLAGS = frozenset({
     'QUILLMD_WM_NARRATIVE', 'QUILLMD_MAPPING_ASSISTANCE', 'QUILLMD_MAPPING_ASSISTANCE_LIVE',
+    # 2026-10-01: the ordinary field-relations contract's explicit production switch ('0' or '1'; the application
+    # refuses real mode with claude-sonnet-5-5 and no value, quillmd/application_profile.real_mode_problems).
+    'QUILLMD_V3_FIELD_RELATIONS',
 })
 ENVIRONMENT_NAMES = frozenset({
     'QUILLMD_DEPLOYMENT_PROFILE', 'QUILLMD_DATA_MODE', 'QUILLMD_STRIPE_MODE', 'QUILLMD_REGISTRATION',

@@ -8,7 +8,6 @@ import json
 from decimal import Decimal, ROUND_CEILING
 from typing import Literal
 
-from django.conf import settings
 from django.core import signing
 from django.core.exceptions import ValidationError
 from pydantic import ConfigDict
@@ -65,12 +64,13 @@ def digest(value):
                                     separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 
-def enabled():
-    return bool(getattr(settings, 'V3_FIELD_RELATIONS', False))
+def enabled(model=None):
+    """The one effective switch (`generation.field_relations_enabled`): for `model`, or the configured model."""
+    return g.field_relations_enabled(model)
 
 
 def require_config(config):
-    if not enabled() or config.get('ordinary_field_contract') != CONTRACT:
+    if not enabled(config.get('model')) or config.get('ordinary_field_contract') != CONTRACT:
         raise ValidationError('Ordinary field interpretation is disabled or its quote has changed.')
     if config.get('provider') != 'anthropic' or config.get('model') not in g.NATIVE_MODELS:
         raise ValidationError('Ordinary field interpretation requires the exact native claude-sonnet-5 or '
@@ -284,7 +284,7 @@ def records(notes, catalogue, context, units, selections, model):
     repeated) refuses the WHOLE response; a field whose selection disagrees with its relations (`disagrees`) is
     recorded as returned and held by `read`, never adopted, and no other field changes. `competing_output` carries
     every competing repeated question's CLAIM (`claimed`), its own included, never only its selection."""
-    if not enabled() or model not in g.NATIVE_MODELS:
+    if not enabled(model) or model not in g.NATIVE_MODELS:
         raise ValidationError('Ordinary interpretation provenance is unavailable.')
     asked = g.v3_generation_fields(catalogue)[0]
     if len(selections.fields) != len(asked) or {f.key for f in selections.fields} != {f['key'] for f in asked}:
@@ -305,6 +305,146 @@ def records(notes, catalogue, context, units, selections, model):
                    'selection': item.model_dump()}
         result[item.key] = signing.dumps(payload, salt=SALT, compress=True)
     return result
+
+
+#: The subject words a single-patient pronoun statement is read through for an option's polarity ('She is a nonsmoker.'
+#: as 'The patient is a nonsmoker.': `v3_destination.predicate_polarity` reads only an explicit patient subject).
+_PRONOUN_SUBJECT = ('She ', 'He ')
+
+
+def sole_released(reading, field, ordered):
+    """2026-10-01. The selected units the note's POSITIVELY established single-patient scope (`v3_actors.sole_patient`)
+    makes the patient's, for this field: a unit of such a note, answering a printed question that names nobody but the
+    patient (`v3_actors.neutral_field`), and - for a question about what is so now (`g.v3_current_state_field`, not a
+    plan) - one present-tense clause with a current verb, no modal and no word of time outside a frequency phrase, whose
+    only subordinate clause states the destination's own printed time (`g.v3_bound_by_destination`). Evidence of WHO,
+    nothing more: every guard after it (shape, side, option, the relation floors) still applies, and the model's
+    relations are still checked against the note by those floors. Empty off the relation path."""
+    scope = reading.get('sole_patient') or frozenset()
+    if not scope or field is None:
+        return set()
+    from .v3_actors import neutral_field
+    if not neutral_field(str(field.get('label') or ''), str(field.get('context') or '')):
+        return set()
+    label = g.question_key(field.get('label'))
+    current = g.v3_current_state_field(field) and not g.v3_plan_question(field, label)
+    chosen = {u['id'] for u in ordered}
+    released = set()
+    for u in ordered:
+        sole = (reading['actors'].get(u['id']) or {}).get('sole')
+        if u['id'] not in scope or not sole:
+            continue
+        if current and not (sole['current'] and all(g.v3_bound_by_destination(field, u, at) for at in sole['advcl'])):
+            continue
+        if not sole_independent(reading, u, chosen, label):
+            continue
+        released.add(u['id'])
+    return released
+
+
+#: The topics a printed question with this exact label is about (`sole_independent`). A label not listed here is not
+#: checked (the model's destination stands, as for every other proven statement).
+SOLE_FIELD_TOPICS = {
+    # label: (at least one of these topics, and none outside the second set)
+    'chief complaint': ({'symptom', 'injury', 'condition'}, {'symptom', 'injury', 'condition'}),
+    'presenting complaint': ({'symptom', 'injury', 'condition'}, {'symptom', 'injury', 'condition'}),
+    'history of present illness': ({'symptom', 'injury', 'condition', 'finding'},
+                                   {'symptom', 'injury', 'condition', 'finding'}),
+    'hpi': ({'symptom', 'injury', 'condition', 'finding'}, {'symptom', 'injury', 'condition', 'finding'}),
+    'past medical history': ({'condition', 'injury'}, {'condition', 'injury'}),
+    'medications': ({'medication'}, {'medication'}), 'medication': ({'medication'}, {'medication'}),
+    'current medications': ({'medication'}, {'medication'}),
+    'allergies': ({'allergy'}, {'allergy', 'medication'}), 'allergy': ({'allergy'}, {'allergy', 'medication'}),
+    'smoker': ({'smoking'}, {'smoking'}), 'smoking': ({'smoking'}, {'smoking'}),
+    'smoking status': ({'smoking'}, {'smoking'}),
+    'examination': ({'finding', 'symptom'}, {'finding', 'symptom'}),
+    'clinical findings': ({'finding', 'symptom'}, {'finding', 'symptom'}),
+    'assessment': ({'condition', 'injury', 'symptom', 'finding'}, {'condition', 'injury', 'symptom', 'finding'}),
+    'plan': (None, {'medication', 'therapy', 'test', 'care'}),
+    'clinic attendance': ({'care'}, {'care'}),
+}
+
+
+def _owner(reading, uid):
+    """The printed question a unit is written as the answer of: its label ('Allergies: none.', 'Assessment is ...') or
+    the question its subject names ('On examination there is ...'); None for any other statement."""
+    own = reading['parsed'].get(uid)
+    return (own[0] if own else None) or reading['subjects'].get(uid)
+
+
+def sole_independent(reading, unit, chosen, label):
+    """2026-10-01. Whether the model's 'independent' for every OTHER line of a single-patient note is borne out by the
+    note itself, for a unit `sole_released` would make the patient's (`v3_actors._sole_reading`: each line's topic
+    classes, operator reach, words and unknown words). The unit is NOT released when the note holds:
+      - a word that is neither a known noun, a known operator nor a known neutral word, anywhere (an unknown word may
+        deny, end or correct: 'She is not anticoagulated.', 'She was misheard.') - fail closed;
+      - a correction or a pointer to another line, anywhere ('The previous line is incorrect.', 'Sorry, ...');
+      - another line about the same topic that denies, ends, restricts, conditions or doubts it ('She takes no
+        medicines.', 'The patient used to smoke.', 'The patient is allergic to latex only.', 'Plan: switch to apixaban.')
+        - only doubt in an assessment's own line excepted ('Assessment is a probable medial meniscus tear.');
+      - another line naming the same word with a contraindication ('She is allergic to amitriptyline.');
+      - another line about the same topic that is neither the presenting line nor written as ANOTHER printed question's
+        answer ('She has twenty cigarettes a day.' beside 'She is a nonsmoker.': the answer may be contradicted or
+        incomplete), and any line written as THIS question's answer that it did not select;
+      - for an answer that itself denies, ends, restricts or contraindicates, another line sharing one of its words
+        ('She denies headaches.' beside 'Assessment is tension-type headache.').
+    The lines it selected are its answer. Read only for a single-patient release; nothing else is changed by it."""
+    units, actors = reading['units'], reading['actors']
+    mine = actors[unit['id']]['sole']
+    found = actors[unit['id']]
+    # The answer itself: no unknown word, nothing pointing elsewhere, no operator but a denial ('She takes warfarin or
+    # apixaban.', 'She is at risk of diabetes.' are not what is so), and nothing leaning on another line.
+    if (mine['unknown'] or 'global' in mine['reach'] or not mine['negation_only']
+            or (found['dependent'] and not mine['self_contained']) or found['bare_cessation']):
+        return False
+    # One statement, two specific questions' topics ('He has hypertension and takes lisinopril 10 mg daily.' alone in
+    # Past medical history): the same owner question as rule (b2) - only a general narrative question takes it (a
+    # question with known topics is checked below instead).
+    if mine['multi_topic'] and label not in g.GENERAL_NARRATIVE_FIELDS and label not in SOLE_FIELD_TOPICS:
+        return False
+    # A question whose topic is known takes only a statement about that topic ('She takes no medicines.' is not a Past
+    # medical history, 'She has asthma.' not a Medications answer): the model's destination, checked where it can be.
+    topics = SOLE_FIELD_TOPICS.get(label)
+    if topics is not None:
+        required, allowed = topics
+        if not mine['classes'] <= allowed or (required is not None and not mine['classes'] & required):
+            return False
+    first = units[0]['id'] if units else None
+    for other in units:
+        oid = other['id']
+        if oid in chosen:
+            continue
+        theirs = (actors.get(oid) or {}).get('sole')
+        if (not theirs or theirs['unknown'] or 'global' in theirs['reach']
+                or (actors[oid]['dependent'] and not theirs['self_contained']) or actors[oid]['bare_cessation']):
+            return False
+        owner = _owner(reading, oid)
+        shared_class = bool(theirs['classes'] & mine['classes'])
+        shared_key = bool(theirs['keys'] & mine['keys'])
+        doubt_in_assessment = owner in ('assessment', 'impression', 'diagnosis') and theirs['doubt_only']
+        if 'key' in theirs['reach'] and shared_key:
+            return False
+        if 'class' in theirs['reach'] and shared_class and not doubt_in_assessment:
+            return False
+        if owner is not None and owner == label:
+            return False
+        if shared_class and oid != first and owner is None:
+            return False
+        if mine['reach'] and shared_key:
+            return False
+    return True
+
+
+def option_view(reading, units, valid=True):
+    """The units an option's polarity is read from: in a single-patient note (`sole_patient`), a statement opening with
+    the patient's own pronoun is read as the patient's ('She is a nonsmoker.' as 'The patient is a nonsmoker.'), so an
+    opposite statement anywhere holds the option exactly as an explicit one does. Anything else, unchanged."""
+    scope = reading.get('sole_patient') or frozenset()
+    if not valid or not scope:
+        return list(units)
+    return [{**u, 'quote': 'The patient ' + u['quote'][len(prefix):]}
+            if u['id'] in scope and (prefix := next((p for p in _PRONOUN_SUBJECT if u['quote'].startswith(p)), None))
+            else u for u in units]
 
 
 def read(reading, label, evidence, record, *, text=None, field_key=None):
@@ -363,6 +503,8 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         policy_patient = isinstance(field.get('answer_policy'), dict)
         from .v3_literal_facts import complete_ids
         literal_ids = complete_ids(field, ordered, reading)
+        # 2026-10-01: a unit of a positively established single-patient note is the patient's (`sole_released`).
+        sole_ids = sole_released(reading, field, ordered)
         # Existing patient/foreign actor, shape and exact-labelled-source guards
         # remain prerequisites, regardless of the model's context declarations.
         for u in ordered:
@@ -376,8 +518,11 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
                         and not predicate_patient and not temporal_patient
                         and u['id'] not in reading['syntax_complete']
                         and u['id'] not in reading['actor_relations']['units']
-                        and u['id'] not in literal_ids)
+                        and u['id'] not in literal_ids and u['id'] not in sole_ids)
                     or g.v3_shape_holds(u['quote'], own[1] if own else u['quote'])): return refused
+        # A single-patient unit read as one complete current clause ('She attends the clinic every week.') is complete
+        # without the finite-verb list (`v3_actors._sole_reading` 'current').
+        literal_ids = set(literal_ids) | {uid for uid in sole_ids if reading['actors'][uid]['sole']['current']}
         values = [reading['parsed'][u['id']][1] if reading['parsed'][u['id']] else u['quote'] for u in ordered]
         answer = '\n'.join(values)
         choices = options(field); selected_options = set(item.option_ids)
@@ -387,7 +532,8 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
                     or field.get('kind') != 'multi_choice' and len(selected_options) > 1
                     or any(g.named_option([c['text'] for c in choices], o['text']) is None for o in choices)
                     or any(r == 'qualifier' for r in item.context)): return refused
-            if option_warnings(field, units, ordered, [o['text'] for o in choices if o['id'] in selected_options]): return refused
+            if option_warnings(field, option_view(reading, units), option_view(reading, ordered),
+                               [o['text'] for o in choices if o['id'] in selected_options]): return refused
             if field.get('kind') == 'checkbox':
                 from .v3_mapping import CHECKED
                 answer = CHECKED if selected_options else ''
