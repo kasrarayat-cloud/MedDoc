@@ -35,7 +35,8 @@ What each test proves:
     rate and settlement recorded, the transcript reviewed and saved as the notes through the real notes view, then
     the generation on that encounter, review, finalization and the authenticated export; the stage passes, is never
     run twice, and no key is anywhere in the evidence, the result or the QA database; a Stop file met at the
-    transcription send's admission halts the run, the queued job is cancelled and nothing is sent.
+    transcription send's admission halts the run, the queued job is cancelled and nothing is sent; (L1:R1-F2) a
+    declared Deepgram file of its own path holding the Anthropic key sends nothing.
 """
 import dataclasses
 import hashlib
@@ -444,9 +445,10 @@ else:
                 here = dataclasses.replace(self.campaign.declaration, qa_database=connection.settings_dict['NAME'])
                 self.assertEqual(st.check_configuration(st.settings_snapshot('transcription'), here, 'transcription',
                                                         self.campaign.root), [])
+                kwargs.setdefault('transcription_secret', DEEPGRAM_KEY)
                 return st.run_stage(self.campaign, 'transcription', secret=SYNTHETIC_KEY,
                                     provenance={'runner_commit': 'offline-test'}, database_prefix='test_quillmd_qa_',
-                                    transcription_secret=DEEPGRAM_KEY, **kwargs)
+                                    **kwargs)
 
         def test_a_transcription_then_its_generation_end_to_end(self):
             from decimal import Decimal
@@ -578,6 +580,29 @@ else:
             resumed = self.transcription_run(max_sends=2)
             self.assertEqual(resumed['decision'], 'partial', resumed['reasons'])
             self.assertEqual(len(self.deepgram_requests), 1)
+
+        def test_a_deepgram_file_holding_the_anthropic_key_sends_nothing(self):
+            """L1:R1-F2 end to end: the declared Deepgram file — its own path, 0600, one name, one line — holds the
+            ANTHROPIC key. Whether the run is handed that value or the campaign's own Deepgram key, the real run_stage
+            refuses before any transcription job, attempt or request: the stand-in Deepgram sees nothing."""
+            from core.models import Job
+            for audio in st.TRANSCRIPTION_AUDIO:
+                if not os.path.exists(audio.path):
+                    self.skipTest(f'{audio.path} is not on this host')
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            self.transcription_setup()
+            self.deepgram_file.write_text(SYNTHETIC_KEY + '\n')               # (a copy of the Anthropic key)
+            os.chmod(self.deepgram_file, 0o600)
+            self.assertNotEqual(self.deepgram_file, Path(self.credential))      # (the paths differ)
+            for given in ('the file value', 'the campaign Deepgram key'):
+                with self.subTest(given=given):
+                    secret = SYNTHETIC_KEY if given == 'the file value' else DEEPGRAM_KEY
+                    with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential is not a key of its own'):
+                        self.transcription_run(transcription_secret=secret)
+            self.assertEqual(self.deepgram_requests, [])                           # (nothing was sent)
+            self.assertEqual([a for a, _ in self.campaign.ledger.rows() if a['stage'] == 'transcription'], [])
+            self.assertEqual(Job.objects.filter(kind='transcription').count(), 0)
+            self.assertNotEqual(self.campaign.ledger.stage_state('transcription')['state'], 'passed')
 
         def test_the_stop_file_refuses_a_run_before_anything_is_written(self):
             self.campaign.stop_file().write_text('')

@@ -55,9 +55,12 @@ never a large number. Every NON-monetary control stays, each stated so a reader 
                         (one QA-worker job; the reviewed transcript then saved as the notes through the real view) and the
                         generation on that encounter (review, finalization, authenticated export). The Deepgram key is read
                         from `transcription_credential_file` by the same file rules as the Anthropic key, only for a
-                        transcription run, and reaches only that run's request process, whose environment holds it only
-                        around the transcription send's one request; a transport guard admits only that request (POST
-                        https://api.deepgram.com/v1/listen with exactly the declared parameters), captured first.
+                        transcription run, and must be a key of its own BY VALUE (sharing no run of 16 characters with
+                        the Anthropic key in any letter case, never Anthropic-shaped: require_own_transcription_key,
+                        refutation L1:R1-F2 — a copy at a path of its own was sent to Deepgram); it reaches only that
+                        run's request process, whose environment holds it only around the transcription send's one
+                        request; a transport guard admits only that request (POST https://api.deepgram.com/v1/listen
+                        with exactly the declared parameters and key, the Anthropic key nowhere in it), captured first.
 
 The historical campaign quillmd-v1-sonnet5-staged-40 (its declaration, ledger, limits, attempts 1-24, failures and
 verdicts) is untouched: its runner (ops/sonnet5_qa.py) still reads it (plan, status), refuses every write to its root
@@ -779,20 +782,58 @@ def require_door(declaration, environ=None):
 TRANSCRIPTION_KEY_VARIABLE = 'DEEPGRAM_API_KEY'
 
 
-def load_transcription_credential(declaration, path=None):
+#: Two credentials sharing this many consecutive characters (letter case ignored) are one credential copied: a real
+#: Deepgram key (40 hexadecimal characters) and a real Anthropic key share no such run but by a copy.
+SHARED_RUN = 16
+
+
+def shares_a_run(first, second, run=SHARED_RUN):
+    """True when `first` and `second`, letter case ignored, have `run` consecutive characters in common — or, when the
+    shorter of the two is shorter than `run`, when it occurs whole in the other. Equality, one holding the other, a
+    part of one, and a long piece of one among other characters are each such a run."""
+    shorter, longer = sorted((first.lower(), second.lower()), key=len)
+    run = min(run, len(shorter))
+    return any(shorter[i:i + run] in longer for i in range(len(shorter) - run + 1))
+
+
+def require_own_transcription_key(transcription_key, anthropic_key):
+    """The Deepgram key is a credential of its own BY VALUE, not only by path (refutation L1:R1-F2: a declared Deepgram
+    file at a path of its own holding a copy of the Anthropic key was handed on and sent to api.deepgram.com as `Token
+    <the Anthropic key>`). Refused unless the Anthropic key is given to compare against, and unless the Deepgram key
+    carries no Anthropic key's shape (provider_campaign.KEY_SHAPE, letter case ignored) and shares no run of SHARED_RUN
+    characters with the Anthropic key (shares_a_run: a copy, the key inside a longer line, a part of it, a long piece of
+    it among other characters, in any letter case). The one rule for every holder of both keys: the loader (outer,
+    inner, the transcription preconditions), run_stage, and the transcription guard at the last door. Neither value is
+    ever named in the refusal."""
+    require(isinstance(anthropic_key, str) and anthropic_key,
+            'The Deepgram credential is checked against the Anthropic key, which is not given; nothing is sent.')
+    require(isinstance(transcription_key, str) and transcription_key
+            and not pc.KEY_SHAPE.search(transcription_key.lower().encode())
+            and not shares_a_run(transcription_key, anthropic_key),
+            'The Deepgram credential is not a key of its own: it is, holds, is part of or shares a run of characters '
+            'with the Anthropic key, or carries an Anthropic key\'s shape. It would be sent to another provider; '
+            'nothing is sent.')
+    return transcription_key
+
+
+def load_transcription_credential(declaration, path=None, *, anthropic_key):
     """The Deepgram key from the declared `transcription_credential_file` ONLY, under the Anthropic key's own file rules
     (provider_campaign.load_credential), every one checked before a byte is read: an absolute path with no
     environment-file name and no symbolic link at ANY component, a regular file with one name (no hard link), mode 0600,
-    owned by the account running the runner, one non-empty printable line. A missing file refuses. Returned, never
-    printed, logged, written or put in argv."""
+    owned by the account running the runner, one non-empty printable line. A missing file refuses. Then the key must be
+    one of its own BY VALUE against `anthropic_key` (require_own_transcription_key: the path check alone let a copy of
+    the Anthropic key through, L1:R1-F2) — a required argument, so no caller can read the Deepgram key without that
+    comparison; the Anthropic key is given by the caller, never read here. Returned, never printed, logged, written or
+    put in argv."""
     terms = declaration.transcription
     require(terms is not None, 'The declaration declares no transcription stage; no Deepgram credential is read.')
     path = terms.credential_file if path is None else path
     require(str(path) == terms.credential_file, 'Only the declared transcription_credential_file is read.')
     try:
-        return pc.load_credential(str(path))
+        key = pc.load_credential(str(path))
     except Refused as refused:
         raise Refused(f'The Deepgram credential: {refused}') from None
+    return require_own_transcription_key(key, anthropic_key)
 
 
 # ── restricted and allowed inputs ────────────────────────────────────────────────────────────────────────────────
@@ -1697,14 +1738,16 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     transcribing = stage == 'transcription'
     require(transcribing == (transcription_secret is not None),
             'The Deepgram credential reaches a transcription run only, and a transcription run needs it.')
+    if transcribing:
+        require_own_transcription_key(transcription_secret, secret)      # (L1:R1-F2: before the ledger, a run, a worker)
     ledger.acquire()
     settled = settle(campaign)
     require_preflight(campaign)
     limits = campaign.limits()
     if transcribing:
         checked = transcription_module().preconditions(
-            campaign, transcription_secret=transcription_secret, database_prefix=database_prefix, rebuild=rebuild,
-            environ=environ, expect=declaration.expect(limits))
+            campaign, secret=secret, transcription_secret=transcription_secret, database_prefix=database_prefix,
+            rebuild=rebuild, environ=environ, expect=declaration.expect(limits))
     else:
         checked = stages.stage_preconditions(declaration, kind, root, database_prefix=database_prefix, rebuild=rebuild,
                                              environ=environ, ledger=ledger, expect=declaration.expect(limits))
@@ -2087,9 +2130,10 @@ def outer(command, stage=None, max_sends=None, path=None):
     require(not os.path.lexists(root / STOP_NAME), f'The Stop file {root / STOP_NAME} exists; nothing is sent.')
     key = pc.load_credential(declaration.credential_file, declaration)
     # (the Deepgram key: read for a transcription run ONLY, by the same file rules, before anything is sent — a missing,
-    # linked, wrongly owned or wrongly permissioned file refuses here, before the database or the request process)
+    # linked, wrongly owned or wrongly permissioned file refuses here, before the database or the request process, and
+    # so does one holding the Anthropic key's value at a path of its own: L1:R1-F2)
     transcribing = command == 'run' and stage == 'transcription'
-    transcription_key = load_transcription_credential(declaration) if transcribing else None
+    transcription_key = load_transcription_credential(declaration, anthropic_key=key) if transcribing else None
     password = ''
     if command == 'run':
         password = pc.read_private(declaration.qa_database_password_file).decode().strip()
@@ -2141,8 +2185,8 @@ def inner():
     require(pc.constant_time_equal(key, pc.load_credential(declaration.credential_file, declaration)),
             'The request process does not carry the declared credential.')
     if transcribing:
-        require(transcription_key and pc.constant_time_equal(transcription_key,
-                                                             load_transcription_credential(declaration)),
+        require(transcription_key and pc.constant_time_equal(
+                    transcription_key, load_transcription_credential(declaration, anthropic_key=key)),
                 'The request process does not carry the declared Deepgram credential.')
     provenance = {'runner_commit': context['runner_commit']}
     try:

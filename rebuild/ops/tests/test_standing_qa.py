@@ -55,6 +55,10 @@ What each group proves, stated so a reader can see how it would fail:
     never restricted; never twice); the real run_stage for transcription (each recording then its generation, the
     key only for a transcription run, a halt between the two strands the generation and refuses every later run, a
     retained copy of the Deepgram key stops the campaign); the transcript judge (source support, protected fields).
+    (L1:R1-F2) A Deepgram key sharing a run of 16 characters with the Anthropic key in any letter case (a copy, holding
+    it, a part or a long piece of it) or Anthropic-shaped — a file of its own PATH holding the Anthropic key's VALUE —
+    is refused where it is read (the loader, outer, inner, the preconditions), by run_stage before a run opens, and at
+    the guard before the network; the guard also refuses the Anthropic key in any header or body.
   · STOP RACE (L1:R1-F4 / L2:R2-F2) — the Stop file met inside a send before its attempt record (preview admission,
     admission, attempt record; and in the model check) halts the run and cancels its queued job; any other refusal,
     even with a Stop file present, and a campaign stop still fail; the halt is read from the refusal's type.
@@ -1364,6 +1368,55 @@ class ProcessTests(Base):
                     with self.assertRaisesRegex(pc.Refused, f'The Deepgram credential: .*{why[name]}'):
                         st.outer('run', 'transcription')
 
+    def test_a_deepgram_file_holding_the_anthropic_key_refuses_a_transcription_run_before_anything_is_sent(self):
+        """L1:R1-F2: the declared Deepgram file is a path of its own, mode 0600, one name, one line — and holds the
+        Anthropic key (shaped, or an unshaped value equal to the Anthropic file's). outer() refuses before the
+        password, the database or the exec, so no request process ever carries it as DEEPGRAM_API_KEY."""
+        def forbidden(*args, **kwargs):
+            raise AssertionError('the run went past the Deepgram credential')
+        plain = 'plain-standing-credential-6666666666666666'
+        for name, (anthropic, deepgram) in {'a copy of the Anthropic key': (SYNTHETIC_KEY, SYNTHETIC_KEY),
+                                            'an unshaped copy': (plain, plain),
+                                            'the Anthropic key inside a longer line': (SYNTHETIC_KEY,
+                                                                                       'x' + SYNTHETIC_KEY)}.items():
+            with self.subTest(case=name):
+                self.key.write_text(anthropic + '\n')
+                os.chmod(self.key, 0o600)
+                self.deepgram.write_text(deepgram + '\n')
+                os.chmod(self.deepgram, 0o600)
+                self.assertNotEqual(os.path.abspath(self.deepgram), os.path.abspath(self.key))  # (paths differ)
+                with patch.dict(os.environ, self.door), patch.object(os, 'execve', forbidden), \
+                        patch.object(st, 'ensure_database', forbidden), patch.object(pc, 'read_private', forbidden), \
+                        redirect_stderr(io.StringIO()):
+                    with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential is not a key of its own') as caught:
+                        st.outer('run', 'transcription')
+                self.assertNotIn(anthropic, str(caught.exception))
+                self.assertNotIn(deepgram, str(caught.exception))
+
+    def test_inner_refuses_a_deepgram_key_that_is_the_anthropic_key(self):
+        """L1:R1-F2 in the request process: its environment and the declared file both hold the Anthropic key as the
+        Deepgram key (outer() was passed with good files) — the shaped key, or an unshaped Anthropic key, so the
+        comparison itself is exercised and not only the shape. inner() refuses before any request."""
+        import httpx
+        calls = []
+
+        def anything(request):
+            calls.append(request)
+            return httpx.Response(500)
+        for name, anthropic in {'a copy of the Anthropic key': SYNTHETIC_KEY,
+                                'an unshaped copy': 'plain-standing-credential-9999999999999999'}.items():
+            with self.subTest(case=name):
+                self.key.write_text(anthropic + '\n')
+                self.deepgram.write_text(DEEPGRAM_KEY + '\n')
+                env = self.outer_run('transcription')['env']
+                self.assertEqual((env[st.TRANSCRIPTION_KEY_VARIABLE], env['ANTHROPIC_API_KEY']),
+                                 (DEEPGRAM_KEY, anthropic))                       # (positive control: a good run)
+                self.deepgram.write_text(anthropic + '\n')
+                with patch.object(httpx, 'HTTPTransport', lambda: httpx.MockTransport(anything)), \
+                        self.assertRaisesRegex(pc.Refused, 'The Deepgram credential is not a key of its own'):
+                    self.inner({**env, st.TRANSCRIPTION_KEY_VARIABLE: anthropic})
+                self.assertEqual(calls, [])                                     # (nothing was sent)
+
     def test_inner_refuses_a_deepgram_key_outside_a_transcription_run(self):
         import httpx
         env = self.outer({**self.door})['env']                                 # (the preflight's own environment)
@@ -1824,7 +1877,7 @@ class TranscriptionDeclarationTests(Base):
             parse(self, stage_back.replace(relations, relations + 'pricing_version transcription: configured-v1:'
                                                                   + 'e' * 64 + '\n'))
         with self.assertRaisesRegex(pc.Refused, 'declares no transcription stage'):
-            st.load_transcription_credential(d)
+            st.load_transcription_credential(d, anthropic_key=SYNTHETIC_KEY)
         with self.assertRaisesRegex(pc.Refused, 'declares no transcription stage'):
             st.stage_inputs('transcription', d)
 
@@ -1844,44 +1897,116 @@ class TranscriptionCredentialTests(Base):
                                                                           credential_file=str(self.key)))
 
     def test_the_declared_file_with_the_right_shape_is_read(self):
-        self.assertEqual(st.load_transcription_credential(self.d), DEEPGRAM_KEY)
+        self.assertEqual(st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY), DEEPGRAM_KEY)
 
     def test_each_bad_condition_refuses(self):
         with self.assertRaisesRegex(pc.Refused, 'Only the declared transcription_credential_file'):
-            st.load_transcription_credential(self.d, str(self.folder / 'other'))
+            st.load_transcription_credential(self.d, str(self.folder / 'other'), anthropic_key=SYNTHETIC_KEY)
         os.chmod(self.key, 0o644)
         with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*mode 0600'):
-            st.load_transcription_credential(self.d)
+            st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY)
         os.chmod(self.key, 0o600)
         with patch.object(os, 'getuid', lambda: os.geteuid() + 1), \
                 self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*owned by the account'):
-            st.load_transcription_credential(self.d)
+            st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY)
         os.link(self.key, self.folder / 'second-name')
         with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*another name'):
-            st.load_transcription_credential(self.d)
+            st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY)
         os.unlink(self.folder / 'second-name')
         real = self.folder / 'real-key'
         self.key.rename(real)
         self.key.symlink_to(real)
         with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*symbolic link'):
-            st.load_transcription_credential(self.d)
+            st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY)
         os.unlink(self.key)
         with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*does not exist'):
-            st.load_transcription_credential(self.d)
+            st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY)
         linked = scratch(self) / 'linked-folder'
         linked.symlink_to(self.folder)                                     # (a link at a DIRECTORY component)
         real.rename(self.key)
         through = dataclasses.replace(self.d, transcription=dataclasses.replace(
             self.d.transcription, credential_file=str(linked / 'deepgram-api-key')))
         with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*symbolic link'):
-            st.load_transcription_credential(through)
+            st.load_transcription_credential(through, anthropic_key=SYNTHETIC_KEY)
         self.key.write_text(DEEPGRAM_KEY + ' trailing\n')
         with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*one non-empty line'):
-            st.load_transcription_credential(self.d)
+            st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY)
         self.key.unlink()
         self.key.mkdir(mode=0o700)
         with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*not a regular file'):
+            st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY)
+
+    def test_a_file_holding_the_anthropic_key_is_refused(self):
+        """L1:R1-F2: a Deepgram credential file of its OWN PATH (0600, one name, one line) that holds the Anthropic
+        key's VALUE — a copy, the key inside a longer line, a part of it — or any Anthropic-shaped key is refused: its
+        value would go to another provider. The refusal names neither key; the Anthropic key is given, never read here."""
+        plain = 'plain-anthropic-standing-value-5555555555'
+        other = '0123456789abcdef0123456789'                                  # (no run of the Anthropic key)
+        cases = {'a copy of the Anthropic key': (SYNTHETIC_KEY, SYNTHETIC_KEY),
+                 'the Anthropic key inside a longer line': ('dg0' + SYNTHETIC_KEY + '0dg', SYNTHETIC_KEY),
+                 'a part of the Anthropic key': (SYNTHETIC_KEY[10:50], SYNTHETIC_KEY),
+                 'a short part of the Anthropic key': (SYNTHETIC_KEY[20:30], SYNTHETIC_KEY),
+                 'a 20-character piece of the Anthropic key among other characters': (SYNTHETIC_KEY[13:33] + other[:20],
+                                                                                      SYNTHETIC_KEY),
+                 'another Anthropic-shaped key': ('sk-ant-api03-ANOTHER-SYNTHETIC-OFFLINE-KEY-55555555', SYNTHETIC_KEY),
+                 'another Anthropic-shaped key in capitals': ('SK-ANT-API03-ANOTHER-SYNTHETIC-OFFLINE-KEY-55555555',
+                                                              SYNTHETIC_KEY),
+                 'an unshaped copy of the Anthropic key': (plain, plain),
+                 'an unshaped Anthropic key inside a longer line': ('dg0' + plain + '0dg', plain),
+                 'an unshaped copy in capitals': (plain.upper(), plain)}
+        for held, _ in (cases['a part of the Anthropic key'], cases['a short part of the Anthropic key'],
+                        cases['a 20-character piece of the Anthropic key among other characters'],
+                        cases['an unshaped copy in capitals']):
+            self.assertFalse(pc.KEY_SHAPE.search(held.encode()))                 # (refused by the run, not the shape)
+        self.assertNotIn(cases['a 20-character piece of the Anthropic key among other characters'][0],
+                         SYNTHETIC_KEY)                                          # (neither contains the other)
+        for name, (held, anthropic) in cases.items():
+            with self.subTest(case=name):
+                self.key.write_text(held + '\n')
+                with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential is not a key of its own') as caught:
+                    st.load_transcription_credential(self.d, anthropic_key=anthropic)
+                self.assertNotIn(held, str(caught.exception))
+                self.assertNotIn(anthropic, str(caught.exception))
+        self.key.write_text(DEEPGRAM_KEY + '\n')                                # (positive control: its own key)
+        self.assertEqual(st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY), DEEPGRAM_KEY)
+        bound = SYNTHETIC_KEY[13:28] + other[:25]                  # (the rule's stated bound: a 15-character run passes)
+        self.key.write_text(bound + '\n')
+        self.assertEqual(st.load_transcription_credential(self.d, anthropic_key=SYNTHETIC_KEY), bound)
+        with self.assertRaises(TypeError):                                     # (no read without the key to compare)
             st.load_transcription_credential(self.d)
+
+
+class TranscriptionPreconditionsCredentialTests(Base):
+    """L1:R1-F2 in the request process's transcription preconditions (standing_qa_transcription.preconditions), which
+    check the credential FIRST — before the historical checks or any application import, so this runs offline: a
+    declared Deepgram file of its own path holding the Anthropic key's value refuses, however the run was handed it."""
+
+    def test_a_file_holding_the_anthropic_key_refuses_before_anything_else(self):
+        tr = st.transcription_module()
+        folder = scratch(self) / 'credential'
+        folder.mkdir(mode=0o700)
+        key = folder / 'deepgram-api-key'
+        d = parse(self)
+        campaign = self.campaign(dataclasses.replace(d, transcription=dataclasses.replace(d.transcription,
+                                                                                          credential_file=str(key))))
+        plain = 'plain-standing-credential-4444444444444444'
+        cases = {'a copy of the Anthropic key': (SYNTHETIC_KEY, SYNTHETIC_KEY),
+                 'an unshaped copy': (plain, plain),
+                 'an unshaped Anthropic key inside it': (plain, 'dg' + plain)}
+
+        def historical(*args, **kwargs):
+            raise pc.Refused('sentinel: past the Deepgram credential')
+        with patch.object(sq, 'preconditions', historical):
+            for name, (anthropic, held) in cases.items():
+                with self.subTest(case=name):
+                    key.write_text(held + '\n')
+                    os.chmod(key, 0o600)
+                    for given in (held, DEEPGRAM_KEY):              # (the file's value, or the campaign's own key)
+                        with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential is not a key of its own'):
+                            tr.preconditions(campaign, secret=anthropic, transcription_secret=given, environ={})
+            key.write_text(DEEPGRAM_KEY + '\n')                    # (positive control: its own key gets past it)
+            with self.assertRaisesRegex(pc.Refused, 'sentinel: past the Deepgram credential'):
+                tr.preconditions(campaign, secret=SYNTHETIC_KEY, transcription_secret=DEEPGRAM_KEY, environ={})
 
 
 class TranscriptionGuardTests(unittest.TestCase):
@@ -1991,6 +2116,63 @@ class TranscriptionGuardTests(unittest.TestCase):
         with self.assertRaisesRegex(pc.Refused, 'outside an attempt'):
             self.post()
         self.assertEqual(self.seen, [])
+
+    def test_a_declared_key_that_is_not_its_own_is_refused_before_it_leaves(self):
+        """L1:R1-F2 at the last door: the request carries `Authorization: Token <the declared key>` exactly, but the
+        declared key IS, holds or is part of the campaign's Anthropic key, or carries an Anthropic key's shape — or the
+        attempt names no Anthropic key to tell them apart. Refused before the network and before any record; the
+        refusal kept with the attempt names neither key."""
+        plain = 'plain-standing-credential-8888888888888888'
+        cases = {'the Anthropic key': (SYNTHETIC_KEY, SYNTHETIC_KEY),
+                 'the Anthropic key inside it': (SYNTHETIC_KEY, 'dg' + SYNTHETIC_KEY),
+                 'a part of the Anthropic key': (SYNTHETIC_KEY, SYNTHETIC_KEY[10:50]),
+                 'another Anthropic-shaped key': (SYNTHETIC_KEY, 'sk-ant-api03-ANOTHER-SYNTHETIC-KEY-888888888888'),
+                 'an unshaped copy': (plain, plain),
+                 'an unshaped Anthropic key inside it': (plain, 'dg' + plain),
+                 'an unshaped copy in capitals': (plain, plain.upper()),
+                 'a 20-character piece of the Anthropic key': (SYNTHETIC_KEY, SYNTHETIC_KEY[13:33] + '0123456789abcdef0123'),
+                 'no Anthropic key named': (None, DEEPGRAM_KEY)}
+        for index, (name, (campaign_key, declared)) in enumerate(cases.items(), start=2):
+            with self.subTest(case=name):
+                pc.SENT.clear()
+                self.seen.clear()
+                self.evidence = pc.private_directory(self.root / 'evidence' / f'{index:03d}')
+                self.attempt(secret=declared)
+                if campaign_key is None:
+                    pc.CURRENT_ATTEMPT.pop('secret')
+                else:
+                    pc.CURRENT_ATTEMPT['secret'] = campaign_key
+                with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential is not a key of its own|is not given'):
+                    self.post(headers={'Authorization': f'Token {declared}', 'Content-Type': 'application/octet-stream'})
+                self.assertEqual(self.seen, [])
+                self.assertFalse((self.evidence / 'request.json').exists())
+                for value in (declared, campaign_key or SYNTHETIC_KEY):
+                    self.assertEqual(pc.leaked(self.root, value), [])
+
+    def test_the_anthropic_key_anywhere_in_the_request_is_refused_before_it_leaves(self):
+        """L1:R1-F2's class at the last door: with the right Deepgram key, a request that would carry the Anthropic key
+        (or an Anthropic-shaped value) in any other header or in its body is refused before the network."""
+        another = 'sk-ant-api03-ANOTHER-SYNTHETIC-KEY-999999999999'
+        plain = 'plain-standing-credential-3333333333333333'        # (an unshaped Anthropic key: its VALUE is matched)
+        token = {'Authorization': f'Token {DEEPGRAM_KEY}', 'Content-Type': 'application/octet-stream'}
+        cases = {'the Anthropic key in another header': (SYNTHETIC_KEY, dict(headers={**token, 'X-Trace': SYNTHETIC_KEY})),
+                 'an Anthropic-shaped header': (SYNTHETIC_KEY, dict(headers={**token, 'X-Trace': another})),
+                 'an unshaped Anthropic key in another header': (plain, dict(headers={**token, 'X-Trace': 'a' + plain})),
+                 'the Anthropic key in the body': (SYNTHETIC_KEY, dict(content=self.body + SYNTHETIC_KEY.encode())),
+                 'an Anthropic-shaped body': (SYNTHETIC_KEY, dict(content=b'RIFF' + another.encode() + bytes(64))),
+                 'an unshaped Anthropic key in the body': (plain, dict(content=self.body + plain.encode()))}
+        for index, (name, (campaign_key, change)) in enumerate(cases.items(), start=2):
+            with self.subTest(case=name):
+                pc.SENT.clear()
+                self.seen.clear()
+                self.evidence = pc.private_directory(self.root / 'evidence' / f'{index:03d}')
+                self.attempt()
+                pc.CURRENT_ATTEMPT['secret'] = campaign_key
+                with self.assertRaisesRegex(pc.Refused, 'would carry'):
+                    self.post(**change)
+                self.assertEqual(self.seen, [])
+                self.assertFalse((self.evidence / 'request.json').exists())
+                self.assertEqual(pc.leaked(self.root, campaign_key), [])
 
     def test_the_guard_sits_on_the_campaign_guard_and_comes_off_cleanly(self):
         import httpx
@@ -2301,6 +2483,31 @@ class TranscriptionStageRunTests(Base):
             st.run_stage(campaign, 'mapping', secret=SYNTHETIC_KEY, provenance={'runner_commit': RUNNER_COMMIT},
                          transcription_secret=DEEPGRAM_KEY)
         self.assertEqual(len(campaign.runs.listing()), 1)                    # (only the model check's run)
+
+    def test_a_deepgram_key_that_is_the_anthropic_key_is_refused_before_a_run_opens(self):
+        """L1:R1-F2 at run_stage, which holds both keys (its preconditions stood in here, so only its own check can
+        refuse): a Deepgram key that is, holds or carries the shape of the Anthropic key opens no run, writes nothing
+        and builds no worker; the campaign's own Deepgram key then passes (positive control)."""
+        campaign = self.prepared()
+        plain = 'plain-standing-credential-7777777777777777'
+        cases = {'the Anthropic key': (SYNTHETIC_KEY, SYNTHETIC_KEY),
+                 'the Anthropic key inside it': (SYNTHETIC_KEY, 'dg' + SYNTHETIC_KEY),
+                 'another Anthropic-shaped key': (SYNTHETIC_KEY, 'sk-ant-api03-ANOTHER-SYNTHETIC-KEY-77777777'),
+                 'a 20-character piece of the Anthropic key': (SYNTHETIC_KEY, SYNTHETIC_KEY[13:33] + '0123456789abcdef0123'),
+                 'an unshaped copy': (plain, plain)}
+        built = []
+        FakeWorker.hooks = {'start': lambda send: built.append(send.id)}
+        try:
+            for name, (secret, deepgram) in cases.items():
+                with self.subTest(case=name):
+                    with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential is not a key of its own'):
+                        st.run_stage(campaign, 'transcription', secret=secret,
+                                     provenance={'runner_commit': RUNNER_COMMIT}, transcription_secret=deepgram)
+        finally:
+            FakeWorker.hooks = {}
+        self.assertEqual((built, self.attempted(campaign), len(campaign.runs.listing())), ([], [], 1))
+        result = self.run_transcription(campaign)
+        self.assertEqual((result['decision'], result['verdict']), ('passed', 'PASS'), result['reasons'])
 
     def test_a_halt_between_a_transcription_and_its_generation_refuses_every_later_run(self):
         campaign = self.prepared()

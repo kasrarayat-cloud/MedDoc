@@ -12,9 +12,14 @@ only what transcription needs, stated so a reader can see how each would fail:
   the credential  the Deepgram key reaches this process only for a transcription run (standing_qa.outer, inner); it is
                   verified against the declared file, kept in memory, and put into the environment — where the product
                   reads it (core.jobs.transcribe) — ONLY around the transcription send's one run_one(), then removed.
+                  It must be a key of its own BY VALUE, not only by path (standing_qa.require_own_transcription_key,
+                  refutation L1:R1-F2): sharing no run of 16 characters with the Anthropic key in any letter case
+                  (a copy, holding it, a part or a piece of it), never Anthropic-shaped — checked where it is read, by
+                  run_stage, and by the guard below.
   the request     install_transcription_guard sits on the campaign's transport guard: during a transcription attempt it
                   admits exactly ONE request, POST https://api.deepgram.com/v1/listen carrying exactly the declared
-                  parameters (model nova-3-medical, smart_format false, mip_opt_out true) and exactly the declared key;
+                  parameters (model nova-3-medical, smart_format false, mip_opt_out true) and exactly the declared key —
+                  a key of its own against the attempt's Anthropic key, which is in no header and not in the body;
                   it records the request (its credential header removed) and its body BEFORE anything leaves, then the
                   response as received. Anything else — another host, URL, parameter, credential, a second request, a
                   request outside an attempt — is refused before a connection is opened. Outside a transcription attempt
@@ -136,8 +141,12 @@ def uninstall_transcription_guard():
 def capture_transcription_request(request, terms, other_secret=None):
     """(record, body) of a transcription request, refused BEFORE anything is recorded or sent unless it is exactly
     POST https://api.deepgram.com/v1/listen, each declared parameter once and nothing else, `Authorization: Token <the
-    declared key>` and no other credential header, an octet-stream body of 1..15 MiB. The record has no credential
-    header; it is refused if either key (or the Anthropic key shape) survives anywhere in it."""
+    declared key>` and no other credential header, an octet-stream body of 1..15 MiB — and unless the declared key is
+    one of its own BY VALUE against `other_secret`, the campaign's Anthropic key, which a transcription attempt must
+    name (standing_qa.require_own_transcription_key: L1:R1-F2, a copy of the Anthropic key declared as the Deepgram key
+    was sent as `Token <the Anthropic key>`), and the Anthropic key (or any Anthropic-shaped value) is in no header and
+    not in the body. The record has no credential header; it is refused if either key (or the Anthropic key shape)
+    survives anywhere in it."""
     url = request.url
     require(request.method == 'POST' and url.scheme == 'https' and url.host == LISTEN_HOST and url.port is None
             and url.path == LISTEN_PATH and not url.userinfo and not url.fragment,
@@ -149,6 +158,7 @@ def capture_transcription_request(request, terms, other_secret=None):
     require(len(items) == len(parameters) and parameters == declared,
             f'The transcription request carries other parameters than the declared {declared}; nothing was sent.')
     secret = terms.get('secret')
+    st.require_own_transcription_key(secret, other_secret)          # (L1:R1-F2: never the Anthropic key, by value)
     authorizations = request.headers.get_list('authorization')
     require(isinstance(secret, str) and secret and len(authorizations) == 1
             and pc.constant_time_equal(authorizations[0], f'Token {secret}'),
@@ -160,6 +170,11 @@ def capture_transcription_request(request, terms, other_secret=None):
     content = request.content
     require(0 < len(content) <= SUBMISSION_LIMIT_BYTES,
             f'The transcription request body is not 1..{SUBMISSION_LIMIT_BYTES} bytes; nothing was sent.')
+    require(not any(other_secret in value or pc.KEY_SHAPE.search(value.encode())
+                    for _, value in request.headers.multi_items())
+            and other_secret.encode() not in content and not pc.KEY_SHAPE.search(content),
+            'The transcription request would carry the Anthropic key (or an Anthropic-shaped value) to another '
+            'provider; nothing was sent.')
     headers, removed = {}, []
     for name, value in request.headers.multi_items():
         if name.lower() in CREDENTIAL_HEADERS or secret in value or (other_secret and other_secret in value):
@@ -177,7 +192,7 @@ def capture_transcription_request(request, terms, other_secret=None):
 
 # ── the request process's checks for a transcription run ──────────────────────────────────────────────────────────
 
-def preconditions(campaign, *, transcription_secret, database_prefix=sq.DATABASE_PREFIX, rebuild=st.REBUILD,
+def preconditions(campaign, *, secret, transcription_secret, database_prefix=sq.DATABASE_PREFIX, rebuild=st.REBUILD,
                   environ=None, expect=None):
     """Asserted before anything is written for a transcription run: the historical door's own checks under the
     `transcription` pricing version (sonnet5_qa.preconditions: the synthetic QA database and state, synthetic mode, live
@@ -185,10 +200,10 @@ def preconditions(campaign, *, transcription_secret, database_prefix=sq.DATABASE
     version, the Anthropic credential and the scrubbed environment, a clean leak scan, a reconciled ledger); the notes
     stage's settings (v3, no layout socket, no mapping assistance); the declared transcription request — the per-minute
     rate (and no per-second rate), the Model Improvement opt-out on, smart formatting off, and the product's own
-    parameters equal to the declared ones; the Deepgram key equal to the declared file's and ABSENT from the environment
-    (it enters only around the one request); and no copy of it under the campaign root."""
-    from django.conf import settings
-    from core import jobs as app_jobs
+    parameters equal to the declared ones; the Deepgram key equal to the declared file's, a key of its own by value
+    against the Anthropic key `secret` (standing_qa.require_own_transcription_key, L1:R1-F2), and ABSENT from the
+    environment (it enters only around the one request); and no copy of it under the campaign root. The credential is
+    checked first, before the historical checks or any application import."""
     declaration, root = campaign.declaration, campaign.root
     terms = declaration.transcription
     environ = os.environ if environ is None else environ
@@ -196,10 +211,13 @@ def preconditions(campaign, *, transcription_secret, database_prefix=sq.DATABASE
     require(st.TRANSCRIPTION_KEY_VARIABLE not in environ,
             'The Deepgram credential is in the request process environment outside its one request; nothing is sent.')
     require(isinstance(transcription_secret, str) and transcription_secret
-            and pc.constant_time_equal(transcription_secret, st.load_transcription_credential(declaration)),
+            and pc.constant_time_equal(transcription_secret,
+                                       st.load_transcription_credential(declaration, anthropic_key=secret)),
             'The run does not carry the declared Deepgram credential.')
     checked = sq.preconditions(declaration, 'transcription', root, database_prefix=database_prefix, rebuild=rebuild,
                                environ=environ, ledger=campaign.ledger, expect=expect)
+    from django.conf import settings
+    from core import jobs as app_jobs
     require(settings.QUILLMD_WORD_ENGINE == 'v3', 'The transcript is generated on the v3 Word engine.')
     require(not settings.QUILLMD_LAYOUT_SOCKET, 'The deployed-equivalent path has no layout socket.')
     require(not (settings.QUILLMD_MAPPING_ASSISTANCE or settings.QUILLMD_MAPPING_ASSISTANCE_LIVE),
