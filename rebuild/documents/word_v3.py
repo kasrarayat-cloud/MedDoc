@@ -6871,8 +6871,7 @@ def base_role(label) -> str:
 #: arm leaked a signing place ('Nurse — Initial', 'Witness sign'), every fail-closed arm over-held a clinical label
 #: ('Troponin (initial)', 'Consent form signed by patient'). The difference here is where a vocabulary miss lands:
 #:   ordinary  - generated. ONLY on positive evidence of a clinical or checklist reading (ORDINARY_EVIDENCE): an
-#:               attributive or sequence-option 'initial', a measured head or a unit printed in the label itself
-#:               before or after a qualifier 'initial', a state participle closing a signature ('... signature obtained'), a document subject of
+#:               attributive or sequence-option 'initial', a measured head before a qualifier 'initial', a state participle closing a signature ('... signature obtained'), a document subject of
 #:               'signed' with a person agent ('Consent form signed by patient'), a scientific 'signature'. A label the
 #:               grammar does not decide keeps f5fe720f's reading (base_role) - never a new release.
 #:   protected - a signing, initials, attestation or consent ACTION place: a person's signature/initials/sign ('Nurse
@@ -6892,7 +6891,7 @@ def base_role(label) -> str:
 #: ⚠️ roles-3 (the refutation of 39bdb9f0): a release that kept failing is dropped, and each regression vs f5fe720f is
 #: repaired by restoring f5fe720f's reading for its input class - never by another word list. Dropped: a bare 'Initial'
 #: released by the labels beside it in its table ('Day 1', '15 min', 'Follow-up', 'Repeat', and - through a reused
-#: object id - labels of OTHER tables); a unit printed elsewhere in the row or column. Narrowed: the heads a closing
+#: object id - labels of OTHER tables); a unit as evidence, printed anywhere. Narrowed: the heads a closing
 #: 'initial' measures (_MEASURED: quantities, never a care task or a drug - 'Mouth care (initial)'), the options of an
 #: option list (no checking ordinal - 'Initial / 2nd check'), a person read as the head of a phrase rather than any word
 #: in it ('Patient weight — Initial' is a measurement), a document signed by a title awaiting a name ('signed by Dr').
@@ -6904,7 +6903,7 @@ STATE_ORDINARY, STATE_PROTECTED, STATE_UNCERTAIN = "ordinary", "protected", "unc
 STATE_RANK = {STATE_ORDINARY: 0, STATE_UNCERTAIN: 1, STATE_PROTECTED: 2}
 #: The bases that establish an ordinary reading on evidence; every other ordinary basis is f5fe720f's reading (and on
 #: contract v3 leaves the kind rule's kind unchanged: a fallback never turns a signing kind into an answer).
-ORDINARY_EVIDENCE = frozenset({"sequence_option", "attributive", "measure_unit", "measure_head",
+ORDINARY_EVIDENCE = frozenset({"sequence_option", "attributive", "measure_head",
                                "signature_state", "scientific_signature", "signed_document", "document_signed_by",
                                "document_signed", "count_question", "time_question", "initialled_state"})
 SIGNING_TOKEN = re.compile(r"sign|initial|consent|agree|assent|authori[sz]|allow|permi", re.I)
@@ -6983,9 +6982,6 @@ _MEASURED = (r"(?:troponin|trop|hs-?trop|hs-?troponin|lactate|lac|dose|doses|dos
 _SCIENCE = (r"(?:gene|genes|genetic|genomic|expression|molecular|mutational|mutation|transcriptional|transcriptomic|"
             r"proteomic|metabolomic|metabolic|immune|inflammatory|epigenetic|methylation|radiomic|spectral|isotopic|"
             r"viral|bacterial|microbial|tumou?r|prognostic|predictive|rna|dna|mrna|mirna|cytokine|interferon)")
-_UNIT = (r"(?:ng/l|ng/ml|mg/l|mmol/l|µmol/l|umol/l|g/l|g/dl|mg/dl|iu/l|u/l|kpa|mmhg|mg|mcg|µg|ug|ml|kg|cm|mm|"
-         r"%|bpm|units?|/min|°c|x\s*10\^?9/l|10\^?9/l|meq/l|breaths/min)")
-UNIT_TOKEN = re.compile(r"(?<![\w/])" + _UNIT + r"(?![\w/])", re.I)
 _OPTIONS = r"\(\s*(?:y|n|yes|no|n/a|na)(?:\s*[/,]\s*(?:y|n|yes|no|n/a|na))*\s*\)"
 _CLOSE = r"(?:\s*" + _OPTIONS + r")?[\s?:.\-–—]*$"
 _ACT = r"(?:here|there|below|above|beside|overleaf|opposite|each|every|all|both|the|this|these|those|if|to|where|when)"
@@ -7026,7 +7022,11 @@ def _agent_only(text) -> bool:
 def _signer_named(post) -> bool:
     """Whether the words after an imperative 'sign' (or 'sign-off') name its signer: a person in parentheses, after a
     dash or colon, or after 'by', 'for' or 'on behalf of' ('(patient)', '- witness', 'by consultant', 'for patient')."""
-    who = re.sub(r"^[\s(\[:\-–—,]*(?:(?:by|for|on\s+behalf\s+of)\s+)?", "", _plain(post))
+    post = str(post or "").casefold()          # (read as printed: clean_label would strip the marker itself)
+    marked = re.match(r"\s*(?:[(\[:\-–—,]\s*|(?:by|for|on\s+behalf\s+of)\s+)", post)
+    if marked is None:
+        return False      # 'Sign language interpreter', 'Sign out nurse': no signer named
+    who = re.sub(r"^\s*(?:[(\[:\-–—,]\s*)*(?:(?:by|for|on\s+behalf\s+of)\s+)?", "", post)
     who = who.strip(" )]:.?")
     return bool(who) and _agent_only(who)
 
@@ -7099,10 +7099,9 @@ def _initial_state(t):
                 st = _state(STATE_PROTECTED, "base", base) if base else _state(STATE_ORDINARY, "attributive_unverified")
         elif re.fullmatch(r"\s*\)?\s*(?:\(\s*[^)]*\)\s*)?[\W_]*", after):
             head = re.sub(r"[\s(\[–—\-:,]+$", "", before).strip()
-            last = re.split(r"[\s(/]+", head)[-1] if head else ""
+            noun = re.sub(r"\([^)]*\)?", " ", head).strip(" ,;:-–—")
+            last = re.split(r"[\s/]+", noun)[-1] if noun else ""
             qualifier = re.match(r"\s*\(([^)]*)\)", after)
-            own_unit = UNIT_TOKEN.search(after) is not None or \
-                re.search(r"\([^)]*" + _UNIT + r"[^)]*\)", before) is not None
             if not head and not (qualifier is not None and _agent_only(qualifier.group(1))):
                 # a bare 'Initial', 'Initial:': the initials place
                 st = _state(STATE_PROTECTED, "bare_initial", "initials")
@@ -7112,10 +7111,10 @@ def _initial_state(t):
             elif re.search(r"\bby$", head):
                 # an agent phrase closing on 'by' ('Checked by — Initial', 'Given by - initial'): the agent's initials
                 st = _state(STATE_PROTECTED, "agent_initial", "initials")
-            elif own_unit:
-                # a unit printed in the label itself ('Troponin — Initial (ng/L)', 'Fibre initial (mg)')
-                st = _state(STATE_ORDINARY, "measure_unit")
-            elif re.fullmatch(_MEASURED, last) or re.fullmatch(_MEASURED, head):
+            elif re.fullmatch(_MEASURED, last) or re.fullmatch(_MEASURED, noun):
+                # a measured quantity's first reading ('Troponin (initial)', 'Troponin — Initial (ng/L)', 'Troponin
+                # (ng/L) — Initial'). ⚠️ roles-3: no unit is evidence, printed in the row, the column or the label
+                # (L1:R1-04 - 'Morphine 5 mg IV | Second check (initial)'): the head is.
                 st = _state(STATE_ORDINARY, "measure_head")
             else:
                 st = _state(STATE_UNCERTAIN, "unknown_head_initial", "initials")
@@ -7207,7 +7206,7 @@ def _destination_state(label) -> dict:
     if re.search(r"^(?:(?:the\s+)?" + _PERSON + r"\s+)?(?:date\s+and\s+)?initials\s+(?:and|&|/|\+|,)\s*dated?\b"
                  r"(?!\s+of\s+birth)", t) or re.search(r"\bdated?\s+(?:and|&|/|\+|,)\s*initials\s+of\b", t):
         return _state(STATE_PROTECTED, "signing_and_date", "initials")
-    pair = _SIGNING_AND_DATE.match(t)
+    pair = _SIGNING_AND_DATE.match(t) if DATE_LABEL.search(t) else None
     if pair and SIGNING_TOKEN.search(pair.group("head")):
         head = _destination_state(pair.group("head"))
         if head["state"] != STATE_ORDINARY:

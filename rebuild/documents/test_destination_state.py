@@ -25,7 +25,7 @@ REG18 = {
     'Lactate (initial)': ('ordinary', 'measure_head'),
     'Dose (initial)': ('ordinary', 'measure_head'),
     'Troponin initial': ('ordinary', 'measure_head'),
-    'Troponin — Initial (ng/L)': ('ordinary', 'measure_unit'),
+    'Troponin — Initial (ng/L)': ('ordinary', 'measure_head'),
     'Initial (baseline) weight': ('ordinary', 'attributive'),
     'Initial and ongoing management': ('ordinary', 'attributive'),
     'Visit type (initial/follow-up)': ('ordinary', 'sequence_option'),
@@ -253,12 +253,13 @@ class Structure(unittest.TestCase):
     def test_a_person_beside_a_sequence_word_stays_held(self):
         self.assertEqual(w.legacy_role_kind('Nurse initial', siblings=['Repeat']), 'initials')
 
-    def test_an_unknown_head_is_uncertain_and_its_own_unit_makes_it_a_measurement(self):
+    def test_an_unknown_head_is_uncertain_and_no_unit_makes_it_a_measurement(self):
         self.assertEqual(w.destination_state('Wristband (initial)')['state'], 'uncertain')
         self.assertEqual(w.destination_state('Phlebotomist (initial)')['state'], 'protected')     # a person's head
-        self.assertEqual(w.destination_state('Fibre initial (mg)')['basis'], 'measure_unit')
-        # a unit elsewhere in the row or column is not read (roles-3, L1:R1-04)
+        # no unit is evidence, printed in the label, the row or the column (roles-3, L1:R1-04): the head is
+        self.assertEqual(w.destination_state('Fibre initial (mg)')['state'], 'uncertain')
         self.assertEqual(w.destination_state('Fibre initial', unit=True)['state'], 'uncertain')
+        self.assertEqual(w.destination_state('Troponin (ng/L) — Initial')['basis'], 'measure_head')
         # a person never becomes a measurement, unit or not
         self.assertEqual(w.destination_state('Nurse (initial) (mg)')['state'], 'protected')
 
@@ -897,8 +898,11 @@ class RepairOf39bdb9f0(unittest.TestCase):
                 self.assertFalse(generated(f, rep), f['label'])
         fields, rep = report(grid(('Item', 'Value (mg)'), [('Given (initial)', '')]))
         self.assertFalse(generated(by_label(fields)['Given (initial) — Value (mg)'], rep))
-        # a unit printed in the label itself, and a measured head, are evidence
-        for label in ('Troponin — Initial (ng/L)', 'Fibre initial (mg)', 'Insulin (initial) (units)'):
+        # no unit is evidence, printed in the label either; a measured head is
+        for label in ('Fibre initial (mg)', 'Insulin (initial) (units)', 'Second check (initial) (mg)'):
+            with self.subTest(label=label):
+                self.assert_held(label)
+        for label in ('Troponin — Initial (ng/L)', 'Troponin (ng/L) — Initial', 'Dose (initial) (mg)'):
             with self.subTest(control=label):
                 self.assert_ordinary(label)
 
@@ -932,7 +936,8 @@ class RepairOf39bdb9f0(unittest.TestCase):
                 self.assertNotEqual(legacy_roles_of(two_col([label, 'Plan']))[label]['state'], 'ordinary')
         self.assert_v3(lines('Sign (patient): ______', 'Sign-off (consultant): ______'),
                        ['Sign (patient)', 'Sign-off (consultant)'])
-        for label in ('Babinski sign', 'Sign of infection', 'Signs of sepsis', 'Sign (positive)'):
+        for label in ('Babinski sign', 'Sign of infection', 'Signs of sepsis', 'Sign (positive)',
+                      'Sign language interpreter', 'Sign out nurse'):
             with self.subTest(control=label):
                 self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
 
