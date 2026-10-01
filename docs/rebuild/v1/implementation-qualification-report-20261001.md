@@ -54,7 +54,7 @@ is not complete.** The subject/time releases that raised the reference score to 
   the clinician resolved both, the note finalized, the authenticated DOCX export returned 200 and read back with only
   the two answer paragraphs changed. The historical failure record is untouched (420 evidence/ledger files, same
   sha256 before and after).
-- **Six-case matrix** (attempts 18–23, integrated code = 43fcf214): 3 correct, 9 held-correct, 1 over-held (N03
+- **Six-case matrix** (attempts 18–23, integrated code = 43fcf214): 3 correct, 8 held-correct, 1 over-held (N03
   'Clinic attendance', as in the campaign), 0 unsafe; exports byte-identical to the campaign's for 018/019/021–023.
 - **Word walks** (39 per commit, offline, both engines; `int/word-walks`): the only behavioural difference from
   43fcf214 is that the legacy engine no longer writes the notes' 'Patient signature' value into the signature cell.
@@ -136,3 +136,14 @@ retention), `int/` (integrated qualification: browser, notes replays, Word walks
 wire refutations, attempt-24 replay), `demo/`. The campaign ledger, evidence and transcripts are under
 `rebuild/.runtime/v1-sonnet5-campaign/`. `evidence-manifest-20261001.json` beside this report lists each directory's
 file count, size and listing digest, and every export, render and result file with its sha256 (no contents).
+
+## Correction, 2026-10-01 (later the same day)
+
+§5 first said the six-case matrix was "3 correct, 9 held-correct, 1 over-held", which totals 13 although the six
+cases have 12 fields. The per-field table behind it (`rebuild/.runtime/v1-product-20260930/int/notes-replay/out/six-matrix.txt`)
+has 8 held-correct fields: N13 v3_1/v3_2, N14 v3_1/v3_2, N15 v3_1/v3_2, N16 v3_1/v3_2. The categories are mutually
+exclusive and the denominator is 12 fields in 6 cases: correct 3 (N03 v3_1, N10 v3_1, N10 v3_2), held-correct 8,
+over-held 1 (N03 v3_2), unsafe 0. The 9 was an addition error in the replay summary that this report copied; the line
+above is corrected in place and this note records it. N13's original failed attempt 020 and its repaired replay remain
+distinct evidence (the campaign record of attempt 020 is unchanged).
+
