@@ -29,8 +29,20 @@ every standing attempt), and the 35-slot envelope was produced without any.
 - `mapping_wire.request_schema`: each field-group and slot-group item is an integer `enum` of exactly the request's IDs
   (up to 400 per group; above that the generic item stays), so constrained decoding cannot name an absent area.
 - `mapping_assistance.request_profile`: the mapping envelope on claude-sonnet-5-5 asks for adaptive thinking
-  (`display: omitted`) at medium effort with a 180 s deadline; the output bound (20,000, thinking included), the price
-  bound and every validation are unchanged. Sonnet 5's mapping request is byte-identical to before.
+  (`display: omitted`) at medium effort; the 120 s client deadline, the output bound (20,000, thinking included), the
+  price bound and every validation are unchanged. Sonnet 5's mapping request is byte-identical to before.
+
+**Refutation r1 (independent, read-only).** A-F1 (MEDIUM): the first version raised the 5.5 mapping deadline to 180 s,
+which outlives the worker's graceful stop (systemd `TimeoutStopSec=150`, `generation.WORKER_STOP_SECONDS`) that every
+application profile respects with 30 s left for the receipt and settlement; a deploy during a long request would have
+left it unreceipted. Reverted to 120 s, with a test that every mapping deadline ends inside the graceful stop (mutation:
+180 s fails it for both models). A-N1 (LOW, predates this change): the cost scanner does not watch `profile` inside
+`compile_request`, so a cap lowered there through an unreadable call would price the hold below the request; the
+mapping unit tests catch that case. Recorded as a residual. Nothing else was found: the enum schema survives
+`transform_schema`, response validation is unchanged, the Sonnet 5 request digest is identical, an old-profile quote is
+refused unsent and released.
+(Whether the provider accepts the enum grammar, and how long adaptive mapping takes against 120 s, is measured live in
+campaign 2; a timeout there is an unknown outcome and stops the stage.)
 
 **Why a new campaign, not a reopening.** The first campaign's declaration fixes `thinking: between_tools` for every
 request it admits. Mapping requests with adaptive thinking are a different request profile, so they are measured under

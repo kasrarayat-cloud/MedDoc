@@ -19,12 +19,13 @@ VERSION='blank-mapping-v3'
 PROFILE='claude-sonnet-5-blank-mapping-v3'
 MAX_OUTPUT_TOKENS=20000
 TIMEOUT_SECONDS=120
-#: The thinking a mapping envelope asks for when it differs from the application's no-up-front profile, by model, and
-#: the client deadline that allows for it. The application's between_tools setting gives a one-shot request no reasoning
-#: at all (0 thinking tokens on every standing attempt); standing attempt 32 (f2b, 35 slots) then listed 21 slots in two
-#: groups and invented eight more, and the whole proposal was refused. Sonnet 5's request is untouched.
+#: The thinking a mapping envelope asks for when it differs from the application's no-up-front profile, by model. The
+#: application's between_tools setting gives a one-shot request no reasoning at all (0 thinking tokens on every standing
+#: attempt); standing attempt 32 (f2b, 35 slots) then listed 21 slots in two groups and invented eight more, and the
+#: whole proposal was refused. Sonnet 5's request is untouched. The client deadline stays TIMEOUT_SECONDS for every model:
+#: it must end inside the worker's graceful stop (generation.WORKER_STOP_SECONDS, systemd TimeoutStopSec=150) with 30 s
+#: left for the receipt and settlement (refutation r1 A-F1: a 180 s deadline outlived a graceful stop).
 MAPPING_THINKING={generation.SONNET_5_5:{'thinking':generation.SONNET_5_5_THINKING['adaptive']}}
-MAPPING_TIMEOUT_SECONDS={generation.SONNET_5_5:180}
 MAX_PAYLOAD_BYTES=400_000
 MAX_SLOTS=1200
 MAX_FIELDS=200
@@ -71,7 +72,7 @@ def request_profile(config):
 
     Sent only on a native model (claude-sonnet-5, claude-sonnet-5-5) whose application profile has no up-front thinking
     (disabled on Sonnet 5, between_tools on Sonnet 5.5) at medium effort. Sonnet 5 maps with thinking disabled; Sonnet
-    5.5 maps with adaptive thinking and a 180 s deadline (standing attempt 32). PROFILE names the envelope's
+    5.5 maps with adaptive thinking (standing attempt 32); both within TIMEOUT_SECONDS. PROFILE names the envelope's
     contract, not the model: the model is the request's own `model`, the base profile carries the thinking type, and
     `mapping_profile_sha256` binds them all."""
     if config.get('provider')!='anthropic' or config.get('model') not in generation.NATIVE_MODELS:
@@ -82,7 +83,7 @@ def request_profile(config):
     # The model's mapping thinking is spread BEFORE the priced keys, so the output bound stays MAX_OUTPUT_TOKENS (thinking
     # included) whatever MAPPING_THINKING holds.
     profile={**base,**MAPPING_THINKING.get(config['model'],{}),'profile':PROFILE,'max_output_tokens':MAX_OUTPUT_TOKENS,
-             'timeout_seconds':MAPPING_TIMEOUT_SECONDS.get(config['model'],TIMEOUT_SECONDS)}
+             'timeout_seconds':TIMEOUT_SECONDS}
     if 'mapping_contract' in config and (config['mapping_contract']!=VERSION or
         config.get('mapping_request_profile')!=profile or config.get('mapping_profile_sha256')!=digest(profile)):
         generation._refuse_profile('Mapping contract or profile changed. Review a fresh quote; nothing was sent.')

@@ -657,7 +657,7 @@ def mapping_fixture():
 @override_settings(**mapping_settings())
 class Sonnet55Mapping(TestCase):
     """Mapping assistance on claude-sonnet-5-5: the separately bound envelope. The application profile stays between_tools
-    at medium; the mapping envelope alone asks for adaptive thinking (180 s) with a per-request ID enum schema
+    at medium; the mapping envelope alone asks for adaptive thinking (120 s) with a per-request ID enum schema
     (standing attempt 32: with no reasoning and no ID bound, 21 slots were listed twice and 8 invented)."""
     setUp = mapping_fixture().setUp
     body = mapping_fixture().body
@@ -680,7 +680,7 @@ class Sonnet55Mapping(TestCase):
         job, wire = self.live(lambda body: message55(text(json.dumps(body)), ident='msg_mapping_adopted'))
         self.assertEqual(self.config['request_profile']['thinking'], BETWEEN)      # (the application profile is unchanged)
         self.assertEqual(self.compiled['profile'], {'profile': mapping.PROFILE, 'max_output_tokens': 20000,
-                                                    'timeout_seconds': 180, 'thinking': ADAPTIVE, 'effort': 'medium'})
+                                                    'timeout_seconds': 120, 'thinking': ADAPTIVE, 'effort': 'medium'})
         payload = json.loads(self.compiled['request']['messages'][0]['content'])
         schema = transform_schema(mapping.wire.request_schema(payload))
         assert_sonnet_55_request(self, wire.json(), thinking=ADAPTIVE, effort='medium', max_tokens=20000, schema=schema)
@@ -691,7 +691,7 @@ class Sonnet55Mapping(TestCase):
         self.assertEqual({group: fields[group]['items'] for group in 'krnu'},
                          {group: {'type': 'integer', 'enum': list(range(len(payload['fields'])))} for group in 'krnu'})
         self.assertEqual(wire.json(), json.loads(json.dumps(self.compiled['request'])))
-        self.assertEqual(wire.constructed, [{'timeout': 180, 'max_retries': 0}])
+        self.assertEqual(wire.constructed, [{'timeout': 120, 'max_retries': 0}])
         self.assertEqual(job.state, 'succeeded', job.error)
         receipt = ProviderReceipt.objects.get(job=job)
         self.assertEqual((receipt.provider, receipt.units['response_model']), ('anthropic:' + MODEL, MODEL))
@@ -709,6 +709,18 @@ class Sonnet55Mapping(TestCase):
                 self.assertTrue(PlatformCost.objects.filter(job=job, kind='absorbed_failure').exists())
                 self.assertEqual(sum(LedgerEntry.objects.filter(job=job).values_list('amount', flat=True)), Decimal(0))
                 self.assertEqual(self.template.versions.count(), 1)
+
+    def test_every_mapping_deadline_ends_inside_the_workers_graceful_stop(self):
+        """Refutation r1 A-F1: the worker's graceful stop (TimeoutStopSec=150) finishes the request in flight and then
+        systemd kills it; the client deadline must leave 30 s for the receipt and settlement, as every application
+        profile does (generation.SONNET_5_TIMEOUT_SECONDS)."""
+        from core import generation, mapping_assistance as mapping
+        for model in generation.NATIVE_MODELS:
+            with self.subTest(model=model), override_settings(AI_MODEL=model, AI_THINKING='disabled'):
+                config = {**generation.configuration(), 'model': model}
+                profile = mapping.request_profile(config)
+                self.assertLessEqual(profile['timeout_seconds'] + 30, generation.WORKER_STOP_SECONDS)
+                self.assertEqual(profile['max_output_tokens'], mapping.MAX_OUTPUT_TOKENS)
 
     def test_adaptive_thinking_is_refused_for_mapping_before_any_request(self):
         from core import generation, mapping_assistance as mapping

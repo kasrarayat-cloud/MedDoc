@@ -960,8 +960,7 @@ def compiled_mapping_cap(path, tree, call, expression, where):
     assigned_once(profiled, 'base', 'generation.job_request_profile(config)')
     # MAPPING_THINKING is spread before the priced key, so max_output_tokens is MAX_OUTPUT_TOKENS whatever it holds.
     assigned_once(profiled, 'profile', "{**base, **MAPPING_THINKING.get(config['model'], {}), 'profile': PROFILE, "
-                                       "'max_output_tokens': MAX_OUTPUT_TOKENS, "
-                                       "'timeout_seconds': MAPPING_TIMEOUT_SECONDS.get(config['model'], TIMEOUT_SECONDS)}")
+                                       "'max_output_tokens': MAX_OUTPUT_TOKENS, 'timeout_seconds': TIMEOUT_SECONDS}")
     readonly_value(profiled, 'profile', ('digest',))
     returns = [n for n in ast.walk(profiled) if isinstance(n, ast.Return)]
     if len(returns) != 1 or returns[0] is not profiled.body[-1] or ast.unparse(returns[0]) != 'return profile':
