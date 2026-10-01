@@ -980,7 +980,20 @@ def compiled_mapping_cap(path, tree, call, expression, where):
 # The destination-roles addendum (integration 98aebf7b, fix/v1-roles-salvage): enqueue refuses, before any hold or
 # send, a complete-form plan whose ORIGINAL has a field on a role place (destination_roles.v3_held); resolve_view and
 # recover_recorded keep the settlement keyword above; run_one (the send boundary) and every other definition unchanged.
-BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114830bae5f58c4561746694987fdd88cdd381c0', 'core/batch_jobs.py': 'a5b04bf5a6d07d28a9fbe97722d600b033d21d482a26dceb56536fbd57ed23d9'}
+# The Sonnet 5.5 addendum (fix/v2-sonnet55-notes 9833e79a; was 1da9f91b... / a5b04bf5...): the model gates and model
+# names only. generation_batch: require_config admits the exact native claude-sonnet-5 OR claude-sonnet-5-5
+# (core.generation.NATIVE_MODELS); parse_part judges a response against the model the plan's own config named, not the
+# constant claude-sonnet-5; assemble signs relation records with that model. batch_jobs: the fixture response, the
+# receipt provider and a metering-failure provider carry the plan's model. plan_for, request (the priced wire),
+# constraints, partitions and every other definition are AST-identical, so the request and its price are unchanged.
+# The relations field-batch addendum (fix/v2-sonnet55-notes 0e9f1025; was 375235d1... / 18f0910f...): a form whose
+# single field-relations response would exceed its bound is asked in bounded parts under the relations contract's own
+# plan contract 'ordinary-field-relations-parts-v1' (generation_batch.RELATIONS_PARTS_CONTRACT): partitions keeps every
+# field sharing a printed context in one part (by_context), each part's wire is v3_field_relations.compile_request for
+# that part's fields over the whole note and catalogue, and plan_constraints is None for such a plan without a
+# manifest; batch_jobs.current_plan compares plan_constraints. Each part is priced and held as before (one reservation
+# per part, settled on success or failure); the union is adopted only whole.
+BATCH_PRICED_MODULES = {'core/generation_batch.py': 'c5bdfb74a7474858f069b471ba8e96dc0580b4f16a407ef79cdb01e0c6e9fc02', 'core/batch_jobs.py': 'c759a6a1404d849ede7144f847f4713e4c3de011f7484c0e6486d5c1f82d589a'}
 
 # Reviewed c14dda34 compiler/profile on the40fb602f union, including unchanged
 # quarantine admission gates. See ordinary-cost-scanner-20260928.md for the
@@ -999,7 +1012,33 @@ BATCH_PRICED_MODULES = {'core/generation_batch.py': '1da9f91b8879192678086152114
 # between competing repeated questions (refutation of dfde4fc8, F1/F2). Only claimed (added), records and read changed;
 # compile_request, maximum_cost, generate, parse, response_schema, response_bound, disagrees, validated, CONTRACT, SALT
 # and INSTRUCTIONS are AST-identical, so the priced wire is unchanged byte for byte.
-ORDINARY_PRICED_SHA256 = '51120e0a45e25883131964d277c93fa19fe1b61cf65eb4c5d0a9ed393022f1fd'
+# The Sonnet 5.5 addendum (fix/v2-sonnet55-notes 9833e79a; was 51120e0a...): require_config, records and read admit
+# the exact native claude-sonnet-5 or claude-sonnet-5-5 (core.generation.NATIVE_MODELS); generate adds the requested
+# model to its in-memory result and validated refuses a response from any other model. compile_request, maximum_cost,
+# response_schema, response_bound, parse, disagrees, claimed, CONTRACT, SALT and INSTRUCTIONS are AST-identical, so the
+# priced wire is unchanged byte for byte (on claude-sonnet-5-5 the ordinary profile is claude-sonnet-5-5-ordinary-v1:
+# the same 20000-token cap the scanner already resolves).
+# The single-patient addendum (fix/v2-sonnet55-notes 0e9f1025; was a554409a...): enabled(model) reads
+# core.generation.field_relations_enabled (claude-sonnet-5-5 takes the contract by default unless the switch says
+# '0'), and require_config and records pass the config's / record's model to it (the django settings import is gone);
+# read() adds sole_released / sole_independent / SOLE_FIELD_TOPICS / option_view (evidence of WHO, read after the
+# response - nothing reaches the wire). compile_request, maximum_cost, generate, validated, response_schema,
+# response_bound, parse, disagrees, claimed, CONTRACT, SALT and INSTRUCTIONS are AST-identical, so the priced wire is
+# unchanged byte for byte.
+# The refutation round-4 addendum (fix/v2-sonnet55-notes, repair over 0e9f1025; was 90fc7d89...): enabled() is on
+# only while the deployment's own switch is on AND (for a request or record) the model it names takes the contract;
+# read() refuses a record whose model the switch does not take; sole_independent sets apart only an assessment's doubt
+# about something else. compile_request, maximum_cost, generate, validated, response_schema, response_bound, parse,
+# disagrees, claimed, CONTRACT, SALT and INSTRUCTIONS are AST-identical, so the priced wire is unchanged byte for byte.
+# The refutation round-5 addendum (fix/v2-sonnet55-notes, repair over 737590c1; was 5f94cea6...): sole_independent
+# holds a denial, ending or contraindication against every other line naming a topic class it bears on, holds a
+# doubt of the answer's own class whatever its word, and nothing else in the module changed. compile_request,
+# maximum_cost, generate, validated, response_schema, response_bound, parse, disagrees, claimed, records, read,
+# CONTRACT, SALT and INSTRUCTIONS are AST-identical, so the priced wire is unchanged byte for byte.
+# The refutation round 6 addendum (fix/v2-sonnet55-notes, was bd3902aa...): sole_independent only (a line denying a
+# class that bears on the answer's, in either direction; its docstring) - read after the response, nothing reaches
+# the wire; every other definition is AST-identical.
+ORDINARY_PRICED_SHA256 = '6fc2071f29afb194442eedfff9186e4ec87d15aaba9cb0a726c400dfba5e5ffe'
 
 
 def ordinary_module_proof(where):
@@ -1073,6 +1112,12 @@ def compiled_batch_cap(path, tree, call, expression, where):
     return 'profile', profile_cap_values(profile_tree, int_constants(profile_tree), where)
 
 
+#: Client calls that send no tokens and are never priced (reviewed 2026-10-01 for the standing runner's model-access
+#: preflight, ops/standing_qa.run_preflight: GET /v1/models/<id> through a guard that allows one request). Anything
+#: else on a provider client still has to be a traced, capped provider call.
+UNBILLED_CLIENT_CALLS = frozenset({('models', 'retrieve'), ('close',)})
+
+
 def provider_caps(path):
     """[(where, (kind, caps))] for every provider call in one file. Fails closed, naming the call, on anything it
     cannot trace: a provider-shaped call whose receiver is not a client constructed and bound to a name in this file;
@@ -1132,6 +1177,8 @@ def provider_caps(path):
         where = f'{name}:{node.lineno} {ast.unparse(node.func)}'
         if shaped and not from_client:
             raise Unresolved(f'{where}: the receiver cannot be traced to a provider client constructed in this file')
+        if from_client and not shaped and tuple(parts) in UNBILLED_CLIENT_CALLS and not capped:
+            continue  # reviewed: model metadata lookup / client close carry no tokens and no price
         if from_client and not shaped:
             raise Unresolved(f'{where}: a provider client call this check does not know')
         if INDIRECTIONS & set(parts):

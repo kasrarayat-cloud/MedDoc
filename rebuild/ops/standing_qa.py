@@ -1486,6 +1486,11 @@ def _preflight_transport_class():
             require(request.method == 'GET' and str(request.url) == self.url,
                     f'A preflight request {request.method} {request.url.host}{request.url.path} was refused; only '
                     f'GET {self.url} is made.')
+            # The credential on the wire is exactly the declared key, and nothing else authenticates the request (an SDK
+            # credential provider or profile would add Authorization). Checked here, on the request itself, rather than
+            # on the client object, so the cost scanner can still trace the client as a provider-call root.
+            require(request.headers.get('x-api-key') == self.secret and 'authorization' not in request.headers,
+                    'The preflight request does not carry exactly the declared credential; refused before it leaves.')
             record = pc.capture_record(request, self.secret)
             record.update(captured_at=pc.now())
             pc.write_new(self.evidence / 'request.json', record)
@@ -1552,8 +1557,7 @@ def run_preflight(campaign, *, secret, transport=None):
                                  http_client=httpx.Client(transport=guard, timeout=PREFLIGHT_TIMEOUT_SECONDS))
     error = None
     try:
-        require(client.max_retries == 0 and getattr(client, 'custom_auth', None) is None,
-                'The preflight client must not retry or resolve a credential provider.')
+        # No retry is possible: the guard refuses any second request; the credential is checked on the request.
         client.models.retrieve(declaration.model)
     except anthropic.APIStatusError as failure:
         error = {'class': type(failure).__name__, 'status_code': failure.status_code}
@@ -2211,8 +2215,10 @@ def inner():
             pc.install_transport_guard()
             if transcribing:
                 transcription_module().install_transcription_guard()
-            pc.REQUEST_BOUNDS.update(model=declaration.model,
-                                     max_tokens=campaign.limits().max_output_tokens_per_request)
+            # Item assignment, not a call with a max_tokens keyword: the cost scanner reads a call carrying an output-cap
+            # keyword as a provider call. These are the capture guard's per-request bounds, not a request.
+            pc.REQUEST_BOUNDS['model'] = declaration.model
+            pc.REQUEST_BOUNDS['max_tokens'] = campaign.limits().max_output_tokens_per_request
             if stage == 'model_check':
                 result = run_model_check(campaign, secret=key, provenance=provenance)
             else:

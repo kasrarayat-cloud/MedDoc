@@ -1496,9 +1496,15 @@ class PreflightTests(Base):
         with self.assertRaisesRegex(pc.Refused, 'only GET'):
             guard.handle_request(httpx.Request('GET', 'https://api.deepgram.com/v1/listen'))
         self.assertEqual(self.calls, [])
-        guard.handle_request(httpx.Request('GET', st.MODELS_URL + 'claude-sonnet-5-5'))
-        with self.assertRaisesRegex(pc.Refused, 'second preflight request'):
+        with self.assertRaisesRegex(pc.Refused, 'exactly the declared credential'):
             guard.handle_request(httpx.Request('GET', st.MODELS_URL + 'claude-sonnet-5-5'))
+        with self.assertRaisesRegex(pc.Refused, 'exactly the declared credential'):
+            guard.handle_request(httpx.Request('GET', st.MODELS_URL + 'claude-sonnet-5-5',
+                                               headers={'x-api-key': SYNTHETIC_KEY, 'authorization': 'Bearer other'}))
+        self.assertEqual(self.calls, [])
+        guard.handle_request(httpx.Request('GET', st.MODELS_URL + 'claude-sonnet-5-5', headers={'x-api-key': SYNTHETIC_KEY}))
+        with self.assertRaisesRegex(pc.Refused, 'second preflight request'):
+            guard.handle_request(httpx.Request('GET', st.MODELS_URL + 'claude-sonnet-5-5', headers={'x-api-key': SYNTHETIC_KEY}))
         self.assertEqual(len(self.calls), 1)
 
     def test_the_stop_file_refuses_the_preflight(self):
