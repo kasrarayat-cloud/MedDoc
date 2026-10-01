@@ -265,6 +265,25 @@ class V3ThreeStates(Walk, V3Fixture, TestCase):
         e = self.generated(version, 'Initial and ongoing management: IV antibiotics\nPlan: Rest.')
         self.assertEqual(e.answers[field['key']]['text'], 'IV antibiotics')
 
+    def test_a_signers_consent_choice_is_never_ticked_from_the_notes_and_the_clinician_may_tick_it(self):
+        template, version = self.uploaded(data=lines('I agree that my samples may be kept in a biobank:  ☐ Yes   ☐ No',
+                                                     'Consent obtained?  ☐ Yes  ☐ No', 'Plan: ______'),
+                                          name='Synthetic consent choice')
+        version = self.confirm(template)
+        choice = next(f for f in version.fields if f['label'].startswith('I agree'))
+        question = next(f for f in version.fields if f['label'].startswith('Consent obtained'))
+        self.assertIn(choice['key'], destination_roles.v3_uncertain(version))
+        e = self.generated(version, 'I agree that my samples may be kept in a biobank: Yes\nConsent obtained?: Yes\nPlan: Rest.')
+        self.assertEqual((e.answers[choice['key']]['status'], e.answers[choice['key']]['text']), ('missing', ''))
+        self.assertEqual(offered(e.answers[question['key']]), 'Yes')
+        typed = {choice['label']: 'Yes'}
+        if e.answers[question['key']]['status'] == 'conflict':
+            typed[question['label']] = 'Yes'
+        self.assertEqual(self.rows_post(e, version, typed).status_code, 302)
+        self.assertEqual(e.answers[choice['key']]['status'], 'edited')
+        self.finalized(e)
+        self.assertEqual(e.status, 'finalized')
+
     def test_the_reading_is_named_and_reused_per_template(self):
         template, version = self.uploaded(data=lines('Name: ______', 'Plan: ______'), name='Synthetic reading')
         self.assertEqual(destination_roles.report(version)['reading'], word_v3.ROLE_READING)

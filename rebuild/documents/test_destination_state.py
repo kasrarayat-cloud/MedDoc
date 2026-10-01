@@ -547,6 +547,26 @@ class PositiveControls(unittest.TestCase):
         self.assertTrue(generated(by_label(fields)['Transcribed by'], rep))
 
 
+class ConsentChoices(unittest.TestCase):
+    """A factual consent question is ordinary; the signer's own consent choice is a consent ACTION (uncertain: never
+    ticked from the notes, the clinician may tick it). Measured on development consent forms (D15, D33, D34, D37)."""
+
+    def test_the_signers_consent_choice_is_held_and_a_consent_question_is_asked(self):
+        for text in ('I agree that my samples may be kept in a biobank:  ☐ Yes   ☐ No',
+                     'I give consent to store my coded data:  ☐ Yes   ☐ No',
+                     '<if POS collecting genetic data>I give consent to share my data:  ☐ Yes  ☐ No',
+                     '(~Include if appropriate. ~) I agree that my doctor may contact me:  ☐ Yes  ☐ No'):
+            with self.subTest(text=text):
+                blob = lines(text)
+                fields, rep = report(blob)
+                choice = next(f for f in fields if f['kind'] == 'choice')
+                self.assertIn(choice['key'], rep['held'])
+                self.assertNotIn(choice['key'], rep['violations'])
+                w.fill(blob, fields, {choice['key']: 'Yes'})                    # the clinician may tick it
+        fields, rep = report(lines('Consent obtained?  ☐ Yes  ☐ No'))
+        self.assertTrue(generated(fields[0], rep))
+
+
 class LegacyEngineRoles(unittest.TestCase):
     """The legacy 'roles' operation reads the label cell's printed words (paragraphs and line breaks as spaces), its
     stacked captions one by one, and the labels beside it in its table."""

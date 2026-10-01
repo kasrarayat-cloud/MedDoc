@@ -2380,6 +2380,14 @@ class Detector:
         for area in self.areas:
             if area.protection or area.structural:
                 continue
+            if area.kind in ("choice", "multi_choice", "checkbox"):
+                # A printed option set is a factual question ('Consent obtained? Yes/No') - except the signer's own
+                # consent choice ('I agree that my samples may be kept in a biobank: Yes / No'), a consent ACTION:
+                # uncertain (never ticked from the notes; the clinician may tick it). Its kind is kept.
+                st = destination_state(area.label)
+                if st["state"] != STATE_ORDINARY and st["basis"] == "consent_declaration":
+                    area.destination = st
+                continue
             state, caption = None, ""
             target = area.target or {}
             # (1) a writing line a signing caption governs.
@@ -6596,6 +6604,11 @@ def _role_reading(package):
         if area.protection:
             for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
                 roles.append(_role(ROLE_PROTECTED, "protected_area", pid, None, None, area.protection))
+        elif area.kind not in SIGNING_KINDS and isinstance(area.destination, dict) \
+                and area.destination["state"] == STATE_UNCERTAIN:
+            # an option field the destination state holds (a signer's consent choice): its boxes are an uncertain place
+            for pid, start, end in places:
+                roles.append(_role(ROLE_UNCERTAIN, "consent_choice", pid, start, end, UNCERTAIN_REASON))
         elif area.kind in SIGNING_KINDS:
             state = area_destination(area)
             if not area.structural and state["state"] == STATE_ORDINARY:
@@ -7044,7 +7057,8 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
     t = _plain(label)
     if not t or not SIGNING_TOKEN.search(t):
         return _state(STATE_ORDINARY, "no_signing_word")
-    if CONSENT_DECLARATION.search(t):
+    # (a leading author's note or guidance - '<if POS ...>', '(~Include ... ~)', '[...]' - is no part of the sentence)
+    if CONSENT_DECLARATION.search(re.sub(r"^(?:\s*(?:<[^<>]*>|\[[^\[\]]*\]|\(~[^)]*~\)|\([^)]*\)))+\s*", "", t)):
         return _state(STATE_UNCERTAIN, "consent_declaration", "signature")
     if not re.search(r"sign|initial", t):
         return _state(STATE_ORDINARY, "no_signing_word")
