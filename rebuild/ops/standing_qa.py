@@ -67,7 +67,9 @@ Commands (from the candidate checkout's rebuild/; `run` and `preflight` only thr
   recover            records any attempt left without an outcome and closes a dangling run
   reopen --stage S --diagnosis P
                      reopens a failed stage after an offline, committed diagnosis and repair; nothing is sent
-Exit status: 0 PASS (or a clean plan/status/pricing/recover/reopen, or a preflight that matched), 3 FAIL, 2 REFUSED.
+Exit status: 0 PASS (or a clean plan/status/pricing/recover/reopen, or a preflight that matched; a run that made its
+sends with no stop, whether or not its stage is now decided — the result's `decision` says), 3 FAIL, 2 REFUSED, 4 HALTED
+(the Stop file appeared during a run: the remaining sends were not made, the stage stays open).
 """
 import argparse
 import dataclasses
@@ -129,7 +131,8 @@ CONTEXT_VARIABLE = 'STANDING_QA_CONTEXT'
 PROVIDER_ROOT = 'https://api.anthropic.com'
 MODELS_URL = PROVIDER_ROOT + '/v1/models/'
 PREFLIGHT_TIMEOUT_SECONDS = 30
-EXIT = sq.EXIT
+#: 4 HALTED: the operator's Stop file appeared during a run; the remaining sends were not made and the stage stays open.
+EXIT = {**sq.EXIT, 'HALTED': 4}
 #: The most a non-streaming request may ask for (core.generation.NONSTREAMING_MAX_OUTPUT_TOKENS) and the longest
 #: per-send deadline this runner accepts.
 NONSTREAMING_MAX_OUTPUT_TOKENS = 21333
@@ -1283,9 +1286,14 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
         campaign.runs.close(ledger, run['run'], {'closed_as': 'refused_before_attempt', 'reason': str(refused),
                                                  'sends': []})
         raise
-    reasons, not_sent = [], []
+    reasons, not_sent, halted = [], [], None
     for send in selected:
-        if worker.stopped:
+        if worker.stopped or halted:
+            not_sent.append(send.id)
+            continue
+        if os.path.lexists(campaign.stop_file()):
+            # (the operator's halt switch, not a safety failure: the run ends here and the stage stays open)
+            halted = f'the Stop file {campaign.stop_file()} appeared during the run; the remaining sends were not made'
             not_sent.append(send.id)
             continue
         try:
@@ -1302,13 +1310,14 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
             worker.stopped = {'send': send.id, 'attempt': record.get('attempt'), 'findings': record.get('findings')}
             reasons.append(f'{send.id}: ' + '; '.join(f['why'] for f in record.get('findings') or []))
     return decide_run(campaign, stage, run, plan, worker, reasons, not_sent,
-                      {'settled_before_start': settled, 'stale_jobs_cancelled': stale})
+                      {'settled_before_start': settled, 'stale_jobs_cancelled': stale}, halted=halted)
 
 
-def decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base):
+def decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base, *, halted=None):
     """The run's close and, when it is due, the stage's decision: failed on any stop (that path stops until a committed
     diagnosis and repair reopen it); passed only when every planned send has been made (or recorded not exercisable)
-    and no attempt of any run ever stopped it; otherwise the run closes and the stage stays open for the next run."""
+    and no attempt of any run ever stopped it; otherwise the run closes and the stage stays open for the next run —
+    `halted` (the operator's Stop file during the run) included: a halt is not a failure."""
     ledger = campaign.ledger
     attempts = [row.get('attempt') for row in worker.sends if row.get('attempt')]
     earlier = earlier_stops(campaign, stage, attempts)
@@ -1326,10 +1335,13 @@ def decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base):
     summary = {'run': run['run_id'], 'plan': [send.id for send in plan], 'selected': run['sends'],
                'sends': worker.sends, 'not_sent': not_sent, 'veto_evidence': worker.veto_evidence, 'attempts': attempts,
                'earlier_stops': earlier, 'remaining_after': left, 'monetary_ceiling': None, **base}
-    if not attempts and not reasons and not any('not_exercised' in row for row in worker.sends):
+    if not attempts and not reasons and not halted and not any('not_exercised' in row for row in worker.sends):
         reasons = ['no send was made']
+    summary['halted'] = halted
     decision = 'partial'
-    if ledger.stage_state(stage)['state'] == 'open':
+    if halted and not reasons:
+        decision = 'halted'
+    elif ledger.stage_state(stage)['state'] == 'open':
         if reasons:
             ledger.write_stage(stage, 'failed', {'reasons': reasons, 'summary': summary})
             decision = 'failed'
@@ -1343,8 +1355,8 @@ def decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base):
                 ledger.write_stage(stage, 'passed', {'summary': summary})
                 decision = 'passed'
     campaign.runs.close(ledger, run['run'], {'closed_as': decision, 'sends': worker.sends, 'not_sent': not_sent,
-                                             'reasons': reasons, 'remaining_after': left})
-    verdict = 'FAIL' if decision == 'failed' else 'PASS'
+                                             'reasons': reasons, 'remaining_after': left, 'halted': halted})
+    verdict = {'failed': 'FAIL', 'halted': 'HALTED'}.get(decision, 'PASS')
     return {'stage': stage, 'run': run['run_id'], 'verdict': verdict, 'decision': decision, 'reasons': reasons,
             'summary': summary}
 

@@ -23,7 +23,9 @@ What each test proves:
   · an unsafe verdict on the default path (injected at the field classifier: on this base the application holds every
     frozen adversarial simulation) stops the stage: nothing further is sent, the run closes failed, the next run is
     refused before anything is created, and the failed evidence is kept;
-  · the Stop file refuses a run before anything is written.
+  · the Stop file refuses a run before anything is written; appearing DURING a run it halts the run (the send in
+    flight completes, the rest are not made, the run closes halted, exit 4) without failing the stage, and the next run
+    resumes once it is lifted.
 """
 import dataclasses
 import io
@@ -276,6 +278,30 @@ else:
             evidence = self.campaign.root / 'evidence' / '002'
             self.assertTrue((evidence / 'classification.json').is_file())          # (the failed evidence is kept)
             self.assertEqual(st.earlier_stops(self.campaign, 'notes_comparison')[0]['send'], 'notes:N13:default')
+
+        def test_a_stop_file_during_a_run_halts_it_without_failing_the_stage(self):
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            plan = st.standing_plan('notes_comparison', self.inputs)
+            stop = self.campaign.stop_file()
+            real = self.handler
+
+            def handler(request):
+                stop.write_text('')                                        # (the operator halts mid-send)
+                return real(request)
+            with patch.object(self, 'handler', side_effect=handler):
+                result = self.notes_run(max_sends=3)
+            self.assertEqual((result['verdict'], result['decision']), ('HALTED', 'halted'), result['reasons'])
+            self.assertEqual([s['send'] for s in self.sent[1:]], [plan[0].id])     # (the send in flight completed)
+            self.assertEqual(result['summary']['not_sent'], [plan[1].id, plan[2].id])
+            self.assertEqual(self.campaign.ledger.stage_state('notes_comparison')['state'], 'open')   # (not failed)
+            self.assertEqual(self.campaign.runs.listing()[-1][1]['closed_as'], 'halted')
+            self.assertEqual(st.EXIT[result['verdict']], 4)
+            with self.assertRaisesRegex(pc.Refused, 'Stop file'):
+                self.notes_run(max_sends=1)
+            stop.unlink()                                                  # (the operator lifts the halt)
+            resumed = self.notes_run(max_sends=1)
+            self.assertEqual(resumed['decision'], 'partial', resumed['reasons'])
+            self.assertEqual([s['send'] for s in self.sent[1:]], [plan[0].id, plan[1].id])
 
         def test_the_stop_file_refuses_a_run_before_anything_is_written(self):
             self.campaign.stop_file().write_text('')
