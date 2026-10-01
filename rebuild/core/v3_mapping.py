@@ -55,8 +55,20 @@ def answerable(fields):
 
 
 def export_refusal(template):
+    """Why no answer on this v3 form can be exported, for the encounter page, before anything is generated or typed.
+
+    From the STORED inspection notes only (no sandbox run on a page view), so it can say too little but must never say
+    something false: the layout reason is shown only while this deployment names no layout verifier, because a stored
+    'not available' describes the upload's configuration, not today's. generation_refusal re-inspects; this does not."""
+    from documents import layout_transport
     from documents.word_v3 import FLOATING_INITIALS_REFUSAL
-    return FLOATING_INITIALS_REFUSAL if FLOATING_INITIALS_REFUSAL in template.warnings else ''
+    if FLOATING_INITIALS_REFUSAL in template.warnings:
+        return FLOATING_INITIALS_REFUSAL
+    if not layout_transport.configured() and any(
+            note in (layout_transport.LAYOUT_UNAVAILABLE, layout_transport.LAYOUT_UNAVAILABLE_BEFORE)
+            for note in template.warnings):
+        return layout_transport.LAYOUT_UNAVAILABLE
+    return ''
 
 
 
@@ -64,6 +76,12 @@ GENERATION_EXPORT_REFUSAL = ("Generation is unavailable for this form's floating
                              "Nothing was sent or charged; the unchanged form and mapping remain available.")
 GENERATION_SOURCE_REFUSAL = ("The original form could not be verified for generation. Nothing was sent or charged. "
                             "Ask an administrator to check the original before trying again.")
+#: ⚠️ D10 (V1 B-W1): without the isolated layout verifier a form with a tab-column answer was generated — quoted, held,
+#: sent, charged — and refused only at finalization, because word_v3.fill refuses EVERY non-empty answer on such a form
+#: until the verifier has measured it. Predictable from the original, so it is refused here, before all of that.
+#: Short enough to survive whole in Job.error (250) behind the worker's 'Not processed: ' and its release sentence.
+GENERATION_LAYOUT_REFUSAL = ("Generation is unavailable: no answer on this form can be exported until the isolated "
+                             "layout verifier checks it. Nothing was sent or charged.")
 
 
 def generation_refusal(version):
@@ -72,14 +90,21 @@ def generation_refusal(version):
     Stored warnings can refuse early, but their absence never authorizes generation. Inspect the original again
     in the existing document sandbox and bind its digest to the selected version's template. Never rewrite old
     mappings, warnings, jobs or receipts. Voice transcription does not depend on filled-form export.
+
+    ⚠️ THE LAYOUT REFUSAL READS THE FRESH INSPECTION, NEVER THE STORED NOTE. `layout_pending` survives
+    documents.service's inspection only when the original has a tab-column layout candidate AND the verifier did not
+    verify it now (not configured, unreachable, or not verified); a verified inspection replaces the response and
+    carries no `layout_pending`. Export then needs the same verifier for any answer at all, so the request could only
+    end in a charge and a refusal. A verifier configured after the upload is therefore honoured, and one lost since is
+    caught, without trusting the upload's notes either way.
     """
     from documents import DocumentError, inspect_template
+    from documents.word_v3 import FLOATING_INITIALS_REFUSAL
     from . import destination_roles
     if not is_v3_version(version):
         return ''
-    if export_refusal(version.template):
+    if FLOATING_INITIALS_REFUSAL in version.template.warnings:
         return GENERATION_EXPORT_REFUSAL
-    from documents.word_v3 import FLOATING_INITIALS_REFUSAL
     from .security import private_path
     try:
         result = inspect_template(private_path(version.template.original_path), engine=CONTRACT)
@@ -90,6 +115,8 @@ def generation_refusal(version):
         return GENERATION_SOURCE_REFUSAL
     if FLOATING_INITIALS_REFUSAL in result.get('warnings', []):
         return GENERATION_EXPORT_REFUSAL
+    if result.get('layout_pending'):
+        return GENERATION_LAYOUT_REFUSAL
     return ''
 
 

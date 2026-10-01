@@ -9,6 +9,17 @@ import stat
 import struct
 
 MAX_FRAME = 48 * 1024 * 1024
+#: ⚠️ WHAT AN ABSENT VERIFIER MEANS FOR THE WHOLE FORM, said in one place. `word_v3.fill` refuses EVERY non-empty answer
+#: set on an original with a tab-column layout candidate unless this verifier measured it — one answer in an unrelated
+#: text field included — so without it no answer on the form can be exported, only the unchanged form. The previous
+#: wording ('... before its tab-column answers can be used') read as if the other answers could be; D10 was then
+#: generated, held and charged, and refused only at finalization. Stored as an inspection note at upload, raised as the
+#: export refusal, and read by core.v3_mapping to explain it before generation.
+LAYOUT_UNAVAILABLE = ('This form has tab-column answers that only the isolated layout verifier can check, and it is not '
+                      'available here. Until it is, no answer on this form can be exported; the unchanged form can '
+                      'still be downloaded.')
+#: The wording uploads stored before 2026-10-01. Recognised in stored notes, never written.
+LAYOUT_UNAVAILABLE_BEFORE = 'This form needs the isolated layout verifier before its tab-column answers can be used.'
 
 
 def canonical(value):
@@ -34,18 +45,26 @@ def send(stream, value):
     stream.sendall(struct.pack('!I', len(payload)) + payload)
 
 
-def verify_document(data, mapping=None, answers=None):
-    from .service import DocumentError
+def _endpoint():
     try:
         from django.conf import settings
-        endpoint = getattr(settings, 'QUILLMD_LAYOUT_SOCKET', '')
-        expected_uid = getattr(settings, 'QUILLMD_LAYOUT_SERVICE_UID', None)
+        return getattr(settings, 'QUILLMD_LAYOUT_SOCKET', ''), getattr(settings, 'QUILLMD_LAYOUT_SERVICE_UID', None)
     except Exception:
-        endpoint = os.getenv('QUILLMD_LAYOUT_SOCKET', '')
-        expected_uid = os.getenv('QUILLMD_LAYOUT_SERVICE_UID', '')
+        return os.getenv('QUILLMD_LAYOUT_SOCKET', ''), os.getenv('QUILLMD_LAYOUT_SERVICE_UID', '')
+
+
+def configured():
+    """Whether this deployment names a layout verifier at all. Not whether it answers: a configured verifier that is
+    down or does not verify a form is found by asking it (verify_document), never assumed from this."""
+    endpoint, expected_uid = _endpoint()
+    return bool(endpoint) and expected_uid not in (None, '')
+
+
+def verify_document(data, mapping=None, answers=None):
+    from .service import DocumentError
+    endpoint, expected_uid = _endpoint()
     if not endpoint or expected_uid in (None, ''):
-        raise DocumentError('This form needs the isolated layout verifier before its tab-column answers can be used.',
-                            'layout_unavailable')
+        raise DocumentError(LAYOUT_UNAVAILABLE, 'layout_unavailable')
     try:
         path = Path(endpoint)
         meta = path.lstat()
