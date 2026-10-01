@@ -495,7 +495,7 @@ class TranscriptionTerms:
     inputs: tuple
     #: The notes contract each transcript's generation runs under: 'default' (the plain request, every contract flag off)
     #: or 'field_relations' (the candidate's claude-sonnet-5-5 default; switched on around that send only, priced under
-    #: ordinary_notes_field_relations). Optional in a declaration; absent means 'default', what campaigns 1 and 2 ran.
+    #: voice_notes_field_relations). Optional in a declaration; absent means 'default', what campaigns 1 and 2 ran.
     notes_contract: str = 'default'
 
     def parameters(self):
@@ -2015,6 +2015,14 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                 # B-F3: a `true` declaration printed smart_format 'false')
                 entry['parameters'] = declaration.transcription.parameters()
                 entry['flags'] = stage_flags(name, declaration)
+                # (refutation r1 of 6c8d79d6, F2: the generation's contract, key and sends as declared)
+                key = TRANSCRIPTION_NOTES_CONTRACTS[declaration.transcription.notes_contract]
+                entry['notes_contract'] = declaration.transcription.notes_contract
+                entry['pricing_keys'] = sorted({'transcription', key})
+                entry['generation_path_flags'] = (sq.stages_module().steps.PATH_FLAGS['field_relations']
+                                                  if key != 'transcription' else {})
+                entry['sends'] = [{**row, 'pricing_key': next(s.pricing_key for s in sends if s.id == row['id'])}
+                                  for row in entry['sends'] if any(s.id == row['id'] for s in sends)]
             else:
                 sends = standing_plan(name, inputs)
             left = remaining_sends(campaign, name, sends)

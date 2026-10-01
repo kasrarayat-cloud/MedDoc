@@ -1808,6 +1808,7 @@ class PricingCommandTests(unittest.TestCase):
             self.assertTrue(preview['within_standard'])
         without = json.loads(self.pricing('claude-sonnet-5', ('2', '10', '0.20')).stdout)
         self.assertNotIn('transcription', without['pricing_versions'])
+        self.assertFalse(set(st.VOICE_PRICING_KEYS) & set(without['pricing_versions']))   # (r1 of 6c8d79d6, F4/M6)
         for rate in ('0', '-0.0077', 'abc', '0.00000000001'):
             with self.subTest(rate=rate):
                 refused = self.pricing('claude-sonnet-5', ('2', '10', '0.20'), f'--deepgram-rate-per-minute={rate}')
@@ -1902,7 +1903,12 @@ class TranscriptionDeclarationTests(Base):
                  'transcription_smart_format: false\ntranscription_notes_contract: default\n'
                  'transcription_notes_contract: field_relations\n', 'at most once'),
                 ('transcription_smart_format: false\n',
-                 'transcription_smart_format: false\n- transcription_notes_contract: field_relations\n', 'transcription_notes_contract')]:
+                 'transcription_smart_format: false\n- transcription_notes_contract: field_relations\n', 'transcription_notes_contract'),
+                # (refutation r1 of 6c8d79d6, F4/M11: a case variant is a stated line, never a silent `default`)
+                ('transcription_smart_format: false\n',
+                 'transcription_smart_format: false\nTranscription_Notes_Contract: field_relations\n', 'transcription_notes_contract'),
+                ('transcription_smart_format: false\n',
+                 'transcription_smart_format: false\nTRANSCRIPTION_NOTES_CONTRACT: field_relations\n', 'transcription_notes_contract')]:
             with self.subTest(new=new[-60:]), self.assertRaisesRegex(pc.Refused, why):
                 parse(self, edited(old, new))
 

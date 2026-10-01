@@ -456,9 +456,12 @@ else:
                 self.assertEqual(st.check_configuration(st.settings_snapshot('transcription'), here, 'transcription',
                                                         self.campaign.root), [])
                 kwargs.setdefault('transcription_secret', DEEPGRAM_KEY)
-                return st.run_stage(self.campaign, 'transcription', secret=SYNTHETIC_KEY,
-                                    provenance={'runner_commit': 'offline-test'}, database_prefix='test_quillmd_qa_',
-                                    **kwargs)
+                result = st.run_stage(self.campaign, 'transcription', secret=SYNTHETIC_KEY,
+                                      provenance={'runner_commit': 'offline-test'}, database_prefix='test_quillmd_qa_',
+                                      **kwargs)
+                from django.conf import settings
+                self.relations_after_run = settings.V3_FIELD_RELATIONS     # (read INSIDE the run's own settings)
+                return result
 
         def test_a_transcription_then_its_generation_end_to_end(self):
             from decimal import Decimal
@@ -567,13 +570,18 @@ else:
 
         def test_a_transcript_generated_under_the_field_relations_contract(self):
             """The candidate's claude-sonnet-5-5 default: the generation on each transcript runs under field relations
-            (switched on around that send only), is quoted and priced under ordinary_notes_field_relations, and the
+            (switched on around that send only), is quoted and priced under voice_notes_field_relations, and the
             process is back at every contract flag off afterwards."""
             from django.conf import settings
             from core.models import Job
             for audio in st.TRANSCRIPTION_AUDIO:
                 if not os.path.exists(audio.path):
                     self.skipTest(f'{audio.path} is not on this host')
+            # (the transcript is a frozen notes case's own punctuated notes, answered with its reference selection, so
+            # the relations generation adopts answers and the transcript judge checks them — refutation r1 F5)
+            case = next(c for c in self.inputs['cases']['cases'] if c['id'] == 'N01')
+            selection = {k: e['raw_model_expectation']['acceptable'][0] for k, e in case['fields'].items()}
+            self.enterContext(patch.dict(TRANSCRIPTS, {key: case['notes'] for key in TRANSCRIPTS}))
             relations = dataclasses.replace(
                 self.declaration,
                 transcription=dataclasses.replace(self.declaration.transcription, notes_contract='field_relations'),
@@ -584,6 +592,9 @@ else:
             self.declaration = self.campaign.declaration = relations
             self.assertEqual(self.model_check()['verdict'], 'PASS')
             self.transcription_setup()
+            for audio in st.TRANSCRIPTION_AUDIO:
+                self.answers[f'generation:{audio.id}'] = (lambda encounter, payload: wire_answer(
+                    encounter.notes, encounter.template_version.fields, payload, selection)[0])
             result = self.transcription_run()
             self.assertEqual((result['verdict'], result['decision']), ('PASS', 'passed'), result['reasons'])
             generations = [(a, o) for a, o in self.campaign.ledger.rows()
@@ -595,7 +606,33 @@ else:
                 self.assertEqual(outcome['class'], 'completed')
                 job = Job.objects.get(pk=attempt['job'])
                 self.assertTrue(job.config.get('ordinary_field_contract'))
-            self.assertFalse(settings.V3_FIELD_RELATIONS)                  # (switched on around the send only)
+            self.assertFalse(self.relations_after_run)       # (switched on around the send only, read inside the run)
+            # Positive control: a punctuated transcript under field relations adopts an answer, and the judge checked
+            # its source support against the saved notes (refutation r1 of 6c8d79d6, F5).
+            support = [json.loads((self.campaign.root / 'evidence' / f'{a["number"]:03d}' / 'classification.json')
+                                  .read_text()) for a, _ in generations]
+            self.assertTrue(any('adopted' in c['verdict']['fields'].values() for c in support), support)
+            self.assertTrue(all(not entry['problems'] for c in support for entry in c['source_support'].values()))
+
+        def test_a_wrong_voice_relations_price_is_refused_before_any_deepgram_request(self):
+            """Refutation r1 of 6c8d79d6, F1: the transcript generation's price version (and profile) is checked with the
+            run's preconditions, so a stale or mistyped `voice_notes_field_relations` line costs no Deepgram request and
+            leaves the stage open — as a wrong plain `transcription` line always did."""
+            for audio in st.TRANSCRIPTION_AUDIO:
+                if not os.path.exists(audio.path):
+                    self.skipTest(f'{audio.path} is not on this host')
+            wrong = dataclasses.replace(
+                self.declaration,
+                transcription=dataclasses.replace(self.declaration.transcription, notes_contract='field_relations'),
+                pricing_versions=tuple(sorted(self.declaration.pricing_versions + (
+                    ('voice_notes_field_relations', self.declaration.pricing_version('ordinary_notes_field_relations')),))))
+            self.declaration = self.campaign.declaration = wrong
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            self.transcription_setup()
+            with self.assertRaisesRegex(pc.Refused, 'prices the transcript generation'):
+                self.transcription_run()
+            self.assertEqual(self.deepgram_requests, [])
+            self.assertEqual(self.campaign.ledger.stage_state('transcription')['state'], 'open')
 
         def test_an_empty_transcript_stops_the_stage_before_its_generation(self):
             audio = st.AUDIO_BY_ID['soap-ankle-speech']
