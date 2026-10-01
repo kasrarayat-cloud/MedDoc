@@ -229,6 +229,20 @@ def preconditions(campaign, *, secret, transcription_secret, database_prefix=sq.
             f'The application\'s transcription rate is not the declared {terms.rate_per_minute} USD per minute.')
     require(app_jobs.DEEPGRAM_MODEL == terms.model and app_jobs.deepgram_parameters() == terms.parameters(),
             'The application would send other transcription parameters than the declared ones.')
+    key = st.TRANSCRIPTION_NOTES_CONTRACTS[terms.notes_contract]
+    if key != 'transcription':
+        # Refutation r1 of 6c8d79d6, F1: the transcript generation's own price version and request profile are checked
+        # HERE, before the run sends anything — not first at the generation's quote, after a paid Deepgram request.
+        from django.test import override_settings
+        from core import generation
+        with override_settings(**steps.PATH_FLAGS['field_relations']):
+            config = generation.configuration()
+        require(config['pricing_version'] == declaration.pricing_version(key),
+                f'The application prices the transcript generation {config["pricing_version"]}, not the declared {key} '
+                'version; nothing is sent.')
+        require(stages.within_bounds(config['request_profile'],
+                                     declaration.expect() if expect is None else expect),
+                'The transcript generation\'s request profile is outside the declared per-request bounds; nothing is sent.')
     stray = pc.leaked(root, transcription_secret, exclude=(terms.credential_file,))
     require(not stray, 'The Deepgram credential is already present in retained files: ' + ', '.join(stray))
     return {**checked, 'transcription': {'provider': terms.provider, 'model': terms.model,
@@ -346,6 +360,12 @@ class TranscriptionRun(stages.Run):
         if send.path == 'transcription':
             return self.transcription_send(send)
         if send.path == 'transcription_generation':
+            if self.terms.notes_contract == 'field_relations':
+                # (the candidate's claude-sonnet-5-5 default contract, switched on around this send only — the notes
+                # stage's own rule for its field-relations sends; the process stays at every contract flag off)
+                from django.test import override_settings
+                with override_settings(**steps.PATH_FLAGS['field_relations']):
+                    return self.transcript_generation_send(send)
             return self.transcript_generation_send(send)
         raise Refused(f'The transcription stage has no path {send.path!r}.')
 
