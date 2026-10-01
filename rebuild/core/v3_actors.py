@@ -117,8 +117,14 @@ STEM_SUFFIXES = tuple(sorted(('ations', 'ation', 'itions', 'ition', 'ions', 'ion
                               'ed', 'es', 's', 'y', 'e', 'ive', 'ous', 'ness', 'ment', 'ments'), key=len, reverse=True))
 
 
+@functools.lru_cache(maxsize=1 << 16)
+def _fold_text(text):
+    return ''.join(c for c in unicodedata.normalize('NFKD', text) if not unicodedata.combining(c)).casefold()
+
+
 def _fold(text):
-    return ''.join(c for c in unicodedata.normalize('NFKD', str(text)) if not unicodedata.combining(c)).casefold()
+    # memoized on the string (a pure function of it): the single-patient reading folds every word of every unit
+    return _fold_text(str(text))
 
 
 def _lemma(token):
@@ -787,6 +793,13 @@ def _initialism_of_run(token):
             and all(_lemma(t) in SOLE_NOUNS or _fold(t.text) in SOLE_NOUNS for t in run))
 
 
+#: Every word the single-patient reading knows (`_sole_reading` 'unknown'); built once.
+_SOLE_KNOWN = (SOLE_NOUNS | SOLE_STATUS | SOLE_RESTRICTED | SOLE_NEUTRAL_WORDS | SOLE_PRESENTED | SOLE_ANSWERS
+               | SOLE_INITIALISMS | SOLE_TIME_WORDS | SOLE_FREQUENCY_ADVERBS | SOLE_FREQUENCY_NOUNS | frozenset(SOLE_SIDES)
+               | frozenset(SOLE_WORD_CLASSES) | SOLE_UNCERTAIN | {'patient'}
+               | frozenset().union(*SOLE_OPERATORS.values()))
+
+
 def _sole_reading(doc, root, *, value_start, colon, age, opener, explicit):
     """One unit's part of the single-patient scope (`sole_patient`). Every value only decides whether the unit may join
     a positively established single-patient note; nothing here releases a unit by itself."""
@@ -915,10 +928,7 @@ def _sole_reading(doc, root, *, value_start, colon, age, opener, explicit):
     topics = []
     negated = any(_fold(t.text) in SOLE_NEGATION or _lemma(t) in SOLE_NEGATION
                   or (_fold(t.text).startswith('non') and len(t.text) > 5) for t in tokens)
-    known = (SOLE_NOUNS | SOLE_STATUS | SOLE_RESTRICTED | SOLE_NEUTRAL_WORDS | SOLE_PRESENTED | SOLE_ANSWERS
-             | SOLE_INITIALISMS | SOLE_TIME_WORDS | SOLE_FREQUENCY_ADVERBS | SOLE_FREQUENCY_NOUNS | frozenset(SOLE_SIDES)
-             | frozenset(SOLE_WORD_CLASSES) | SOLE_UNCERTAIN | {'patient'}
-             | frozenset().union(*SOLE_OPERATORS.values()))
+    known = _SOLE_KNOWN
     for t in tokens:
         if t.is_punct or t.is_space or not any(c.isalpha() for c in t.text):
             continue
