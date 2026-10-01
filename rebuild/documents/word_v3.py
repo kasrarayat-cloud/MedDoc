@@ -2383,12 +2383,20 @@ class Detector:
                 spaced, siblings, unit = self._cell_context(cell)
                 base = destination_state(area.label)
                 st = destination_state(spaced, siblings=siblings, unit=unit, lines=self._cell_lines) if spaced else base
+                caption_for = spaced
                 if spaced and re.sub(r"\W", "", spaced).casefold() != re.sub(r"\W", "", area.label).casefold():
-                    # The label is not the row label alone ('Nurse — Initials': row and column header): the row label's
-                    # reading may only ADD a hold, never release the label's own.
-                    st = max((st, base), key=lambda x: STATE_RANK[x["state"]])
+                    # The label joins the row label and its column header ('Nurse — Initials', 'Troponin (initial) —
+                    # Result'): each is read as itself, with its own neighbours, and the stricter reading decides - the
+                    # engine's joined wording is no printed label ('Troponin (initial) — Result' read as one closes no
+                    # qualifier). A header the row label does not explain keeps the joined reading as well.
+                    header, header_siblings = self._header_context(cell)
+                    readings = [st, destination_state(header, siblings=header_siblings, unit=unit)] if header else [st, base]
+                    st = max(readings, key=lambda x: STATE_RANK[x["state"]])
+                    if st["state"] == STATE_ORDINARY and not any(x["basis"] in ORDINARY_EVIDENCE for x in readings):
+                        st = base
+                    caption_for = area.label
                 if st["state"] != base["state"] or st["basis"] != base["basis"]:
-                    state, caption = st, spaced
+                    state, caption = st, caption_for
             # (3) inside a signing box: the box's line or a person's line is the signing place.
             box_cell = next((c for c in (self.host_cell(area.slot),) if c is not None and c.id in boxes), None)
             if state is None and box_cell is not None:
@@ -2529,6 +2537,16 @@ class Detector:
                     continue
                 out.append((slot.id, start, end, dict(st, basis="inline_caption:" + st["basis"]), label))
         return out
+
+    def _header_context(self, cell):
+        """(the answer cell's column header, the other column headers of its header row)."""
+        table, row, col = cell.parent, cell.info["row"], cell.info["col"]
+        header = clean_label(self.column_header(table, col, row))
+        others = []
+        for c in self.grid(table).get(0, []):
+            if c.info["col"] != col and self.cell_text(c):
+                others.append(clean_label(self.cell_text(c)))
+        return header, others
 
     def _cell_context(self, cell):
         """(the row's label cell read with its paragraphs and line breaks as spaces, the other row labels of the table,

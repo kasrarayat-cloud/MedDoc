@@ -219,6 +219,32 @@ class Structure(unittest.TestCase):
         self.assertEqual(by_label(fields)['Initial']['kind'], 'initials')
         self.assertEqual(w.legacy_role_kind('Initial', siblings=['Plan']), 'initials')
 
+    def test_a_lab_table_reads_its_row_label_and_column_header_each_as_itself(self):
+        """'Troponin (initial)' in a results table with a 'Result' column and a units column is a measurement (the
+        engine's joined label 'Troponin (initial) — Result' closes no qualifier); 'Nurse (initial)' and 'Nurse
+        initials' rows, and an 'Initials' column, stay held; an 'Initial' column beside 'Repeat' is a qualifier."""
+        def lab(rows, headers):
+            doc = Document(); table = doc.add_table(rows=len(rows) + 1, cols=len(headers)); table.style = 'Table Grid'
+            for c, h in enumerate(headers):
+                table.cell(0, c).text = h
+            for r, row in enumerate(rows, start=1):
+                for c, v in enumerate(row):
+                    table.cell(r, c).text = v
+            doc.add_paragraph('Plan: ______')
+            return data(doc)
+        fields, rep = report(lab((('Troponin (initial)', '', 'ng/L'), ('Fibre initial', '', 'mg'), ('Nurse initials', '', ''),
+                                  ('Nurse (initial)', '', '')), ('Test', 'Result', 'Units')))
+        by = by_label(fields)
+        self.assertTrue(generated(by['Troponin (initial) — Result'], rep))
+        self.assertTrue(generated(by['Fibre initial — Result'], rep))
+        self.assertFalse(generated(by['Nurse initials — Result'], rep))
+        self.assertFalse(generated(by['Nurse (initial) — Result'], rep))
+        fields, rep = report(lab((('Troponin', '', ''),), ('Analyte', 'Initial', 'Repeat')))
+        self.assertTrue(generated(by_label(fields)['Troponin — Initial'], rep))
+        fields, rep = report(lab((('Nurse', '', ''),), ('Staff', 'Initials', 'Date')))
+        self.assertFalse(generated(by_label(fields)['Nurse — Initials'], rep))
+        self.assertTrue(generated(by_label(fields)['Nurse — Date'], rep))
+
     def test_a_person_beside_a_sequence_word_stays_held(self):
         self.assertEqual(w.legacy_role_kind('Nurse initial', siblings=['Repeat']), 'initials')
 
