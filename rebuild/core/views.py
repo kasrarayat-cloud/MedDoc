@@ -31,6 +31,7 @@ from .billing import welcome_credit,welcome_credit_label,credit_payment,reconcil
 from .context import integration_status
 from . import batch_jobs, generation_batch
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full,LATE_RECEIPT_ACTION
+from .doctor_status import doctor_status,encounter_label,reuse_message
 from .billing import available_balance
 from . import wm_review
 from . import v3_mapping
@@ -915,8 +916,11 @@ def encounter_detail(request,pk):
     # where the server allows it, and receives provider output only for requests that stand charged.
     prior_generations=sum(1 for job in jobs if job.kind=='generation' and billable_outcome(job))
     prior_transcriptions=sum(1 for job in jobs if job.kind=='transcription' and billable_outcome(job))
+    # The doctor reads one status vocabulary (core.doctor_status): never an internal state word or an administrator's note.
     for job in jobs:
-        job.display_error=public_error(job); job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
+        # A charged completion keeps the page's own next-step text (the transcript or the draft is ready below).
+        job.doctor_status=doctor_status(job); job.display_error='' if job.doctor_status.key=='completed' else job.doctor_status.explanation
+        job.can_cancel=may_cancel(job,request.user); job.deliverable=bool(job.result_path) and deliverable(job)
     # One visible outcome per complete form. Child receipts stay in the admin
     # record; a staged child is never shown as a ready answer draft.
     visible_jobs=[]
@@ -927,9 +931,6 @@ def encounter_detail(request,pk):
             batch=part.batch
             job.display_kind='Generation'
             job.state=batch.state
-            job.display_error=batch.error
-            if batch.state in ('queued','running','validating'):
-                job.display_error='The complete form is being prepared. Answers appear together after validation.'
             prior_generations+=int(batch.state in ('succeeded','not_adopted'))
         visible_jobs.append(job)
     jobs=visible_jobs
@@ -946,7 +947,7 @@ def encounter_detail(request,pk):
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
     from . import wm_narrative
-    return render(request,'encounter_detail.html',{'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
@@ -1090,9 +1091,10 @@ def generate_view(request,pk):
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
         if getattr(job,'reused',False):
             # Reached from a stale page (Back, or a second tab): a generation does not renumber the
-            # revision, so the succeeded job still holds this request key. Saying "queued" would
-            # promise a request that was not made and answers that will not change.
-            messages.info(request,'These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.')
+            # revision, so the earlier job still holds this request key. Saying "queued" would
+            # promise a request that was not made; saying "answer draft" while that job is still
+            # queued or running promises answers that do not exist yet (doctor_status.reuse_message).
+            messages.info(request,reuse_message(job))
         else:
             messages.success(request,'Generation queued. Refresh this page to view the result.')
     except ValidationError as exc:
@@ -1635,7 +1637,7 @@ def voice(request,pk):
         if getattr(job,'reused',False):
             # The identical recording already holds this request key; the redundant upload was just
             # removed above. Nothing was sent to the provider and nothing was charged again.
-            messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
+            messages.info(request,reuse_message(job,recording=True))
         else:
             messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
@@ -1921,10 +1923,20 @@ def billing(request):
     owned_orgs=Membership.objects.filter(user=request.user,active=True,role='owner').values_list('department__organization_id',flat=True)
     wallets=Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned_orgs))
     usage=searched(Usage.objects.filter(user=request.user).select_related('user','department','job__providerreceipt','costreconciliation__recorded_by').order_by('-created_at','pk'),query,['provider','provider_request_id','provider_resource_id','department__name'])
+    held=held_requests(wallets)
     ledger=searched(LedgerEntry.objects.filter(wallet__in=wallets).select_related('wallet').order_by('-created_at','pk'),query,['kind','description','key'])
     payments=searched(Payment.objects.filter(user=request.user).select_related('wallet__organization').order_by('-created_at','pk'),query,['status','stripe_session','stripe_intent'])
     up=page_for(request,usage,'usage_page','usage');lp=page_for(request,ledger,'ledger_page','ledger');pp=page_for(request,payments,'payments_page','payments')
-    return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+    return render(request,'billing.html',{'wallets':wallets,'ledger':lp['page'],'usage':usage_rows(list(up['page'])),'payments':pp['page'],'usage_navigation':up,'ledger_navigation':lp,'payments_navigation':pp,'query':query,'held_requests':held,'usage_totals':usage.aggregate(cost=models.Sum('actual_cost'),charge=models.Sum('charged_cost')),'form':checkout_form(request.user),'checkout_token':signing.dumps({'user':str(request.user.pk),'nonce':secrets.token_hex(24)},salt='checkout-authorization')})
+
+def held_requests(wallets):
+    """Requests holding funds on these wallets, newest first: what is held, for what, in the doctor's words. Read-only:
+    the reservations themselves decide every amount (core.billing)."""
+    rows={}
+    for reservation in Reservation.objects.filter(wallet__in=wallets,state='held').select_related('job','wallet').order_by('-created_at','pk')[:200]:
+        row=rows.setdefault(reservation.job_id,{'job':reservation.job,'amount':Decimal('0'),'status':doctor_status(reservation.job)})
+        row['amount']+=reservation.amount
+    return list(rows.values())
 
 def usage_rows(usage):
     # Reconciled and absorbed evidence is read from the append-only ledger; the usage rows themselves are never edited.
@@ -2090,6 +2102,7 @@ def billing_job_detail(request,pk):
     job=get_object_or_404(Job.objects.filter(allowed).select_related('user','encounter__department'),pk=pk)
     visible=set(Wallet.objects.filter(models.Q(user=request.user)|models.Q(organization_id__in=owned)).values_list('pk',flat=True))
     context=financial_context(job,visible);context.pop('audit_targets')
+    context['doctor_status']=doctor_status(job)
     audit(request.user,'billing.job_read',job.pk)
     return render(request,'financial_detail.html',context)
 
