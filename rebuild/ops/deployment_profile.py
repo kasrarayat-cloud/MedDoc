@@ -109,6 +109,7 @@ ENVIRONMENT_NAMES = frozenset({
     'QUILLMD_WORD_RUNTIME', 'QUILLMD_WORD_MANIFEST', 'QUILLMD_WORD_MANIFEST_SHA256', 'QUILLMD_WORD_ENGINE',
     'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
     'QUILLMD_PAYER_ROLE_GRANTED', 'CPT_LICENSE_ID', 'CPT_LICENSE_EXPIRY',
+    'QUILLMD_READINESS_WORKER_HEARTBEAT_SECONDS', 'QUILLMD_READINESS_OLDEST_QUEUED_SECONDS', 'QUILLMD_READINESS_QUEUE_DEPTH',
 }) | APPLICATION_FEATURE_FLAGS
 # The application settings (quillmd/application_profile.py, docs/rebuild/v1/application-settings.md) that a
 # production profile's fixed modes select. The launcher forces them; a rendered environment may carry them only

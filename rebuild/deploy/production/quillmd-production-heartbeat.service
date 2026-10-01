@@ -1,6 +1,8 @@
 # QuillMD PRODUCTION outside-host heartbeat. Pings the owner-controlled check URL ONLY after the
-# doctor and admin surfaces answer /health/ with 200 on this host, so a missing ping means the host,
-# the services or the network is down. The check service alerts from outside AWS.
+# doctor and admin surfaces answer /health/ with 200 on this host and the doctor surface answers
+# /health/ready/ with 200 (worker heartbeat, queue and processing health; ops/alarms.json), so a
+# missing ping means the host, the services, the network or the worker is down or stuck. The check
+# service alerts from outside AWS.
 [Unit]
 Description=QuillMD production outside-host heartbeat
 After=network-online.target quillmd-production-doctor.service quillmd-production-admin.service

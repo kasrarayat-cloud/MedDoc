@@ -244,6 +244,14 @@ def health_data_mode():
     return 'real' if getattr(settings,'QUILLMD_DATA_MODE','synthetic')=='real' else 'live'
 def health(request): return JsonResponse({'status':'ok','data_mode':health_data_mode(),'surface':'admin' if settings.ADMIN_SITE else 'doctor','release':settings.RELEASE_SHA})
 
+def health_ready(request):
+    """Readiness, separate from liveness (core.readiness): 200 ready, 503 not ready. On the host only: a request that came
+    through the host proxy, or from any non-loopback peer, is answered 404."""
+    from . import readiness
+    if not readiness.on_host(request):raise Http404
+    value=readiness.report()
+    return JsonResponse(value,status=200 if value['ready'] else 503)
+
 @require_http_methods(['GET','POST'])
 def login_view(request):
     form=LoginForm(request.POST or None)

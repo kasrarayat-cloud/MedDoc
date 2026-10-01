@@ -468,13 +468,22 @@ carry resource names and metric values only, never patient data.
 
 | Signal | Condition |
 | --- | --- |
+| Worker heartbeat | readiness: the single worker's last completed pass is older than `QUILLMD_READINESS_WORKER_HEARTBEAT_SECONDS` (default 600), or never recorded |
+| Oldest queued job | readiness: the oldest queued job has waited longer than `QUILLMD_READINESS_OLDEST_QUEUED_SECONDS` (default 300) |
+| Queue depth | readiness: more than `QUILLMD_READINESS_QUEUE_DEPTH` (default 50) jobs are queued |
+| Processing health | readiness: the console's processing health is in error (no worker has run recently, or the queue is not draining) |
 | EC2 status check | `StatusCheckFailed_System` → alarm plus EC2 auto-recover action; `StatusCheckFailed_Instance` → alarm |
 | Host resources | `mem_used_percent` > 85% for 10 min; disk `used_percent` > 80% on `/` or the state root; swap used > 0 |
 | ALB | `UnHealthyHostCount` ≥ 1 for 5 min; target 5XX > 10 in 5 min; p95 target response > 10 s |
 | RDS | CPU > 80% 15 min; `FreeStorageSpace` < 20%; `FreeableMemory` < 256 MiB; event subscription for failures, low storage, backup and maintenance |
 | Backups | AWS Backup job FAILED/EXPIRED/ABORTED and copy-job failures (EventBridge) |
 | Security | root or break-glass sign-in, KMS disable/deletion scheduling, vault/bucket policy change, security group change, GuardDuty findings of medium or higher |
-| Outside the host | Healthchecks.io check fed by `quillmd-production-heartbeat.timer` every 5 minutes (only after both surfaces answer 200), period 5 min, grace 10 min, alerting both custodians outside AWS; Route 53 health check on `https://app.quillmd.com/health/` with a CloudWatch alarm |
+| Outside the host | Healthchecks.io check fed by `quillmd-production-heartbeat.timer` every 5 minutes (only after both surfaces answer `/health/` with 200 and the doctor surface answers `/health/ready/` with 200), period 5 min, grace 10 min, alerting both custodians outside AWS; Route 53 health check on `https://app.quillmd.com/health/` with a CloudWatch alarm |
+
+The table is data: `rebuild/ops/alarms.json` holds every row, the four readiness rows are what
+`GET /health/ready/` evaluates (`core/readiness.py`; on the host only: a request through the proxy
+is answered 404), and `core/tests/test_readiness.py` fails when this table and that file disagree.
+Readiness is not liveness: `/health/` stays the ALB and Route 53 target.
 
 Tests before go-live (cutover gate G6): publish a labelled test message to the SNS topic and record
 **inbox receipt** by both custodians (provider acceptance is not delivery); stop the heartbeat timer
