@@ -962,6 +962,10 @@ class RepairOf39bdb9f0(unittest.TestCase):
                 self.assertNotEqual(legacy_roles_of(two_col([label, 'Plan']))[label]['state'], 'ordinary')
         self.assert_held('Signature of patient' + ' ' * 20 + 'Date')
         self.assert_held('Signature of patient\tDate')
+        # the pair reads only where a date question would otherwise decide: 'Initialled and dated' keeps its protected
+        # reading (the pair's head 'Initialled' alone is uncertain - mutant N25 of the repair survived without this)
+        self.assert_held('Initialled and dated', protected=True)
+        self.assertEqual(manual(lines('Initialled and dated: ______'), 'b/p[1]')[1], 'destination_role')
         self.assert_v3(lines('Signature of patient, date: ______', 'Initials of nurse, date: ______'),
                        ['Signature of patient, date', 'Initials of nurse, date'])
         for label in ('Date of signature', 'Signature date', 'Date signed', 'Consent form signed, date',
