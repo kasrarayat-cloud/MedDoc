@@ -417,6 +417,87 @@ class Residuals(unittest.TestCase):
                 self.assertIn(SYN, xml(w.fill(blob, fields, {plan['key']: SYN})))
 
 
+class RealFormShapes(unittest.TestCase):
+    """(d) the development-form exposures (c/word-census exposure.txt), rebuilt synthetically: each unsafe write is
+    refused or held, each beside an ordinary field that still fills."""
+
+    def test_d15_a_signature_line_read_as_three_areas_is_one_signing_run_and_its_date_fills(self):
+        blob = lines('Signature:……………........................…………\t\t\t\tDate: _____/_____/_____')
+        fields, rep = report(blob)
+        run = [f for f in fields if f['locator']['target'].get('start', 99) < 50 and f['label'] != 'Plan']
+        self.assertEqual(len(run), 3)
+        self.assertFalse(any(generated(f, rep) for f in run))
+        date = next(f for f in fields if f['kind'] == 'date')                 # PC02
+        self.assertTrue(generated(date, rep))
+        self.assertIn('30', xml(w.fill(blob, fields, {date['key']: '30'})))
+
+    def test_d01_an_electronic_signature_attestation_keeps_its_signer_held(self):
+        blob = lines('Electronically Signed On <<insert date and time>> By:')
+        fields, rep = report(blob)
+        by = next(f for f in fields if f['locator']['target']['start'] > 50)
+        self.assertEqual(by['kind'], 'signature')
+        date = next(f for f in fields if f['kind'] == 'date')                 # the attested date stays an answer
+        self.assertTrue(generated(date, rep))
+
+    def test_d17_a_sign_placeholder_is_held_and_a_name_placeholder_fills(self):
+        doc = Document(); doc.add_heading('Letter', level=1); doc.add_paragraph('Dear [Patient name],')
+        doc.add_paragraph('Yours sincerely,'); doc.add_paragraph('[Sign]'); doc.add_paragraph('Plan: ______')
+        blob = data(doc)
+        fields, rep = report(blob)
+        sign = next(f for f in fields if f['locator']['slot'] == 'b/p[3]')
+        self.assertIn(sign['key'], rep['uncertain_places'])
+        self.assertFalse(generated(sign, rep))
+        name = next(f for f in fields if f['locator']['slot'] == 'b/p[1]')
+        self.assertTrue(generated(name, rep))
+
+    def test_d15_an_authors_note_about_the_wording_is_no_answer(self):
+        fields, rep = report(lines('You will be asked to give samples <if POS collects genetic data> during the visit.'))
+        self.assertFalse(generated(fields[0], rep))
+        self.assertIn(fields[0]['key'], rep['uncertain_places'])
+        fields, rep = report(lines('Dear <Patient name>,'))                    # PC: a placeholder naming its answer
+        self.assertTrue(generated(fields[0], rep))
+
+    def test_d29_an_agent_heading_of_a_signing_row_is_held_and_the_name_fills(self):
+        doc = Document(); doc.add_heading('Review', level=1)
+        table = doc.add_table(rows=1, cols=4); table.style = 'Table Grid'
+        for i, text in enumerate(('Completed by:', 'Name:', 'Signature:', 'Date:')):
+            table.cell(0, i).text = text
+        doc.add_paragraph('Plan: ______')
+        fields, rep = report(data(doc))
+        by = by_label(fields)
+        self.assertFalse(generated(by['Completed by'], rep))
+        self.assertTrue(generated(by['Name'], rep))
+        self.assertTrue(generated(by['Date'], rep))
+
+    def test_d36_a_caption_line_of_several_segments_holds_its_whole_writing_line(self):
+        fields, rep = report(lines('', 'Signature of Participant\t\t\tPrint Name of Participant\t\t\tDate', '',
+                                   heading='Signatures'))
+        self.assertFalse(generated(fields[0], rep))
+
+    def test_d36_an_initials_segment_with_no_area_refuses_a_manual_add_and_the_date_fills(self):
+        text = 'Circle Yes or No:     Yes     No     Initials:          Date:  '
+        blob = lines(text, heading='Signatures')
+        fields, rep = report(blob)
+        date = next(f for f in fields if f['kind'] == 'date')
+        self.assertTrue(generated(date, rep))
+        at = text.index('Initials:') + len('Initials:') + 2
+        roles = [r for r in rep['roles'] if r['source'] == 'governed_line']
+        self.assertTrue(any(r['class'] == 'signing' and r['start'] <= at < r['end'] for r in roles))
+
+    def test_a_first_person_consent_declaration_is_consent_wording_and_a_consent_question_is_ordinary(self):
+        fields, rep = report(lines('I have been asked to give consent for my child to participate in this medical study:',
+                                   'Consent obtained? ______'))
+        declaration, question = fields[0], fields[1]
+        self.assertFalse(generated(declaration, rep))
+        self.assertIn(declaration['key'], rep['uncertain_places'])
+        self.assertTrue(generated(question, rep))
+        for label in ('I agree to take part in this study', 'I hereby consent to the procedure'):
+            self.assertEqual(w.destination_state(label)['state'], 'uncertain')
+        for label in ("I declare that I have taken note of the patient's withdrawal of consent", 'Consent obtained?',
+                      'I understand that the applicant was examined', 'I want to take part in this study'):
+            self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
+
+
 class LegacyEngineRoles(unittest.TestCase):
     """The legacy 'roles' operation reads the label cell's printed words (paragraphs and line breaks as spaces), its
     stacked captions one by one, and the labels beside it in its table."""
