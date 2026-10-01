@@ -53,7 +53,9 @@ The historical campaign quillmd-v1-sonnet5-staged-40 (its declaration, ledger, l
 verdicts) is untouched: its runner (ops/sonnet5_qa.py) still reads it (plan, status) and refuses every write to it
 (sonnet5_qa.require_not_historical); this runner refuses its campaign id, root and database.
 
-Commands (from the candidate checkout's rebuild/; `run` and `preflight` only through the ruled-mutation door):
+Commands (from the candidate checkout; `run` and `preflight` only through the ruled-mutation door; every command but
+`pricing` takes `--declaration docs/foundation/mutations/<YYYYMMDD>-quillmd-v1-standing-api-testing[-<n>].md` for a
+later campaign, whose id fixes its root and QA database — default: the first campaign's declaration):
   pricing --model M --input R --output R --cached R --thinking T --effort E [--inference-geo G]
                      the pricing version the APPLICATION computes for each pricing key under those settings, and each
                      request profile (no credential, network or database) — what the lead writes into the declaration
@@ -111,12 +113,31 @@ MODE = 'standing_unlimited_monetary'
 CAMPAIGN = 'quillmd-v1-standing-api-testing-20261001'
 #: The model the live declaration must name (the owner: "switch to sonnet 5.5 to the brand new one").
 DECLARED_MODEL = 'claude-sonnet-5-5'
-#: The live declaration, written by the lead from TEMPLATE once the application's 5.5 profile is integrated.
-DECLARATION = REPOSITORY / 'docs' / 'foundation' / 'mutations' / '20261001-quillmd-v1-standing-api-testing.md'
-TEMPLATE = REPOSITORY / 'docs' / 'foundation' / 'mutations' / '20261001-quillmd-v1-standing-api-testing.TEMPLATE.md'
-#: This campaign's own root, ledger, run records and evidence (never the historical root).
-LIVE_ROOT = Path('/opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261001')
-#: This campaign's own synthetic QA database on the QA server.
+MUTATIONS = REPOSITORY / 'docs' / 'foundation' / 'mutations'
+#: The live declaration of the first campaign, written by the lead from TEMPLATE once the 5.5 profile is integrated.
+DECLARATION = MUTATIONS / '20261001-quillmd-v1-standing-api-testing.md'
+TEMPLATE = MUTATIONS / '20261001-quillmd-v1-standing-api-testing.TEMPLATE.md'
+#: Where every standing campaign's root lives. A live campaign's id fixes its root, its QA database and its declaration's
+#: file name (live_places) — a declaration can never point a campaign at another place. A later campaign under the same
+#: authority (to measure a send again after a repair: a send is made at most once per campaign) is a new declaration
+#: file, `<date>-quillmd-v1-standing-api-testing-<n>.md`, naming `quillmd-v1-standing-api-testing-<date>-<n>`.
+RUNTIME = Path('/opt/meddoc-pro/rebuild/.runtime')
+LIVE_CAMPAIGN = re.compile(r'quillmd-v1-standing-api-testing-(20[0-9]{6})(?:-([2-9]|[1-9][0-9]))?')
+
+
+def live_places(campaign):
+    """{'root', 'database', 'declaration_name'} a live campaign id fixes; refuses any other id."""
+    match = LIVE_CAMPAIGN.fullmatch(campaign or '')
+    require(match, f'A live standing campaign is named quillmd-v1-standing-api-testing-<YYYYMMDD>[-<n>], not {campaign!r}.')
+    suffix = match.group(1) + (f'-{match.group(2)}' if match.group(2) else '')
+    return {'root': RUNTIME / f'v1-standing-api-testing-{suffix}',
+            'database': 'quillmd_qa_standing_' + suffix.replace('-', '_'),
+            'declaration_name': f'{match.group(1)}-quillmd-v1-standing-api-testing'
+                                + (f'-{match.group(2)}' if match.group(2) else '') + '.md'}
+
+
+#: The first campaign's own root and synthetic QA database (live_places of CAMPAIGN; never the historical ones).
+LIVE_ROOT = RUNTIME / 'v1-standing-api-testing-20261001'
 DATABASE_NAME = 'quillmd_qa_standing_20261001'
 QA_SERVER = {'host': '127.0.0.1', 'port': '55731', 'user': 'quillmd_qa'}
 #: The preserved campaign: never written, never admitted under this authority.
@@ -526,13 +547,30 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
 
 
 def require_live(declaration):
-    """The live declaration: for live use, at this runner's own campaign, root and database."""
+    """A live declaration: for live use, of a live campaign id, in the file that id names, at the root and QA database
+    that id fixes (live_places), naming claude-sonnet-5-5. Returns the places."""
     require(declaration.use == 'live', 'Only a live declaration sends.')
-    require((declaration.campaign, declaration.root, declaration.qa_database)
-            == (CAMPAIGN, str(LIVE_ROOT), DATABASE_NAME),
-            f'The live declaration names this runner\'s campaign {CAMPAIGN}, root {LIVE_ROOT} and database '
-            f'{DATABASE_NAME}.')
+    places = live_places(declaration.campaign)
+    require((declaration.root, declaration.qa_database) == (str(places['root']), places['database']),
+            f'The live campaign {declaration.campaign} runs at {places["root"]} on {places["database"]}; the declaration '
+            f'names {declaration.root} on {declaration.qa_database}.')
+    require(Path(declaration.path).name == places['declaration_name'],
+            f'The declaration of {declaration.campaign} is {places["declaration_name"]}, not {Path(declaration.path).name}.')
     require(declaration.model == DECLARED_MODEL, f'The live declaration names {DECLARED_MODEL}.')
+    return places
+
+
+def declaration_path(given=None):
+    """The declaration a command reads: DECLARATION, or `--declaration`, which must be a live declaration's file in this
+    checkout's docs/foundation/mutations/ (never the template)."""
+    if given is None:
+        return DECLARATION
+    path = Path(given) if os.path.isabs(given) else REPOSITORY / given
+    path = Path(os.path.abspath(str(path)))
+    require(path.parent == MUTATIONS and re.fullmatch(r'20[0-9]{6}-quillmd-v1-standing-api-testing(?:-([2-9]|[1-9][0-9]))?'
+                                                      r'\.md', path.name),
+            'A standing declaration is docs/foundation/mutations/<YYYYMMDD>-quillmd-v1-standing-api-testing[-<n>].md.')
+    return path
 
 
 def require_door(declaration, environ=None):
@@ -1530,7 +1568,7 @@ def request_environment(key, declaration, root, password, context, flags, door):
     return pc.scrubbed_environment(key, declaration, extra, config_parent=str(root / 'tmp'))
 
 
-def outer(command, stage=None, max_sends=None):
+def outer(command, stage=None, max_sends=None, path=None):
     """Everything that needs no database, then the request process (a fresh, scrubbed process) — the one door for the
     preflight and every stage run."""
     require(command in ('preflight', 'run'), f'No process command {command!r}.')
@@ -1538,13 +1576,14 @@ def outer(command, stage=None, max_sends=None):
     require(not _inside(REBUILD, INSTALLED['tree']), 'The runner never runs from the installed tree.')
     identity = pc.git_identity(REBUILD)
     require(identity['clean'], 'The runner checkout must be a clean commit.')
-    declaration = declared_standing(DECLARATION)
-    require_live(declaration)
+    path = DECLARATION if path is None else path
+    declaration = declared_standing(path)
+    places = require_live(declaration)
     door = require_door(declaration)
     if command == 'run':
         require(stage in STAGE_KIND, f'run needs --stage {"|".join(STAGE_KIND)}.')
         declaration.stage(stage)
-    root = pc.private_directory(LIVE_ROOT)
+    root = pc.private_directory(places['root'])
     for name in ('ledger', 'runs', 'evidence', 'preflight', 'qa-state', 'access', 'home', 'tmp', 'forms'):
         pc.private_directory(root / name)
     require(not os.path.lexists(root / STOP_NAME), f'The Stop file {root / STOP_NAME} exists; nothing is sent.')
@@ -1553,7 +1592,7 @@ def outer(command, stage=None, max_sends=None):
     if command == 'run':
         password = pc.read_private(declaration.qa_database_password_file).decode().strip()
         require(password and '\n' not in password, 'The QA database password file is not one line.')
-    context = {'command': command, 'root': str(root), 'declaration': str(DECLARATION), 'stage': stage,
+    context = {'command': command, 'root': str(root), 'declaration': str(path), 'stage': stage,
                'max_sends': max_sends, 'runner_commit': identity['commit']}
     env = request_environment(key, declaration, root, password, context,
                               STAGE_FLAGS[stage] if command == 'run' else STAGE_FLAGS['model_check'], door)
@@ -1582,7 +1621,8 @@ def inner():
     declaration = declared_standing(context['declaration'])
     require_live(declaration)
     require_door(declaration)
-    require(Path(context['root']) == LIVE_ROOT, 'The request process runs only at this campaign\'s root.')
+    require(Path(context['root']) == require_live(declaration)['root'],
+            'The request process runs only at this campaign\'s root.')
     campaign = StandingCampaign(declaration)
     campaign.ledger.acquire()
     pc.scrubbed_now()
@@ -1679,41 +1719,43 @@ def main(argv=None):
         parser.add_argument('--thinking')
         parser.add_argument('--effort')
         parser.add_argument('--inference-geo', default='')
+        parser.add_argument('--declaration')
         args = parser.parse_args(argv)
+        path = declaration_path(args.declaration)
         if args.command == 'pricing':
             require(all((args.model, args.input, args.output, args.cached, args.thinking, args.effort)),
                     'pricing needs --model --input --output --cached --thinking --effort.')
             pricing(args.model, (args.input, args.output, args.cached), args.thinking, args.effort, args.inference_geo)
             return 0
         if args.command == 'plan':
-            report = plan_report(args.stage)
+            report = plan_report(args.stage, declaration_path=path)
             if args.price:
-                report['priced'] = priced_plan(args.stage)
+                report['priced'] = priced_plan(args.stage, path)
             print(json.dumps(report, indent=1, default=str))
             return 0
         if args.command == 'status':
-            status()
+            status(declaration_path=path)
             return 0
         if args.command == 'recover':
-            return recover()
+            return recover(declaration_path=path)
         if args.command == 'reopen':
             require(args.stage, 'reopen needs --stage.')
-            return reopen(args.stage, args.diagnosis)
+            return reopen(args.stage, args.diagnosis, declaration_path=path)
         if args.command == 'preflight':
-            outer('preflight')
+            outer('preflight', path=path)
         else:
             require(args.stage, f'run needs --stage {"|".join(STAGE_KIND)}.')
             require(args.max_sends is None or args.max_sends > 0, '--max-sends is at least 1.')
-            outer('run', args.stage, args.max_sends)
+            outer('run', args.stage, args.max_sends, path=path)
     except Refused as refused:
         print('REFUSED: ' + str(refused), file=sys.stderr)
         return EXIT['REFUSED']
     return EXIT['REFUSED']
 
 
-def priced_plan(stage=None):
+def priced_plan(stage=None, path=None):
     """Each send's maximum, from the application under the live declaration's settings (offline Django)."""
-    declaration = declared_standing(DECLARATION, uses=('live',))
+    declaration = declared_standing(DECLARATION if path is None else path, uses=('live',))
     inputs = sq.stages_module().frozen_inputs()
     names = [stage] if stage else [s.id for s in declaration.stages]
     with tempfile.TemporaryDirectory(prefix='standing-plan-') as scratch:

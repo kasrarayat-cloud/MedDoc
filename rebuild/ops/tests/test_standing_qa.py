@@ -370,6 +370,45 @@ class AuthorityAndDeclarationTests(Base):
         with self.assertRaisesRegex(pc.Refused, 'revocation'):
             parse(self, edited('## Retained evidence', 'This authority is revoked.\n\n## Retained evidence'))
 
+    def test_a_live_campaign_id_fixes_its_root_database_and_declaration_file(self):
+        self.assertEqual(st.live_places(st.CAMPAIGN), {'root': st.LIVE_ROOT, 'database': st.DATABASE_NAME,
+                                                       'declaration_name': st.DECLARATION.name})
+        later = st.live_places('quillmd-v1-standing-api-testing-20261001-2')
+        self.assertEqual((later['root'].name, later['database'], later['declaration_name']),
+                         ('v1-standing-api-testing-20261001-2', 'quillmd_qa_standing_20261001_2',
+                          '20261001-quillmd-v1-standing-api-testing-2.md'))
+        for campaign in ('quillmd-v1-standing-api-testing', 'quillmd-v1-standing-api-testing-20261001-1',
+                         'quillmd-v1-standing-api-testing-2026101', 'other-20261001', st.HISTORICAL['campaign']):
+            with self.subTest(campaign=campaign), self.assertRaisesRegex(pc.Refused, 'live standing campaign'):
+                st.live_places(campaign)
+        values = FIXTURE_VALUES
+        second = {'campaign: quillmd-v1-standing-api-testing-20261001': 'campaign: quillmd-v1-standing-api-testing-20261001-2',
+                  'root: /opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261001':
+                      'root: /opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261001-2',
+                  'qa_database: quillmd_qa_standing_20261001': 'qa_database: quillmd_qa_standing_20261001_2'}
+        root, path = repository(self, fill_template(values, 'live', second),
+                                name='20261001-quillmd-v1-standing-api-testing-2.md')
+        d = st.declared_standing(path, repository=root, out=io.StringIO())
+        self.assertEqual(st.require_live(d)['root'], later['root'])
+        root, path = repository(self, fill_template(values, 'live', second))       # (in the FIRST campaign's file)
+        with self.assertRaisesRegex(pc.Refused, 'is 20261001-quillmd-v1-standing-api-testing-2.md'):
+            st.require_live(st.declared_standing(path, repository=root, out=io.StringIO()))
+        moved = {**second, 'root: /opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261001':
+                 'root: /opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-elsewhere'}
+        root, path = repository(self, fill_template(values, 'live', moved),
+                                name='20261001-quillmd-v1-standing-api-testing-2.md')
+        with self.assertRaisesRegex(pc.Refused, 'runs at'):
+            st.require_live(st.declared_standing(path, repository=root, out=io.StringIO()))
+        self.assertEqual(st.declaration_path(None), st.DECLARATION)
+        self.assertEqual(st.declaration_path('docs/foundation/mutations/20261001-quillmd-v1-standing-api-testing-2.md'),
+                         st.MUTATIONS / '20261001-quillmd-v1-standing-api-testing-2.md')
+        for given in ('docs/foundation/mutations/20261001-quillmd-v1-standing-api-testing.TEMPLATE.md',
+                      'docs/foundation/mutations/20260928-quillmd-v1-sonnet5-staged-campaign.md',
+                      '/tmp/20261001-quillmd-v1-standing-api-testing.md',
+                      'docs/foundation/mutations/../mutations/x/20261001-quillmd-v1-standing-api-testing.md'):
+            with self.subTest(given=given), self.assertRaisesRegex(pc.Refused, 'standing declaration is'):
+                st.declaration_path(given)
+
     def test_every_command_that_sends_refuses_a_test_declaration(self):
         with self.assertRaisesRegex(pc.Refused, 'live use'):
             parse(self, uses=('live',))
@@ -851,7 +890,7 @@ class ProcessTests(Base):
 
     def setUp(self):
         self.repo = scratch(self)
-        self.live_root = self.repo / 'runtime' / 'standing'
+        self.live_root = self.repo / 'runtime' / 'v1-standing-api-testing-20261001'
         secret_dir = self.repo / 'secrets'
         secret_dir.mkdir(mode=0o700)
         self.key = secret_dir / 'anthropic-api-key'
@@ -883,7 +922,7 @@ class ProcessTests(Base):
         git(self.repo, 'commit', '-q', '-m', 'Scratch live declaration')
         self.commit = git(self.repo, 'log', '-1', '--format=%H').stdout.decode().strip()
         for name, value in (('DECLARATION', self.declaration_path), ('REBUILD', self.repo / 'rebuild'),
-                            ('LIVE_ROOT', self.live_root)):
+                            ('RUNTIME', self.repo / 'runtime')):
             patcher = patch.object(st, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)

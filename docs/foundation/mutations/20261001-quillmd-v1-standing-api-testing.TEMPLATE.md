@@ -88,7 +88,9 @@ stage: notes_comparison sends 28 requires model_check_passed
 
 One runner at a time (the ledger lock), one request at a time, a running job in the QA database refuses. A run makes at
 most `max_sends_per_run` sends (fewer with `--max-sends`); a stage never makes more than its declared count, which is
-exactly its plan's size; a send (stage and send id) is attempted at most once in this campaign. The SDK runs with no
+exactly its plan's size; a send (stage and send id) is attempted at most once in this campaign — measuring a send
+again after a repair is a later campaign under the same authority, with its own declaration file
+(`<date>-quillmd-v1-standing-api-testing-<n>.md`), whose id fixes its root and QA database. The SDK runs with no
 retries and a sent request is never sent again: a lost or late response is an unknown outcome, reconciled before any
 new send. Every request's output limit is checked on the job's profile and again on the outgoing body by the request
 capture. A send that has not returned within the deadline is abandoned as unknown.
