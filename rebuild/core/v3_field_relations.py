@@ -312,7 +312,7 @@ def records(notes, catalogue, context, units, selections, model):
 _PRONOUN_SUBJECT = ('She ', 'He ')
 
 
-def sole_released(reading, field, ordered):
+def sole_released(reading, field, ordered, candidates=None):
     """2026-10-01. The selected units the note's POSITIVELY established single-patient scope (`v3_actors.sole_patient`)
     makes the patient's, for this field: a unit of such a note, answering a printed question that names nobody but the
     patient (`v3_actors.neutral_field`), and - for a question about what is so now (`g.v3_current_state_field`, not a
@@ -330,7 +330,7 @@ def sole_released(reading, field, ordered):
     current = g.v3_current_state_field(field) and not g.v3_plan_question(field, label)
     chosen = {u['id'] for u in ordered}
     released = set()
-    for u in ordered:
+    for u in (ordered if candidates is None else candidates):
         sole = (reading['actors'].get(u['id']) or {}).get('sole')
         if u['id'] not in scope or not sole:
             continue
@@ -503,22 +503,28 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
         policy_patient = isinstance(field.get('answer_policy'), dict)
         from .v3_literal_facts import complete_ids
         literal_ids = complete_ids(field, ordered, reading)
-        # 2026-10-01: a unit of a positively established single-patient note is the patient's (`sole_released`).
-        sole_ids = sole_released(reading, field, ordered)
+        def evidenced(u):
+            own = reading['parsed'][u['id']]
+            return bool(own or reading['patients'].get(u['id']) or policy_patient
+                        or predicate_polarity(field, u) is not None
+                        or (destination_temporal_scopes(field) and explicit_patient_report(u['quote']))
+                        or u['id'] in reading['syntax_complete'] or u['id'] in reading['actor_relations']['units']
+                        or u['id'] in literal_ids)
+        # 2026-10-01: a unit the existing evidence does not make the patient's is the patient's only in a positively
+        # established single-patient note (`sole_released`). The release is read only where it can change the answer:
+        # for a unit lacking that evidence, or one not already complete by the cheap statement evidence of
+        # `g.v3_complete_statement` (a released current clause is complete through 'syntax_ids' below). Per unit the
+        # release does not depend on which units are read, so the result equals reading every selected unit.
+        lacking = [u for u in ordered if not evidenced(u)]
+        candidates = [u for u in ordered if u in lacking or not (
+            ':' in u['quote'] or g.FINITE_STATEMENT_V3.search(u['quote']) or u['id'] in reading['syntax_complete'])]
+        sole_ids = sole_released(reading, field, ordered, candidates) if candidates else set()
         # Existing patient/foreign actor, shape and exact-labelled-source guards
         # remain prerequisites, regardless of the model's context declarations.
         for u in ordered:
             own = reading['parsed'][u['id']]
-            predicate_patient = predicate_polarity(field, u) is not None
-            temporal_patient = bool(destination_temporal_scopes(field)
-                                    and explicit_patient_report(u['quote']))
             if ((own and own[0] != g.question_key(label)) or u['id'] in reading['unresolved_subjects']
-                    or (not own and not reading['patients'].get(u['id'])
-                        and not policy_patient
-                        and not predicate_patient and not temporal_patient
-                        and u['id'] not in reading['syntax_complete']
-                        and u['id'] not in reading['actor_relations']['units']
-                        and u['id'] not in literal_ids and u['id'] not in sole_ids)
+                    or (u in lacking and u['id'] not in sole_ids)
                     or g.v3_shape_holds(u['quote'], own[1] if own else u['quote'])): return refused
         # A single-patient unit read as one complete current clause ('She attends the clinic every week.') is complete
         # without the finite-verb list (`v3_actors._sole_reading` 'current').

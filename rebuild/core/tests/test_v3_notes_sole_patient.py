@@ -80,7 +80,13 @@ class SinglePatientRelease(Floors, SimpleTestCase):
              'v3_9': 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'}, choices=NO)
         self.assert_filled(N03, order_form(), {'v3_2': ['She attends the clinic every week.']},
                            {'v3_2': 'She attends the clinic every week.'})
-        exam = 'On examination there is a small effusion and medial joint line tenderness.'
+        # A statement the reader already makes the patient's ('The patient ...') but whose verb is outside the finite
+        # list is complete through the same single-patient reading (the release is read for it too, not only for the
+        # units that lack patient evidence).
+        explicit = 'The patient attends the clinic every week.'
+        self.assert_filled(N03.replace('She attends the clinic every week.', explicit), order_form(),
+                           {'v3_2': [explicit]}, {'v3_2': explicit})
+        exam ='On examination there is a small effusion and medial joint line tenderness.'
         self.assert_filled(N04, fields, {'v3_7': [exam]}, {'v3_7': exam})
         prodrome = 'The patient sees zigzag lines before the headache begins.'
         self.assert_filled(N02, repeated_other(), {'v3_2': [prodrome]}, {'v3_2': prodrome})
