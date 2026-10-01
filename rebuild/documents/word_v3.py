@@ -7032,6 +7032,9 @@ def _initial_state(t, siblings, unit):
                     st = _state(STATE_PROTECTED, "bare_initial", "initials")
             elif _has_person(head):
                 st = _state(STATE_PROTECTED, "person_initial", "initials")
+            elif re.search(r"\bby$", head):
+                # an agent phrase closing on 'by' ('Checked by — Initial', 'Given by - initial'): the agent's initials
+                st = _state(STATE_PROTECTED, "agent_initial", "initials")
             elif unit_here:
                 st = _state(STATE_ORDINARY, "measure_unit")
             elif re.fullmatch(_MEASURE, last) or re.fullmatch(_MEASURE, head):
@@ -7170,7 +7173,8 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
         elif re.search(r"\b(?:reviewed|read|checked|witnessed|verified|approved|agreed|completed|seen)\s*(?:and|&|/)$",
                        pre):
             st = _state(STATE_UNCERTAIN, "verb_and_signed", "signature")
-        elif _person(pre) and closing:
+        elif (_person(pre) or _agent_only(pre)) and closing:
+            # a person, or persons joined ('Parent/guardian signed', 'Patient or carer signed')
             st = _state(STATE_PROTECTED, "person_signed", "signature")
         elif re.match(r"by\b", post):
             agent = post[2:].strip()

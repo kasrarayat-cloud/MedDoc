@@ -702,6 +702,18 @@ class LegacyEngineRoles(unittest.TestCase):
                 self.assert_held_on_both(label, 'protected', 'person_sign')
         self.assertEqual(w.destination_state('Consent form signed by Dr.')['state'], 'ordinary')
 
+    def test_an_agent_phrase_before_an_initial_and_joined_persons_before_signed(self):
+        """'Checked by — Initial' (the earlier repair's must-hold list) was generated into the legacy row on f5fe720f
+        and on every roles-2 commit before this one (f5fe720f's dash-qualifier release); contract v3 held it. The
+        agent phrase closing on 'by' names whose initials they are. 'Parent/guardian signed' names persons joined."""
+        for label in ('Checked by — Initial', 'Given by - initial'):
+            with self.subTest(label=label):
+                self.assert_held_on_both(label, 'protected', 'agent_initial')
+        self.assert_held_on_both('Parent/guardian signed', 'protected', 'person_signed')
+        for label in ('Troponin — Initial', 'Consent form signed'):
+            with self.subTest(control=label):
+                self.assert_generated_on_both(label)
+
     def test_a_sequence_word_beside_a_bare_initial_in_the_same_table(self):
         rows = self.roles(two_col(['Initial', 'Repeat', 'Plan']))
         self.assertEqual((rows['Initial']['state'], rows['Initial']['basis']), ('ordinary', 'sequence_sibling'))
