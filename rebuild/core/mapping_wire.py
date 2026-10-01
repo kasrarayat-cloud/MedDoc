@@ -61,22 +61,28 @@ def catalog(payload):
     return refs
 
 def _partition(groups,count,name):
+    """The request-bound IDs the response OMITTED. A duplicated ID, or one the request does not contain, refuses the
+    whole response (the model contradicts itself or names something that does not exist). An omitted ID is not a
+    contradiction: the caller holds it `uncertain` for the clinician (campaign attempt 24 left eleven checkbox slots
+    of one form unclassified, and refusing the whole proposal for it discarded every decision it did make)."""
     values=[value for group in groups.values() for value in group]
-    if len(values)!=count or set(values)!=set(range(count)):
-        raise ValidationError(f'Mapping {name} IDs must form one complete, disjoint request-bound set.')
+    if len(values)!=len(set(values)) or any(value>=count for value in values):
+        raise ValidationError(f'Mapping {name} IDs must form one disjoint request-bound set.')
+    return sorted(set(range(count))-set(values))
 
 def expand(payload,response):
     """Validate the compact envelope, then restore the stable-source review contract.
 
-    ENVELOPE violations refuse the WHOLE response: the schema, incomplete or duplicated field/slot partitions, a change
+    ENVELOPE violations refuse the WHOLE response: the schema, a duplicated or unknown field/slot ID, a change
     naming a field the request does not contain, an incomplete option triple, the source catalog differing from the
-    bound request, and the option capacity. An individually INVALID CHANGE never refuses the rest and is never adopted: a
+    bound request, and the option capacity. A field or slot the response OMITS is held `uncertain`. An individually
+    INVALID CHANGE never refuses the rest and is never adopted: a
     replacement leaves its field `uncertain` with no target (the prior field is preserved), an addition is dropped, and
     each is returned in `rejected` with its change index, wire array, field key, proposed slot and reason. `sources` maps
     each surviving change to its index and records the text references each change quoted (a dependence reading)."""
     body=Proposal.model_validate(response).model_dump()
-    _partition(body['f'],len(payload['fields']),'field')
-    _partition(body['s'],len(payload['slots']),'slot')
+    omitted_fields=_partition(body['f'],len(payload['fields']),'field')
+    omitted_slots=_partition(body['s'],len(payload['slots']),'slot')
     refs=payload['text_refs']
     if refs!=catalog(payload):raise ValidationError('Mapping source catalog differs from its bound request.')
     for change in body['x']:
@@ -142,8 +148,11 @@ def expand(payload,response):
             # A field touched by a rejected change is held for review; it never carries a target.
             fields.append({'key':key,'verdict':'uncertain' if key in held else verdict,
                            'target':None if key in held else replacements.get(fid)})
+    # An omitted field or slot is held for review: never adopted, never a target.
+    fields.extend({'key':payload['fields'][fid]['key'],'verdict':'uncertain','target':None} for fid in omitted_fields)
     for code,verdict in [('c','covered'),('n','not_answer'),('u','uncertain')]:
         slots.extend({'slot':payload['slots'][sid]['slot'],'verdict':verdict} for sid in body['s'][code])
+    slots.extend({'slot':payload['slots'][sid]['slot'],'verdict':'uncertain'} for sid in omitted_slots)
     fields.sort(key=lambda row:next(n for n,f in enumerate(payload['fields']) if f['key']==row['key']))
     slots.sort(key=lambda row:next(n for n,s in enumerate(payload['slots']) if s['slot']==row['slot']))
     return {'fields':fields,'slots':slots,'additions':additions,'rejected':rejected,'sources':sources},body['e']

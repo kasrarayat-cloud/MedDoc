@@ -69,9 +69,10 @@ def report(version, fields=None):
     # but ONLY after the file is read and hashed again here and still equals the recorded digest (cache refutation
     # F1/F2: a file identity on disk is not its content, and an unreadable or rewritten original must still refuse).
     # Any read failure or digest mismatch is a miss, and the isolated parser then refuses exactly as before.
-    process_key = (key, str(version.template.pk))
+    template_pk = getattr(version.template, 'pk', None)
+    process_key = (key, str(template_pk)) if template_pk is not None else None   # an unsaved template is never shared
     with _PROCESS_LOCK:
-        hit = _PROCESS_REPORTS.get(process_key)
+        hit = _PROCESS_REPORTS.get(process_key) if process_key is not None else None
         if hit is not None:
             _PROCESS_REPORTS.move_to_end(process_key)
     if hit is not None and _current_digest(path) == version.template.sha256:
@@ -86,7 +87,7 @@ def report(version, fields=None):
         raise ValidationError('Original integrity check failed.')
     cache[key] = copy.deepcopy(result)
     # Bounded by size as well as count (cache refutation F4): a pathological reading is never retained.
-    if len(json.dumps(result, default=str)) <= _PROCESS_ENTRY_LIMIT:
+    if process_key is not None and len(json.dumps(result, default=str)) <= _PROCESS_ENTRY_LIMIT:
         with _PROCESS_LOCK:
             _PROCESS_REPORTS[process_key] = copy.deepcopy(result)
             while len(_PROCESS_REPORTS) > _PROCESS_LIMIT:

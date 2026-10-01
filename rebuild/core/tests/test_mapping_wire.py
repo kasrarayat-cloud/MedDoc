@@ -65,16 +65,32 @@ class MappingWire(SimpleTestCase):
         body['x'][0].extend(body['x'][0][-3:])
         with self.assertRaises(ValidationError):wire.expand(payload,body)
 
-    def test_complete_disjoint_groups_and_strict_numeric_ids(self):
+    def test_disjoint_groups_and_strict_numeric_ids(self):
         payload=self.payload();good=wire.fixture(payload)
         candidates=[]
         for group,code in [('f','k'),('s','u')]:
-            for value in [[],[True],[False],[-1],[1200],[0,0],['0']]:
+            for value in [[True],[False],[-1],[1200],[0,0],['0'],[5]]:
                 body=copy.deepcopy(good);body[group][code]=value;candidates.append(body)
         body=copy.deepcopy(good);body['f']['u']=[0];candidates.append(body)
         body=copy.deepcopy(good);body['s']['n']=[0];candidates.append(body)
         for body in candidates:
             with self.subTest(body=body),self.assertRaises((ValidationError,ValueError)):wire.expand(payload,body)
+
+    def test_an_omitted_field_or_slot_is_held_uncertain_not_refused(self):
+        """Campaign attempt 24: the model left eleven checkbox slots of one form unclassified and the whole proposal was
+        refused. An OMITTED ID is held `uncertain` (never a target, never adopted); the rest of the proposal stands."""
+        payload=self.payload(4,2);good=wire.fixture(payload)
+        body=copy.deepcopy(good)
+        body['s']={'c':[0],'n':[],'u':[]}                       # slots 1, 2 and 3 omitted
+        body['f']={'k':[1],'r':[],'n':[],'u':[]}                # field 0 omitted
+        body['x']=[self.target(payload,2)]                       # a valid addition on an omitted slot
+        result,_=wire.expand(payload,body)
+        self.assertEqual([(s['slot'],s['verdict']) for s in result['slots']],
+                         [(payload['slots'][0]['slot'],'covered')]+[(payload['slots'][n]['slot'],'uncertain') for n in (1,2,3)])
+        self.assertEqual([(f['key'],f['verdict'],f['target']) for f in result['fields']],
+                         [('f0','uncertain',None),('f1','keep',None)])
+        self.assertEqual([a['slot'] for a in result['additions']],[payload['slots'][2]['slot']])
+        self.assertEqual(result['rejected'],[])
 
     def test_spans_refuse_foreign_context_wrong_destination_and_invalid_unicode_bounds(self):
         """⚠️ ONE INVALID CHANGE IS HELD WITH ITS REASON; IT NEVER REFUSES THE REST (M05). Each bad change below comes

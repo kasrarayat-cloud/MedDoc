@@ -125,14 +125,26 @@ class MappingAssistance(TestCase):
         with patch.object(mapping,'MAX_PAYLOAD_BYTES',1):
             with self.assertRaises(ValidationError):mapping.compile_request(self.version,self.config)
 
-    def test_missing_duplicated_unknown_or_extra_schema_members_refuse(self):
+    def test_duplicated_unknown_or_extra_schema_members_refuse(self):
         body=self.body()
-        mutations=[{**body,'f':{**body['f'],'k':body['f']['k'][:-1]}},
-                   {**body,'s':{**body['s'],'u':body['s']['u'][:-1]}},
-                   {**body,'f':{**body['f'],'u':[body['f']['k'][0]]}}, {**body,'xml':'execute this'}]
+        mutations=[{**body,'f':{**body['f'],'u':[body['f']['k'][0]]}}, {**body,'xml':'execute this'}]
         for candidate in mutations:
             with self.subTest(candidate=list(candidate)):
                 with self.assertRaises((ValidationError,ValueError)):mapping.validate_proposal(self.version,self.compiled,candidate)
+
+    def test_a_missing_field_or_slot_is_held_for_review_not_refused(self):
+        """Campaign attempt 24 (a model leaving slots unclassified) refused the whole proposal; an omitted field keeps its
+        deterministic mapping and an omitted slot becomes an unresolved review item. Nothing is adopted from it."""
+        body=self.body()
+        for name,candidate in [('field',{**body,'f':{**body['f'],'k':body['f']['k'][:-1]}}),
+                               ('slot',{**body,'s':{**body['s'],'u':body['s']['u'][:-1]}})]:
+            with self.subTest(omitted=name):
+                result=mapping.validate_proposal(self.version,self.compiled,candidate)
+                self.assertEqual(result['fields'],self.version.fields)
+                self.assertEqual(result['review'].get('changes') or [],[])
+                if name=='slot':
+                    dropped=json.loads(self.compiled['request']['messages'][0]['content'])['slots'][body['s']['u'][-1]]['slot']
+                    self.assertIn(dropped,[row['slot'] for row in result['review']['unresolved']])
 
     def target(self,slot,label,kind='text',fid=-1,options=()):
         payload=json.loads(self.compiled['request']['messages'][0]['content'])
