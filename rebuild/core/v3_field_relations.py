@@ -65,8 +65,15 @@ def digest(value):
 
 
 def enabled(model=None):
-    """The one effective switch (`generation.field_relations_enabled`): for `model`, or the configured model."""
-    return g.field_relations_enabled(model)
+    """The one effective switch (`generation.field_relations_enabled`). On for the deployment NOW (the configured model)
+    and, for a request or a record naming `model`, for that model too: the gate before a send (`require_config`), the
+    provenance (`records`) and the reader of stored answers (`read`) give that one answer (refutation round 4, NR1-F1).
+    A quote made under the claude-sonnet-5-5 default and run after the deployment moved to another model is refused
+    before any request, exactly as the base refused a job whose flag was turned off after its quote, instead of being
+    sent, charged and then held whole because its result could not be read."""
+    if not g.field_relations_enabled():
+        return False
+    return model is None or g.field_relations_enabled(model)
 
 
 def require_config(config):
@@ -381,7 +388,9 @@ def sole_independent(reading, unit, chosen, label):
       - a correction or a pointer to another line, anywhere ('The previous line is incorrect.', 'Sorry, ...');
       - another line about the same topic that denies, ends, restricts, conditions or doubts it ('She takes no
         medicines.', 'The patient used to smoke.', 'The patient is allergic to latex only.', 'Plan: switch to apixaban.')
-        - only doubt in an assessment's own line excepted ('Assessment is a probable medial meniscus tear.');
+        - only doubt in an assessment's own line about something else excepted ('Assessment is a probable medial
+        meniscus tear.' beside 'He has knee pain.'; never 'Assessment: asthma unlikely.' beside 'She has asthma.', and an
+        exclusion is a denial, not a doubt: `v3_actors.SOLE_EXCLUSION`);
       - another line naming the same word with a contraindication ('She is allergic to amitriptyline.');
       - another line about the same topic that is neither the presenting line nor written as ANOTHER printed question's
         answer ('She has twenty cigarettes a day.' beside 'She is a nonsmoker.': the answer may be contradicted or
@@ -421,7 +430,10 @@ def sole_independent(reading, unit, chosen, label):
         owner = _owner(reading, oid)
         shared_class = bool(theirs['classes'] & mine['classes'])
         shared_key = bool(theirs['keys'] & mine['keys'])
-        doubt_in_assessment = owner in ('assessment', 'impression', 'diagnosis') and theirs['doubt_only']
+        # (round 4) only an assessment's doubt about something ELSE is set apart: one naming the answer's own word
+        # ('She has asthma.' beside 'Assessment: possible asthma.') may change it
+        doubt_in_assessment = (owner in ('assessment', 'impression', 'diagnosis') and theirs['doubt_only']
+                               and not theirs['keys'] & mine['keys'])
         if 'key' in theirs['reach'] and shared_key:
             return False
         if 'class' in theirs['reach'] and shared_class and not doubt_in_assessment:
@@ -459,7 +471,8 @@ def read(reading, label, evidence, record, *, text=None, field_key=None):
             return refused
         catalogue = reading.get('catalogue', reading['fields'])
         field = next((f for f in catalogue if f['key'] == value['key']), None)
-        if (value['contract'] != CONTRACT or value['model'] not in g.NATIVE_MODELS or not field
+        if (value['contract'] != CONTRACT or value['model'] not in g.NATIVE_MODELS or not enabled(value['model'])
+                or not field
                 or value['binding'] != binding(reading['source']['quote'], catalogue, reading['context_labels'])
                 or g.question_key(field['label']) != g.question_key(label)
                 or (field_key is not None and field_key != field['key'])): return refused

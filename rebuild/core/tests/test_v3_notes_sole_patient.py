@@ -477,3 +477,355 @@ class RelationsFieldBatches(SimpleTestCase):
     def test_a_single_response_form_keeps_the_single_request(self):
         notes = OPENER + ' She takes warfarin.'
         self.assertFalse(b.needed(clinic_form(), notes, g.configuration()))
+
+
+# ─── Refutation round 4 (notes-notes-refute-verify, 2026-10-01): rows 0e9f1025 adopted and f5fe720f held ─────────────
+#: The line breaks every row is read under (the refuters' four variants).
+SEPARATORS = {'space': ' ', 'newline': '\n', 'blank line': '\n\n', 'crlf': '\r\n'}
+W45 = 'A 45-year-old woman presents with cough.'
+M45 = 'A 45-year-old man presents with cough.'
+
+
+class RoundFour(Floors):
+    def held_everywhere(self, rows):
+        for lines, pick, key, choices in rows:
+            for name, sep in SEPARATORS.items():
+                with self.subTest(notes=lines, separator=name):
+                    self.assert_held(sep.join(lines), clinic_form(), {key: [pick]}, key, choices=choices)
+
+    def filled_everywhere(self, rows):
+        for lines, pick, key, choices, text in rows:
+            for name, sep in SEPARATORS.items():
+                with self.subTest(notes=lines, separator=name):
+                    self.assert_filled(sep.join(lines), clinic_form(), {key: [pick]}, {key: text}, choices=choices)
+
+
+@override_settings(**RELATIONS)
+class OnePresentedPerson(RoundFour, SimpleTestCase):
+    """R2-F1: a presenting line naming TWO age-described people ('A 4-year-old girl presents with a 30-year-old man.')
+    presents no single patient, whatever their genders: nothing in the note is released as the patient's."""
+
+    def test_an_opener_presenting_two_people_releases_nothing(self):
+        girl_man, boy_woman = 'A 4-year-old girl presents with a 30-year-old man.', 'A 4-year-old boy presents with a 30-year-old woman.'
+        six = 'A 6-year-old boy presents with a 40-year-old woman.'
+        self.held_everywhere((
+            ([girl_man, 'He takes warfarin.'], 'He takes warfarin.', 'v3_4', None),
+            ([girl_man, 'He is allergic to penicillin.'], 'He is allergic to penicillin.', 'v3_5', None),
+            ([boy_woman, 'She has asthma.'], 'She has asthma.', 'v3_3', None),
+            ([boy_woman, 'She has asthma.'], 'She has asthma.', 'v3_8', None),
+            ([six, 'She smokes.'], 'She smokes.', 'v3_6', YES),
+            ([six, 'She smokes twenty cigarettes a day.', 'Smoker: Yes.'], 'Smoker: Yes.', 'v3_6', YES),
+            ([six, 'She smokes twenty cigarettes a day.', 'Smoker: Yes.'], 'She smokes twenty cigarettes a day.', 'v3_6', YES),
+            (['A 35-year-old man presents with a 5-year-old girl.', 'She has a cough.'], 'She has a cough.', 'v3_2', None),
+            (['A 35-year-old man presents with a 5-year-old girl.', 'She has a cough.'], 'She has a cough.', 'v3_1', None),
+            (['A 70-year-old woman presents with a 45-year-old male.', 'He takes warfarin.'], 'He takes warfarin.', 'v3_4', None),
+            (['A 70-year-old woman presents with a 45-year-old woman.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4',
+             None)))
+
+    def test_the_presenting_line_describes_exactly_one_thing_by_age(self):
+        # whatever the second age-described noun is, the presenting line is not positively one patient's
+        self.held_everywhere((
+            (['A 45-year-old man presents with a 2-year-old fracture.', 'He takes warfarin.'], 'He takes warfarin.', 'v3_4',
+             None),))
+
+    def test_a_second_presentation_is_a_second_patient(self):
+        # (self-refutation of the round-4 repair) two presenting lines are two patients, with or without the article
+        self.held_everywhere((
+            (['30-year-old woman presents with headaches.', '50-year-old woman presents with cough.', 'She takes warfarin.'],
+             'She takes warfarin.', 'v3_4', None),
+            ([OPENER, 'A 50-year-old woman presents with cough.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None),
+            ([OPENER, 'This is a 50-year-old woman seen for cough.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4',
+             None)))
+
+    def test_one_presented_person_still_releases(self):
+        self.filled_everywhere((
+            ([M45, 'He takes warfarin.'], 'He takes warfarin.', 'v3_4', None, 'He takes warfarin.'),
+            ([W45, 'She has asthma.'], 'She has asthma.', 'v3_3', None, 'She has asthma.'),
+            ([OPENER, 'She smokes.'], 'She smokes.', 'v3_6', YES, 'Yes')))
+
+
+@override_settings(**RELATIONS)
+class PatientNounPhrases(RoundFour, SimpleTestCase):
+    """R2-F2: 'patient' names THIS note's patient only as 'the patient' / 'this patient' with nothing else said of the
+    noun: a plural, an indefinite, a possessor, an age or any other modifier may be somebody else."""
+
+    def test_another_or_any_patient_is_not_released(self):
+        self.held_everywhere((
+            ([W45, 'Some patients are allergic to penicillin.'], 'Some patients are allergic to penicillin.', 'v3_5', None),
+            ([W45, 'All patients take aspirin daily.'], 'All patients take aspirin daily.', 'v3_4', None),
+            ([W45, 'The male patient takes aspirin daily.'], 'The male patient takes aspirin daily.', 'v3_4', None),
+            ([W45, 'Her patient has asthma.'], 'Her patient has asthma.', 'v3_3', None),
+            ([W45, 'The older patient takes warfarin.'], 'The older patient takes warfarin.', 'v3_4', None),
+            ([W45, 'A patient is allergic to penicillin.'], 'A patient is allergic to penicillin.', 'v3_5', None),
+            ([W45, 'The 70-year-old patient has asthma.', 'She is allergic to penicillin.'], 'She is allergic to penicillin.',
+             'v3_5', None),
+            ([W45, 'Another patient takes warfarin.'], 'Another patient takes warfarin.', 'v3_4', None),
+            ([W45, 'The other patient takes warfarin.'], 'The other patient takes warfarin.', 'v3_4', None),
+            ([W45, 'The patients take warfarin.'], 'The patients take warfarin.', 'v3_4', None)))
+
+    def test_the_patient_and_this_patient_are_the_presented_patient(self):
+        self.filled_everywhere((
+            ([W45, 'This patient takes warfarin.'], 'This patient takes warfarin.', 'v3_4', None,
+             'This patient takes warfarin.'),
+            ([W45, 'She has asthma.', 'The patient is allergic to penicillin.'], 'She has asthma.', 'v3_3', None,
+             'She has asthma.')))
+
+
+@override_settings(**RELATIONS)
+class AssessmentNamingTheAnswer(RoundFour, SimpleTestCase):
+    """R2-F3: an exclusion is a denial, not a doubt; and an assessment's doubt or denial about the answer's OWN word
+    ('Assessment: asthma unlikely.' beside 'She has asthma.') may change it - only an assessment about something else
+    is set apart from it."""
+
+    def test_an_assessment_excluding_or_doubting_the_answer_holds_it(self):
+        self.held_everywhere((
+            ([W45, 'She has asthma.', 'Assessment: asthma excluded.'], 'She has asthma.', 'v3_3', None),
+            ([M45, 'He has diabetes.', 'Assessment: diabetes excluded.'], 'He has diabetes.', 'v3_3', None),
+            (['A 45-year-old woman presents with wheeze.', 'She has asthma.', 'Assessment: asthma excluded.'],
+             'She has asthma.', 'v3_1', None),
+            (['A 45-year-old woman presents with wheeze.', 'She has asthma.', 'Assessment: asthma excluded.'],
+             'She has asthma.', 'v3_2', None),
+            ([W45, 'Assessment: asthma excluded.', 'She has asthma.'], 'She has asthma.', 'v3_3', None),
+            ([W45, 'She has asthma.', 'Assessment: asthma unlikely.'], 'She has asthma.', 'v3_3', None),
+            ([W45, 'She has asthma.', 'Assessment: asthma ruled out.'], 'She has asthma.', 'v3_3', None),
+            ([W45, 'She has asthma.', 'Assessment: possible asthma.'], 'She has asthma.', 'v3_3', None),
+            ([W45, 'She has eczema.', 'Assessment: eczema excluded.'], 'She has eczema.', 'v3_3', None),
+            # an exclusion is a denial whatever it names: one of a broader class may deny the answer ('lung disease')
+            ([W45, 'She has asthma.', 'Assessment: lung disease excluded.'], 'She has asthma.', 'v3_3', None),
+            ([W45, 'She has asthma.', 'Assessment: lung disease ruled out.'], 'She has asthma.', 'v3_3', None)))
+
+    def test_an_assessment_about_something_else_does_not(self):
+        self.filled_everywhere((
+            ([W45, 'She has asthma.', 'Assessment: probable eczema.'], 'She has asthma.', 'v3_3', None, 'She has asthma.'),
+            ([W45, 'She takes warfarin.', 'Assessment: asthma excluded.'], 'She takes warfarin.', 'v3_4', None,
+             'She takes warfarin.')))
+
+
+@override_settings(**RELATIONS)
+class BareRepairRepeatedValue(RoundFour, SimpleTestCase):
+    """R2-F4: a bare backward repair ('Sorry, I mean warfarin.') withdraws the value before it; a later line that may
+    repeat the withdrawn value is still governed by it. Only a later answer POSITIVELY about another topic is set
+    apart from it."""
+
+    def test_a_later_line_on_the_repaired_topic_is_held(self):
+        self.held_everywhere((
+            (['Medications: aspirin.', 'Sorry, I mean warfarin.', 'Plan: continue aspirin.'], 'Plan: continue aspirin.',
+             'v3_9', None),
+            (['Past medical history: asthma.', 'Sorry, I mean angina.', 'Assessment: asthma.'], 'Assessment: asthma.',
+             'v3_8', None),
+            (['Examination: left knee effusion.', 'Sorry, I mean shoulder.', 'Assessment: left knee effusion.'],
+             'Assessment: left knee effusion.', 'v3_8', None),
+            (['Chief complaint: cough.', 'Sorry, I mean wheeze.', 'History of present illness: cough for a week.'],
+             'History of present illness: cough for a week.', 'v3_2', None),
+            # a later line about the repaired topic in words the lexicon does not know may repeat it ('ASA')
+            (['Medications: aspirin.', 'Sorry, I mean warfarin.', 'Plan: continue ASA.'], 'Plan: continue ASA.', 'v3_9',
+             None),
+            (['Allergies: penicillin.', 'Sorry, I mean amoxicillin.', 'Plan: avoid penicillin.'], 'Plan: avoid penicillin.',
+             'v3_9', None),
+            # ... and one on the repaired topic in other words: a penicillin to start after a repaired drug allergy
+            (['Allergies: penicillin.', 'Sorry, I mean amoxicillin.', 'Plan: start flucloxacillin.'],
+             'Plan: start flucloxacillin.', 'v3_9', None)))
+
+    def test_a_later_answer_about_another_topic_is_still_answered(self):
+        for sep in (' ', '\n'):
+            notes = sep.join(['Patient presents with a rash on both forearms.', 'Allergies: penicillin. Sorry, I mean '
+                              'amoxicillin.', 'Smoker: No.'])
+            with self.subTest(separator=sep):
+                self.assert_filled(notes, clinic_form(), {'v3_6': ['Smoker: No.']}, {'v3_6': 'No'}, choices=NO)
+
+
+
+@override_settings(**RELATIONS)
+class GroupsNamesAndOtherQuestions(RoundFour, SimpleTestCase):
+    """R2-F5 and R2-F6 (refutation round 4, confirmed LOW): a pronoun that can stand for a group ('Both have asthma.',
+    'All take warfarin.') or a bare noun standing as the one who has or takes something ('Spot has a rash.': a name the
+    lexicon happens to know) is not positively the patient; and a printed question with a word the lexicons do not know
+    ('Maternal conditions', 'Discontinued medications') is not positively about the patient now. Nothing is released."""
+
+    def test_a_group_pronoun_or_a_bare_named_bearer_is_not_the_patient(self):
+        itch = 'A 45-year-old woman presents with itching.'
+        self.held_everywhere((
+            ([W45, 'Both have asthma.'], 'Both have asthma.', 'v3_3', None),
+            ([W45, 'All have asthma.'], 'All have asthma.', 'v3_3', None),
+            ([W45, 'All take warfarin.'], 'All take warfarin.', 'v3_4', None),
+            ([W45, 'These take warfarin.'], 'These take warfarin.', 'v3_4', None),
+            ([itch, 'Spot has a rash.'], 'Spot has a rash.', 'v3_7', None),
+            ([itch, 'Spot has a rash.'], 'Spot has a rash.', 'v3_2', None),
+            ([W45, 'Spot is allergic to penicillin.'], 'Spot is allergic to penicillin.', 'v3_5', None),
+            ([W45, 'Spot has a rash.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None)))
+
+    def test_a_thing_as_a_subject_is_still_a_thing(self):
+        self.filled_everywhere((
+            ([W45, 'The rash is red.'], 'The rash is red.', 'v3_7', None, 'The rash is red.'),
+            ([W45, 'Pain is worse at night.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None,
+             'She takes warfarin.')))
+
+    def test_a_question_with_an_unknown_word_is_not_answered(self):
+        for label, notes, pick in (('Maternal conditions', W45 + ' She has asthma.', 'She has asthma.'),
+                                   ('Familial conditions', W45 + ' She has asthma.', 'She has asthma.'),
+                                   ('Paternal medications', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   ('Discontinued medications', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   ('Stopped medications', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   ('Declined treatment', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   # a question framed in another time or a part of the day
+                                   ('Old medications', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   ('New medications', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   ('Night medications', W45 + ' She takes ibuprofen in the morning.',
+                                    'She takes ibuprofen in the morning.'),
+                                   ('Morning medications', W45 + ' She takes amitriptyline at night.',
+                                    'She takes amitriptyline at night.'),
+                                   ('Daily medications', W45 + ' She takes ibuprofen as needed.',
+                                    'She takes ibuprofen as needed.'),
+                                   # a question whose verb is not present: a plan, a past act, a condition
+                                   ('Medications to start', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   ('Medications to be started', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   ('Medications needed', W45 + ' She takes warfarin.', 'She takes warfarin.'),
+                                   ('Medications started', W45 + ' She takes warfarin.', 'She takes warfarin.')):
+            with self.subTest(label=label):
+                self.assert_held(notes, [v3('f', label, 'long_text', TITLE)], {'f': [pick]}, 'f')
+        self.assertTrue(actors.neutral_field('Current medications', TITLE))
+        self.assertTrue(actors.neutral_field('Medications', TITLE))
+        self.assert_filled(W45 + ' She takes warfarin.', [v3('f', 'Current medications', 'long_text', TITLE)],
+                           {'f': ['She takes warfarin.']}, {'f': 'She takes warfarin.'})
+
+ON55 = dict(LIVE, AI_MODEL=g.SONNET_5_5, V3_HISTORY_CONTEXT=False, V3_FIELD_RELATIONS=False, V3_FIELD_RELATIONS_SWITCH=None,
+            V3_GENERATION_BATCHES=False)
+
+
+class OneSwitchAtEveryReader(SimpleTestCase):
+    """NR1-F1: the contract is on for a request or a record only while it is on for the deployment NOW (the configured
+    model) AND for the model the request or record names. The gate before a send (`require_config`), the provenance
+    (`records`) and the reader of stored answers (`read`) give that one answer, so a job is never sent and charged
+    under a contract its result cannot be read under."""
+
+    def test_a_quote_made_under_the_default_is_refused_after_the_deployment_moves_off_it(self):
+        with override_settings(**ON55):
+            config = g.configuration(clinic_form())
+            self.assertEqual(config['ordinary_field_contract'], r.CONTRACT)
+            r.require_config(config)                                                    # control: unchanged deployment
+        for run in (dict(ON55, AI_MODEL=g.SONNET_5), dict(ON55, AI_MODEL='claude-sonnet-4-6'),
+                    dict(ON55, AI_MODEL=g.SONNET_5, V3_FIELD_RELATIONS_SWITCH=False),
+                    dict(ON55, V3_FIELD_RELATIONS_SWITCH=False)):
+            with self.subTest(model=run['AI_MODEL'], switch=run['V3_FIELD_RELATIONS_SWITCH']), override_settings(**run):
+                self.assertIs(r.enabled(g.SONNET_5_5), r.enabled())
+                with self.assertRaisesMessage(ValidationError, 'disabled'):
+                    r.require_config(config)
+
+    def test_the_explicit_switch_keeps_a_queued_job_across_a_model_change(self):
+        # the base's behaviour: '1' is on for every native model whatever the configured model is now
+        with override_settings(**dict(ON55, V3_FIELD_RELATIONS=True, V3_FIELD_RELATIONS_SWITCH=True)):
+            config = g.configuration(clinic_form())
+        with override_settings(**dict(ON55, AI_MODEL='claude-sonnet-4-6', V3_FIELD_RELATIONS=True,
+                                      V3_FIELD_RELATIONS_SWITCH=True)):
+            r.require_config(config)
+            self.assertTrue(r.enabled(g.SONNET_5_5))
+
+    def test_a_record_is_read_only_while_its_model_takes_the_contract(self):
+        from core.tests.test_v3_field_relations import relation_body
+        notes, fields = OPENER + ' She takes warfarin.', clinic_form()
+
+        def stored(model):
+            asked, context, _ = g.v3_generation_fields(fields)
+            units = g.source_units(notes, asked, context_labels=context)[0]
+            selections = r.FieldSelections.model_validate(relation_body(notes, fields, {'v3_4': ['She takes warfarin.']}))
+            records = r.records(notes, fields, context, units, selections, model)
+            answers = g.v3_adopted(fields, g.validate_selections(
+                notes, asked, selections, context_labels=context, evidence_contract=g.TAB_CONTRACT,
+                ordinary_records=records, catalogue=fields), notes, asked, context)
+            self.assertEqual(answers['v3_4']['status'], 'supported')
+            return {'v3_4': answers['v3_4']}
+
+        with override_settings(**ON55):
+            mine = stored(g.SONNET_5_5)
+            self.assertEqual(g.governed_decisions(notes, fields, mine), [])               # control
+        with override_settings(**RELATIONS):
+            explicit = stored(g.SONNET_5)
+        for run, answer in ((ON55, explicit), (dict(ON55, AI_MODEL=g.SONNET_5), mine),
+                            (dict(ON55, AI_MODEL='claude-sonnet-4-6'), mine), (dict(ON55, V3_FIELD_RELATIONS_SWITCH=False), mine)):
+            with self.subTest(model=run['AI_MODEL'], record=answer is mine), override_settings(**run):
+                # a claude-sonnet-5 record under a default that is claude-sonnet-5-5's, or any record once the deployment
+                # is off the contract: refused by the reader, so the page, save and finalization hold it
+                self.assertEqual(g.governed_decisions(notes, fields, answer), ['Medications'])
+
+
+def _keyed_reply(body, picks):
+    """A complete keyed relations answer to the request itself (the picked unit 'answer', every other 'independent'),
+    from the model the request named, end_turn."""
+    payload = json.loads(body['messages'][0]['content'])
+    units = payload['source_units']
+    by_quote = {u['quote']: u['id'] for u in units}
+    labels = {f['key']: f['label'] for f in payload['catalogue']}
+    fields = {}
+    for key in payload['requested_field_ids']:
+        chosen = [by_quote[picks[labels[key]]]] if picks.get(labels[key]) in by_quote else []
+        fields[key] = {'unit_ids': chosen, 'conflict': False,
+                       'context': {str(u['id']): 'answer' if u['id'] in chosen else 'independent' for u in units}}
+        if payload['option_catalogue'].get(key):
+            fields[key]['option_ids'] = []
+    return {'id': 'msg_switch', 'type': 'message', 'role': 'assistant', 'model': body['model'],
+            'content': [{'type': 'text', 'text': json.dumps({'fields': fields})}], 'stop_reason': 'end_turn',
+            'stop_details': None, 'stop_sequence': None,
+            'usage': {'input_tokens': 100, 'output_tokens': 10, 'cache_read_input_tokens': 0,
+                      'cache_creation_input_tokens': 0}}
+
+
+from core.tests.test_word_v3_workflow import V3EncounterFixture  # noqa: E402
+from django.test import TestCase  # noqa: E402
+
+
+@override_settings(**ON55)
+class OneSwitchAtTheWorker(V3EncounterFixture, TestCase):
+    """NR1-F1 end to end: a job quoted under the claude-sonnet-5-5 default and run after the deployment moved off it is
+    refused BEFORE any request - nothing sent, nothing charged, the hold released - exactly as the base refused a job
+    whose flag was turned off after its quote. With no change it is sent once and both answers are adopted."""
+    NOTES = 'Patient presents with right knee pain.\nReferring physician: Dr Example'
+    PICKS = {'Reason for visit': 'Patient presents with right knee pain.',
+             'Referring physician': 'Referring physician: Dr Example'}
+
+    def run_job(self, run_settings):
+        import os
+        import anthropic
+        import httpx
+        from core.jobs import enqueue, run_one
+        from core.models import Encounter, Job, LedgerEntry, Reservation
+        from core.tests.test_sonnet5_profile import PRICE_ENV
+        env = patch.dict(os.environ, PRICE_ENV); env.start(); self.addCleanup(env.stop)
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        self.assertEqual(self.client.post(f"/encounters/{encounter.pk}/notes/",
+                                          {"revision": encounter.revision, "notes": self.NOTES}).status_code, 302)
+        with patch('anthropic.Anthropic') as never:
+            job = enqueue(Encounter.objects.get(pk=self.encounter.pk), self.user)
+            never.assert_not_called()
+        self.assertEqual(job.config['ordinary_field_contract'], r.CONTRACT)
+        sent, real = [], anthropic.Anthropic
+
+        def handler(request):
+            body = json.loads(request.content); sent.append(body)
+            return httpx.Response(200, json=_keyed_reply(body, self.PICKS))
+
+        def client(**kwargs):
+            return real(api_key='synthetic-no-network', http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+                        **kwargs)
+        with override_settings(**run_settings), patch('anthropic.Anthropic', side_effect=client):
+            run_one()
+        job = Job.objects.get(pk=job.pk)
+        encounter = Encounter.objects.get(pk=self.encounter.pk)
+        answers = {label: (encounter.answers.get(self.key(label)) or {}).get('status') for label in self.PICKS}
+        return job, sent, answers, [r.state for r in Reservation.objects.filter(job=job)], \
+            list(LedgerEntry.objects.filter(job=job).values_list('kind', flat=True))
+
+    def test_unchanged_deployment_sends_once_and_adopts(self):
+        job, sent, answers, reservations, ledger = self.run_job(ON55)
+        self.assertEqual((job.state, len(sent), [b['model'] for b in sent]), ('succeeded', 1, [g.SONNET_5_5]))
+        self.assertEqual(answers, {'Reason for visit': 'supported', 'Referring physician': 'supported'})
+
+    def assert_refused_before_any_request(self, run):
+        job, sent, answers, reservations, ledger = self.run_job(run)
+        self.assertEqual((job.state, sent, reservations, ledger), ('failed', [], ['released'], []), job.error)
+        self.assertIn('No provider request was made', job.error)
+
+    def test_moved_to_claude_sonnet_5_refuses_before_any_request(self):
+        self.assert_refused_before_any_request(dict(ON55, AI_MODEL=g.SONNET_5))
+
+    def test_moved_to_claude_sonnet_4_6_refuses_before_any_request(self):
+        self.assert_refused_before_any_request(dict(ON55, AI_MODEL='claude-sonnet-4-6'))

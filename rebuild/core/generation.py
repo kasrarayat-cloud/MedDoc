@@ -1989,49 +1989,74 @@ V3_LABELLED_THEN_REPAIR = re.compile(r'(?P<head>[^.!?\n]*[:\uff1a][^.!?\n]*[.!])
 
 
 def v3_bare_repairs(reading, notes):
-    """Ids of correction units that are a bare backward repair of the labelled value RIGHT BEFORE them (READ ONLY for a
-    valid ordinary relation, `v3_relation_corrections`): 'Allergies: penicillin. Sorry, I mean amoxicillin.' (the repair
-    on the labelled line), or 'Sorry, I mean amoxicillin.' alone on the line after 'Allergies: penicillin.' with no
-    blank line between. Such a repair replaces the value it follows; it cannot change a line written AFTER it. Every
-    other correction ('Strike the next entry.', 'Sorry, the next one is wrong.', 'Sorry, I meant both legs.', a repair
-    after an unlabelled sentence) is read as before, note-wide."""
+    """The correction units that are a bare backward repair of the labelled value RIGHT BEFORE them (READ ONLY for a
+    valid ordinary relation, `v3_relation_corrections`), each with the ids of the lines it is about - the repaired
+    labelled line and the repair itself: 'Allergies: penicillin. Sorry, I mean amoxicillin.' (the repair on the labelled
+    line), or 'Sorry, I mean amoxicillin.' alone on the line after 'Allergies: penicillin.' with no blank line between.
+    Such a repair withdraws the value it follows; a line written AFTER it may still repeat the withdrawn value, so it is
+    set apart only from an answer POSITIVELY about another topic (`v3_repair_apart`). Every other correction ('Strike
+    the next entry.', 'Sorry, the next one is wrong.', 'Sorry, I meant both legs.', a repair after an unlabelled
+    sentence) is read as before, note-wide."""
     found = reading.get('_bare_repairs')
     if found is not None:
         return found
     from .v3_actors import SOLE_NOUNS
     units, colon, position = reading['units'], reading['colon'], reading['position']
-    found = set()
+    found = {}
     for unit in units:
         quote = unit['quote']
         if not v3_note_correction(quote) or v3_record_retraction(quote):
             continue
-        tail, after_labelled = None, False
+        tail, after_labelled, repaired = None, False, None
         if V3_BARE_REPAIR.fullmatch(quote):
             at = position[unit['id']]
             previous = units[at - 1] if at > 0 else None
             if (previous is not None and colon[previous['id']] and reading['parsed'][previous['id']]
                     and not v3_note_correction(previous['quote'])
                     and not BLANK_LINE.search(notes, previous['end'], unit['start'])):
-                tail, after_labelled = quote, True
+                tail, after_labelled, repaired = quote, True, previous['id']
         elif colon[unit['id']] and reading['parsed'][unit['id']]:
             split = V3_LABELLED_THEN_REPAIR.fullmatch(quote)
             if split and V3_BARE_REPAIR.fullmatch(split['tail']) and not v3_note_correction(split['head']):
-                tail, after_labelled = split['tail'], True
+                tail, after_labelled, repaired = split['tail'], True, unit['id']
         if not after_labelled:
             continue
         value = V3_BARE_REPAIR.fullmatch(tail)['value']
         words = [w.casefold() for w in re.findall(r'[^\W\d_]+', value)]
         if words and all(w in SOLE_NOUNS or (w.endswith('s') and w[:-1] in SOLE_NOUNS) for w in words):
-            found.add(unit['id'])
+            found[unit['id']] = frozenset((repaired, unit['id']))
     reading['_bare_repairs'] = found
     return found
+
+
+def v3_repair_apart(reading, answer_ids, repaired_ids):
+    """Whether an answer is POSITIVELY about another topic than a bare backward repair and the value it withdrew
+    (refutation round 4, 2026-10-01: 'Medications: aspirin. Sorry, I mean warfarin. Plan: continue aspirin.' repeats the
+    withdrawn value). Read through the single-patient lexicon (`v3_actors._sole_reading`): every line of the answer and
+    every repaired line has no unknown word and at least one known topic, and the answer shares no topic and no word
+    with them ('Smoker: No.' after 'Allergies: penicillin. Sorry, I mean amoxicillin.'). Anything else - the same topic,
+    a shared word, or a word the lexicon does not know ('Plan: continue ASA.') - is not apart, as before."""
+    actors = reading.get('actors') or {}
+    readings = {}
+    for uid in set(answer_ids) | set(repaired_ids):
+        sole = (actors.get(uid) or {}).get('sole')
+        if not sole or sole['unknown'] or not sole['classes']:
+            return False
+        readings[uid] = sole
+    if not answer_ids:
+        return False
+    # (an answer line that is itself a repaired line shares its own topic below, so it is never apart)
+    classes = frozenset().union(*(readings[uid]['classes'] for uid in answer_ids))
+    words = frozenset().union(*(readings[uid]['keys'] for uid in answer_ids))
+    return not any(readings[uid]['classes'] & classes or readings[uid]['keys'] & words for uid in repaired_ids)
 
 
 def v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, field_key, answer_text):
     """The note's corrections that govern an answer (`judged_context`): every one, note-wide, as before - except, for an
     answer whose ordinary relation record is valid, a bare backward repair (`v3_bare_repairs`) written wholly BEFORE
-    every line of the answer ('Allergies: penicillin. Sorry, I mean amoxicillin.' above 'Smoker: No.'). It still
-    governs everything before it and its own line, and every other correction is unchanged."""
+    every line of the answer when the answer is POSITIVELY about another topic (`v3_repair_apart`: 'Allergies:
+    penicillin. Sorry, I mean amoxicillin.' above 'Smoker: No.'). It still governs everything before it, its own line,
+    and any later line that may repeat what it withdrew; every other correction is unchanged."""
     corrections = list(scope['corrections'])
     reading = scope.get('preceding')
     if not corrections or ordinary_relation is None or not reading:
@@ -2046,7 +2071,11 @@ def v3_relation_corrections(scope, notes, label, evidence, ordinary_relation, fi
     if not ordinary_read(reading, label, evidence, ordinary_relation, text=answer_text, field_key=field_key)['valid']:
         return corrections
     start = min(span[0] for span in spans)
-    return [unit for unit in corrections if not (unit['id'] in bare and unit['end'] <= start)]
+    answer_ids = set(v3_evidence_units(reading, evidence))
+    if len(answer_ids) != len(evidence):
+        return corrections
+    return [unit for unit in corrections if not (unit['id'] in bare and unit['end'] <= start
+                                                 and v3_repair_apart(reading, answer_ids, bare[unit['id']]))]
 
 
 def governance_for(notes, fields, context_labels=(), narrative=False, *, v3_units=None, v3_parsed=None):
