@@ -690,17 +690,19 @@ def _printed_text(element):
 
 
 def _printed_lines(paragraph):
-    """A paragraph's printed captions: its lines (split at its line breaks), each split again at its tabs - a tab
-    separates two captions printed on one line ('Signature of patient<tab>Date' over one answer cell), which the
-    joined words would read as the date question 'Signature date'."""
+    """A paragraph's printed lines (split at its line breaks), its tabs kept: a tab separates two captions printed on
+    one line ('Signature of patient<tab>Date' over one answer cell), which word_v3.destination_state reads one by one
+    - the joined words would be the date question 'Signature date'."""
     out, line = [], []
     for node in paragraph.iter():
         if node.tag == qn("w:t"):
             line.append(node.text or "")
-        elif node.tag in (qn("w:br"), qn("w:cr"), qn("w:tab")):
+        elif node.tag == qn("w:tab"):
+            line.append("\t")
+        elif node.tag in (qn("w:br"), qn("w:cr")):
             out.append("".join(line)); line = []
     out.append("".join(line))
-    return [re.sub(r"\s+", " ", x).strip() for x in out]
+    return [re.sub(r"[^\S\t]+", " ", x).strip() for x in out]
 
 
 def legacy_roles(fields, mapping, cells=()):

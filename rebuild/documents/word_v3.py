@@ -2589,11 +2589,11 @@ class Detector:
             if self.is_label_cell(c):
                 label_cell = c
         own = spaced(label_cell) if label_cell is not None else ""
-        # its own captions one by one: each paragraph, each line of it, and each tab-separated caption on a line
-        # ('Signature of patient<tab>Date' prints two captions over one answer cell, not the date question
-        # 'Signature date')
+        # its own lines, tabs kept: destination_state reads the captions one by one (each line, and each caption a tab
+        # or a run of writing blanks separates on a line - 'Signature of patient<tab>Date' prints two captions over one
+        # answer cell, not the date question 'Signature date')
         self._cell_lines = [line for p in (label_cell.children if label_cell is not None else []) if p.kind == "p"
-                            for line in re.split(r"\n|\t+", self.text(p.el)) if line.strip()]
+                            for line in re.split(r"\n", self.text(p.el)) if line.strip()]
         siblings = []
         for r, cells in self.grid(table).items():
             if r == row:
