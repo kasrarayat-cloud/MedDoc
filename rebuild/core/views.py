@@ -2287,6 +2287,9 @@ def job_result(request,pk):
     job=get_object_or_404(Job.objects.filter(models.Q(encounter__department__in=visible)|models.Q(mapping_version__template__department__in=visible)),pk=pk)
     receipt=get_object_or_404(ProviderReceipt,job=job)
     if not job.result_path:raise Http404('Provider output was not stored; financial receipt is retained.')
+    # A redacted document's provider output was removed with its content; the financial receipt is retained.
+    if job.encounter_id and RedactionTombstone.objects.filter(target_id=job.encounter_id).exists():
+        raise Http404('Provider output was removed with the redacted document; the financial receipt is retained.')
     # Output of a request that is not charged (absorbed platform failure, pending reconciliation) is not delivered.
     if not deliverable(job):raise Http404('Provider output is delivered only for charged requests and usable transcripts.')
     path=private_path(job.result_path)

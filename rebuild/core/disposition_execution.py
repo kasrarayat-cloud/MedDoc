@@ -32,11 +32,16 @@ def require_access(target_id, *, own_instruction=None):
     target = str(target_id)
     if m.DispositionTombstone.objects.filter(target_id=target).exists():
         raise ValidationError('This document has a disposition instruction and is unavailable.')
+    if m.RedactionTombstone.objects.filter(target_id=target).exists():
+        raise ValidationError('This document was redacted and is unavailable.')
     if getattr(settings, 'DISPOSITION_JOURNAL_PATH', ''):
-        for entry in journal.instruction_entries(journal.verified()):
+        entries = journal.verified()
+        for entry in journal.instruction_entries(entries):
             instruction = entry['body']['instruction']
             if instruction['target_id'] == target and instruction['id'] != str(own_instruction):
                 raise ValidationError('This document has a durable disposition instruction and is unavailable.')
+        if any(e['body']['redaction']['target_id'] == target for e in journal.redaction_entries(entries)):
+            raise ValidationError('This document has a durable redaction and is unavailable.')
 
 
 def lock_available(target_id):
@@ -55,7 +60,9 @@ def lock_available(target_id):
 def available(query):
     # Configured-but-unreadable journal is an explicit failure, never an empty
     # deny-list. This includes intent persisted before a failed DB transaction.
-    return query.exclude(pk__in=m.DispositionTombstone.objects.values('target_id')).exclude(pk__in=journal.pending_targets())
+    from .redaction import redacted_targets
+    return (query.exclude(pk__in=m.DispositionTombstone.objects.values('target_id')).exclude(pk__in=journal.pending_targets())
+            .exclude(pk__in=redacted_targets()))
 
 
 def policy_body(admission, now):
@@ -215,8 +222,11 @@ def execute(actor, instruction_id, checkpoint_envelope):
 def replay(actor, checkpoint_envelope):
     """Import durable suppression and preservation only. Conflicting restored content is preserved.
 
-    Tombstones for every journaled instruction; every journaled hold, and each release only after its hold
-    (retention.replay_journal_holds). Admission is a separate, recorded step (core.restore_admission)."""
+    Tombstones for every journaled instruction; every journaled hold, and each release only after its hold, and every
+    journaled redaction, all in journal order (retention.replay_journal_holds): a hold journaled after a redaction
+    never captures the content that redaction removed, and one released before it does not apply. A redaction's
+    file bytes are removed from the restored volume after the commit. Admission is a separate, recorded step
+    (core.restore_admission)."""
     retention.custodian(actor)
     if not d.quarantined(): raise ValidationError('Journal replay requires a quarantined restored target.')
     p.identity(getattr(settings, 'RESTORE_INSTANCE_ID', ''))
@@ -230,11 +240,22 @@ def replay(actor, checkpoint_envelope):
              for scope in ('organization', 'department', 'patient', 'encounter')}
     for model, scope in ((m.Organization, 'organization'), (m.Department, 'department'), (m.Patient, 'patient')):
         list(model.objects.select_for_update(no_key=True).filter(pk__in=named[scope]).order_by('pk'))
-    list(m.Encounter.objects.select_for_update().filter(pk__in=targets + named['encounter']).order_by('pk'))
+    redacting = [e['body']['redaction']['target_id'] for e in journal.redaction_entries(entries)]
+    list(m.Encounter.objects.select_for_update().filter(pk__in=targets + named['encounter'] + redacting).order_by('pk'))
     retention.lock_preservation()
     for entry in instructions: _import_tombstone(entry)
-    holds = retention.replay_journal_holds(actor, records)
+    from . import redaction
+    redacted = []; codes = []
+    def redact(entry):
+        tombstone, deleted = redaction.apply(entry)
+        redacted.append(tombstone); codes.append(deleted)
+    holds = retention.replay_journal_holds(actor, records, entries=entries, redact=redact)
+    for tombstone in redacted:
+        transaction.on_commit(lambda files=tombstone.files: redaction.remove_files(files))
     audit(actor, 'disposition.journal_replayed', settings.RESTORE_INSTANCE_ID, entries=len(entries),
-          journal_sha256=p.digest(entries[-1]) if entries else p.ZERO, holds=holds['holds'], releases=holds['releases'])
-    return {'tombstones': len(instructions), **holds, 'clinical_rows_deleted': 0, 'restore_admission_available': False,
-            'external_copy_deletion': False}
+          journal_sha256=p.digest(entries[-1]) if entries else p.ZERO, holds=holds['holds'], releases=holds['releases'],
+          redactions=len(redacted))
+    # Clinical content a journaled redaction removed is removed again here (its code suggestions included); every other
+    # restored clinical row is kept.
+    return {'tombstones': len(instructions), **holds, 'redactions': len(redacted), 'clinical_rows_deleted': sum(codes),
+            'restore_admission_available': False, 'external_copy_deletion': False}

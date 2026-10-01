@@ -22,13 +22,19 @@ SOURCE_CONTAINER = 'quillmd-fresh-postgres'
 SOURCE_DATABASE = 'quillmd_fresh'
 MAX_OBJECT_BYTES = 256 * 1024 * 1024
 LABEL = 'quillmd.restore-run'
+# A storage key whose bytes a redaction removed (core.redaction, 0033) is not a file reference: its row keeps the key as
+# accounting evidence and the bytes are absent by design, so neither a backup nor a restore check expects them.
+NOT_REDACTED = ("NOT EXISTS(SELECT 1 FROM core_redactiontombstone r "
+                "WHERE r.files @> jsonb_build_array(jsonb_build_object('storage_key',{})))")
 FILE_QUERIES = [
     ('original', 'SELECT original_path,sha256 FROM core_template'),
     ('export', "SELECT export_path,export_sha256 FROM core_encounter WHERE export_path<>''"),
-    ('audio', "SELECT input_path,'' FROM core_job WHERE input_path<>''"),
-    ('receipt', "SELECT result_path,result_sha256 FROM core_job WHERE result_path<>''"),
-    ('receipt', "SELECT result_path,result_sha256 FROM core_providerreceipt WHERE result_path<>''"),
-    ('batch_response', "SELECT result_path,result_sha256 FROM core_generationbatchresponse WHERE result_path<>''"),
+    ('audio', "SELECT input_path,'' FROM core_job WHERE input_path<>'' AND " + NOT_REDACTED.format('input_path')),
+    ('receipt', "SELECT result_path,result_sha256 FROM core_job WHERE result_path<>'' AND " + NOT_REDACTED.format('result_path')),
+    ('receipt', "SELECT result_path,result_sha256 FROM core_providerreceipt WHERE result_path<>'' AND "
+                + NOT_REDACTED.format('result_path')),
+    ('batch_response', "SELECT result_path,result_sha256 FROM core_generationbatchresponse WHERE result_path<>'' AND "
+                       + NOT_REDACTED.format('result_path')),
 ]
 INVARIANTS = {
     'wallet_bounds': 'SELECT count(*) FROM core_wallet WHERE balance<0 OR reserved<0 OR reserved>balance',

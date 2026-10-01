@@ -30,6 +30,8 @@ CATALOG={
  'restore_preparations':('core.RestorePreparation',{},('created_at',),True),
  'restore_admissions':('core.RestoreAdmission',{},('created_at',),True),
  'retention_hold_replays':('core.RetentionHoldReplay',{},('created_at',),True),
+ 'redaction_requests':('core.RedactionRequest',{},('created_at',),True),
+ 'redaction_tombstones':('core.RedactionTombstone',{},('created_at',),True),
  'retention_holds':('core.RetentionHold',{},('created_at',),True),
  'retention_hold_releases':('core.RetentionHoldRelease',{},('created_at',),True),
  'preserved_clinical_rows':('core.PreservedRecord',{},('created_at',),True),

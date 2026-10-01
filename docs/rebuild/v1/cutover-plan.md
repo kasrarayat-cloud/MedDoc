@@ -132,7 +132,7 @@ evidence. **Rollback:** terminate the instance and delete the unused volume (no 
    `operator/` only for the act.
 3. `with_db_role.py --profile production --role migrator -- migrate --noinput`, then
    `showmigrations` and `check`. Record the migration head and the number of QuillMD integrity
-   triggers and their release-bound definitions (92 in this candidate, `len(ops.integrity_contract.GUARDS)`; the installed legacy revision has nine). The restored drill must match the selected release contract and the recorded count; a matching count alone is insufficient.
+   triggers and their release-bound definitions (102 in this candidate, `len(ops.integrity_contract.GUARDS)`; the installed legacy revision has nine). The restored drill must match the selected release contract and the recorded count; a matching count alone is insufficient.
 4. Re-import the recorded public ICD-10-CM releases with `import_terminology` through the wrapper,
    using the exact files, sha256 values and counts from the private import records (FY2026 and
    FY2027). CPT stays disabled.

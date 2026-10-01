@@ -438,3 +438,18 @@ COLUMNS.update({'RetentionHoldReplay': [['created_at', 'DateTimeField'],
                          ['journal_entry', 'JSONField'],
                          ['outcome', 'CharField'],
                          ['record_id', 'UUIDField']]})
+
+# REDACTION CATALOG: exact additive 0033 shape. A redaction request names its document (related_name '+', so no model
+# gains a reverse field); the tombstone keeps scalar identities, like a disposition tombstone, for replay onto an older
+# backup. Both are collected with the document they name (disposition.graph).
+EDGES.update({'RedactionRequest': [['created_by', 'core.user'], ['department', 'core.department'],
+                                   ['encounter', 'core.encounter']],
+              'RedactionTombstone': []})
+COLUMNS.update({'RedactionRequest': [['content_sha256', 'CharField'], ['created_at', 'DateTimeField'],
+                                     ['created_by', 'ForeignKey'], ['department', 'ForeignKey'],
+                                     ['encounter', 'ForeignKey'], ['id', 'UUIDField'], ['reason_sha256', 'CharField'],
+                                     ['request_key', 'UUIDField']],
+                'RedactionTombstone': [['content_sha256', 'CharField'], ['created_at', 'DateTimeField'],
+                                       ['department_id', 'UUIDField'], ['entry_sha256', 'CharField'],
+                                       ['files', 'JSONField'], ['id', 'UUIDField'], ['journal_entry', 'JSONField'],
+                                       ['request_id', 'UUIDField'], ['target_id', 'UUIDField']]})

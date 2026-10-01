@@ -13,8 +13,9 @@ class ReleaseIntegrityContract(TestCase):
             context = cursor.fetchall()
         report = integrity_contract.assess(rows,context,len(integrity_contract.GUARDS))
         self.assertTrue(report['passed'],report)
-        self.assertEqual(report['found'],92)
-        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),23)
+        # 92 + 0033's ten redaction guards (one new function, quillmd_redaction_guard): the contract grows with them.
+        self.assertEqual(report['found'],102)
+        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),24)
 
     def test_batch_guards_and_composed_preservation_body_fail_closed_when_changed(self):
         def read():
@@ -39,7 +40,11 @@ class ReleaseIntegrityContract(TestCase):
     def test_release_restore_reference_queries_include_immutable_batch_response(self):
         from ops.production_restore_check import FILE_QUERIES
         batch=[sql for kind,sql in FILE_QUERIES if kind=='batch_response']
-        self.assertEqual(batch,["SELECT result_path,result_sha256 FROM core_generationbatchresponse WHERE result_path<>''"])
+        # Every immutable batch response is still a reference, except a storage key whose bytes a redaction removed
+        # (0033): its row stays as accounting evidence and the bytes are absent by design.
+        self.assertEqual(batch,["SELECT result_path,result_sha256 FROM core_generationbatchresponse WHERE result_path<>'' AND "
+                                "NOT EXISTS(SELECT 1 FROM core_redactiontombstone r WHERE r.files @> "
+                                "jsonb_build_array(jsonb_build_object('storage_key',result_path)))"])
         with connection.cursor() as cursor:
             for _,sql in FILE_QUERIES:
                 cursor.execute(sql);cursor.fetchall()

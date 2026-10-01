@@ -170,6 +170,31 @@ class RestoreAdmission(Entity):
     report_sha256=models.CharField(max_length=64)
     created_by=models.ForeignKey('User',on_delete=models.PROTECT)
 
+class RedactionRequest(Entity):
+    """A first custodian's request to remove one draft's clinical content, naming that exact content by its digest.
+
+    The reason is a SHA-256 of the authority document, never prose. Append-only; a second, distinct custodian executes
+    it (core.redaction.execute), and only while the content still has this digest."""
+    encounter=models.ForeignKey('Encounter',on_delete=models.PROTECT,related_name='+')
+    department=models.ForeignKey('Department',on_delete=models.PROTECT,related_name='+')
+    reason_sha256=models.CharField(max_length=64)
+    content_sha256=models.CharField(max_length=64)
+    request_key=models.UUIDField(unique=True)
+    created_by=models.ForeignKey('User',on_delete=models.PROTECT,related_name='+')
+
+class RedactionTombstone(Entity):
+    """A draft whose clinical content was removed while its work, money and audit rows stay (every reference to an
+    encounter is PROTECT). Scalar identities, like a disposition tombstone's, so the verified journal entry can be
+    replayed onto an older restored backup that lacks the request. Who, when and why are the signed entry kept verbatim;
+    `files` lists the storage keys and digests whose bytes were removed. Append-only."""
+    target_id=models.UUIDField(unique=True)
+    department_id=models.UUIDField()
+    request_id=models.UUIDField(unique=True)
+    content_sha256=models.CharField(max_length=64)
+    files=models.JSONField()
+    journal_entry=models.JSONField()
+    entry_sha256=models.CharField(max_length=64,unique=True)
+
 class ProviderIdentifiers:
     @property
     def legacy_resource_identifier(self):

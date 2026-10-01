@@ -427,7 +427,7 @@ drill measures them before go-live and quarterly.
 3. Launch a drill instance (same AMI) without the production role, attach the volume read-only at
    `/mnt/quillmd-drill-<same stamp>`.
 4. As root on the drill instance (the restored files are 0600 for uid 931), run
-   `ops/production_restore_check.py --expected-triggers 92` (the number recorded at activation: 92 for this release,
+   `ops/production_restore_check.py --expected-triggers 102` (the number recorded at activation: 102 for this release,
    `len(ops.integrity_contract.GUARDS)`) with
    the backup role; it refuses the live endpoint and live mount and prints counts only.
 5. Record: restore start/end times (RTO), T versus the last write before the incident simulation

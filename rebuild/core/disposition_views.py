@@ -61,7 +61,8 @@ def page(request):
         'financial_history_unresolved':'A payment, refund or reconciliation is still unresolved.',
         'historical_preservation':'Historical preservation instructions remain relevant.', 'active_hold':'An active preservation hold applies.',
         'preserved_evidence':'Protected historical evidence remains retained.', 'shared_reference':'Another record references a shared source or file.',
-        'file_bytes_unverified':'Referenced files have not been inspected.', 'immutable_evidence':'Immutable evidence remains protected.'}
+        'file_bytes_unverified':'Referenced files have not been inspected.', 'immutable_evidence':'Immutable evidence remains protected.',
+        'redacted_target':'This document\'s clinical content was redacted.'}
     for plan in navigation['page']:plan.display_blockers=[labels.get(code,'An unsupported dependency needs review.') for code in plan.graph['blockers']]
     audit(request.user,'disposition.proposals_read')
     return render(request,'disposition_review.html',{'request_form':forms_by_name['request'],

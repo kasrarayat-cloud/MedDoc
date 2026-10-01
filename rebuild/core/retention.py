@@ -473,19 +473,34 @@ def _replay_release(actor,hold,hold_outcome,release,entry):
     return 'imported'
 
 
-def replay_journal_holds(actor,records):
+def replay_journal_holds(actor,records,*,entries=None,redact=None):
     """Import journaled holds, and each release only after its hold, into a quarantined restored database.
 
+    With `entries` (the verified chain) every hold, release and redaction is replayed in journal order, `redact`
+    applying each redaction (core.redaction.apply): the restored database then passes through the source's own sequence,
+    so a hold journaled after a redaction never captures the content it removed. Without them, holds in record order.
     The caller (disposition_execution.replay) has verified the complete journal against a fresh checkpoint, and holds
-    the scope rows and then the preservation lock. Nothing is deleted. Returns counts only."""
+    the scope rows and then the preservation lock. Nothing is deleted here. Returns counts only."""
     counts={'holds':0,'holds_imported':0,'holds_present':0,'holds_target_absent':0,
             'releases':0,'releases_imported':0,'releases_present':0,'releases_target_absent':0}
-    for record in records.values():
-        outcome=_replay_hold(actor,record['hold'],record['hold_entry'])
+    from . import disposition_journal as journal
+    outcomes={}
+    def hold(record):
+        outcomes[record['hold']['id']]=outcome=_replay_hold(actor,record['hold'],record['hold_entry'])
         counts['holds']+=1;counts['holds_'+outcome]+=1
-        if record['release'] is not None:
-            released=_replay_release(actor,record['hold'],outcome,record['release'],record['release_entry'])
-            counts['releases']+=1;counts['releases_'+released]+=1
+    def release(record):
+        released=_replay_release(actor,record['hold'],outcomes[record['hold']['id']],record['release'],record['release_entry'])
+        counts['releases']+=1;counts['releases_'+released]+=1
+    if entries is None:
+        for record in records.values():
+            hold(record)
+            if record['release'] is not None:release(record)
+        return counts
+    for entry in entries:
+        kind=journal.kind(entry)
+        if kind=='hold':hold(records[entry['body']['hold']['id']])
+        elif kind=='release':release(records[entry['body']['release']['hold_id']])
+        elif kind=='redaction':redact(entry)
     return counts
 
 

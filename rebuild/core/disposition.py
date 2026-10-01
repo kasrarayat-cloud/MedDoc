@@ -114,6 +114,8 @@ def graph(request):
     tombstones=collect('DispositionTombstone',m.DispositionTombstone.objects.filter(Q(target_id__in=eids)|Q(instruction_id__in=instruction_ids)))
     collect('DispositionCompletion',m.DispositionCompletion.objects.filter(tombstone_id__in=[v['id'] for v in tombstones]))
     if tombstones:blockers.add('disposed_target')
+    collect('RedactionRequest',m.RedactionRequest.objects.filter(encounter_id__in=eids))
+    if collect('RedactionTombstone',m.RedactionTombstone.objects.filter(target_id__in=eids)):blockers.add('redacted_target')
     holds=collect('RetentionHold',m.RetentionHold.objects.filter(Q(scope='global')|Q(organization_id=dept.organization_id)|Q(department_id=dept.pk)|Q(patient_id__in=patient_ids)|Q(encounter_id__in=eids)))
     releases=collect('RetentionHoldRelease',m.RetentionHoldRelease.objects.filter(hold_id__in=[v['id'] for v in holds]))
     collect('RetentionHoldReplay',m.RetentionHoldReplay.objects.filter(hold_id__in=[v['id'] for v in holds]))
@@ -237,6 +239,10 @@ def journal_accounted(key):
             with transaction.atomic():
                 retention.lock_preservation()
                 missing=retention.unaccounted_journal_records()
+        if not missing:
+            # A redaction journaled after admission (another host's) is re-applied by replay before this target serves.
+            from . import disposition_journal, redaction
+            missing=redaction.unapplied(disposition_journal.verified())
     except (ValidationError,DatabaseError):return False
     if missing:return False
     _ACCOUNTED[key]=identity
