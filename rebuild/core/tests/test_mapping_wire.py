@@ -84,13 +84,21 @@ class MappingWire(SimpleTestCase):
         body['s']={'c':[0],'n':[],'u':[]}                       # slots 1, 2 and 3 omitted
         body['f']={'k':[1],'r':[],'n':[],'u':[]}                # field 0 omitted
         body['x']=[self.target(payload,2)]                       # a valid addition on an omitted slot
-        result,_=wire.expand(payload,body)
+        result,incomplete=wire.expand(payload,body)
+        self.assertTrue(incomplete)                              # an omission is recorded as an incomplete proposal
         self.assertEqual([(s['slot'],s['verdict']) for s in result['slots']],
                          [(payload['slots'][0]['slot'],'covered')]+[(payload['slots'][n]['slot'],'uncertain') for n in (1,2,3)])
         self.assertEqual([(f['key'],f['verdict'],f['target']) for f in result['fields']],
                          [('f0','uncertain',None),('f1','keep',None)])
         self.assertEqual([a['slot'] for a in result['additions']],[payload['slots'][2]['slot']])
         self.assertEqual(result['rejected'],[])
+        self.assertFalse(wire.expand(payload,good)[1])          # a complete proposal is not
+
+    def test_a_response_classifying_nothing_is_refused(self):
+        payload=self.payload(3,2)
+        empty={'f':{'k':[],'r':[],'n':[],'u':[]},'s':{'c':[],'n':[],'u':[]},'x':[],'e':False}
+        with self.assertRaises(ValidationError):wire.expand(payload,empty)
+        with self.assertRaises(ValidationError):wire.expand(payload,{**empty,'x':[self.target(payload,0)]})
 
     def test_spans_refuse_foreign_context_wrong_destination_and_invalid_unicode_bounds(self):
         """⚠️ ONE INVALID CHANGE IS HELD WITH ITS REASON; IT NEVER REFUSES THE REST (M05). Each bad change below comes

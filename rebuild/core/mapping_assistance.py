@@ -227,8 +227,10 @@ def validate_proposal(version,compiled,response):
     """Return fields + complete review record. The envelope refuses the WHOLE response; every change is judged ALONE,
     then with the others, and the resulting mapping is validated as a whole.
 
-    1. ENVELOPE (schema, partitions, catalogue, capacity, verdict completeness) and the original's integrity and
-       destination roles (read now in the isolated parser) refuse the whole response.
+    1. ENVELOPE (schema, duplicated or unknown IDs, a response classifying nothing, catalogue, capacity) and the
+       original's integrity and destination roles (read now in the isolated parser) refuse the whole response; an
+       OMITTED field or slot is held uncertain and marks the proposal incomplete (mapping_wire.expand); the completeness
+       checks below remain as a backstop for the expanded record.
     2. Each change alone. An ADDITION is never adopted: it becomes an explicit review item naming the proposed kind and
        label, which blocks confirmation until a clinician adds it through the mapping page or dismisses it. A
        REPLACEMENT is adopted only on an automatic ordinary field (no signature/initials kind, protection or printed

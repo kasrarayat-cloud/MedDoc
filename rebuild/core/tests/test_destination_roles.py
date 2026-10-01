@@ -1211,6 +1211,18 @@ class RepairLegacyIdentity(Walk, V3Fixture, TestCase):
                 self.assertEqual(e.status, 'review')
 
 
+    def test_the_review_page_says_why_a_signing_row_was_not_generated(self):
+        """Demo rehearsal gap: a held 'Patient signature' row showed only 'No supporting passage was attached'."""
+        template, version = self.uploaded(data=legacy_rows('Patient signature', 'Plan'), name='Synthetic held reason')
+        by = self.by_label(version)
+        e = self.generated(version, 'Patient signature: Synthetic Person\nPlan: Rest.')
+        page = self.client.get(f'/encounters/{e.pk}/')
+        rows = {r['key']: r for r in page.context['answer_rows']}
+        self.assertEqual(rows[by['Patient signature']['key']]['destination_reason'], destination_roles.ROLE_NOT_GENERATED)
+        self.assertEqual(rows[by['Plan']['key']]['destination_reason'], '')
+        self.assertContains(page, 'data-destination-role', count=1)
+        self.assertContains(page, 'never generated from notes')
+
     def test_fv_01_a_signing_place_renamed_to_a_signature_label_keeps_the_finalizer_identity(self):
         """FV-01 (regression vs 43fcf214): identity read the printed label wherever it was a signing place, so a real
         signing place ('Initials', 'Sign here', 'Signature and date', 'Signed off by consultant') renamed to a signature

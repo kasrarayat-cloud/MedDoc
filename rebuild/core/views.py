@@ -748,6 +748,7 @@ def encounter_detail(request,pk):
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
     from .tab_review import clinician_identity
+    from .destination_roles import ROLE_NOT_GENERATED as role_not_generated
     printed_roles={}
     if not is_wm and not is_v3 and e.status!='finalized':
         # Identity is read from each field's PRINTED label (core.destination_roles), as saving and finalization read it.
@@ -806,6 +807,10 @@ def encounter_detail(request,pk):
         row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
         row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
         row['identity']=clinician_identity(printed_field(row,printed_roles))
+        # Why a signing or initials row was never generated (destination roles): the stored answer's reason, shown on
+        # the page so the clinician is told rather than only seeing 'no supporting passage' (demo rehearsal gap).
+        row['destination_reason']=(answer.get('reason') if answer.get('status')=='missing'
+                                   and answer.get('reason')==role_not_generated else '')
         if is_v3:
             # How the page asks for each kind; the stored answer stays its text form (core/v3_mapping.py).
             kind=row.get('kind')

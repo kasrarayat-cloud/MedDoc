@@ -26,3 +26,19 @@ failed verdicts are unchanged.
 
 Calculated costs (pinned rates × provider-reported usage). Provider billing evidence is not available here (the
 campaign key is a Messages key; usage/cost reports need an Admin key or the console).
+
+## Addendum 2026-10-01 — the mapping remainder
+
+Mapping was reopened (reopening 1, diagnosis `diagnosis-mapping-failure-1-20261001.md`, runner `f55a1561`, CI green;
+plan: 9 sends, worst case $2.3745, `can_pass: false`). The first send, attempt 24 (`mapping:f2-leave-checkboxes`,
+$0.018776), returned a proposal that left 11 of 35 slots unclassified; the whole-response rule refused it and the stage
+stopped again (failed-2) before the other eight. Nothing unsafe was adopted. Repair `f8adebd9` holds omitted IDs for
+review (`diagnosis-mapping-failure-2-20261001.md`).
+
+| stage | attempts | exposure | remaining | decisions |
+|---|---|---|---|---|
+| model_check | 1 | $0.002860 | $4.997140 | passed |
+| mapping | 2 | $0.028616 | $24.971384 | failed-1, reopened-1, failed-2 |
+| ordinary_notes | 21 | $0.099404 | $9.900596 | failed-3 |
+| **total** | **24** | **$0.130880** | **$39.869120** | 0 open |
+

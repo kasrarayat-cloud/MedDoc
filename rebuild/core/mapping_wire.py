@@ -83,6 +83,10 @@ def expand(payload,response):
     body=Proposal.model_validate(response).model_dump()
     omitted_fields=_partition(body['f'],len(payload['fields']),'field')
     omitted_slots=_partition(body['s'],len(payload['slots']),'slot')
+    if (payload['fields'] or payload['slots']) and len(omitted_fields)==len(payload['fields']) \
+            and len(omitted_slots)==len(payload['slots']):
+        # A response that classifies nothing is no proposal: refused, as the whole-partition rule refused it before.
+        raise ValidationError('The mapping response classified no field and no slot; no proposal was adopted.')
     refs=payload['text_refs']
     if refs!=catalog(payload):raise ValidationError('Mapping source catalog differs from its bound request.')
     for change in body['x']:
@@ -155,7 +159,8 @@ def expand(payload,response):
     slots.extend({'slot':payload['slots'][sid]['slot'],'verdict':'uncertain'} for sid in omitted_slots)
     fields.sort(key=lambda row:next(n for n,f in enumerate(payload['fields']) if f['key']==row['key']))
     slots.sort(key=lambda row:next(n for n,s in enumerate(payload['slots']) if s['slot']==row['slot']))
-    return {'fields':fields,'slots':slots,'additions':additions,'rejected':rejected,'sources':sources},body['e']
+    # An omission makes the proposal incomplete, like an exhausted envelope: the record must not read as a full judgment.
+    return {'fields':fields,'slots':slots,'additions':additions,'rejected':rejected,'sources':sources},body['e'] or bool(omitted_fields or omitted_slots)
 
 def fixture(payload):
     mapped={slot for field in payload['fields'] for slot in field['slots']}
