@@ -280,15 +280,29 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     # Both routes lock the document first, the batch route included (batch_jobs.enqueue re-locks the same row in
     # this transaction): a document disposed of since the caller read it is a refusal, never DoesNotExist (RF-3).
     e=lock_available(encounter.pk)
+    # ⚠️ D10's LAYOUT GATE IS ADMISSION'S, AND IT IS HERE, never in v3_mapping.generation_refusal: that check also runs
+    # before every batch part and at adoption, after money was spent, where a verifier outage discarded paid parts
+    # (refutation L1:F1). It is measured before anything is held, and raised only for a request that would take a NEW
+    # hold — after each route's own replay answer, so a re-posted admitted request is still answered as that request.
+    # It is fill's own answer (v3_mapping.export_needs_verifier: the export path, probed), never the inspection's count,
+    # which also counts tab-column rows fill withdraws and exports without any verifier (refutation FV:F1).
     if kind=='generation' and generation_batch.needed(encounter.template_version.fields, encounter.notes,
                                                       config or generation.configuration(encounter.template_version.fields)):
-        return batch_jobs.enqueue(encounter,user,config or generation.configuration(encounter.template_version.fields),expected_revision)
+        admission=v3_mapping.admission_refusals(e.template_version)
+        job=batch_jobs.enqueue(encounter,user,config or generation.configuration(encounter.template_version.fields),expected_revision)
+        # A NEW batch admission raising here is undone whole by this transaction — batch, parts, holds, events, audit —
+        # exactly as the batch's own refusals after reserve() are; nothing held or sent survives it.
+        if not getattr(job,'reused',False) and (refusal:=admission[0] or admission[1]):
+            raise ValidationError(refusal)
+        return job
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
     if expected_revision is not None and e.revision!=expected_revision:
         raise ValidationError('Source notes changed after the quote. Reload and review the current notes before submitting.')
-    if kind=='generation' and (refusal:=v3_mapping.generation_refusal(e.template_version)):
-        raise ValidationError(refusal)
+    layout_refusal=''
+    if kind=='generation':
+        refusal,layout_refusal=v3_mapping.admission_refusals(e.template_version)
+        if refusal: raise ValidationError(refusal)
     if kind=='generation' and not e.notes.strip():
         raise ValidationError('Type and save source notes, or review and add a transcript, before generating answers.')
     fingerprint=hashlib.sha256(private_path(input_path).read_bytes()).hexdigest() if kind=='transcription' else str(e.revision)
@@ -357,6 +371,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         streams=config.get('submission_streams') or ''
         if streams.isdigit() and int(streams)>1: raise ValidationError(AMBIGUOUS_STREAMS.format(count=int(streams)))
         if streams.isdigit() and int(streams)==0: raise ValidationError(NO_AUDIO_TRACK)
+    # The last refusal before the job and its hold: every earlier answer (the replay above included) stands as before.
+    if layout_refusal: raise ValidationError(layout_refusal)
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     job.reused=False
     if kind=='transcription':

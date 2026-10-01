@@ -9,6 +9,21 @@ import stat
 import struct
 
 MAX_FRAME = 48 * 1024 * 1024
+#: ⚠️ TWO CALLERS ASK THE VERIFIER, AND ONLY ONE OF THEM KNOWS WHAT ITS ABSENCE COSTS. Said in one place each:
+#: - EXPORT (a mapping and answers: documents.service after `word_v3.fill` or `effective_values` refused for want of it).
+#:   That gate fires on the original's proposal-mode tab-column candidates for ANY non-empty answer set — one answer in an
+#:   unrelated text field included — so without the verifier no answer on this form can be exported, only the unchanged
+#:   form. The previous wording read as if the other answers could be; D10 was generated, held and charged, and refused
+#:   only at finalization.
+#: - INSPECTION (no mapping: documents.service when the inspection counts a tab-column candidate, at upload and at every
+#:   fresh inspection). It does NOT know that: fill's reader can withdraw what the inspection counted (a complete question
+#:   or section past the mapping limit, refutation FV:F1), and such a form exports without any verifier. So the note
+#:   stored at upload keeps the base wording, which claims nothing about the other answers. Whether generation is
+#:   refused is fill's own answer, asked at admission (core.v3_mapping.admission_refusals).
+LAYOUT_UNAVAILABLE = ('This form has tab-column answers that only the isolated layout verifier can check, and it is not '
+                      'available here. Until it is, no answer on this form can be exported; the unchanged form can '
+                      'still be downloaded.')
+LAYOUT_NEEDED = 'This form needs the isolated layout verifier before its tab-column answers can be used.'
 
 
 def canonical(value):
@@ -44,8 +59,7 @@ def verify_document(data, mapping=None, answers=None):
         endpoint = os.getenv('QUILLMD_LAYOUT_SOCKET', '')
         expected_uid = os.getenv('QUILLMD_LAYOUT_SERVICE_UID', '')
     if not endpoint or expected_uid in (None, ''):
-        raise DocumentError('This form needs the isolated layout verifier before its tab-column answers can be used.',
-                            'layout_unavailable')
+        raise DocumentError(LAYOUT_NEEDED if mapping is None else LAYOUT_UNAVAILABLE, 'layout_unavailable')
     try:
         path = Path(endpoint)
         meta = path.lstat()
