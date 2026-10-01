@@ -2281,21 +2281,33 @@ class Detector:
                             out[(ps.id, start, end)] = (dict(state, basis="governed_line:" + state["basis"]), caption)
         return out
 
-    def _question_box_cells(self):
+    def _question_box_cells(self, only=None):
         """{cell id: (state, question)} for every one-cell box whose printed question or section reads as signing or
         consent (the engine's own reading) or whose question the destination state holds (roles-2: 'Countersignature?',
         'Signatures?' - residual L1:F6). Nested boxes are read too (residual L1:RR1-07)."""
+        if only is None and getattr(self, "_box_cells", None) is not None:   # one full reading per detector
+            return self._box_cells
         out = {}
         for table in [s for s in self.index.slots if s.kind == "tbl"]:
             cells = [c for c in table.children if c.kind == "tc"]
             if len(cells) != 1 or len(table_rows_of(table.el)) != 1:
                 continue
-            question, section = self.question_box_role_source(table)
+            if only is not None and cells[0].id not in only:
+                continue
+            question, section = self.question_box_role_source(table, with_section=False)
             state = destination_state(question) if question else None
             if state is not None and state["state"] != STATE_ORDINARY:
                 out[cells[0].id] = (state, question)
-            elif signing_box_reading(question) or signing_box_reading(section):
-                out[cells[0].id] = (_state(STATE_PROTECTED, "signing_box", "signature"), question or section)
+            elif signing_box_reading(question):
+                out[cells[0].id] = (_state(STATE_PROTECTED, "signing_box", "signature"), question)
+            elif only is None:
+                # The section is read only when the question does not decide (it is the costly part of the reading), and
+                # only for the roles: the areas (only=...) read the boxes their question decides.
+                question, section = self.question_box_role_source(table)
+                if signing_box_reading(section):
+                    out[cells[0].id] = (_state(STATE_PROTECTED, "signing_box", "signature"), question or section)
+        if only is None:
+            self._box_cells = out
         return out
 
     def _own_label(self, area):
@@ -2357,7 +2369,9 @@ class Detector:
         signing captions with no area of their own (a manual add there is refused)."""
         self.destination_places = []
         lines = self._governed_lines()
-        boxes = self._question_box_cells()
+        # Only the boxes that hold or are an engine area matter to the areas (the roles read every box afterwards).
+        hosts = {c.id for a in self.areas for c in (self.host_cell(a.slot),) if c is not None}
+        boxes = self._question_box_cells(only=hosts)
         line_hit = {}
         for (pid, start, end), value in lines.items():
             line_hit.setdefault(pid, []).append((start, end, value))
@@ -5281,7 +5295,7 @@ class Detector:
             return True
         return SIGNATURE.search(reading) or INITIALS.search(reading) or re.search(r"\bconsent\b", reading, re.I)
 
-    def question_box_role_source(self, table):
+    def question_box_role_source(self, table, *, with_section=True):
         """(printed question, section) over a one-cell box, read for the box's DESTINATION ROLE only (destination_roles).
 
         Unlike rule_question_boxes' reading, a question paragraph holding a line break, a drawing or a field is still
@@ -5306,7 +5320,8 @@ class Detector:
             raw = re.sub(r"\s+", " ", self.text(node)).strip()
             if raw:
                 slot = self.index.by_el.get(id(node))
-                section = self.question_box_context(slot)[0] if slot is not None and slot.parent is None else ""
+                section = self.question_box_context(slot)[0] if with_section and slot is not None and \
+                    slot.parent is None else ""
                 return raw, section
             skipped += 1
             if skipped > 4:
