@@ -41,6 +41,7 @@ another person only as an object or beneficiary ('The patient takes warfarin for
 reader; a person noun outside the lexicon and a given name without a title read as things when they stand alone ('The
 sherpa takes warfarin.', 'Jane is subject to a CTO.').
 """
+import functools
 import re
 import unicodedata
 
@@ -116,8 +117,14 @@ STEM_SUFFIXES = tuple(sorted(('ations', 'ation', 'itions', 'ition', 'ions', 'ion
                               'ed', 'es', 's', 'y', 'e', 'ive', 'ous', 'ness', 'ment', 'ments'), key=len, reverse=True))
 
 
+@functools.lru_cache(maxsize=1 << 16)
+def _fold_text(text):
+    return ''.join(c for c in unicodedata.normalize('NFKD', text) if not unicodedata.combining(c)).casefold()
+
+
 def _fold(text):
-    return ''.join(c for c in unicodedata.normalize('NFKD', str(text)) if not unicodedata.combining(c)).casefold()
+    # memoized on the string (a pure function of it): the single-patient reading folds every word of every unit
+    return _fold_text(str(text))
 
 
 def _lemma(token):
@@ -552,6 +559,676 @@ def _floor_reading(words, root, lem=None, txt=None):
             'surface_keys': keys(surface), 'intention': intention}
 
 
+# ─── 2026-10-01: A POSITIVELY ESTABLISHED SINGLE-PATIENT SCOPE (`sole_patient`) ─────────────────────────────────────────
+# Read ONLY by the ordinary field-relations reader (`v3_field_relations.read`) and its floors, for a unit the relation
+# reader would otherwise refuse for want of patient evidence ('She takes ibuprofen as needed.'). The three earlier
+# designs read a pronoun, a thing or an implicit subject as the patient's from the ABSENCE of a listed danger (a person
+# noun, a time word), and every one was refuted by a person or a time the lists missed ('The patient employs a
+# housekeeper. She takes warfarin.', 'The patient visits JANE daily.', 'On admission she is on warfarin.'). This reading
+# is the opposite polarity: a note is one patient's only when EVERY nominal word in it is POSITIVELY known to name no
+# person and no animal (`SOLE_NOUNS`; anything else, an unknown drug name included, fails closed), its first unit
+# presents the patient, all its personal pronouns are one gender that agrees, no unit is fronted by a frame ('On
+# admission ...', 'Then ...'), it names at most one side and states nothing uncertain outside an assessment. A word
+# missing from a list here only HOLDS. Nothing here is read by the default path.
+#: Nouns (lemmas, casefolded) that positively name no person and no animal: parts of the body, symptoms and conditions,
+#: generic drug names, clinical things, measures and times. Words that can stand for a person by metonymy are not here,
+#: or are in `SOLE_RESTRICTED`; given names, brand names and agent nouns ('-er', '-ist') are never here.
+#: Each word's TOPIC CLASS (`SOLE_CLASSES`) is what the release's independence check compares (`sole_released`): a
+#: neighbour about the same topic, or one that denies, ends, corrects or restricts it, holds the answer. 'body', 'meta'
+#: and 'time' words name no topic of their own.
+SOLE_LEXICON = {
+    'body': 'head face eye eyes ear nose mouth throat neck shoulder arm forearm elbow wrist finger thumb chest breast '
+            'abdomen stomach belly back spine hip groin leg thigh knee shin ankle foot feet toe heel skin joint muscle '
+            'bone lung liver kidney bladder bowel brain blood vein artery meniscus ligament tendon cartilage lymph node '
+            'gland scalp jaw tooth teeth gum tongue lip pelvis rib buttock side area region site',
+    'symptom': 'pain ache headache migraine cough fever temperature rash itch itching swelling tightness stiffness '
+               'weakness numbness tingling dizziness vertigo nausea vomiting diarrhoea diarrhea constipation fatigue '
+               'tiredness breathlessness wheeze breath palpitation bleeding bruising bruise cramp spasm change '
+               'disturbance symptom problem complaint aura spot flash zigzag line band vision hearing appetite sleep '
+               'mood lump tenderness',
+    'finding': 'effusion tenderness swelling lesion ulcer wound murmur rash bruise reflex power sensation tone gait '
+               'pulse pressure rate rhythm saturation temperature range motion movement reading level score weight',
+    'condition': 'hypertension hypotension diabetes asthma angina arthritis osteoarthritis depression anxiety insomnia '
+                 'eczema psoriasis acne dermatitis cancer tumour tumor seizure epilepsy infection inflammation disease '
+                 'disorder illness condition attack glucose cholesterol',
+    'injury': 'injury fracture sprain strain tear fall trauma',
+    'medication': 'ibuprofen paracetamol acetaminophen aspirin codeine morphine tramadol naproxen diclofenac '
+                  'amitriptyline nortriptyline gabapentin pregabalin sertraline citalopram fluoxetine mirtazapine '
+                  'diazepam lorazepam methadone buprenorphine warfarin apixaban rivaroxaban heparin clopidogrel '
+                  'atorvastatin simvastatin rosuvastatin pravastatin lisinopril ramipril enalapril amlodipine bisoprolol '
+                  'atenolol metoprolol losartan furosemide bendroflumethiazide metformin gliclazide insulin '
+                  'levothyroxine omeprazole lansoprazole salbutamol beclometasone prednisolone prednisone hydrocortisone '
+                  'amoxicillin penicillin flucloxacillin doxycycline clarithromycin erythromycin trimethoprim '
+                  'nitrofurantoin cetirizine loratadine medication medicine drug tablet pill capsule injection inhaler '
+                  'cream dose mg mcg ml puff',
+    'allergy': 'allergy anaphylaxis reaction latex peanut shellfish',
+    'smoking': 'smoking cigarette tobacco vaping',
+    'alcohol': 'alcohol',
+    'test': 'test scan x-ray xray ultrasound stress exercise',
+    'therapy': 'physiotherapy therapy treatment management follow-up procedure operation removal excision suture stitch '
+               'dressing anaesthesia anesthesia anaesthetic',
+    'care': 'clinic attendance community order consent',
+    'meta': 'examination exam assessment plan diagnosis impression finding result benefit status type tension',
+    'time': 'day week month year morning evening night hour minute time bedtime',
+}
+SOLE_CLASSES = {}
+for _topic, _words in SOLE_LEXICON.items():
+    for _word in _words.split():
+        SOLE_CLASSES.setdefault(_word, set()).add(_topic)
+SOLE_CLASSES = {word: frozenset(found - {'body', 'meta', 'time'}) for word, found in SOLE_CLASSES.items()}
+SOLE_NOUNS = frozenset(SOLE_CLASSES)
+#: Words that DENY ('not', 'no', 'denies', 'without', 'pain free'): an answer may itself be a denial.
+SOLE_NEGATION = frozenset(('not', "n't", 'no', 'never', 'none', 'nothing', 'nil', 'without', 'free', 'deny', 'negative',
+                           'absent', 'lack', 'neither', 'nor', 'nkda'))
+#: Classes of the words outside the nouns that name a topic ('smokes', 'a nonsmoker', 'allergic').
+SOLE_WORD_CLASSES = {'smoke': frozenset({'smoking'}), 'vape': frozenset({'smoking'}), 'smoker': frozenset({'smoking'}),
+                     'nonsmoker': frozenset({'smoking'}), 'non-smoker': frozenset({'smoking'}),
+                     'ex-smoker': frozenset({'smoking'}), 'vaper': frozenset({'smoking'}),
+                     'drink': frozenset({'alcohol'}), 'drinker': frozenset({'alcohol'}),
+                     'nondrinker': frozenset({'alcohol'}), 'allergic': frozenset({'allergy'}),
+                     'referral': frozenset({'therapy'}), 'sugar': frozenset({'condition'}), 'hand': frozenset(),
+                     'attend': frozenset({'care'}),
+                     # 'NKDA' (no known drug allergies) is an allergy answer AND its negation (`SOLE_NEGATION`)
+                     'nkda': frozenset({'allergy'})}
+#: Words that are NOT a topic and change nothing ('takes', 'normal', 'as needed'): any other word in a single-patient
+#: note that is neither a known noun, a known operator nor one of these makes the note's release fail closed - an
+#: unknown word may deny, end or correct ('She is not anticoagulated.', 'She was misheard.').
+SOLE_NEUTRAL_WORDS = frozenset((
+    # verbs
+    'be have take use attend present see notice describe report start begin follow show reveal demonstrate appear occur '
+    'examine tolerate discuss obtain close excise need require direct know feel get complain experience suffer measure '
+    'perform do apply tick make seem look radiate worsen improve smoke vape drink '
+    # adjectives
+    'visual neurological normal small large medial lateral tight mild moderate severe acute chronic local general known '
+    'clinical physical upper lower bad worse better good tender swollen red warm sharp dull constant intermittent '
+    'regular stable subject well unremarkable clear soft central superficial deep minor major new old year-old '
+    'right left daily weekly nightly monthly present medical past current chief tension-type '
+    # adverbs and particles
+    'as up out very much currently twice once there to'
+).split())
+#: OPERATORS - what lets one line change another: their REACH. 'global': a correction or a pointer to another line ('The
+#: previous line is incorrect.', 'She was misheard.', 'Sorry, ...') holds every release in the note; 'class': a denial,
+#: an ending, a restriction, an uncertainty or a condition ('She takes no medicines.', 'The patient used to smoke.',
+#: 'The patient is allergic to latex only.', 'She may need warfarin.') holds a release about the same topic class;
+#: 'key': a contraindication ('She is allergic to amitriptyline.', 'Amitriptyline is contraindicated.') holds a release
+#: sharing its word. A word missing here is UNKNOWN (`SOLE_NEUTRAL_WORDS`), which fails closed.
+SOLE_OPERATORS = {
+    'global': frozenset((
+        'sorry mean incorrect wrong error mistake misheard misspoke mistyped correction correct corrected scratch strike '
+        'disregard ignore retract retracted delete amend amended erroneous previous above below following aforementioned '
+        'latter preceding typo misdiagnosed oops actually').split()),
+    'class': frozenset((
+        'not n\'t no never none nothing nil without free deny negative absent lack neither nor stop discontinue cease '
+        'quit resolve subside withdraw wean taper switch change replace swap substitute hold withhold reduce increase '
+        'decrease adjust titrate halve double avoid until till used formerly former ex previously anymore longer finish '
+        'complete only also except instead rather alone solely just but however although though unless if when apart '
+        'besides other may might could would should possible possibly probable probably suspected suspect query unsure '
+        'unclear uncertain unknown unconfirmed likely unlikely maybe perhaps questionable presumed presumably '
+        'differential ruled exclude excluded whereas while otherwise yet nevertheless nonetheless despite cannot or '
+        'either risk option alternatively').split()),
+    'key': frozenset((
+        'allergic allergy intolerant intolerance sensitive sensitivity reaction anaphylaxis contraindicated '
+        'contraindication caution').split()),
+}
+#: Nouns that can stand for a person by metonymy ('the referral' for the person referred, 'the head of department'):
+#: positively no person only where they cannot be one - never a subject, a possessor, an appositive, or the object of
+#: with / by / from / for / to / of a person.
+SOLE_RESTRICTED = frozenset(('referral', 'head', 'hand', 'sugar'))
+#: Lexicon words that can name a group of people (`_sole_noun_ok`).
+SOLE_COLLECTIVE = frozenset(('band', 'community', 'order', 'clinic', 'care', 'team'))
+#: Status nouns ('smoker', 'nonsmoker'): a person, so only as a printed label ('Smoker: No.') or predicated of the
+#: patient ('She is a nonsmoker.'), never as somebody else ('The patient lives with a smoker.').
+SOLE_STATUS = frozenset(('smoker', 'nonsmoker', 'non-smoker', 'drinker', 'nondrinker', 'vaper', 'ex-smoker'))
+#: Initialisms that name a test (an initialism can be a role: 'CPN', 'GP'; anything else fails closed).
+SOLE_INITIALISMS = frozenset(('mri', 'ct', 'ecg', 'ekg', 'eeg'))
+#: Plain answer words ('Smoker: No.', 'Allergies: none.').
+SOLE_ANSWERS = frozenset(('yes', 'no', 'none', 'nil', 'nkda'))
+#: The patient's own presented noun, in the presenting unit only ('This is a 30-year-old female ...').
+SOLE_PRESENTED = frozenset(('man', 'woman', 'male', 'female', 'boy', 'girl', 'child', 'patient'))
+#: Pronouns that cannot be another person ('it', 'this', 'there', 'none'); personal pronouns are read apart.
+SOLE_PRONOUNS = frozenset(('it', 'its', 'itself', 'this', 'that', 'these', 'those', 'there', 'none', 'nothing', 'all',
+                           'both', 'which', 'what'))
+SOLE_PERSONAL = frozenset(('he', 'she', 'him', 'her', 'his', 'hers', 'himself', 'herself'))
+#: Pronouns that can stand for a GROUP of people ('Both have asthma.', 'All take warfarin.', 'These ...'): a thing only
+#: where nothing can act or bear - never a subject, possessor, agent or apposition (refutation round 4, R2-F5).
+SOLE_GROUP_PRONOUNS = frozenset(('all', 'both', 'these', 'those'))
+SOLE_REFLEXIVE = frozenset(('himself', 'herself'))
+#: Dependencies that make a word nominal whatever the tagger called it ('lives with Will': a name read as a verb).
+SOLE_NOMINAL_DEPS = frozenset(('nsubj', 'nsubjpass', 'dobj', 'obj', 'iobj', 'dative', 'pobj', 'attr', 'oprd', 'appos',
+                               'npadvmod', 'poss', 'agent', 'compound', 'nmod'))
+#: Prepositions whose object can be a companion, agent, source or beneficiary (where a restricted noun fails).
+SOLE_PERSON_PREPS = frozenset(('with', 'by', 'from', 'for', 'to', 'of', 'at', 'beside', 'alongside'))
+#: Words that leave a statement uncertain ('possible', 'unsure', '?'); allowed only in an assessment's own line.
+SOLE_UNCERTAIN = frozenset(('possible', 'possibly', 'probable', 'probably', 'suspected', 'suspect', 'query', 'unsure',
+                            'unclear', 'uncertain', 'unknown', 'unconfirmed', 'likely', 'unlikely', 'maybe', 'perhaps',
+                            'questionable', 'presumed', 'presumably', 'differential', 'ruled', 'exclude', 'excluded'))
+#: Words that DENY a diagnosis ('asthma excluded', 'ruled out'): uncertain for the scope (`SOLE_UNCERTAIN`) but never a
+#: DOUBT (`_sole_reading` 'doubt_only'): an assessment excluding something is not a probable diagnosis (round 4).
+SOLE_EXCLUSION = frozenset(('ruled', 'exclude', 'excluded'))
+SOLE_DOUBT = SOLE_UNCERTAIN - SOLE_EXCLUSION
+#: (round 5, R1/R2) The clinical topic classes: a symptom, a finding, a condition and an injury may be one thing in other
+#: words ('fever' / 'temperature', 'swelling' / 'effusion', 'wheeze' / 'asthma'), so none can be told apart from another
+#: by its word.
+SOLE_CLINICAL = frozenset(('symptom', 'finding', 'condition', 'injury'))
+#: What an answer that DENIES, ENDS or CONTRAINDICATES something of a class may be contradicted by (`sole_bears_on`): the
+#: topic classes a statement elsewhere in the note can bear on it through ('She takes no medicines.' beside 'bleeding on
+#: warfarin', 'diabetes on insulin' or 'on treatment'; 'She has no allergies.' beside a drug, a rash or a test). A class
+#: not listed here bears on every class (fail closed).
+SOLE_BEARS_ON = {
+    'smoking': frozenset(('smoking',)),
+    'alcohol': frozenset(('alcohol',)),
+    'medication': frozenset(('medication', 'therapy', 'condition', 'allergy')),
+    'allergy': SOLE_CLINICAL | frozenset(('allergy', 'medication', 'therapy', 'test')),
+    **{name: SOLE_CLINICAL | frozenset(('allergy', 'medication', 'therapy', 'test')) for name in SOLE_CLINICAL},
+}
+#: Words outside the nouns that state NO clinical state of their own ('takes', 'attends', 'daily', 'medial'): any other
+#: adjective, verb or adverb ('normal', 'swollen', 'tender', 'worse', 'improves') may describe the state a denial denies
+#: ('There is no swelling.' beside 'The knee is swollen.'), so a line carrying one is not positively apart from it
+#: (`_sole_reading` 'descriptive'). A word missing here only HOLDS.
+SOLE_INERT = frozenset((
+    'be have take use attend present see notice describe report start begin follow show reveal demonstrate appear occur '
+    'examine discuss obtain need require direct know get do make apply tick perform seem look measure smoke vape drink '
+    'complain experience suffer feel close excise '
+    'as up out very much currently twice once there to '
+    'medical past current chief known general clinical physical year-old daily weekly nightly monthly present upper '
+    'lower medial lateral central local').split())
+
+
+#: Every topic class a word can name.
+SOLE_EVERY_CLASS = frozenset().union(*SOLE_CLASSES.values(), *SOLE_WORD_CLASSES.values())
+
+
+def sole_bears_on(classes):
+    """The topic classes a statement must name none of to be positively apart from an answer of `classes` that denies,
+    ends or contraindicates (`SOLE_BEARS_ON`; an unlisted class bears on all)."""
+    return frozenset().union(*(SOLE_BEARS_ON.get(name, SOLE_EVERY_CLASS) for name in classes))
+SOLE_SIDES = {'left': 'left', 'lt': 'left', 'l': 'left', 'right': 'right', 'rt': 'right', 'r': 'right',
+              'bilateral': 'both', 'both': 'both'}
+#: Words of time: in an answer to a question about what is so NOW, each must sit in a frequency phrase.
+SOLE_TIME_WORDS = (GENERIC_WORDS | PAST_TIME_WORDS | frozenset((
+    'january february march april may june july august september october november december monday tuesday wednesday '
+    'thursday friday saturday sunday admission admit admitted discharge discharged then when whenever while during '
+    'before after since until till from between recent soon later next earlier initially originally already anymore '
+    'longer yet again now today tonight tomorrow yesterday weekend holiday season spring summer autumn winter last '
+    'first').split())) - {'weekly', 'daily', 'nightly', 'monthly', 'yearly', 'annually', 'hourly'}
+#: Frequency adverbs and nouns a current answer may carry ('daily', 'every week', 'at night', 'as needed').
+SOLE_FREQUENCY_ADVERBS = frozenset(('daily', 'weekly', 'nightly', 'monthly', 'fortnightly', 'hourly', 'currently'))
+SOLE_FREQUENCY_NOUNS = frozenset(('day', 'week', 'month', 'night', 'morning', 'evening', 'hour', 'bedtime'))
+#: Verbs a current answer may be stated with, in the present ('She takes ...', 'She attends ...', 'She is a ...').
+SOLE_CURRENT_VERBS = frozenset(('be', 'have', 'take', 'use', 'attend', 'smoke', 'drink', 'vape', 'see', 'notice', 'feel',
+                                'experience', 'get', 'report', 'describe', 'deny', 'complain', 'suffer'))
+_DATE_LIKE = re.compile(r'(?:\d{4}|\d{1,2}[/.\-]\d{1,4}(?:[/.\-]\d{2,4})?|\d{1,2}:\d{2}|\d+(?:st|nd|rd|th))', re.I)
+#: The presenting opener with an article ('A 45-year-old man presents with cough.'): the deterministic age grammar
+#: (`generation.AGE_PATIENT_PRESENTATION`) without it is unchanged on the default path.
+SOLE_OPENER = re.compile(r'(?:an?\s+)?\d{1,3}-year-old (?:man|woman|male|female|boy|girl|child|patient) '
+                         r'(?:(?:presents|presented) (?:with|for)|(?:was )?seen for)\b', re.I)
+
+
+def _misread(token):
+    """A word the tagger put in a CLOSED class (preposition, determiner, conjunction, particle, auxiliary) that is not one
+    of that class's words: the pinned model reads drug names and names that way ('She will start amitriptyline ...':
+    'amitriptyline' ADP). The single-patient reading treats it as the noun it is."""
+    return (token.pos_ in ('ADP', 'SCONJ', 'PART', 'DET', 'CCONJ', 'AUX') and token.is_alpha and not token.is_stop
+            and _fold(token.text) not in ("n't", 'nt'))
+
+
+def _the_patient(token):
+    """'the patient', 'this patient' or a bare 'Patient': THIS note's patient by the noun alone (refutation round 4,
+    2026-10-01) - singular, no determiner but 'the' or 'this', and nothing else said of the noun (no modifier, possessor,
+    number, apposition, clause, preposition or conjunct). A plural ('Some patients', 'All patients'), an indefinite ('A
+    patient'), a possessor ('Her patient'), an age or any other modifier ('The male patient', 'The older patient', 'The
+    70-year-old patient') may be somebody else, so it fails closed. Read only by the single-patient scope."""
+    if _lemma(token) != 'patient' or _fold(token.text) != 'patient':
+        return False
+    return all((child.dep_ == 'det' and _fold(child.text) in ('the', 'this')) or child.dep_ in ('case', 'punct')
+               for child in token.children)
+
+
+def _sole_noun_ok(token, *, anchor_nouns, label_end):
+    """Whether one nominal token positively names no person or animal (`SOLE_NOUNS` and friends)."""
+    text, lemma = _fold(token.text), _lemma(token)
+    if token.idx < label_end:                                    # a printed label's own words ('Smoker:', 'Allergies:')
+        return lemma in SOLE_NOUNS or text in SOLE_NOUNS or lemma in SOLE_STATUS or text in SOLE_STATUS
+    if token.i in anchor_nouns:
+        return True
+    if token.pos_ == 'NUM' and token.dep_ not in ('nsubj', 'nsubjpass'):
+        return True
+    if lemma == 'patient':
+        return _the_patient(token)
+    if (token.pos_ in ('ADJ', 'ADV', 'VERB', 'AUX', 'ADP', 'DET', 'CCONJ', 'SCONJ', 'PART', 'INTJ') and not _misread(token)
+            and token.dep_ not in ('nsubj', 'nsubjpass', 'dobj', 'obj', 'iobj', 'dative', 'pobj', 'appos', 'poss', 'agent')):
+        return True
+    if text in SOLE_ANSWERS:
+        return True
+    if token.text.isupper() and len(token.text) <= 5 and text in SOLE_INITIALISMS:
+        return True
+    if (lemma in SOLE_STATUS or text in SOLE_STATUS) and token.dep_ in ('attr', 'oprd') and _lemma(token.head) == 'be':
+        subject = next((c for c in token.head.children if c.dep_ in ('nsubj', 'nsubjpass')), None)
+        return subject is not None and (_fold(subject.text) in ('he', 'she') or _the_patient(subject))
+    if lemma in SOLE_RESTRICTED or text in SOLE_RESTRICTED:
+        if token.dep_ in ('nsubj', 'nsubjpass', 'poss', 'appos', 'agent', 'conj') or any(
+                c.dep_ in ('relcl', 'acl', 'appos') for c in token.children):
+            return False
+        return not (token.dep_ == 'pobj' and _fold(token.head.text) in SOLE_PERSON_PREPS
+                    and _fold(token.head.text) != 'of')
+    if lemma not in SOLE_NOUNS and text not in SOLE_NOUNS:
+        return False
+    # A noun standing ALONE as a subject or a possessor may be a name the lexicon happens to know, WHATEVER its verb
+    # ('Spot has a rash.', 'Spot is allergic to penicillin.' - round 4, R2-F5; 'Spot is in pain.', 'Flash is with
+    # fever.', 'Spot itches.', "Spot's knee ..." - round 5, R3): positively a thing there only with a determiner, a
+    # possessor, a number or a modifier ('The rash has spread.', 'Her knee has an effusion.', 'Knee pain is worse.'), or
+    # as a printed question's own heading word ('Assessment is ...', 'Examination is normal.', 'Plan is ...'). A bare
+    # 'Pain is worse at night.' is held with it (fail closed: the base holds it too).
+    if (token.dep_ in ('nsubj', 'nsubjpass', 'poss')
+            and not any(c.dep_ in ('det', 'poss', 'nummod', 'amod', 'compound') for c in token.children)
+            and lemma not in SOLE_HEADING_WORDS and text not in SOLE_HEADING_WORDS):
+        return False
+    # A word that can name a GROUP of people ('her band', 'the community', 'the clinic' for its staff): positively no
+    # person only where a group cannot act or accompany - never a subject, possessor, appositive or agent, never the
+    # object of with / by / from / beside.
+    if lemma in SOLE_COLLECTIVE or text in SOLE_COLLECTIVE:
+        if token.dep_ in ('nsubj', 'nsubjpass', 'poss', 'appos', 'agent') or any(
+                c.dep_ in ('relcl', 'acl', 'appos') and not _initialism_of_run(c) for c in token.children):
+            return False
+        if token.dep_ == 'pobj' and _fold(token.head.text) in ('with', 'by', 'from', 'beside', 'alongside'):
+            return False
+    # A capitalized word in the middle of a sentence may be a name ('lives with Pain'): only inside a run of capitalized
+    # known words ('Community Treatment Order').
+    if token.text[:1].isupper() and token.i > token.sent.start and not token.text.isupper():
+        neighbours = [t for t in (token.doc[token.i - 1] if token.i > 0 else None,
+                                  token.doc[token.i + 1] if token.i + 1 < len(token.doc) else None) if t is not None]
+        if not any(t.text[:1].isupper() and (_lemma(t) in SOLE_NOUNS or _fold(t.text) in SOLE_NOUNS)
+                   and t.pos_ in ('NOUN', 'PROPN') for t in neighbours):
+            return False
+    return True
+
+
+#: The printed questions' own heading words a bare subject may be ('Assessment is ...', 'Examination is normal.'): a
+#: name is never written so (`_sole_noun_ok`, round 5).
+SOLE_HEADING_WORDS = frozenset(('examination', 'exam', 'assessment', 'plan', 'diagnosis', 'impression'))
+
+
+def _initialism_of_run(token):
+    """An initialism in parentheses spelling the capitalized known words right before it: 'Community Treatment Order
+    (CTO)'. Nothing else: an initialism can be a role ('her CPN')."""
+    doc = token.doc
+    if not (token.text.isalpha() and token.text.isupper() and 2 <= len(token.text) <= 6):
+        return False
+    if not (token.i >= 2 and doc[token.i - 1].text == '(' and token.i + 1 < len(doc) and doc[token.i + 1].text == ')'):
+        return False
+    run, at = [], token.i - 2
+    while at >= 0 and doc[at].text[:1].isupper() and doc[at].is_alpha and len(run) < len(token.text):
+        run.insert(0, doc[at]); at -= 1
+    return (len(run) == len(token.text) and ''.join(t.text[0] for t in run) == token.text
+            and all(_lemma(t) in SOLE_NOUNS or _fold(t.text) in SOLE_NOUNS for t in run))
+
+
+#: The words that are NOT descriptive (`_sole_reading` 'descriptive', round 5): a noun names its topic through its class,
+#: an operator reaches through its reach, a word of time, frequency or side is read apart; only `SOLE_INERT` among the
+#: rest states no clinical state. Built once.
+_SOLE_NOT_DESCRIPTIVE = (SOLE_INERT | SOLE_NOUNS | SOLE_STATUS | SOLE_RESTRICTED | SOLE_PRESENTED | SOLE_ANSWERS
+                         | SOLE_INITIALISMS | SOLE_TIME_WORDS | SOLE_FREQUENCY_ADVERBS | SOLE_FREQUENCY_NOUNS
+                         | frozenset(SOLE_SIDES) | frozenset(SOLE_WORD_CLASSES) | SOLE_UNCERTAIN | SOLE_NEGATION
+                         | {'patient'} | frozenset().union(*SOLE_OPERATORS.values()))
+#: An age written as one word ('45-year-old', '4 years old'): its parts describe no state (`_sole_reading` 'descriptive').
+_AGE_WORDS = re.compile(r'\b\d{1,3}[- ]years?[- ]old\b', re.I)
+#: Every word the single-patient reading knows (`_sole_reading` 'unknown'); built once.
+_SOLE_KNOWN = (SOLE_NOUNS | SOLE_STATUS | SOLE_RESTRICTED | SOLE_NEUTRAL_WORDS | SOLE_PRESENTED | SOLE_ANSWERS
+               | SOLE_INITIALISMS | SOLE_TIME_WORDS | SOLE_FREQUENCY_ADVERBS | SOLE_FREQUENCY_NOUNS | frozenset(SOLE_SIDES)
+               | frozenset(SOLE_WORD_CLASSES) | SOLE_UNCERTAIN | {'patient'}
+               | frozenset().union(*SOLE_OPERATORS.values()))
+
+
+def _sole_reading(doc, root, *, value_start, colon, age, opener, explicit):
+    """One unit's part of the single-patient scope (`sole_patient`). Every value only decides whether the unit may join
+    a positively established single-patient note; nothing here releases a unit by itself."""
+    label_end = value_start if colon else 0
+    tokens = [t for t in doc if not t.is_space]
+    anchor_nouns = set()
+    anchor = None
+    main = next((c for c in root.children if c.dep_ in ('nsubj', 'nsubjpass')), None)
+    if age or opener:
+        # The presenting unit presents exactly ONE person (refutation round 4, 2026-10-01): the one noun an age
+        # describes, a presented noun ('A 45-year-old man ...', 'This is a 30-year-old female ...'). A second
+        # age-described noun is a second person ('A 4-year-old girl presents with a 30-year-old man.'), whatever its
+        # gender: no anchor, and it then fails the positive noun check below like any other person.
+        described = [t for t in doc if _described_by_age(t)]
+        if len(described) == 1 and _lemma(described[0]) in SOLE_PRESENTED:
+            anchor_nouns = {described[0].i}
+        anchor = 'age' if anchor_nouns else None
+    elif explicit and main is not None and this_patient(main) and not any(
+            c.dep_ in ('compound', 'amod', 'poss', 'appos') for c in main.children):
+        anchor = 'explicit'
+    nouns_ok = True
+    for t in tokens:
+        if t.is_punct:
+            continue
+        if t.pos_ == 'PRON':
+            continue
+        nominal = t.pos_ in ('NOUN', 'PROPN', 'X') or t.dep_ in SOLE_NOMINAL_DEPS or _misread(t)
+        if not nominal:
+            continue
+        if _initialism_of_run(t):
+            continue
+        if not _sole_noun_ok(t, anchor_nouns=anchor_nouns, label_end=label_end):
+            nouns_ok = False
+            break
+    genders, bad_pronoun = set(), False
+    for t in tokens:
+        if t.pos_ != 'PRON' and _fold(t.text) not in SOLE_PERSONAL:
+            continue
+        text = _fold(t.text)
+        if text in SOLE_PERSONAL:
+            gender = 'Masc' if text in ('he', 'him', 'his', 'himself') else 'Fem'
+            genders.add(gender)
+            if text not in SOLE_REFLEXIVE and t.dep_ in ('dobj', 'obj', 'iobj', 'dative', 'pobj', 'attr', 'appos'):
+                bad_pronoun = True          # 'She gives her ibuprofen.': a non-reflexive object is somebody else
+        elif not (text in SOLE_PRONOUNS or (anchor == 'age' and text == 'this' and t.dep_ == 'nsubj')):
+            bad_pronoun = True
+        elif text in SOLE_GROUP_PRONOUNS and t.dep_ in ('nsubj', 'nsubjpass', 'poss', 'agent', 'appos'):
+            bad_pronoun = True
+    # A frame fronted before the subject ('On admission she is on warfarin.', 'Then she ...', 'When asked, ...').
+    fronted = False
+    if not colon:
+        subject = next((c for c in root.children if c.dep_ in ('nsubj', 'nsubjpass', 'expl', 'csubj')), None)
+        frontier = subject.i if subject is not None else root.i
+        fronted = any(c.i < frontier and c.dep_ in ('prep', 'advmod', 'npadvmod', 'advcl', 'tmod', 'obl', 'mark', 'cc',
+                                                     'intj', 'dep', 'meta', 'parataxis', 'ccomp', 'pcomp', 'prt')
+                      for c in root.children)
+        # ... or opening with a preposition, a subordinator or an adverb whatever the parse made of it ('At the time of
+        # the fracture she takes warfarin.' parses with 'At' as its root), or a parse whose root is not its verb.
+        opening = next((t for t in tokens if not t.is_punct), None)
+        fronted = fronted or bool(opening is not None and opening.pos_ in ('ADP', 'SCONJ', 'ADV', 'CCONJ', 'INTJ'))
+        fronted = fronted or (root.pos_ not in ('VERB', 'AUX') and any(
+            t.pos_ in ('VERB', 'AUX') and 'Fin' in t.morph.get('VerbForm') for t in tokens))
+    sides = {SOLE_SIDES[_fold(t.text)] for t in tokens if _fold(t.text) in SOLE_SIDES
+             and (len(t.text) > 1 or t.text in ('L', 'R'))}
+    uncertain = '?' in doc.text or any(_fold(t.text) in SOLE_UNCERTAIN or _lemma(t) in SOLE_UNCERTAIN for t in tokens)
+    # CURRENT: the unit read as an answer to a question about what is so now. One present-tense clause with a
+    # current verb, no modal, every word of time inside a frequency phrase, no subordinate clause but 'as needed' (a
+    # bounding clause is returned in `advcl` for the reader to set aside only when it states the destination's own
+    # printed time).
+    current, advcl = not colon, []
+    if current:
+        heads = [root] + [c for c in root.children if c.dep_ == 'conj' and c.pos_ in ('VERB', 'AUX')]
+        for head in heads:
+            finite = [t for t in [head] + [c for c in head.children if c.dep_ in ('aux', 'auxpass')]
+                      if 'Fin' in t.morph.get('VerbForm')]
+            if (_lemma(head) not in SOLE_CURRENT_VERBS or head.pos_ not in ('VERB', 'AUX')
+                    or not finite or any('Past' in t.morph.get('Tense') for t in finite)
+                    or any(c.dep_ == 'auxpass' for c in head.children)
+                    or any(_lemma(c) in ('have',) and c.dep_ == 'aux' for c in head.children)):
+                current = False
+            # 'is on warfarin' states a current medication; 'is in line for insulin', 'is under review' do not.
+            if _lemma(head) == 'be' and any(
+                    c.dep_ == 'prep' and not (_fold(c.text) == 'on' and any(
+                        g.dep_ == 'pobj' and (SOLE_CLASSES.get(_lemma(g), frozenset()) & {'medication', 'therapy'}
+                                              or (_lemma(g) in ('examination', 'exam') and c.i < head.i))
+                        for g in c.children))
+                    for c in head.children):
+                current = False
+        if root.dep_ != 'ROOT' or (main is None and not any(c.dep_ == 'expl' for c in root.children)):
+            current = False
+        bounding = set()                    # the tokens of a before/after clause the reader judges (`advcl`)
+        for t in tokens:
+            if t.tag_ == 'MD':
+                current = False
+            if t.dep_ in ('ccomp', 'xcomp', 'csubj', 'relcl', 'acl', 'parataxis'):
+                current = False
+            if t.dep_ == 'advcl':
+                mark = next((c for c in t.children if c.dep_ == 'mark'), None)
+                if mark is not None and _fold(mark.text) == 'as' and _lemma(t) in ('need', 'require', 'direct') \
+                        and t.tag_ == 'VBN' and not list(c for c in t.children if c.dep_ not in ('mark', 'punct')):
+                    continue
+                if (mark is not None and _fold(mark.text) in ('before', 'after') and t.head.i == root.i
+                        and not any(c.dep_ == 'advcl' for c in t.children)):
+                    advcl.append(mark.idx)
+                    bounding |= {x.i for x in t.subtree}
+                    continue
+                current = False
+        for t in tokens:
+            text, lemma = _fold(t.text), _lemma(t)
+            if t.i in bounding:
+                continue                    # inside a bounding clause the reader judges against the destination
+            if t.pos_ == 'NUM' and _DATE_LIKE.fullmatch(t.text):
+                current = False
+            if text in SOLE_FREQUENCY_ADVERBS and t.dep_ == 'advmod':
+                continue
+            if text not in SOLE_TIME_WORDS and lemma not in SOLE_TIME_WORDS:
+                continue
+            if lemma in SOLE_FREQUENCY_NOUNS and (
+                    any(_fold(c.text) in ('every', 'each', 'a', 'per') and c.dep_ == 'det' for c in t.children)
+                    or (t.dep_ == 'pobj' and _fold(t.head.text) == 'at' and lemma in ('night', 'bedtime'))
+                    or (t.dep_ == 'pobj' and _fold(t.head.text) == 'in' and lemma in ('morning', 'evening')
+                        and any(_fold(c.text) == 'the' for c in t.children))):
+                continue
+            current = False
+    # TOPIC, OPERATORS AND UNKNOWN WORDS (`sole_released`'s independence check). A label's own words count for its
+    # topic ('Smoker: No.' is about smoking, 'Allergies: none.' about allergy); a compound or adjectival modifier does
+    # not ('drug allergies' is about allergy, 'joint line tenderness' about tenderness).
+    classes, reach, unknown, content, doubts, operators = set(), set(), False, set(), set(), set()
+    topics = []
+    descriptive = False                     # (round 5) a word that may describe a clinical state (`SOLE_INERT`)
+    ages = [m.span() for m in _AGE_WORDS.finditer(doc.text)]   # '45-year-old': an age, not a state
+    negated = any(_fold(t.text) in SOLE_NEGATION or _lemma(t) in SOLE_NEGATION
+                  or (_fold(t.text).startswith('non') and len(t.text) > 5) for t in tokens)
+    known = _SOLE_KNOWN
+    for t in tokens:
+        if t.is_punct or t.is_space or not any(c.isalpha() for c in t.text):
+            continue
+        text, lemma = _fold(t.text), _lemma(t)
+        words = {text, lemma}
+        topic_word = t.dep_ not in ('compound', 'amod') and (t.pos_ in ('NOUN', 'PROPN', 'VERB', 'ADJ')
+                                                             or t.dep_ in SOLE_NOMINAL_DEPS or _misread(t)
+                                                             or bool(words & SOLE_NOUNS))
+        if topic_word:
+            found = frozenset().union(*(SOLE_CLASSES.get(word, frozenset()) | SOLE_WORD_CLASSES.get(word, frozenset())
+                                        for word in words))
+            classes |= found
+            if found:
+                topics.append(found)
+            if text.startswith('non') and len(text) > 5:
+                classes |= SOLE_CLASSES.get(text[3:].lstrip('-'), frozenset()) | SOLE_WORD_CLASSES.get(text[3:].lstrip('-'), frozenset())
+        if ((t.pos_ in ('NOUN', 'PROPN', 'VERB', 'ADJ') or t.dep_ in SOLE_NOMINAL_DEPS or _misread(t)
+             or words & SOLE_NOUNS) and t.idx >= label_end
+                and lemma != 'patient' and lemma not in SOLE_NEUTRAL_WORDS
+                and (t.pos_ not in ('PRON', 'DET', 'NUM') or _misread(t))):
+            content.add(lemma)
+        if words & SOLE_OPERATORS['key']:
+            reach.add('key')
+        if (t.idx >= label_end and (t.pos_ in ('ADJ', 'VERB', 'ADV') or _misread(t))
+                and not words & _SOLE_NOT_DESCRIPTIVE and not (text.startswith('non') and len(text) > 5)
+                and not any(low <= t.idx < high for low, high in ages)):
+            descriptive = True
+        noun_topic = t.pos_ in ('NOUN', 'PROPN') and bool(words & SOLE_NOUNS)
+        # A pronoun standing for something said elsewhere ('She denies this.', 'That was years ago.', 'None of this is
+        # current.') points at another line: it may change any of them. Not the presenting 'This is a ...', not a
+        # relative pronoun ('a rash that itches').
+        if (t.pos_ == 'PRON' and text in ('it', 'its', 'itself', 'this', 'that', 'these', 'those')
+                and t.head.dep_ != 'relcl' and not (anchor == 'age' and text == 'this' and t.dep_ == 'nsubj')):
+            reach.add('global')
+        if not noun_topic:
+            if words & SOLE_OPERATORS['global']:
+                reach.add('global')
+            if text in ('or', 'either') and negated:
+                pass                        # 'denies nausea or weakness': a negated list, not a choice
+            elif words & SOLE_OPERATORS['class'] or words & SOLE_UNCERTAIN or (text.startswith('non') and len(text) > 5):
+                reach.add('class')
+                operators.add('negation' if (words & SOLE_NEGATION or (text.startswith('non') and len(text) > 5))
+                              else 'other')
+                doubts.add(bool(words & SOLE_DOUBT) and not words & (SOLE_OPERATORS['class'] - SOLE_DOUBT)
+                           and not (text.startswith('non') and len(text) > 5))
+        if t.tag_ == 'MD' and text not in ('will', "'ll", 'wo', 'shall', 'can', 'ca'):
+            reach.add('class'); doubts.add(False); operators.add('other')
+        if (t.idx < label_end or (t.pos_ in ('PRON', 'NUM', 'DET', 'ADP', 'CCONJ', 'SCONJ', 'PART', 'AUX', 'SYM')
+                                  and not _misread(t))
+                or t.i in anchor_nouns or _initialism_of_run(t)):
+            continue
+        if not words & known and not (text.startswith('non') and text[3:].lstrip('-') in known):
+            unknown = True
+    # A dictated correction ('Make that aspirin.', 'Make it 20 mg.', 'Change that to ibuprofen.') replaces a word of a
+    # line it does not name: it may change any answer of the note (self-refutation round 2, 2026-10-01).
+    lead = [t for t in tokens if not (t.is_punct or t.is_space)][:2]
+    if len(lead) == 2 and _lemma(lead[0]) in ('make', 'change') and _fold(lead[1].text) in ('that', 'it', 'this'):
+        reach.add('global')
+    # A line that names no topic of its own but negates, ends, restricts, doubts, contrasts or sides something ('Not in
+    # the morning.', 'Worse at night instead.', 'Bilateral.', 'Left side.', 'The right knee is also swollen.', 'None.')
+    # qualifies a line it does not name: it may change any answer of the note (self-refutation round 2, 2026-10-01).
+    # So does an unlabelled line naming no topic, whatever its words: a fragment ('Worse at night.', 'Last week.',
+    # 'Every day.', 'Severe.': round 3) and - refutation round 6, L1:F4 - a whole clause ('She has twenty a day.',
+    # 'She feels better.'): nothing in it shows what it is about. A labelled value is its label's, and the presenting
+    # line is the note's anchor.
+    if not classes and (reach & {'class', 'key'} or sides or not (colon or age or opener)):
+        reach.add('global')
+    # (refutation round 6, L1:F4) A number standing for a noun it does not name ('She has twenty a day.', 'She takes
+    # one every morning.', 'She has two every morning with her inhaler.'): what it counts is elided, so the line may be
+    # about any answer whatever else it names - its topic is UNKNOWN, fail closed. A number counting its own noun ('20
+    # mg', 'twenty cigarettes': the parser's 'nummod'), a date or year ('in 2019') and an age ('30-year-old') name what
+    # they count.
+    if any(t.idx >= label_end and (t.pos_ == 'NUM' or t.like_num) and t.dep_ not in ('nummod', 'quantmod', 'compound')
+           and not _DATE_LIKE.fullmatch(t.text) and not any(low <= t.idx < high for low, high in ages)
+           for t in tokens):
+        unknown = True
+    return {'nouns_ok': nouns_ok, 'genders': frozenset(genders), 'bad_pronoun': bad_pronoun, 'fronted': fronted,
+            'classes': frozenset(classes), 'reach': frozenset(reach), 'unknown': unknown, 'descriptive': descriptive,
+            'doubt_only': doubts == {True},
+            # only a negation among its own operators ('She denies nausea.', 'She does not smoke.', 'a nonsmoker')
+            'negation_only': operators <= {'negation'},
+            # two topics no one word covers ('He has hypertension and takes lisinopril.': condition and medication)
+            # (an allergen is a drug or a substance: allergy with medication is one topic)
+            'multi_topic': any(not (a & b) and not ({'allergy'} <= (a | b) and (a | b) <= {'allergy', 'medication'})
+                               for i, a in enumerate(topics) for b in topics[i + 1:]),
+            # a statement that is whole on its own though it has no object ('She smokes.', 'He drinks.'): an intransitive
+            # habit verb with a personal pronoun subject, nothing else in it
+            'self_contained': bool(root.pos_ == 'VERB' and _lemma(root) in ('smoke', 'vape', 'drink')
+                                   and all(c.dep_ in ('nsubj', 'punct', 'neg', 'aux') for c in root.children)),
+            'keys': keys(content),
+            'sides': frozenset(sides), 'uncertain': uncertain, 'anchor': anchor,
+            'anchor_gender': next(iter({_noun_gender(doc[i]) for i in anchor_nouns} - {None}), None)
+                             if len({_noun_gender(doc[i]) for i in anchor_nouns} - {None}) == 1 else None,
+            'current': current, 'advcl': tuple(advcl),
+            # a presenting line (the age grammar or the opener), whether or not it presents exactly one person
+            'presenting': bool(age or opener)}
+
+
+def sole_patient(units, info, *, subjects, parsed, colon):
+    """The unit ids of a note whose single-patient scope is POSITIVELY established (empty otherwise): every unit read,
+    the first one presenting the patient (`_sole_reading` 'anchor'), no unit naming or implying anyone else (every
+    nominal word known to name no person, no other pronoun, no non-reflexive personal object, no actor reading another
+    person), every personal pronoun one gender agreeing with the presented patient, no frame fronted before a subject
+    (but a printed question's own subject line: 'On examination there is ...'), at most one side named in the note, and
+    nothing uncertain outside an assessment's own line. Read ONLY by the ordinary field-relations reader."""
+    if not units:
+        return frozenset()
+    readings = []
+    for unit in units:
+        found = info.get(unit['id']) or {}
+        sole = found.get('sole')
+        if not found.get('readable') or sole is None:
+            return frozenset()
+        readings.append((unit, found, sole))
+    first = readings[0]
+    if first[2]['anchor'] is None:
+        return frozenset()
+    genders, sides = set(), set()
+    for index, (unit, found, sole) in enumerate(readings):
+        if not sole['nouns_ok'] or sole['bad_pronoun']:
+            return frozenset()
+        # (self-refutation of round 4) a later line presenting somebody ('50-year-old woman presents with cough.') is a
+        # second patient, whatever the actor run made of it: only the first line presents the note's patient
+        if index > 0 and sole['presenting']:
+            return frozenset()
+        # (the presenting opener reads 'A 45-year-old man' as a person; the positive noun check above is what says
+        # the note names nobody else, so the presenting unit itself is not refused for it)
+        if (found['other_floor'] or found['other']) and not (index == 0 and sole['anchor'] == 'age'):
+            return frozenset()
+        if sole['fronted'] and not subjects.get(unit['id']):
+            return frozenset()
+        own = parsed.get(unit['id'])
+        topic = (own[0] if own else None) or subjects.get(unit['id'])
+        if sole['uncertain'] and topic not in ('assessment', 'impression', 'diagnosis'):
+            return frozenset()
+        genders |= sole['genders']; sides |= sole['sides']
+    anchor_gender = first[2]['anchor_gender']
+    if len(genders) > 1 or (anchor_gender and genders and genders != {anchor_gender}) or len(sides) > 1:
+        return frozenset()
+    return frozenset(unit['id'] for unit in units)
+
+
+@functools.lru_cache(maxsize=512)
+def neutral_field(label, context):
+    """Whether a printed question names nobody but the patient: every nominal word of its label and context known to
+    name no person (`SOLE_NOUNS`, `SOLE_STATUS`, `SOLE_FIELD_NOUNS`), no personal pronoun but 'you' / 'your'. A question
+    under 'Family history', 'Mother' or 'Carer' is not neutral, so no single-patient release answers it."""
+    from . import v3_syntax
+    text = ' '.join(part for part in (str(label or ''), str(context or '')) if part.strip())
+    if not text.strip():
+        return True
+    parsed = v3_syntax.docs([text[:v3_syntax.MAX_CHARACTERS]])
+    if not parsed or parsed[0] is None or len(text) > v3_syntax.MAX_CHARACTERS:
+        return False
+    history_label = bool(re.fullmatch(r'(?:past (?:medical|surgical) history|history of present illness|history)',
+                                      ' '.join(str(label or '').casefold().split()).rstrip(':?')))
+    for t in parsed[0]:
+        word, lemma = _fold(t.text), _lemma(t)
+        if not any(c.isalpha() for c in t.text):
+            continue                        # '>', '(', '?': a separator names nobody
+        # A question framed in another time ('Previous visit > Medications', 'On admission', 'Discharge medications')
+        # does not ask what is so now; only a printed history question names the past as its own subject.
+        if ({word, lemma} & SOLE_FIELD_FRAMES) and not (history_label and t.idx < len(str(label or ''))):
+            return False
+        # (refutation round 4) a content word of time frames the question in another time or a part of the day ('Old
+        # medications', 'Night medications', 'Daily medications'): only 'current' / 'present' name the now it reads
+        if t.pos_ in ('ADJ', 'ADV', 'VERB', 'NOUN', 'PROPN', 'X') and {word, lemma} & SOLE_FIELD_TIME:
+            return False
+        # ... and so does a verb that is past, a participle, modal or infinitival ('Medications to start', 'Medications
+        # given', 'Medications needed', 'What would ...'): only a present-tense question asks what is so now
+        if (t.pos_ in ('VERB', 'AUX') and word not in SOLE_SIDES
+                and (t.tag_ in ('VBD', 'VBN', 'MD') or any(c.tag_ == 'TO' for c in t.children))):
+            return False
+        if t.pos_ == 'PRON':
+            if word not in ('you', 'your', 'yours', 'yourself', 'it', 'this', 'that', 'anything', 'all', 'which', 'what',
+                            'none', 'nothing', 'there', 'these', 'those'):
+                return False
+            continue
+        if t.pos_ in ('NOUN', 'PROPN', 'X') or t.dep_ in ('nsubj', 'nsubjpass', 'dobj', 'pobj', 'appos', 'poss'):
+            if t.is_punct or t.pos_ in ('NUM', 'DET', 'ADP', 'AUX', 'CCONJ', 'SCONJ', 'PART', 'ADJ', 'ADV', 'VERB'):
+                pass
+            elif not ({word, lemma} & (SOLE_NOUNS | SOLE_STATUS | SOLE_FIELD_NOUNS)) and not _initialism_of_run(t):
+                return False
+            else:
+                continue
+        # (refutation round 4, R2-F6) every other content word too: a modifier or verb the lexicons do not know may
+        # name somebody else or another time ('Maternal conditions', 'Paternal medications', 'Discontinued
+        # medications', 'Declined treatment') - the question is then not positively about the patient now.
+        # ('the patient' the parse tags as a modifier, 'Does the patient smoke?', names the patient)
+        if (t.pos_ in ('ADJ', 'ADV', 'VERB', 'NOUN', 'PROPN', 'X') and not ({word, lemma} & SOLE_FIELD_KNOWN)
+                and not (word == 'patient' and t.i > 0 and _fold(parsed[0][t.i - 1].text) in ('the', 'this'))):
+            return False
+    return True
+
+
+#: Words that frame a printed question in another time or encounter (`neutral_field`).
+SOLE_FIELD_FRAMES = frozenset((
+    'previous previously prior past former formerly earlier initial baseline admission admitted discharge discharged '
+    'last pre post historical history ago yesterday future planned intended'
+).split())
+#: Words of a printed question that name no person ('Clinic visit record', 'History of present illness').
+SOLE_FIELD_NOUNS = frozenset((
+    'record visit review history illness complaint details information form section question medication medications '
+    'allergies allergy other symptoms symptom chief current findings finding care tick notes note summary description '
+    'mental health state lifestyle ideation self wellbeing'
+).split())
+#: Content words that frame a printed question in a time of its own (`neutral_field`, round 4): words of time and
+#: frequency, and 'old' / 'new'.
+SOLE_FIELD_TIME = ((SOLE_TIME_WORDS | SOLE_FREQUENCY_ADVERBS | SOLE_FREQUENCY_NOUNS
+                    | frozenset(SOLE_LEXICON['time'].split()) | frozenset(('old', 'new', 'recent', 'recently')))
+                   - frozenset(('current', 'currently', 'present')))
+#: Every word a printed question may carry and still be positively about the patient now (`neutral_field`, round 4).
+SOLE_FIELD_KNOWN = (SOLE_NOUNS | SOLE_STATUS | SOLE_FIELD_NOUNS | SOLE_NEUTRAL_WORDS | SOLE_FREQUENCY_ADVERBS
+                    | frozenset(SOLE_WORD_CLASSES))
+
+
 #: Any word that may name who a line is about, read WITHOUT the parser (an unread line in a readable note, RR4-1).
 _PERSON_WORDS = re.compile(r'(?<![^\W_])(?:' + '|'.join(sorted(PERSON_NOUNS | CARE_NOUNS | PERSONAL | TITLES | CARE_TITLES,
                                                               key=len, reverse=True))
@@ -577,11 +1254,21 @@ def _unread(note_unread=True, quote=''):
             'claim_keys': frozenset(), 'negated_keys': frozenset(), 'predicates': (),
             'quantified_denial': True, 'reattribution': True, 'denial_nouns': frozenset(), 'denial_heads': frozenset(),
             'bare_cessation': True, 'ceased_keys': frozenset(),
-            'topic_denial_keys': frozenset(), 'surface_keys': frozenset(), 'intention': True}
+            'topic_denial_keys': frozenset(), 'surface_keys': frozenset(), 'intention': True, 'sole': None}
 
 
-def read(units, groups, *, colon, parsed, subjects, explicit, ages):
-    """Per-unit and note-wide actor reading. `explicit`: unit ids whose text opens with an explicit patient subject by
+# (refutation round 6, 2026-10-01) round 5's three readings for the default path's own holds (D30) are withdrawn with the
+# releases they fed, and the default path is the base's again: a line's own present frame (OWN_FRAME: an earlier past
+# event may fall inside 'this admission' / 'this reporting period'), a PLAIN pair of lines (`_plain`: any noun passed -
+# 'The warfarin is recorded for discontinuation.'), and the parser's syntax-only completeness for a thing subject or the
+# patient as object (`_thing_subject`, `_patient_object`: 'The warfarin belongs to the dog.', 'The physiotherapy ended
+# last year.' as a plan, 'The apixaban replaces the warfarin.' were adopted). Each was the meaning of a line, which only
+# a reader of meaning could supply.
+
+
+def read(units, groups, *, colon, parsed, subjects, explicit, ages, openers=frozenset()):
+    """Per-unit and note-wide actor reading. `openers` (2026-10-01): units opening with the presenting opener with an
+    article (`SOLE_OPENER`); read ONLY for the relation floors' `other_floor` and the single-patient scope (`sole`). `explicit`: unit ids whose text opens with an explicit patient subject by
     the deterministic source grammar (`EXPLICIT_PATIENT_SUBJECT`, the age presentation `ages`). `groups` (paragraphs)
     is accepted for the caller's signature and NOT used: the run is the note's. Returns {'units': {id: info},
     'resolved': {id: state}, 'gender': the note's patient gender (None, 'Masc', 'Fem' or 'conflict')}."""
@@ -642,6 +1329,7 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
         # 'seen' on 'woman' as a relative clause, so the reading above calls the opener another person's). Every other
         # person it names still counts ('This is a 12-year-old boy seen with his mother, who has chest pain.').
         other_floor = other
+        opener = uid in openers
         if other and age:
             described = {t.i for t in doc if _described_by_age(t)}
             presented_age = presented | described
@@ -757,7 +1445,10 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages):
                                         if colon.get(uid) else [root])),
                   'main_patient': bool(main is not None and main.pos_ in ('NOUN', 'PROPN') and this_patient(main)
                                        and not any(c.dep_ in ('poss', 'compound', 'amod', 'appos') for c in main.children)),
-                  'other_floor': other_floor, **_floor_reading(words, root, lem, txt)}
+                  'other_floor': other_floor, **_floor_reading(words, root, lem, txt),
+                  # 2026-10-01: the single-patient scope's reading of this unit (`sole_patient`), relation path only
+                  'sole': _sole_reading(doc, root, value_start=value_start, colon=bool(colon.get(uid)),
+                                        age=age, opener=opener, explicit=uid in explicit)}
         info[uid] = {**floors, 'readable': True, 'kind': kind, 'other': other, 'mentions_other': mentions_other,
                      'content': frozenset(content), 'core': frozenset(core), 'nominal': frozenset(nominal),
                      'keys': keys(content | nominal), 'core_keys': keys(core),

@@ -77,9 +77,13 @@ def send(compiled,config):
     units['response_model']=getattr(response,'model','')
     return response,cost,units,recorded,provider,getattr(response,'_request_id','') or '',getattr(response,'id','') or '',False
 
-def parse_response(raw,simulated):
+def parse_response(raw,simulated,requested):
+    """The proposal of a mapping response. `requested` is the model the request named (the job's config): a response
+    from any other model, and every stop but a complete end_turn (refusal, max_tokens, model_context_window_exceeded), is
+    refused before anything is read."""
     if simulated:return raw
-    if getattr(raw,'model',None)!=generation.SONNET_5 or getattr(raw,'stop_reason',None)!='end_turn':
+    if (requested not in generation.NATIVE_MODELS or getattr(raw,'model',None)!=requested
+            or getattr(raw,'stop_reason',None)!='end_turn'):
         raise ValidationError('Mapping response model differs, was refused or was incomplete.')
     if any(getattr(block,'type','')=='refusal' for block in raw.content):
         raise ValidationError('Provider refused mapping assistance.')
@@ -136,7 +140,7 @@ def run_one():
         connection.ensure_connection();carrier=connection.connection;settling=True
         settle(job,cost,units,rates,provider,request_id,simulated,provider_resource_id=resource_id)
         settling=False
-        proposal=mapping.validate_proposal(version,compiled,parse_response(raw,simulated))
+        proposal=mapping.validate_proposal(version,compiled,parse_response(raw,simulated,job.config['model']))
         with transaction.atomic():
             template=Template.objects.select_for_update().get(pk=version.template_id)
             # The template, then the job (the global lock order, core.retention): a job swept or resolved after its

@@ -327,7 +327,7 @@ def live_generation_queue_row(live):
 
 
 def language_model_rows():
-    """The language-model section: model, three rates, the Sonnet 5 settings, the request profile and pricing_version.
+    """The language-model section: model, three rates, the Sonnet 5 / 5.5 settings, the request profile and pricing_version.
 
     ONE implementation, printed line for line by `manage.py configuration_status` and rendered by the services page, so
     the two screens cannot disagree about which request a generation queued now would send — including the INVALID state
@@ -359,8 +359,10 @@ def language_model_rows():
                         ('QUILLMD_AI_THINKING', settings.AI_THINKING),
                         ('QUILLMD_AI_EFFORT', settings.AI_EFFORT),
                         ('QUILLMD_AI_INFERENCE_GEO', settings.AI_INFERENCE_GEO)):
-        # Thinking and effort are read only for claude-sonnet-5; saying so stops a 4.6 operator reading them as live.
-        scope = ' (read only for claude-sonnet-5)' if name in ('QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT') else ''
+        # Thinking and effort are read only for the native models; saying so stops a 4.6 operator reading them as live.
+        # On claude-sonnet-5-5 'disabled' is SENT as between_tools: the request profile row below shows what is sent.
+        scope = (' (read only for claude-sonnet-5 and claude-sonnet-5-5)'
+                 if name in ('QUILLMD_AI_THINKING', 'QUILLMD_AI_EFFORT') else '')
         rows.append({'name': name, 'value': unset(value) + scope + inactive, 'severity': ''})
     try:
         config = generation.configuration()

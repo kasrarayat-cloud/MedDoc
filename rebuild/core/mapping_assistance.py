@@ -61,12 +61,17 @@ def digest(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 def request_profile(config):
-    """A separately bound mapping envelope; the historical generation snapshot is untouched."""
-    if config.get('provider')!='anthropic' or config.get('model')!=generation.SONNET_5:
-        generation._refuse_profile('Mapping assistance requires the selected Sonnet 5 profile.')
+    """A separately bound mapping envelope; the historical generation snapshot is untouched.
+
+    Sent only on a native model (claude-sonnet-5, claude-sonnet-5-5) with no up-front thinking — the type that model
+    accepts for it: disabled on Sonnet 5, between_tools on Sonnet 5.5 — at medium effort. PROFILE names the envelope's
+    contract, not the model: the model is the request's own `model`, the base profile carries the thinking type, and
+    `mapping_profile_sha256` binds them all."""
+    if config.get('provider')!='anthropic' or config.get('model') not in generation.NATIVE_MODELS:
+        generation._refuse_profile('Mapping assistance requires the selected Sonnet 5 or Sonnet 5.5 profile.')
     base=generation.job_request_profile(config)
-    if base.get('thinking')!={'type':'disabled'} or base.get('effort')!='medium':
-        generation._refuse_profile('Mapping assistance requires disabled thinking and medium effort.')
+    if base.get('thinking')!=generation.NO_UP_FRONT_THINKING[config['model']] or base.get('effort')!='medium':
+        generation._refuse_profile('Mapping assistance requires no up-front thinking and medium effort.')
     profile={**base,'profile':PROFILE,'max_output_tokens':MAX_OUTPUT_TOKENS,'timeout_seconds':TIMEOUT_SECONDS}
     if 'mapping_contract' in config and (config['mapping_contract']!=VERSION or
         config.get('mapping_request_profile')!=profile or config.get('mapping_profile_sha256')!=digest(profile)):

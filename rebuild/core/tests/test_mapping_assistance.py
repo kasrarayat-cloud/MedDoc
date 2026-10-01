@@ -288,10 +288,10 @@ class MappingAssistance(TestCase):
     def test_native_envelope_refusal_incomplete_and_wrong_model_never_parse(self):
         for model,stop in [('claude-sonnet-4-6','end_turn'),('claude-sonnet-5','max_tokens'),('claude-sonnet-5','refusal')]:
             with self.subTest(model=model,stop=stop),self.assertRaises(ValidationError):
-                mapping_jobs.parse_response(SimpleNamespace(model=model,stop_reason=stop,content=[]),False)
+                mapping_jobs.parse_response(SimpleNamespace(model=model,stop_reason=stop,content=[]),False,'claude-sonnet-5')
         response=self.response()
         response.content=[SimpleNamespace(type='text',text='{"fields": [], "fields": []}')]
-        with self.assertRaises(ValidationError):mapping_jobs.parse_response(response,False)
+        with self.assertRaises(ValidationError):mapping_jobs.parse_response(response,False,'claude-sonnet-5')
 
     @override_settings(AI_MODE='live')
     def test_live_permission_off_refuses_before_reservation_or_provider(self):
