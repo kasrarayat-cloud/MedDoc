@@ -101,4 +101,5 @@ class CIGatePartitions(unittest.TestCase):
                 self.assertEqual(check.returncode == 0, result == 'success')
         self.assertIn('fail-fast: false', workflow)
         self.assertIn('lane: [core-1, core-2, support]', workflow)
-        self.assertIn('timeout-minutes: 20', workflow.split('\n  python:\n', 1)[0])
+        # 30 since 2026-10-01: the count-balanced core-1 lane measured 18m20s and then 20m18s (cancelled at 20).
+        self.assertIn('timeout-minutes: 30', workflow.split('\n  python:\n', 1)[0])
