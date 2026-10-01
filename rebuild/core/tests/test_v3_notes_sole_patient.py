@@ -80,9 +80,8 @@ class SinglePatientRelease(Floors, SimpleTestCase):
              'v3_9': 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'}, choices=NO)
         self.assert_filled(N03, order_form(), {'v3_2': ['She attends the clinic every week.']},
                            {'v3_2': 'She attends the clinic every week.'})
-        # A statement the reader already makes the patient's ('The patient ...') but whose verb is outside the finite
-        # list is complete through the same single-patient reading (the release is read for it too, not only for the
-        # units that lack patient evidence).
+        # The explicit-subject form of the same statement stays filled (its completeness comes from `syntax_complete`,
+        # its patient from the single-patient reading).
         explicit = 'The patient attends the clinic every week.'
         self.assert_filled(N03.replace('She attends the clinic every week.', explicit), order_form(),
                            {'v3_2': [explicit]}, {'v3_2': explicit})
@@ -196,6 +195,38 @@ class SinglePatientRefusals(Floors, SimpleTestCase):
                  'He has tenderness over the right knee.')):
             with self.subTest(notes=notes):
                 self.assert_filled(notes, fields, {key: [pick]}, {key: text}, choices=choices)
+
+    def test_self_refutation_lines_hold_the_answer(self):
+        """Fresh lines written after the design (probes2, probes3): a line naming no topic that negates, contrasts or
+        sides something, an unlabelled fragment naming no topic, an 'NKDA', and a dictated correction each qualify a line
+        they do not name."""
+        fields = clinic_form()
+        hpi, effusion = 'The headaches are worse in the morning.', 'On examination there is a small effusion in the knee.'
+        for notes, pick, key in (
+                (OPENER + ' ' + hpi + ' Not in the morning.', hpi, 'v3_2'),
+                (OPENER + ' ' + hpi + ' Worse at night instead.', hpi, 'v3_2'),
+                (OPENER + ' ' + effusion + ' Bilateral.', effusion, 'v3_7'),
+                (OPENER + ' ' + effusion + ' Left side.', effusion, 'v3_7'),
+                (OPENER + ' ' + effusion + ' The right knee is also swollen.', effusion, 'v3_7'),
+                (OPENER + ' She is allergic to penicillin. NKDA.', 'She is allergic to penicillin.', 'v3_5'),
+                (OPENER + ' NKDA. She is allergic to penicillin.', 'She is allergic to penicillin.', 'v3_5'),
+                (OPENER + ' She has asthma. Make that aspirin.', 'She has asthma.', 'v3_3'),
+                (OPENER + ' ' + hpi + ' Worse at night.', hpi, 'v3_2'),
+                (OPENER + ' She takes warfarin. Last week.', 'She takes warfarin.', 'v3_4'),
+                (OPENER + ' She takes ibuprofen as needed. Every day.', 'She takes ibuprofen as needed.', 'v3_4'),
+                (OPENER + ' Severe. She has asthma.', 'She has asthma.', 'v3_3')):
+            with self.subTest(notes=notes):
+                self.assert_held(notes, fields, {key: [pick]}, key)
+        # controls: the same answers beside a complete line about something else (another finding beside the
+        # examination is the examination's own unplaced topic, held by design)
+        follow = ' She will follow up in six weeks.'
+        for notes, pick, key in ((OPENER + ' ' + hpi + follow, hpi, 'v3_2'),
+                                 (OPENER + ' ' + effusion + follow, effusion, 'v3_7'),
+                                 (OPENER + ' She is allergic to penicillin.' + follow, 'She is allergic to penicillin.',
+                                  'v3_5'),
+                                 (OPENER + ' She has asthma.' + follow, 'She has asthma.', 'v3_3')):
+            with self.subTest(control=notes):
+                self.assert_filled(notes, fields, {key: [pick]}, {key: pick})
 
     def test_two_topics_in_one_statement_answer_no_specific_question(self):
         both = 'He has hypertension and takes lisinopril 10 mg daily.'

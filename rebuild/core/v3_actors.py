@@ -613,7 +613,7 @@ SOLE_CLASSES = {word: frozenset(found - {'body', 'meta', 'time'}) for word, foun
 SOLE_NOUNS = frozenset(SOLE_CLASSES)
 #: Words that DENY ('not', 'no', 'denies', 'without', 'pain free'): an answer may itself be a denial.
 SOLE_NEGATION = frozenset(('not', "n't", 'no', 'never', 'none', 'nothing', 'nil', 'without', 'free', 'deny', 'negative',
-                           'absent', 'lack', 'neither', 'nor'))
+                           'absent', 'lack', 'neither', 'nor', 'nkda'))
 #: Classes of the words outside the nouns that name a topic ('smokes', 'a nonsmoker', 'allergic').
 SOLE_WORD_CLASSES = {'smoke': frozenset({'smoking'}), 'vape': frozenset({'smoking'}), 'smoker': frozenset({'smoking'}),
                      'nonsmoker': frozenset({'smoking'}), 'non-smoker': frozenset({'smoking'}),
@@ -621,7 +621,9 @@ SOLE_WORD_CLASSES = {'smoke': frozenset({'smoking'}), 'vape': frozenset({'smokin
                      'drink': frozenset({'alcohol'}), 'drinker': frozenset({'alcohol'}),
                      'nondrinker': frozenset({'alcohol'}), 'allergic': frozenset({'allergy'}),
                      'referral': frozenset({'therapy'}), 'sugar': frozenset({'condition'}), 'hand': frozenset(),
-                     'attend': frozenset({'care'})}
+                     'attend': frozenset({'care'}),
+                     # 'NKDA' (no known drug allergies) is an allergy answer AND its negation (`SOLE_NEGATION`)
+                     'nkda': frozenset({'allergy'})}
 #: Words that are NOT a topic and change nothing ('takes', 'normal', 'as needed'): any other word in a single-patient
 #: note that is neither a known noun, a known operator nor one of these makes the note's release fail closed - an
 #: unknown word may deny, end or correct ('She is not anticoagulated.', 'She was misheard.').
@@ -966,6 +968,20 @@ def _sole_reading(doc, root, *, value_start, colon, age, opener, explicit):
             continue
         if not words & known and not (text.startswith('non') and text[3:].lstrip('-') in known):
             unknown = True
+    # A dictated correction ('Make that aspirin.', 'Make it 20 mg.', 'Change that to ibuprofen.') replaces a word of a
+    # line it does not name: it may change any answer of the note (self-refutation round 2, 2026-10-01).
+    lead = [t for t in tokens if not (t.is_punct or t.is_space)][:2]
+    if len(lead) == 2 and _lemma(lead[0]) in ('make', 'change') and _fold(lead[1].text) in ('that', 'it', 'this'):
+        reach.add('global')
+    # A line that names no topic of its own but negates, ends, restricts, doubts, contrasts or sides something ('Not in
+    # the morning.', 'Worse at night instead.', 'Bilateral.', 'Left side.', 'The right knee is also swollen.', 'None.')
+    # qualifies a line it does not name: it may change any answer of the note (self-refutation round 2, 2026-10-01).
+    # So does an unlabelled fragment naming no topic, whatever its words ('Worse at night.', 'Last week.', 'Every
+    # day.', 'Severe.': round 3); a labelled value is its label's, and the presenting line is the note's anchor.
+    clause = root.pos_ in ('VERB', 'AUX') and any(c.dep_ in ('nsubj', 'nsubjpass', 'expl', 'csubj', 'csubjpass')
+                                                  for c in root.children)
+    if not classes and (reach & {'class', 'key'} or sides or not (clause or colon or age or opener)):
+        reach.add('global')
     return {'nouns_ok': nouns_ok, 'genders': frozenset(genders), 'bad_pronoun': bad_pronoun, 'fronted': fronted,
             'classes': frozenset(classes), 'reach': frozenset(reach), 'unknown': unknown,
             'doubt_only': doubts == {True},
