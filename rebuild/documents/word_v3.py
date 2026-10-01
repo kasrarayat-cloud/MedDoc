@@ -2589,8 +2589,11 @@ class Detector:
             if self.is_label_cell(c):
                 label_cell = c
         own = spaced(label_cell) if label_cell is not None else ""
+        # its own captions one by one: each paragraph, each line of it, and each tab-separated caption on a line
+        # ('Signature of patient<tab>Date' prints two captions over one answer cell, not the date question
+        # 'Signature date')
         self._cell_lines = [line for p in (label_cell.children if label_cell is not None else []) if p.kind == "p"
-                            for line in re.split(r"\n", self.text(p.el)) if line.strip()]
+                            for line in re.split(r"\n|\t+", self.text(p.el)) if line.strip()]
         siblings = []
         for r, cells in self.grid(table).items():
             if r == row:
@@ -7049,9 +7052,10 @@ def destination_state(label, *, siblings=(), unit=False, lines=()) -> dict:
     """{'state': ordinary|protected|uncertain, 'basis', 'kind' (signature|initials for a held place), 'reading'} for a
     PRINTED label (see the section comment). `siblings`: the printed labels beside it in the same table or block
     (structure); `unit`: whether its row or column prints a unit; `lines`: the label cell's own paragraphs and line
-    breaks, when it has several - two captions stacked in one label cell ('Signature' over 'Date') and one caption
-    wrapped onto two lines ('Date of' over 'signature') print the same words, so a line that alone holds the place
-    while the whole reads ordinary leaves it UNCERTAIN (residual L1:F1, legacy half)."""
+    breaks (and the captions a tab separates on one line), when it has several - two captions stacked in one label
+    cell ('Signature' over 'Date', or 'Signature of patient<tab>Date') and one caption wrapped onto two lines ('Date of'
+    over 'signature') print the same words, so a line that alone holds the place while the whole reads ordinary leaves
+    it UNCERTAIN (residual L1:F1, legacy half)."""
     whole = _destination_state(label, siblings=siblings, unit=unit)
     if whole["state"] == STATE_ORDINARY and len([x for x in lines if _plain(x)]) > 1:
         held = [st for x in lines if _plain(x) and (st := _destination_state(x))["state"] != STATE_ORDINARY]

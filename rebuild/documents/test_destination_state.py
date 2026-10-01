@@ -612,6 +612,37 @@ class LegacyEngineRoles(unittest.TestCase):
                 self.assertIn(fields[0]['key'], rep['uncertain_places'])
                 self.assertFalse(generated(fields[0], rep))
 
+    def test_two_captions_a_tab_separates_in_one_label_cell_are_uncertain(self):
+        """'Signature of patient<tab>Date' prints two captions over one answer cell. Read as joined words it is the date
+        question 'Signature of patient date', which released the legacy row f5fe720f held (its runs joined to
+        'patientDate') and let contract v3 generate a date there. Each caption is read alone, as stacked lines are."""
+        def tab_col(rows):
+            doc = Document(); doc.add_heading('Clinic record', level=2)
+            table = doc.add_table(rows=len(rows), cols=2); table.style = 'Table Grid'
+            for i, label in enumerate(rows):
+                tabbed(table.cell(i, 0).paragraphs[0], label)
+            return data(doc)
+        for label in ('Signature of patient\t\t\tDate', 'Signature\tDate', 'Consultant signature\tDate signed',
+                      'Date\tSignature'):
+            with self.subTest(label=label):
+                blob = tab_col([label, 'Plan'])
+                held = next(v for k, v in self.roles(blob).items() if k != 'Plan')
+                self.assertEqual((held['state'], held['basis']), ('uncertain', 'stacked_caption'))
+                fields, rep = report(blob)                       # the same reading on contract v3
+                self.assertIn(fields[0]['key'], rep['uncertain_places'])
+                self.assertFalse(generated(fields[0], rep))
+        # positive controls: tab-separated captions with no signing place, and a label read whole on evidence
+        for label in ('Date\tTime', 'Troponin\tng/L', 'Consent form signed by patient', 'Patient signature obtained'):
+            with self.subTest(control=label):
+                blob = tab_col([label, 'Plan'])
+                row = next(v for k, v in self.roles(blob).items() if k != 'Plan')
+                self.assertEqual(row['state'], 'ordinary')
+                fields, rep = report(blob)
+                self.assertTrue(generated(fields[0], rep))
+        # a governed writing line keeps its own caption: the blank after 'Date:' is the date's
+        fields, rep = report(lines('Signature of patient\t\t\tDate: ______'))
+        self.assertEqual(fields[0]['kind'], 'date')
+
     def test_a_sequence_word_beside_a_bare_initial_in_the_same_table(self):
         rows = self.roles(two_col(['Initial', 'Repeat', 'Plan']))
         self.assertEqual((rows['Initial']['state'], rows['Initial']['basis']), ('ordinary', 'sequence_sibling'))
