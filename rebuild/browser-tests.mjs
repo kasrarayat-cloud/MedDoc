@@ -120,8 +120,9 @@ try {
       await page.waitForTimeout(1000);
       await page.reload();
       if (await page.locator('textarea[name^=answer_]').count()) break;
-      const terminalErrors = await page.locator('.source-panel .badge').allTextContents();
-      assert(!terminalErrors.some(state => ['failed', 'reconciliation'].includes(state)), 'Fixture job did not complete.');
+      // The request list reads core.doctor_status: its key, not the internal state word, says a request is stuck.
+      const terminalErrors = await page.locator('.source-panel [data-request-status]').evaluateAll(nodes => nodes.map(node => node.dataset.requestStatus));
+      assert(!terminalErrors.some(state => ['held','not_completed','completed_not_applied','unknown'].includes(state)), 'Fixture job did not complete.');
     }
     assert.equal(await page.locator('textarea[name^=answer_]').count(), 3);
     assert.equal(await page.locator('.evidence blockquote').count(), 3);

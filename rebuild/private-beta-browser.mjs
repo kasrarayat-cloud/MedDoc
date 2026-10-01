@@ -44,7 +44,7 @@ async function reserve(form){
 async function generated(page){
  const form=page.locator('form').filter({has:page.getByRole('button',{name:'Generate supported answers',exact:true})});await reserve(form);
  await page.getByRole('button',{name:'Generate supported answers',exact:true}).click();
- for(let i=0;i<90;i++){await page.waitForTimeout(1000);await page.reload();if(await page.locator('textarea[name^=answer_]').count())return;assert(!(await page.locator('.source-panel .badge').allTextContents()).some(s=>['failed','reconciliation'].includes(s)));}
+ for(let i=0;i<90;i++){await page.waitForTimeout(1000);await page.reload();if(await page.locator('textarea[name^=answer_]').count())return;assert(!(await page.locator('.source-panel [data-request-status]').evaluateAll(n=>n.map(e=>e.dataset.requestStatus))).some(s=>['held','not_completed','completed_not_applied','unknown'].includes(s)));}
  assert.fail('Generation timed out');
 }
 async function upload(page,file,label){
@@ -149,7 +149,7 @@ try{
   const voiceId=await encounter(page,docName+' · mapping 2','History: Synthetic voice review pending.');
   const audio=process.env.QUILLMD_SYNTHETIC_AUDIO;assert(audio,'Provide a previously verified synthetic audio fixture.');
   const form=page.locator('[data-voice-form]');await reserve(form);await form.locator('[name=audio]').setInputFiles(audio);await form.locator('[name=consent]').check();await page.getByRole('button',{name:'Transcribe recording',exact:true}).click();
-  for(let i=0;i<90;i++){await page.waitForTimeout(1000);await page.reload();if((await page.locator('.source-notes').innerText()).includes('wrist'))break;assert(!(await page.locator('.source-panel .badge').allTextContents()).some(s=>['failed','reconciliation'].includes(s)));}
+  for(let i=0;i<90;i++){await page.waitForTimeout(1000);await page.reload();if((await page.locator('.source-notes').innerText()).includes('wrist'))break;assert(!(await page.locator('.source-panel [data-request-status]').evaluateAll(n=>n.map(e=>e.dataset.requestStatus))).some(s=>['held','not_completed','completed_not_applied','unknown'].includes(s)));}
   assert((await page.locator('.source-notes').innerText()).toLowerCase().includes('no fracture'));await page.getByText('Edit source notes',{exact:true}).click();const corrected='History: Synthetic voice transcription corrected by clinician.\nFindings: No fracture documented.';await page.locator('#source-notes-edit').fill(corrected);await page.getByRole('button',{name:'Save source notes',exact:true}).click();await page.waitForLoadState();assert.equal(await page.locator('.source-notes').innerText(),corrected);assert.equal(await page.locator('textarea[name^=answer_]').count(),0);report.voiceEncounter=voiceId;
  });
  await check('Administrator MFA is required, replay refused, and separate logout enforced',async()=>{
