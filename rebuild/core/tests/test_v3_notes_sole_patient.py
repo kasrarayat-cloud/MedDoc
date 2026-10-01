@@ -85,6 +85,10 @@ class SinglePatientRelease(Floors, SimpleTestCase):
         explicit = 'The patient attends the clinic every week.'
         self.assert_filled(N03.replace('She attends the clinic every week.', explicit), order_form(),
                            {'v3_2': [explicit]}, {'v3_2': explicit})
+        # ... but not a habit verb left without what it is about ('She attends weekly.': attends what?) - only an
+        # intransitive habit ('She smokes.') is whole on its own
+        bare = 'She attends weekly.'
+        self.assert_held(N03.replace('She attends the clinic every week.', bare), order_form(), {'v3_2': [bare]}, 'v3_2')
         exam ='On examination there is a small effusion and medial joint line tenderness.'
         self.assert_filled(N04, fields, {'v3_7': [exam]}, {'v3_7': exam})
         prodrome = 'The patient sees zigzag lines before the headache begins.'
@@ -214,7 +218,13 @@ class SinglePatientRefusals(Floors, SimpleTestCase):
                 (OPENER + ' ' + hpi + ' Worse at night.', hpi, 'v3_2'),
                 (OPENER + ' She takes warfarin. Last week.', 'She takes warfarin.', 'v3_4'),
                 (OPENER + ' She takes ibuprofen as needed. Every day.', 'She takes ibuprofen as needed.', 'v3_4'),
-                (OPENER + ' Severe. She has asthma.', 'She has asthma.', 'v3_3')):
+                (OPENER + ' Severe. She has asthma.', 'She has asthma.', 'v3_3'),
+                # a complete line naming no topic but a side
+                (OPENER + ' ' + effusion + ' The right knee is swollen.', effusion, 'v3_7'),
+                # uncertainty outside an assessment's own line withdraws the note's single-patient scope
+                (OPENER + ' She takes warfarin. Asthma is uncertain.', 'She takes warfarin.', 'v3_4'),
+                # a line continuing another ('And ...') inherits its subject: it is not whole on its own
+                (OPENER + ' She has asthma. And takes warfarin.', 'And takes warfarin.', 'v3_4')):
             with self.subTest(notes=notes):
                 self.assert_held(notes, fields, {key: [pick]}, key)
         # controls: the same answers beside a complete line about something else (another finding beside the
@@ -224,7 +234,9 @@ class SinglePatientRefusals(Floors, SimpleTestCase):
                                  (OPENER + ' ' + effusion + follow, effusion, 'v3_7'),
                                  (OPENER + ' She is allergic to penicillin.' + follow, 'She is allergic to penicillin.',
                                   'v3_5'),
-                                 (OPENER + ' She has asthma.' + follow, 'She has asthma.', 'v3_3')):
+                                 (OPENER + ' She has asthma.' + follow, 'She has asthma.', 'v3_3'),
+                                 # 'NKDA' is about allergy: it cannot change a medication answer
+                                 (OPENER + ' She takes warfarin. NKDA.', 'She takes warfarin.', 'v3_4')):
             with self.subTest(control=notes):
                 self.assert_filled(notes, fields, {key: [pick]}, {key: pick})
 
