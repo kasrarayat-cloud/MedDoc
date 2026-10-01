@@ -30,8 +30,13 @@ ROLE_NOT_GENERATED = ('Signed or initialled by hand on the printed form: this an
 IDENTITY_NOT_GENERATED = 'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'
 UNCERTAIN_NOT_GENERATED = ('Needs your review: the printed form does not show whether this is a signing or initials place '
                            'or an ordinary answer. It is never filled from the notes. If it is an answer, enter it yourself.')
+#: The same, for the engine's own Signature or Initials field on such a place of a contract v3 form (it takes no typed
+#: text, so the clinician replaces it first).
+UNCERTAIN_REPLACE = ('Needs your review: the printed form does not show whether this is a signing or initials place or an '
+                     'ordinary answer. It is never filled from the notes. If it is an answer, replace this field with a '
+                     "text field on the form's answer-fields page, then enter it yourself.")
 #: Every reason a destination role gives an answer it never generated (shown on the review page).
-DESTINATION_REASONS = (ROLE_NOT_GENERATED, UNCERTAIN_NOT_GENERATED)
+DESTINATION_REASONS = (ROLE_NOT_GENERATED, UNCERTAIN_NOT_GENERATED, UNCERTAIN_REPLACE)
 #: A generation that would need to change what a contract's catalogue binds (the ordinary relations contract, the
 #: batched complete-form contract) is refused rather than silently narrowed.
 GENERATION_HELD_REFUSAL = ('This form\'s mapping places an answer area on a signing, initials, consent or protected place '
@@ -229,7 +234,9 @@ def review_reasons(version):
         return {}
     if v3_mapping.is_v3_version(version):
         result = report(version) or {}
-        out = {key: UNCERTAIN_NOT_GENERATED for key in result.get('uncertain_places') or []}
+        signing = {f['key'] for f in version.fields if f.get('kind') in v3_mapping.SIGNING_KINDS}
+        out = {key: UNCERTAIN_REPLACE if key in signing else UNCERTAIN_NOT_GENERATED
+               for key in result.get('uncertain_places') or []}
         out.update({key: UNCERTAIN_NOT_GENERATED for key in (result.get('held') or {})})
         return out
     roles = legacy_roles(version)

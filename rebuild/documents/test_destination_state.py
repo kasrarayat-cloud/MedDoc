@@ -187,7 +187,7 @@ class TheEighteenAndTheSeventeen(unittest.TestCase):
 
     def test_an_uncertain_place_is_never_generated_and_takes_a_clinicians_text_field(self):
         for label in ('Signed off by consultant', 'Signed on admission', 'Sign', 'Reviewed and signed',
-                      'Phlebotomist (initial)'):
+                      'Wristband (initial)'):
             with self.subTest(label=label):
                 blob = lines(label + ': ______')
                 fields, rep = report(blob)
@@ -249,7 +249,8 @@ class Structure(unittest.TestCase):
         self.assertEqual(w.legacy_role_kind('Nurse initial', siblings=['Repeat']), 'initials')
 
     def test_an_unknown_head_is_uncertain_and_a_unit_makes_it_a_measurement(self):
-        self.assertEqual(w.destination_state('Phlebotomist (initial)')['state'], 'uncertain')
+        self.assertEqual(w.destination_state('Wristband (initial)')['state'], 'uncertain')
+        self.assertEqual(w.destination_state('Phlebotomist (initial)')['state'], 'protected')     # a person's head
         self.assertEqual(w.destination_state('Fibre initial (mg)')['basis'], 'measure_unit')
         self.assertEqual(w.destination_state('Fibre initial', unit=True)['state'], 'ordinary')
         # a person never becomes a measurement, unit or not

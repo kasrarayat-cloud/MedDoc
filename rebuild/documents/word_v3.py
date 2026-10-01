@@ -6862,7 +6862,8 @@ _PERSON = (r"(?:patient|pt|witness|nurse|staff\s+nurse|charge\s+nurse|nurse\s+in
            r"relative|partner|spouse|next\s+of\s+kin|kin|interpreter|translator|advocate|representative|participant|"
            r"subject|donor|recipient|person|individual|employee|member|delegate|nominee|investigator|chaperone|"
            r"provider|md|np|pa|hcp|clerk|receptionist|secretary|client|signatory|signer|signee|professional|colleague|"
-           r"team|healthcare\s+professional)"
+           r"team|healthcare\s+professional|phlebotomist|leader|volunteer|proxy|attorney|deputy|lpa|associate|"
+           r"\w*ologist|\w*iatrist|\w+ician|\w+grapher|\w*therapist|\w*nurse|\w*wife)"
            r"(?:'s|s'|’s|s’|s|es)?")
 _DOCUMENT = (r"(?:form|forms|chart|charts|kardex|consent|prescription|prescriptions|script|plan|summary|letter|"
              r"letters|checklist|check-?list|list|note|notes|record|records|request|referral|order|card|sheet|"
@@ -6876,6 +6877,11 @@ _STATE = (r"(?:obtained|received|present|absent|checked|verified|confirmed|compl
 _SEQUENCE = (r"(?:repeat(?:ed)?|follow[- ]?up|f/u|subsequent|ongoing|final|peak|current|latest|last|previous|prior|"
              r"baseline|second|2nd|third|3rd|later|continuing|maintenance|interim|review|new|end|discharge|"
              r"\d+\s*(?:h|hr|hrs|hours?|mins?|minutes?|days?|weeks?)|day\s*\d+|week\s*\d+)")
+#: A sibling row or column that makes a bare 'Initial' a measurement's first reading: a repeat or a timed reading only.
+#: 'Second', 'Final', 'Review', 'New' are deliberately absent - an approvals or checking table prints 'Initial' and
+#: 'Second' (or 'Final') as two people's initials.
+_SEQUENCE_SIBLING = (r"(?:repeat(?:ed)?|follow[- ]?up|peak|subsequent|baseline|\d+\s*(?:h|hr|hrs|hours?|mins?|minutes?|days?|"
+                     r"weeks?)|day\s*\d+|week\s*\d+)")
 _SEQUENCE_ADJ = (r"(?:ongoing|subsequent|continuing|follow[- ]?up|final|later|maintenance|repeat(?:ed)?|current|"
                  r"long[- ]term)")
 #: The heads of a measured or recorded clinical value ('Troponin (initial)'): evidence only. Ambiguous one- and two-
@@ -6976,7 +6982,7 @@ def _initial_state(t, siblings, unit):
             unit_here = unit or UNIT_TOKEN.search(after) is not None or \
                 re.search(r"\([^)]*" + _UNIT + r"[^)]*\)", before) is not None
             if not head:
-                if any(re.fullmatch(_SEQUENCE + r"[\W_]*", _plain(s)) for s in siblings or ()):
+                if any(re.fullmatch(_SEQUENCE_SIBLING + r"[\W_]*", _plain(s)) for s in siblings or ()):
                     st = _state(STATE_ORDINARY, "sequence_sibling")
                 else:
                     st = _state(STATE_PROTECTED, "bare_initial", "initials")
@@ -7112,6 +7118,9 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
         if re.fullmatch(r"sign[- ]off", word):
             if _person(pre) or re.match(r"by\s+" + _PERSON, post):
                 st = _state(STATE_PROTECTED, "person_sign_off", "signature")
+            elif pre and re.fullmatch(r"[\w'-]+(?:\s+[\w'-]+)?", pre) and _EMPTY.fullmatch(post):
+                # '<someone> sign-off' with a head the vocabulary does not know: the role cannot be established.
+                st = _state(STATE_UNCERTAIN, "sign_off", "signature")
         elif word == "signing":
             if re.match(_ACT + r"\b", post):
                 st = _state(STATE_PROTECTED, "sign_action", "signature")
@@ -7138,6 +7147,9 @@ def _destination_state(label, *, siblings=(), unit=False) -> dict:
                 st = _state(STATE_PROTECTED, "sign_action", "signature")
             elif _person(pre) and (not post or _EMPTY.fullmatch(post) or re.match(_ACT + r"\b", post)):
                 st = _state(STATE_PROTECTED, "person_sign", "signature")
+            elif re.search(r"\bto$", pre) and (not post or _EMPTY.fullmatch(post)):
+                # '<someone> to sign' closing the label: an instruction to sign, whoever the vocabulary knows.
+                st = _state(STATE_UNCERTAIN, "to_sign", "signature")
             elif re.search(r"\b(?:print(?:\s+name)?|name|read|stamp|date|initial|check|review|complete)\s*"
                            r"(?:and|&|\+|/|,)$", pre):
                 st = _state(STATE_PROTECTED, "and_sign", "signature")

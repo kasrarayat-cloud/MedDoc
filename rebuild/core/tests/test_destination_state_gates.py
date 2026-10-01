@@ -192,6 +192,7 @@ class V3ThreeStates(Walk, V3Fixture, TestCase):
         e = self.generated(version, 'Signed off by consultant: Dr Example\nPlan: Rest.')
         page = self.client.get(f'/encounters/{e.pk}/').content.decode()
         self.assertIn('data-destination-role', page)                       # shown with what needs review
+        self.assertIn('answer-fields page, then enter it yourself', page)
         # the clinician replaces the engine's signature field with a text field: allowed (uncertain is no role)
         response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
                                                                   'remove_' + field['key']: 'on'})
