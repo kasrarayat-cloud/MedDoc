@@ -94,6 +94,29 @@ class MappingWire(SimpleTestCase):
         self.assertEqual(result['rejected'],[])
         self.assertFalse(wire.expand(payload,good)[1])          # a complete proposal is not
 
+    def test_the_request_schema_bounds_every_id_group_to_the_request(self):
+        """Standing attempt 32: native structured output drops numeric bounds, and a 35-slot request got slot IDs 35-42
+        back. The per-request schema lists exactly the request's IDs; validation of the response is unchanged."""
+        from anthropic import transform_schema
+        payload=self.payload(35,3)
+        schema=transform_schema(wire.request_schema(payload))
+        for name,count,groups in (('SlotGroups',35,'cnu'),('FieldGroups',3,'krnu')):
+            for group in groups:
+                self.assertEqual(schema['$defs'][name]['properties'][group]['items'],{'type':'integer','enum':list(range(count))})
+        generic=transform_schema(wire.Proposal.model_json_schema())
+        self.assertEqual({k:v for k,v in schema.items() if k!='$defs'},{k:v for k,v in generic.items() if k!='$defs'})
+        self.assertEqual(schema['$defs'].keys(),generic['$defs'].keys())
+        # No ID at all, or more than the enum limit: the generic item stays (bounds described, checked on return).
+        for slots,fields in ((0,0),(wire.ENUM_LIMIT+1,1)):
+            schema=wire.request_schema(self.payload(slots,fields))
+            item=schema['$defs']['SlotGroups']['properties']['c']['items']
+            self.assertNotIn('enum',item)
+        self.assertEqual(wire.request_schema(self.payload(wire.ENUM_LIMIT,1))['$defs']['SlotGroups']['properties']['u']['items'],
+                         {'type':'integer','enum':list(range(wire.ENUM_LIMIT))})
+        # The response check does not depend on the schema: an ID outside the request still refuses the whole response.
+        body=wire.fixture(payload);body['s']['n']=body['s']['n']+[35]
+        with self.assertRaises(ValidationError):wire.expand(payload,body)
+
     def test_a_response_classifying_nothing_is_refused(self):
         payload=self.payload(3,2)
         empty={'f':{'k':[],'r':[],'n':[],'u':[]},'s':{'c':[],'n':[],'u':[]},'x':[],'e':False}

@@ -19,6 +19,13 @@ VERSION='blank-mapping-v3'
 PROFILE='claude-sonnet-5-blank-mapping-v3'
 MAX_OUTPUT_TOKENS=20000
 TIMEOUT_SECONDS=120
+#: The thinking a mapping envelope asks for when it differs from the application's no-up-front profile, by model. The
+#: application's between_tools setting gives a one-shot request no reasoning at all (0 thinking tokens on every standing
+#: attempt); standing attempt 32 (f2b, 35 slots) then listed 21 slots in two groups and invented eight more, and the
+#: whole proposal was refused. Sonnet 5's request is untouched. The client deadline stays TIMEOUT_SECONDS for every model:
+#: it must end inside the worker's graceful stop (generation.WORKER_STOP_SECONDS, systemd TimeoutStopSec=150) with 30 s
+#: left for the receipt and settlement (refutation r1 A-F1: a 180 s deadline outlived a graceful stop).
+MAPPING_THINKING={generation.SONNET_5_5:{'thinking':generation.SONNET_5_5_THINKING['adaptive']}}
 MAX_PAYLOAD_BYTES=400_000
 MAX_SLOTS=1200
 MAX_FIELDS=200
@@ -63,8 +70,9 @@ def digest(value):
 def request_profile(config):
     """A separately bound mapping envelope; the historical generation snapshot is untouched.
 
-    Sent only on a native model (claude-sonnet-5, claude-sonnet-5-5) with no up-front thinking — the type that model
-    accepts for it: disabled on Sonnet 5, between_tools on Sonnet 5.5 — at medium effort. PROFILE names the envelope's
+    Sent only on a native model (claude-sonnet-5, claude-sonnet-5-5) whose application profile has no up-front thinking
+    (disabled on Sonnet 5, between_tools on Sonnet 5.5) at medium effort. Sonnet 5 maps with thinking disabled; Sonnet
+    5.5 maps with adaptive thinking (standing attempt 32); both within TIMEOUT_SECONDS. PROFILE names the envelope's
     contract, not the model: the model is the request's own `model`, the base profile carries the thinking type, and
     `mapping_profile_sha256` binds them all."""
     if config.get('provider')!='anthropic' or config.get('model') not in generation.NATIVE_MODELS:
@@ -72,7 +80,10 @@ def request_profile(config):
     base=generation.job_request_profile(config)
     if base.get('thinking')!=generation.NO_UP_FRONT_THINKING[config['model']] or base.get('effort')!='medium':
         generation._refuse_profile('Mapping assistance requires no up-front thinking and medium effort.')
-    profile={**base,'profile':PROFILE,'max_output_tokens':MAX_OUTPUT_TOKENS,'timeout_seconds':TIMEOUT_SECONDS}
+    # The model's mapping thinking is spread BEFORE the priced keys, so the output bound stays MAX_OUTPUT_TOKENS (thinking
+    # included) whatever MAPPING_THINKING holds.
+    profile={**base,**MAPPING_THINKING.get(config['model'],{}),'profile':PROFILE,'max_output_tokens':MAX_OUTPUT_TOKENS,
+             'timeout_seconds':TIMEOUT_SECONDS}
     if 'mapping_contract' in config and (config['mapping_contract']!=VERSION or
         config.get('mapping_request_profile')!=profile or config.get('mapping_profile_sha256')!=digest(profile)):
         generation._refuse_profile('Mapping contract or profile changed. Review a fresh quote; nothing was sent.')
@@ -94,7 +105,8 @@ def compile_request(version,config):
              'slots':rows,'fields':[{'key':f['key'],'label':f['label'],'kind':f['kind'],
                  'options':f.get('options',[]),'slots':sorted(v3_mapping.mapped_slots([f]))} for f in version.fields]}
     payload['text_refs']=wire.catalog(payload)
-    request=generation.anthropic_request(config['model'],profile,SYSTEM,payload,wire.Proposal)
+    schema=wire.request_schema(payload) if config['model']==generation.SONNET_5_5 else wire.Proposal
+    request=generation.anthropic_request(config['model'],profile,SYSTEM,payload,schema)
     size=len(canonical(request).encode())
     if size>MAX_PAYLOAD_BYTES:
         raise ValidationError('Blank mapping exceeds the supported request size; nothing was truncated.')

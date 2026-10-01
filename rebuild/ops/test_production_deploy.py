@@ -924,7 +924,10 @@ def compiled_mapping_cap(path, tree, call, expression, where):
     compiler_tree = ast.parse((REBUILD / 'core' / 'mapping_assistance.py').read_text())
     compiler = one_function(compiler_tree, 'compile_request')
     assigned_once(compiler, 'profile', 'request_profile(config)')
-    assigned_once(compiler, 'request', "generation.anthropic_request(config['model'], profile, SYSTEM, payload, wire.Proposal)")
+    # The schema carries no price: the cap is profile['max_output_tokens'] and the input bound is the compiled request's
+    # own size below, which includes the per-request enum schema of a claude-sonnet-5-5 envelope (standing attempt 32).
+    assigned_once(compiler, 'schema', "wire.request_schema(payload) if config['model'] == generation.SONNET_5_5 else wire.Proposal")
+    assigned_once(compiler, 'request', "generation.anthropic_request(config['model'], profile, SYSTEM, payload, schema)")
     readonly_value(compiler, 'request', ('canonical', 'digest'))
     assigned_once(compiler, 'size', 'len(canonical(request).encode())')
     assigned_once(compiler, 'bound', 'size + 12000')
@@ -955,7 +958,9 @@ def compiled_mapping_cap(path, tree, call, expression, where):
         raise Unresolved(f'{where}: mapping cost is rebound outside its priced formula')
     profiled = one_function(compiler_tree, 'request_profile')
     assigned_once(profiled, 'base', 'generation.job_request_profile(config)')
-    assigned_once(profiled, 'profile', "{**base, 'profile': PROFILE, 'max_output_tokens': MAX_OUTPUT_TOKENS, 'timeout_seconds': TIMEOUT_SECONDS}")
+    # MAPPING_THINKING is spread before the priced key, so max_output_tokens is MAX_OUTPUT_TOKENS whatever it holds.
+    assigned_once(profiled, 'profile', "{**base, **MAPPING_THINKING.get(config['model'], {}), 'profile': PROFILE, "
+                                       "'max_output_tokens': MAX_OUTPUT_TOKENS, 'timeout_seconds': TIMEOUT_SECONDS}")
     readonly_value(profiled, 'profile', ('digest',))
     returns = [n for n in ast.walk(profiled) if isinstance(n, ast.Return)]
     if len(returns) != 1 or returns[0] is not profiled.body[-1] or ast.unparse(returns[0]) != 'return profile':

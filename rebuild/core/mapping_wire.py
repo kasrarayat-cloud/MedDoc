@@ -50,6 +50,23 @@ INSTRUCTIONS=(' Array positions are request-bound numeric IDs. Return f groups k
  'Every r field needs exactly one change. When more changes/options are needed than the envelope permits, '
  'set e=true and mark remaining affected fields/slots uncertain; all slots still require verdicts.')
 
+#: The most field or slot IDs a request lists as an enum (`request_schema`). Above it the group keeps the generic integer
+#: item (its bounds are only described to the provider and checked on return); the enum grammar has been measured live
+#: only on the frozen synthetic forms, all far below this.
+ENUM_LIMIT=400
+
+def request_schema(payload):
+    """The response schema of ONE request: Proposal's, with each field-group and slot-group item restricted to exactly
+    the request's IDs, so constrained decoding cannot name an area the request does not contain. Standing attempt 32
+    (claude-sonnet-5-5, f2b, 35 slots) returned slot IDs 35-42 because native structured output drops numeric bounds;
+    the whole proposal was refused. Validation is unchanged: `expand` still refuses an unknown or repeated ID."""
+    schema=Proposal.model_json_schema()
+    for name,count in (('FieldGroups',len(payload['fields'])),('SlotGroups',len(payload['slots']))):
+        if 0<count<=ENUM_LIMIT:
+            for group in schema['$defs'][name]['properties'].values():
+                group['items']={'type':'integer','enum':list(range(count))}
+    return schema
+
 def catalog(payload):
     """Reference metadata only; full original strings remain once in the source catalog."""
     refs=[]
