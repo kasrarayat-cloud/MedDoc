@@ -31,7 +31,8 @@ GENERATION_HELD_REFUSAL = ('This form\'s mapping places an answer area on a sign
 #: Verified role readings of unchanged originals, reused across requests by this process (see report()).
 _PROCESS_REPORTS = collections.OrderedDict()
 _PROCESS_LOCK = threading.Lock()
-_PROCESS_LIMIT = 128
+_PROCESS_LIMIT = 64
+_PROCESS_ENTRY_LIMIT = 256 * 1024     # bytes of a reading's JSON; larger readings are not retained
 
 
 def applies(version):
@@ -64,23 +65,18 @@ def report(version, fields=None):
         return copy.deepcopy(cache[key])
     # ⚠️ AND ACROSS REQUESTS, IN THIS PROCESS (integrated-candidate refutation R2-1): every v3 review save re-ran the
     # isolated parser under the encounter row lock, 5-11x slower than 43fcf214. The report is a pure function of the
-    # original's bytes, the mapping and the engine, so a reading of the SAME file is reused: the key adds the template,
-    # its recorded digest and the file's identity on disk (inode, size, mtime). A missing or replaced file is a miss and
-    # is read afresh (an unreadable original still refuses), and fill/finalization re-inspect the file themselves.
-    import os
-    try:
-        stat = os.stat(path)
-        process_key = (key, str(version.template.pk), stat.st_ino, stat.st_size, stat.st_mtime_ns)
-    except OSError:
-        process_key = None
-    if process_key is not None:
-        with _PROCESS_LOCK:
-            hit = _PROCESS_REPORTS.get(process_key)
-            if hit is not None:
-                _PROCESS_REPORTS.move_to_end(process_key)
+    # original's bytes, the mapping and the engine, so a verified reading is reused for the same template and mapping -
+    # but ONLY after the file is read and hashed again here and still equals the recorded digest (cache refutation
+    # F1/F2: a file identity on disk is not its content, and an unreadable or rewritten original must still refuse).
+    # Any read failure or digest mismatch is a miss, and the isolated parser then refuses exactly as before.
+    process_key = (key, str(version.template.pk))
+    with _PROCESS_LOCK:
+        hit = _PROCESS_REPORTS.get(process_key)
         if hit is not None:
-            cache[key] = copy.deepcopy(hit)
-            return copy.deepcopy(hit)
+            _PROCESS_REPORTS.move_to_end(process_key)
+    if hit is not None and _current_digest(path) == version.template.sha256:
+        cache[key] = copy.deepcopy(hit)
+        return copy.deepcopy(hit)
     result = destination_roles(path, fields, engine=engine)
     if result.get('sha256') != version.template.sha256:
         raise ValidationError('Original integrity check failed.')
@@ -89,12 +85,26 @@ def report(version, fields=None):
     if engine == 'legacy' and not isinstance(result.get('legacy_roles'), dict):
         raise ValidationError('Original integrity check failed.')
     cache[key] = copy.deepcopy(result)
-    if process_key is not None:
+    # Bounded by size as well as count (cache refutation F4): a pathological reading is never retained.
+    if len(json.dumps(result, default=str)) <= _PROCESS_ENTRY_LIMIT:
         with _PROCESS_LOCK:
             _PROCESS_REPORTS[process_key] = copy.deepcopy(result)
             while len(_PROCESS_REPORTS) > _PROCESS_LIMIT:
                 _PROCESS_REPORTS.popitem(last=False)
     return result
+
+
+def _current_digest(path):
+    """sha256 of the file's bytes now, or None when it cannot be read."""
+    import hashlib
+    digest = hashlib.sha256()
+    try:
+        with open(path, 'rb') as stream:
+            for block in iter(lambda: stream.read(1 << 20), b''):
+                digest.update(block)
+    except OSError:
+        return None
+    return digest.hexdigest()
 
 
 def v3_held(version, fields=None):

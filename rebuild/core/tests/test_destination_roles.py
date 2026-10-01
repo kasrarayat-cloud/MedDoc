@@ -1384,8 +1384,7 @@ class RoleReportReuse(V3Fixture, TestCase):
         self.assertEqual(first, second)
         self.assertEqual(len(calls), 1)
 
-    def test_a_changed_mapping_or_a_replaced_file_is_read_again(self):
-        import os
+    def test_a_changed_mapping_is_read_again(self):
         template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic reread')
         calls, counting = self.counted()
         with counting:
@@ -1393,11 +1392,70 @@ class RoleReportReuse(V3Fixture, TestCase):
             fields = [dict(f) for f in version.fields]
             fields[0]['label'] = fields[0]['label'] + ' (renamed)'
             destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk), fields)
-            path = private_path(template.original_path)
-            stat = os.stat(path)
-            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+        self.assertEqual(len(calls), 2)
+
+    def test_an_original_rewritten_in_place_with_its_old_size_and_mtime_is_refused(self):
+        """Cache refutation F2: inode, size and mtime are not the content; a hit re-hashes the file."""
+        import os
+        template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic rewritten')
+        destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        path = private_path(template.original_path)
+        original, stat = open(path, 'rb').read(), os.stat(path)
+        forged = original[:-1] + bytes([original[-1] ^ 0x01])
+        try:
+            with open(path, 'r+b') as stream:
+                stream.write(forged)
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+            self.assertEqual((os.stat(path).st_ino, os.stat(path).st_size, os.stat(path).st_mtime_ns),
+                             (stat.st_ino, stat.st_size, stat.st_mtime_ns))
+            with self.assertRaises((DocumentError, ValidationError)):
+                destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        finally:
+            with open(path, 'r+b') as stream:
+                stream.write(original)
+
+    def test_an_original_present_but_unreadable_is_refused_after_a_cached_reading(self):
+        """Cache refutation F1: a chmod changes no identity the old key read; a hit re-reads the file."""
+        import os
+        template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic chmod')
+        destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        path = private_path(template.original_path)
+        mode = os.stat(path).st_mode
+        os.chmod(path, 0)
+        try:
+            if os.access(path, os.R_OK):
+                self.skipTest('this account can read a mode-000 file')
+            with self.assertRaises((DocumentError, ValidationError, OSError)):
+                destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        finally:
+            os.chmod(path, mode)
+
+    def test_a_caller_mutating_a_reading_does_not_change_the_next_one(self):
+        template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic poison')
+        first = destination_roles.report(TemplateVersion.objects.get(pk=version.pk))
+        expected = copy.deepcopy(first)
+        first.clear()
+        hit = destination_roles.report(TemplateVersion.objects.get(pk=version.pk))
+        hit['violations'] = {'forged': {'reason': 'x'}}
+        self.assertEqual(destination_roles.report(TemplateVersion.objects.get(pk=version.pk)), expected)
+
+    def test_an_integrity_failure_is_never_retained(self):
+        template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic not kept')
+        import documents.service as service
+        real = service.destination_roles
+        with patch.object(service, 'destination_roles', lambda *a, **k: {**real(*a, **k), 'sha256': '0' * 64}):
+            for _ in range(2):
+                with self.assertRaises(ValidationError):
+                    destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        self.assertEqual(destination_roles._PROCESS_REPORTS, {})
+
+    def test_a_reading_larger_than_the_entry_limit_is_not_retained(self):
+        template, version = self.uploaded(data=lines('Plan: ______', 'Signature: ______'), name='Synthetic large')
+        calls, counting = self.counted()
+        with counting, patch.object(destination_roles, '_PROCESS_ENTRY_LIMIT', 10):
             destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
-        self.assertEqual(len(calls), 3)
+            destination_roles.v3_held(TemplateVersion.objects.get(pk=version.pk))
+        self.assertEqual(len(calls), 2)
 
     def test_an_unreadable_original_is_still_refused_after_a_cached_reading(self):
         import os
