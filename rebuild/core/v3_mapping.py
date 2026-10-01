@@ -57,9 +57,10 @@ def answerable(fields):
 def export_refusal(template):
     """Why no answer on this v3 form can be exported, for the encounter page, before anything is generated or typed.
 
-    From the STORED inspection notes only (no sandbox run on a page view), so it can say too little but must never say
-    something false: the layout reason is shown only while this deployment names no layout verifier, because a stored
-    'not available' describes the upload's configuration, not today's. generation_refusal re-inspects; this does not."""
+    From the STORED inspection notes only (no sandbox run on a page view). The layout reason is shown only while this
+    deployment names no layout verifier, because a stored 'not available' describes the upload's configuration, not
+    today's. It can still be stale in one way: an engine release that no longer finds the form's tab-column candidate
+    leaves the note behind. generation_refusal re-inspects and is what refuses; this only explains."""
     from documents import layout_transport
     from documents.word_v3 import FLOATING_INITIALS_REFUSAL
     if FLOATING_INITIALS_REFUSAL in template.warnings:
