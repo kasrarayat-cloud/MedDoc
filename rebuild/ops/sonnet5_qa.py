@@ -3,9 +3,9 @@
 
 The contract is the committed declaration docs/foundation/mutations/20260928-quillmd-v1-sonnet5-staged-campaign.md:
 its limits, model, request settings, pricing versions, admission and stop rules, credential file, QA-only route,
-synthetic-only inputs and retained evidence. Nothing here widens it. This file implements model_check and the ONE door
-every stage goes through (outer_run -> the scrubbed request process -> inner); the mapping and ordinary_notes stages
-are ops/sonnet5_stages.py, run through the same door.
+synthetic-only inputs and retained evidence. Nothing here widens it. This file implements model_check; the mapping and
+ordinary_notes stages are ops/sonnet5_stages.py. The ONE door every stage went through (`run` -> the scrubbed request
+process -> `_inner`) is CLOSED (below): it refuses before reading anything.
 
 One model_check attempt, in the request process (a fresh process with the scrubbed environment, re-executed by `run`):
   the QA world is seeded through the application's own models and views (a synthetic organization, doctor, patient, the
@@ -29,14 +29,21 @@ Commands (from the candidate checkout's rebuild/):
                            remaining stage and total limits (the ledger read without its lock); no credential, network
                            or database
   run --stage model_check|mapping|ordinary_notes [--amendment <path>]
-                           the stage (refused unless the declaration, credential and ledger all allow it); --amendment
-                           (ordinary_notes only) names a committed contract-identity amendment
-                           (provider_campaign.declared_amendment)
+                           CLOSED: refused before anything is read, whatever root it is given (the campaign is closed)
   status                   the ledger against every declared limit; read-only
   recover                  records any attempt left without an outcome as interrupted_unknown and fails its stage
   reopen --stage <id> --diagnosis <path>
                            reopens a FAILED stage after offline repair (provider_campaign.Campaign.reopen); nothing is sent
 Exit status: 0 PASS (or a clean plan/status/recover/reopen), 3 FAIL (stage_failed written), 2 REFUSED (nothing sent).
+
+CLOSED 2026-10-01. The historical campaign (24 attempts, $0.130880 calculated, 0 open) stays readable — `plan` and
+`status`. It is closed by CAMPAIGN, not by directory: `run` and the request process `_inner` refuse before reading
+anything, at ANY root and under ANY declaration (SENDS_CLOSED; refutation R1-F1 had the historical declaration pass every
+check at a fresh root, its budget reset); `reopen` and `recover`, which send nothing, refuse on its root
+(HISTORICAL_ROOT). The standing authority quillmd-v1-private-api-testing-standing-20260930 funds only its own campaign
+(ops/standing_qa.py), which reuses this file's library (`preconditions(expect=…)`, `run_model_check(expect=…,
+deadline=…)`) inside its own request process. What code does not refuse: a hand-written program that imports the
+library (provider_campaign.Campaign, run_model_check) with the historical declaration — no command of either runner does.
 """
 import argparse
 import copy
@@ -47,7 +54,6 @@ import json
 import os
 import re
 import secrets
-import signal
 import stat
 import sys
 import time
@@ -70,7 +76,6 @@ EXPECTED_MODEL = 'claude-sonnet-5'
 #: The one synthetic QA database server (container v1-sonnet5-qa-pg), and the only database-name prefix accepted.
 DATABASE = {'name': 'quillmd_qa_sonnet5', 'user': 'quillmd_qa', 'host': '127.0.0.1', 'port': '55731'}
 DATABASE_PREFIX = 'quillmd_qa_'
-DATABASE_PASSWORD_FILE = LIVE_ROOT / 'qa-db' / 'password'
 #: Stated by the declaration in prose, not in a structured line: its pricing versions were computed "under these
 #: settings (and QUILLMD_DEEPGRAM_RATE_PER_MINUTE=0.0043, no discount)". The pricing-version check refuses any drift.
 PRICE_SETTINGS = {'QUILLMD_DEEPGRAM_RATE_PER_MINUTE': '0.0043', 'QUILLMD_DEEPGRAM_RATE_PER_SECOND': '',
@@ -117,6 +122,14 @@ STAGE_RUNNER_FILES = ('rebuild/ops/sonnet5_stages.py',
 WATCHED_FILES = tuple('rebuild/' + name for name in ENGINE_FILES) + STAGE_RUNNER_FILES
 EXIT = {'PASS': 0, 'FAIL': 3, 'REFUSED': 2}
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+#: The historical campaign's root (pc.LIVE_ROOT, spelled out so a patched LIVE_ROOT never moves it). Its ledger — 24
+#: attempts, $0.130880 calculated exposure, 0 open on 2026-10-01 — stays READABLE (`plan`, `status`) and is CLOSED for
+#: new sends: the standing authority quillmd-v1-private-api-testing-standing-20260930 funds only its own campaign
+#: (ops/standing_qa.py), never this one, and this campaign's attempts, failures and verdicts are historical facts.
+HISTORICAL_ROOT = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign')
+#: The commands that would write to a ledger or send: refused on the historical root before anything is read (`run`
+#: is refused at every root: SENDS_CLOSED).
+WRITING_COMMANDS = ('run', 'reopen', 'recover')
 
 require = pc.require
 Refused = pc.Refused
@@ -146,6 +159,24 @@ def build_form():
             entry.external_attr = 0o600 << 16
             archive.writestr(entry, source.read(info.filename))
     return fixed.getvalue()
+
+
+#: Why the historical runner sends nothing: `run` and its request process (`_inner`) refuse this before reading anything,
+#: whatever root or declaration they are given.
+SENDS_CLOSED = ('The historical campaign quillmd-v1-sonnet5-staged-40 is closed for new sends: this runner sends nothing '
+                'again, at any root and under any declaration (`run` and its request process refuse before reading '
+                'anything); its ledger stays readable (plan, status). The standing authority '
+                'quillmd-v1-private-api-testing-standing-20260930 funds only its own campaign (ops/standing_qa.py).')
+
+
+def require_not_historical(root):
+    """Refuses any write to, or send from, the historical campaign's root (HISTORICAL_ROOT), before anything is read."""
+    root = Path(os.path.abspath(str(root)))
+    historical = Path(os.path.abspath(str(HISTORICAL_ROOT)))
+    require(root != historical and historical not in root.parents and root not in historical.parents,
+            'The historical campaign quillmd-v1-sonnet5-staged-40 is closed for new sends: its ledger stays readable '
+            '(plan, status) and is never written again. The standing authority '
+            'quillmd-v1-private-api-testing-standing-20260930 funds only its own campaign (ops/standing_qa.py).')
 
 
 def env_file_present(rebuild=REBUILD):
@@ -191,12 +222,21 @@ def settle_open_stages(campaign):
 
 # ── preconditions ────────────────────────────────────────────────────────────────────────────────────────────────
 
+#: What this campaign's preconditions expect of the application: the served model and the generation profile's name.
+#: Another runner that reuses this door (ops/standing_qa.py) passes its own `expect`; `generation_profile` None then
+#: means the profile is bound by its pricing version (which hashes the whole profile) and by that runner's own
+#: per-request bounds instead of by a name.
+EXPECT = {'model': EXPECTED_MODEL, 'generation_profile': 'claude-sonnet-5-v1'}
+
+
 def preconditions(declaration, stage, root, *, database_prefix=DATABASE_PREFIX, rebuild=REBUILD, environ=None,
-                  ledger=None):
-    """Asserted before any enqueue. Returns what was checked, for the provenance manifest."""
+                  ledger=None, expect=None):
+    """Asserted before any enqueue. Returns what was checked, for the provenance manifest. `expect`: EXPECT (this
+    campaign's model and profile) unless another runner passes its own."""
     from django.conf import settings
     from django.db import connection
     from core import generation
+    expect = EXPECT if expect is None else expect
     environ = os.environ if environ is None else environ
     require(not env_file_present(rebuild), 'The candidate checkout has a rebuild/.env; the campaign never runs beside one.')
     database = connection.settings_dict
@@ -211,7 +251,7 @@ def preconditions(declaration, stage, root, *, database_prefix=DATABASE_PREFIX, 
     require(settings.SYNTHETIC_ONLY is True and settings.QUILLMD_DATA_MODE == 'synthetic', 'Synthetic-only mode is required.')
     require(settings.AI_MODE == 'live', 'The QA process must be in live AI mode.')
     require(settings.AI_PROVIDER == declaration.provider == 'anthropic', 'The provider must be anthropic.')
-    require(settings.AI_MODEL == declaration.model == EXPECTED_MODEL, f'The model must be {EXPECTED_MODEL}.')
+    require(settings.AI_MODEL == declaration.model == expect['model'], f'The model must be {expect["model"]}.')
     require((settings.AI_INPUT_RATE, settings.AI_OUTPUT_RATE, settings.AI_CACHED_RATE)
             == (declaration.rates.input, declaration.rates.output, declaration.rates.cached),
             'The configured rates are not the declared rates.')
@@ -223,8 +263,11 @@ def preconditions(declaration, stage, root, *, database_prefix=DATABASE_PREFIX, 
     config = generation.configuration()
     require(config['pricing_version'] == declaration.pricing_version(stage),
             f'The application prices {config["pricing_version"]}, not the declared {stage} version.')
-    require(config['request_profile'].get('profile') == 'claude-sonnet-5-v1' and 'invalid' not in config['request_profile'],
-            'The request profile is not the Sonnet 5 generation profile.')
+    require('invalid' not in config['request_profile']
+            and (expect['generation_profile'] is None
+                 or config['request_profile'].get('profile') == expect['generation_profile']),
+            'The request profile is not the Sonnet 5 generation profile.' if expect is EXPECT
+            else 'The application has no valid generation request profile for the declared model.')
     key = pc.load_credential(declaration.credential_file, declaration)
     require(pc.constant_time_equal(key, environ.get('ANTHROPIC_API_KEY', '')),
             'The request process does not carry the declared credential.')
@@ -683,16 +726,18 @@ def write_manifest(evidence, attempt, context):
 
 # ── the model check ──────────────────────────────────────────────────────────────────────────────────────────────
 
-def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PREFIX, environ=None, rebuild=REBUILD):
+def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PREFIX, environ=None, rebuild=REBUILD,
+                    expect=None, deadline=None):
     """ONE model_check attempt, end to end. Returns {'verdict': 'PASS'|'FAIL', …}; raises Refused when it stops before any
-    attempt was written (nothing was sent)."""
+    attempt was written (nothing was sent). `expect` (preconditions) and `deadline` (seconds the one send may take before
+    its outcome is unknown; None: no deadline, as this campaign ran) are for another runner reusing this door."""
     from core import generation
     from core.models import Encounter, Job, Reservation
     declaration, ledger, root = campaign.declaration, campaign.ledger, campaign.root
     ledger.acquire()
     settled = settle_open_stages(campaign)
     checked = preconditions(declaration, STAGE, root, database_prefix=database_prefix, rebuild=rebuild, environ=environ,
-                            ledger=ledger)
+                            ledger=ledger, expect=expect)
     # (the fixed case never changes; a run refuses before anything if it did)
     form = build_form()
     require(sha256(form) == FORM_SHA256 and sha256(NOTES) == NOTES_SHA256, 'The fixed case did not build to its hashes.')
@@ -773,7 +818,7 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
     base = {'stage': STAGE, 'attempt': number, 'recovered_before_start': settled, 'stale_jobs_cancelled': stale}
     try:
         return _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, form, maximum, secret,
-                               provenance, checked, base)
+                               provenance, checked, base, deadline=deadline)
     except BaseException as error:
         # ⚠️ AFTER THE ATTEMPT IS WRITTEN NOTHING ESCAPES AS "REFUSED, NOTHING SENT". Whatever failed — the runner's own
         # code, the database, a signal — the attempt gets an outcome (unknown unless already recorded), the stage is
@@ -787,17 +832,29 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
 
 
 def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, form, maximum, secret, provenance, checked,
-                    base):
+                    base, deadline=None):
     """The ONE request (the real worker function), its outcome, the stop conditions, the review, finalization, the
-    export, the billing audit and the decision."""
+    export, the billing audit and the decision. `deadline`: seconds the send may take (the stage runner's Deadline); when
+    it passes, the outcome is unknown, the stage fails and nothing is re-sent. None: no deadline (this campaign's runs)."""
     from core.jobs import run_one
     from core.management.commands.audit_billing import audit_report
     from core.models import AuditEvent, Job, ProviderReceipt, Reservation, Usage
     declaration, ledger, number = campaign.declaration, campaign.ledger, attempt['number']
     receipts_before = ProviderReceipt.objects.count()
     pc.CURRENT_ATTEMPT.update(number=number, evidence_dir=str(evidence), secret=secret)
+    fired = None
     try:
-        worked = run_one()
+        if deadline is None:
+            worked = run_one()
+        else:
+            stages = stages_module()
+            timer = stages.Deadline(deadline)
+            try:
+                with timer:
+                    worked = run_one()
+            except stages.SendDeadline:
+                worked = None
+            fired = timer.fired
     finally:
         pc.CURRENT_ATTEMPT.clear()
     job.refresh_from_db()
@@ -834,6 +891,8 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
                               'charged_cost': str(usage_row.charged_cost) if usage_row else None,
                               'reservations': sorted(r.state for r in Reservation.objects.filter(job=job))},
                'recorded_at': pc.now()}
+    if deadline is not None:
+        outcome['deadline'] = fired
     outcome['exposure'] = format(pc.exposure(attempt, outcome, rates), 'f')
     ledger.write_outcome(number, outcome)                                    # AFTER, whatever happened
     encounter.refresh_from_db()
@@ -842,6 +901,8 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
                                                     'status': encounter.status, 'revision': encounter.revision})
 
     reasons = []
+    if fired is not None:
+        reasons.append(fired + '; the outcome is unknown and it is never re-sent')
     if cls != 'completed' or job.state != 'succeeded':
         reasons.append(f'the attempt ended {cls} with the job {job.state} ({outcome["error_class"] or "no error class"}), '
                        'not a succeeded generation')
@@ -1014,18 +1075,6 @@ def _decide(campaign, attempt, evidence, secret, reasons, result, provenance, ch
 
 # ── the processes ────────────────────────────────────────────────────────────────────────────────────────────────
 
-def ensure_database(password):
-    """The QA server's campaign database, created if absent (a synthetic database on the QA server only)."""
-    import psycopg
-    from psycopg import sql
-    require(re.fullmatch(r'quillmd_qa_[a-z0-9_]{1,40}', DATABASE['name']), 'The campaign database name is not a QA name.')
-    with psycopg.connect(host=DATABASE['host'], port=DATABASE['port'], user=DATABASE['user'], password=password,
-                         dbname='postgres', autocommit=True, connect_timeout=10) as connection:
-        exists = connection.execute('SELECT 1 FROM pg_database WHERE datname = %s', (DATABASE['name'],)).fetchone()
-        if not exists:
-            connection.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(DATABASE['name'])))
-
-
 def request_environment(key, declaration, root, password, context, flags=None):
     """The complete environment of the request process (and nothing inherited). `flags`: the stage's settings (the plain
     profile for model_check; sonnet5_stages.STAGE_FLAGS for the others)."""
@@ -1048,97 +1097,18 @@ def stages_module():
     return sonnet5_stages
 
 
-def stage_flags(stage):
-    """The request process's settings for `stage`: the plain generation profile for model_check, the stage runner's
-    own for mapping and ordinary_notes; anything else is refused."""
-    if stage == STAGE:
-        return PLAIN_PROFILE_FLAGS
-    sonnet5_stages = stages_module()
-    require(stage in sonnet5_stages.STAGES, f'No stage runner for {stage!r}.')
-    return sonnet5_stages.STAGE_FLAGS[stage]
-
-
-def outer_run(args):
-    """Validate everything that needs no database, build the scrubbed environment, and become the request process —
-    the one door for every stage (model_check, mapping, ordinary_notes)."""
-    flags = stage_flags(args.stage)
-    require(not env_file_present(), 'The candidate checkout has a rebuild/.env; the campaign never runs beside one.')
-    identity = pc.git_identity(REBUILD)
-    require(identity['clean'], 'The runner checkout must be a clean commit.')
-    declaration = pc.declared(DECLARATION)
-    amendment = getattr(args, 'amendment', None)
-    if amendment is not None:
-        require(args.stage == 'ordinary_notes', 'An amendment applies to the ordinary_notes stage only.')
-        amendment = str(pc.declared_amendment(amendment, declaration).path)
-    root = pc.private_directory(LIVE_ROOT)
-    for name in ('ledger', 'evidence', 'qa-state', 'access', 'home', 'tmp'):
-        pc.private_directory(root / name)
-    key = pc.load_credential(declaration.credential_file, declaration)
-    password = pc.read_private(DATABASE_PASSWORD_FILE).decode().strip()
-    require(password and '\n' not in password, 'The QA database password file is not one line.')
-    context = {'root': str(root), 'declaration': str(DECLARATION), 'stage': args.stage,
-               'runner_commit': identity['commit']}
-    if amendment is not None:
-        context['amendment'] = amendment
-    env = request_environment(key, declaration, root, password, context, flags)
-    ensure_database(password)
-    os.chdir(REBUILD)
-    os.execve(sys.executable, [sys.executable, '-B', str(RUNNER), '_inner'], env)
-
-
-def _interrupted(signum, frame):
-    raise SystemExit(f'signal {signum}')
-
-
 def inner():
-    """The request process: its environment is exactly `request_environment`. Before anything else — before the
-    declaration is read and long before django.setup() — it refuses unless QUILLMD_ENV_MANAGED is exactly '1' (settings
-    then never calls load_dotenv) and rebuild/.env does not exist, so even `_inner` started by hand never loads one."""
+    """CLOSED 2026-10-01: the historical campaign's request process sends nothing again. Started by hand (`_inner`) with a
+    context naming ANY root and ANY declaration, it refuses — after the two checks that read nothing (QUILLMD_ENV_MANAGED
+    exactly '1', no rebuild/.env), before the context, the declaration, the credential, Django or a database is touched.
+    Refutation R1-F1: it used to refuse only the historical ROOT, so the historical declaration at a fresh root passed
+    every check with an empty ledger — the closed $40 authority with its budget reset. The campaign is closed, not its
+    directory. (Its body — the scrubbed process that settled, checked, migrated and ran a stage — is gone with `run`'s
+    outer half; ops/standing_qa.py has its own.)"""
     require(os.environ.get('QUILLMD_ENV_MANAGED') == '1',
             'The request process runs only with QUILLMD_ENV_MANAGED=1: settings must never load a .env file.')
     require(not env_file_present(), 'The candidate checkout has a rebuild/.env; the request process never starts beside one.')
-    os.umask(0o077)
-    signal.signal(signal.SIGTERM, _interrupted)
-    signal.signal(signal.SIGINT, _interrupted)
-    context = json.loads(os.environ['SONNET5_QA_CONTEXT'])
-    root = Path(context['root'])
-    stage = context['stage']
-    declaration = pc.declared(context['declaration'])       # (re-verified by the process that spends)
-    amendment = context.get('amendment')
-    if amendment is not None:
-        require(stage == 'ordinary_notes', 'An amendment applies to the ordinary_notes stage only.')
-        amendment = pc.declared_amendment(amendment, declaration)   # (re-verified by the process that spends)
-    campaign = pc.Campaign(declaration, root, watched_files=WATCHED_FILES, amendment=amendment)
-    campaign.ledger.acquire()
-    pc.scrubbed_now()
-    sys.path.insert(0, str(REBUILD))
-    import django
-    django.setup()
-    from django.test.utils import override_settings
-    override_settings(STORAGES=STATIC_STORAGES).enable()
-    settle_open_stages(campaign)
-    if stage == STAGE:
-        preconditions(declaration, STAGE, root, ledger=campaign.ledger)   # (before the database is written at all)
-    else:
-        sonnet5_stages = stages_module()
-        sonnet5_stages.stage_preconditions(declaration, stage, root, ledger=campaign.ledger)
-    from django.core.management import call_command
-    call_command('migrate', interactive=False, verbosity=0)
-    pc.install_request_capture()
-    pc.install_transport_guard()
-    key = os.environ['ANTHROPIC_API_KEY']
-    provenance = {'runner_commit': context['runner_commit']}
-    try:
-        if stage == STAGE:
-            result = run_model_check(campaign, secret=key, provenance=provenance)
-        else:
-            result = sonnet5_stages.run_stage(campaign, stage, secret=key, provenance=provenance)
-    finally:
-        os.environ.pop('ANTHROPIC_API_KEY', None)
-    text = json.dumps(result, indent=1, default=str)
-    require(key not in text and not pc.KEY_SHAPE.search(text.encode()), 'The result carried a key-shaped value; withheld.')
-    print(text)
-    return EXIT[result['verdict']]
+    raise Refused(SENDS_CLOSED)
 
 
 def plan_environment(declaration, state_dir):
@@ -1262,6 +1232,9 @@ def main(argv=None):
         parser.add_argument('--diagnosis')
         parser.add_argument('--amendment')
         args = parser.parse_args(argv)
+        require(args.command != 'run', SENDS_CLOSED)            # (whatever root LIVE_ROOT names: refutation R1-F1)
+        if args.command in WRITING_COMMANDS:
+            require_not_historical(LIVE_ROOT)
         require(args.amendment is None or args.command in ('plan', 'run'), 'Only plan and run take --amendment.')
         if args.command == 'plan':
             if args.stage in (None, STAGE):
@@ -1274,8 +1247,6 @@ def main(argv=None):
             return recover()
         if args.command == 'reopen':
             return reopen(args.stage, args.diagnosis)       # (Campaign.reopen refuses a missing stage or diagnosis)
-        require(args.stage, 'run needs --stage model_check|mapping|ordinary_notes.')
-        outer_run(args)
     except Refused as refused:
         print('REFUSED: ' + str(refused), file=sys.stderr)
         return EXIT['REFUSED']

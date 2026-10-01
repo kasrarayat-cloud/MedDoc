@@ -1222,8 +1222,10 @@ class Campaign:
         limits = self.limits(rows)
         in_force = limits.stage(stage.id)
         spent = sum((exposure(a, o, rates) for a, o in here), Decimal(0))
-        require(spent < in_force.limit, f'Stage {stage.id} has no money left under its own ${in_force.limit} limit '
-                                        f'({spent} exposed); another stage\'s budget is never used.')
+        # (a campaign with no monetary ceiling — ops/standing_qa.py — states None: there is no money check to make)
+        if in_force.limit is not None:
+            require(spent < in_force.limit, f'Stage {stage.id} has no money left under its own ${in_force.limit} limit '
+                                            f'({spent} exposed); another stage\'s budget is never used.')
         if in_force.max_requests is not None:
             require(len(here) < in_force.max_requests,
                     f'Stage {stage.id} has used all {in_force.max_requests} requests of its own.')
@@ -1235,8 +1237,10 @@ class Campaign:
             'failed_attempts': this_failure, 'failed_runner_commits': failed_runners, 'repair_commit': repair,
             'runner_commit': runner_commit, 'ledger_attempts': len(rows), 'engine_files': current,
             'changed_files': sorted(changed), 'repair_touches': touched,
-            'stage_exposure': format(spent, 'f'), 'stage_limit': format(in_force.limit, 'f'),
-            'stage_remaining': format(in_force.limit - spent, 'f'), 'stage_requests': len(here),
+            'stage_exposure': format(spent, 'f'),
+            'stage_limit': None if in_force.limit is None else format(in_force.limit, 'f'),
+            'stage_remaining': None if in_force.limit is None else format(in_force.limit - spent, 'f'),
+            'stage_requests': len(here),
             'max_requests': in_force.max_requests, 'limits': limits.record(),
             **({'remainder': resumes} if remainder is not None else {})}
         return ledger.write_reopen(stage.id, state['failures'], document)
@@ -1387,6 +1391,11 @@ def scrubbed_now(environ=None):
 #: The attempt a provider request belongs to: {'number': n, 'evidence_dir': Path, 'secret': str}. Set by the runner
 #: around its ONE `run_one`; the capture refuses any request outside it.
 CURRENT_ATTEMPT = {}
+#: Per-request bounds a runner sets for its whole request process: {'model': the one model id a request may name,
+#: 'max_tokens': the most output a request may ask for}. Empty (this campaign): no bound beyond the request profile. Set
+#: (ops/standing_qa.py), a request naming another model, or asking for more output, is refused by the capture BEFORE it
+#: is recorded or sent — the last door, behind the runner's own checks of the job's profile.
+REQUEST_BOUNDS = {}
 PROVIDER_URL = 'https://api.anthropic.com/v1/messages'
 SECRET_HEADERS = frozenset(('x-api-key', 'authorization', 'proxy-authorization', 'cookie'))
 
@@ -1431,6 +1440,14 @@ def install_request_capture():
         require(request.method == 'POST' and str(request.url) == PROVIDER_URL,
                 f'A request to {request.url.host}{request.url.path} was refused.')
         record = capture_record(request, attempt.get('secret', ''))
+        bounds = dict(REQUEST_BOUNDS)
+        if bounds:
+            body = record.get('body_json')
+            asked = body.get('max_tokens') if isinstance(body, dict) else None
+            require(isinstance(body, dict) and body.get('model') == bounds['model'] and type(asked) is int
+                    and 0 < asked <= bounds['max_tokens'],
+                    f'A request outside the declared per-request bounds (model {bounds["model"]}, at most '
+                    f'{bounds["max_tokens"]} output tokens) was refused; nothing was sent.')
         record.update(attempt=attempt['number'], captured_at=now(),
                       client={'base_url': str(getattr(self, 'base_url', '')), 'timeout': str(getattr(self, 'timeout', '')),
                               'max_retries': getattr(self, 'max_retries', None)})
@@ -1740,11 +1757,15 @@ def _leaked(root, key, exclude):
 UNSAFE_FINDINGS = frozenset(('adopted_without_source_support', 'wrong_destination', 'wrong_side', 'wrong_denial',
                              'contradiction_adopted', 'protected_area_answered', 'credential_leak',
                              'harmful_change_unreviewed'))
-#: A broken request contract or money path: each STOPS the stage.
+#: A broken request contract or money path: each STOPS the stage. The last three are the standing runner's transcription
+#: stage's (ops/standing_qa_transcription.py): the request sent is not the declared one or not the submission the product
+#: prepared; the transcript is empty, its coverage incomplete or unknown, or not the provider's; the reviewed transcript
+#: could not be saved, unedited, as the notes.
 CONTRACT_FINDINGS = frozenset(('wrong_served_model', 'stop_reason_not_end_turn', 'reconciliation', 'uncertain_outcome',
                                'output_over_70_percent', 'metered_us_while_unset', 'settlement_mismatch', 'audit_failure',
                                'validator_failure', 'more_than_one_request', 'request_not_captured',
-                               'export_verification_failed', 'response_not_captured'))
+                               'export_verification_failed', 'response_not_captured',
+                               'transcription_contract', 'transcript_unusable', 'transcript_not_applied'))
 #: What happened to each field (or, for mapping, each expected area, control or false field) of a case: USEFULNESS,
 #: recorded per item. Held, missing, over-held and refused answers are the product declining to guess — measured, never
 #: a stop ('held_unadjudicated': a hold of an UNLISTED model selection on a field that may be supported — the frozen

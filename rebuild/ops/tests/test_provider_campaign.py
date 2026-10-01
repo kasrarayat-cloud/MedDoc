@@ -1639,7 +1639,7 @@ class CaseVerdictTests(unittest.TestCase):
     CONTRACT = ('wrong_served_model', 'stop_reason_not_end_turn', 'reconciliation', 'uncertain_outcome',
                 'output_over_70_percent', 'metered_us_while_unset', 'settlement_mismatch', 'audit_failure',
                 'validator_failure', 'more_than_one_request', 'request_not_captured', 'export_verification_failed',
-                'response_not_captured')
+                'response_not_captured', 'transcription_contract', 'transcript_unusable', 'transcript_not_applied')
     OUTCOMES = ('adopted', 'held', 'missing', 'refused')
     #: (Part C) the mapping grader's outcomes and the notes/encounter field classes that never stop by themselves
     SAFE_OUTCOMES = OUTCOMES + ('right', 'held_safe', 'wrong', 'missed', 'false_field_held', 'supported_correct',

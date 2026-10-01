@@ -561,15 +561,17 @@ def stop_decision(verdict, path):
 # ── the request process's checks, per stage ──────────────────────────────────────────────────────────────────────
 
 def stage_preconditions(declaration, stage, root, *, database_prefix=sq.DATABASE_PREFIX, rebuild=REBUILD, environ=None,
-                        ledger=None):
+                        ledger=None, expect=None):
     """Asserted before anything is written for a stage: model_check's own preconditions for everything they share
     (database, state directory, synthetic mode, live Sonnet 5 at the declared rates, credential, scrubbed environment,
-    leak scan, reconciled ledger), then this stage's settings and its declared pricing version."""
+    leak scan, reconciled ledger), then this stage's settings and its declared pricing version. `expect`: another
+    runner's expectations (ops/standing_qa.py): its model, and `max_output_tokens` / `timeout_seconds`, the per-request
+    bounds a profile it has no name for must fit; None: this campaign's Sonnet 5 profiles by name."""
     from django.conf import settings
     from core import generation
     require(stage in STAGES, f'No stage runner for {stage!r}.')
     checked = sq.preconditions(declaration, stage, root, database_prefix=database_prefix, rebuild=rebuild,
-                               environ=environ, ledger=ledger)
+                               environ=environ, ledger=ledger, expect=expect)
     require(settings.QUILLMD_WORD_ENGINE == 'v3', 'The stage runs the v3 Word engine.')
     require(not (settings.WM_NARRATIVE or settings.V3_FIELD_RELATIONS or settings.V3_GENERATION_BATCHES
                  or settings.V3_HISTORY_CONTEXT), 'Every contract flag is off (field relations only around its sends).')
@@ -578,16 +580,34 @@ def stage_preconditions(declaration, stage, root, *, database_prefix=sq.DATABASE
     require(bool(settings.QUILLMD_MAPPING_ASSISTANCE) is mapping and bool(settings.QUILLMD_MAPPING_ASSISTANCE_LIVE) is mapping,
             'Mapping assistance (and its live admission) is on for the mapping stage only.')
     config = generation.configuration()
-    require(config['request_profile'].get('profile') == 'claude-sonnet-5-v1' and 'invalid' not in config['request_profile'],
-            'The request profile is not the Sonnet 5 generation profile.')
+    if expect is None:
+        require(config['request_profile'].get('profile') == 'claude-sonnet-5-v1'
+                and 'invalid' not in config['request_profile'],
+                'The request profile is not the Sonnet 5 generation profile.')
+    else:
+        require(within_bounds(config['request_profile'], expect),
+                'The generation request profile is invalid or outside the declared per-request bounds.')
     if mapping:
         from core import mapping_assistance
         profile = mapping_assistance.request_profile(config)
-        require(profile['profile'] == mapping_assistance.PROFILE and profile['max_output_tokens'] == 20000,
-                'The mapping request profile is not the declared Sonnet 5 blank-mapping profile.')
+        if expect is None:
+            require(profile['profile'] == mapping_assistance.PROFILE and profile['max_output_tokens'] == 20000,
+                    'The mapping request profile is not the declared Sonnet 5 blank-mapping profile.')
+        else:
+            require(within_bounds(profile, expect),
+                    'The mapping request profile is invalid or outside the declared per-request bounds.')
     return {**checked, 'stage_flags': {name: os.environ.get(name, '') for name in STAGE_FLAGS[stage]},
             'word_engine': settings.QUILLMD_WORD_ENGINE, 'mapping_assistance': bool(settings.QUILLMD_MAPPING_ASSISTANCE),
             'layout_socket': settings.QUILLMD_LAYOUT_SOCKET}
+
+
+def within_bounds(profile, expect):
+    """Whether a request profile is valid and inside another runner's per-request bounds (`expect`
+    max_output_tokens and timeout_seconds): an integer output limit and client timeout, each positive and at most the
+    bound."""
+    tokens, timeout = (profile or {}).get('max_output_tokens'), (profile or {}).get('timeout_seconds')
+    return (isinstance(profile, dict) and 'invalid' not in profile and type(tokens) is int and type(timeout) is int
+            and 0 < tokens <= expect['max_output_tokens'] and 0 < timeout <= expect['timeout_seconds'])
 
 
 def amended(amendment, send):
@@ -905,7 +925,9 @@ class Run:
         if any(outcome is None for _, outcome in rows):
             problems.append('an attempt has no outcome after its send')
         stage, total = self.campaign.totals(self.stage)['exposure'], self.campaign.totals()['exposure']
-        if stage > limits.stage(self.stage).limit or total > limits.total:
+        # (a campaign with no monetary ceiling — ops/standing_qa.py — has None for both limits: nothing to be past)
+        stage_limit, total_limit = limits.stage(self.stage).limit, limits.total
+        if (stage_limit is not None and stage > stage_limit) or (total_limit is not None and total > total_limit):
             problems.append(f'exposure {stage} (stage) / {total} (total) is past a limit in force')
         return [{'code': 'reconciliation', 'why': problem} for problem in problems]
 
