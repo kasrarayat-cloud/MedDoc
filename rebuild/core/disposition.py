@@ -255,8 +255,12 @@ def prepare_restore(actor,instance_id,backup_sha256):
     target={'instance_id':str(instance),'database_host':str(db['HOST']),'database_port':str(db['PORT']),
             'database_name':str(db['NAME']),'state_root':str(settings.MEDIA_ROOT.resolve())}
     if not all(target.values()):raise ValidationError('The restore target is incomplete.')
+    # 'admission_available' and 'journal_freshness_verified' are pinned false by 0028: THIS record never admits the
+    # target nor proves the journal fresh. They do not mean admission is missing from the product: it is the separate,
+    # recorded step after journal replay (core.restore_admission), named in 'next_steps' in the order they run.
     report={'contract':'restore-preparation-v1','target':target,'backup_sha256':backup_sha256,
             'quarantined':True,'admission_available':False,'journal_freshness_verified':False,
+            'next_steps':['journal_replay','restore_admission'],
             'blockers':['independent_journal_unverified','journal_replay_pending','restore_admission_pending']}
     row=m.RestorePreparation.objects.create(instance_id=instance,target=target,backup_sha256=backup_sha256,
         report=report,report_sha256=digest(report),created_by=actor)
