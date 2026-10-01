@@ -20,6 +20,7 @@ What each test proves:
   · the preflight, then the model check, then two bounded notes runs pass end to end: every attempt carries the
     standing identities (mode, monetary_ceiling null, run, attempt id, send key), every send is made once, the runs
     close (decided, partial, partial), the stage stays open between runs, and status reports no ceiling;
+  · a bounded mapping run (two forms) goes through the frozen grader and closes partial;
   · an unsafe verdict on the default path (injected at the field classifier: on this base the application holds every
     frozen adversarial simulation) stops the stage: nothing further is sent, the run closes failed, the next run is
     refused before anything is created, and the failed evidence is kept;
@@ -166,6 +167,10 @@ else:
             if attempt['stage'] == 'model_check':
                 return httpx.Response(200, headers={'request-id': 'req_011SyntheticStandingMC'}, json=sonnet5_message())
             payload = json.loads(body['messages'][0]['content'])
+            if payload.get('contract') == 'blank-mapping-v3':
+                from core import mapping_wire
+                return httpx.Response(200, headers={'request-id': f'req_011SyntheticStanding{number:03d}'},
+                                      json=message(mapping_wire.fixture(payload), number=number))
             encounter = Encounter.objects.get(pk=attempt['encounter'])
             answer = self.answers.get(send.get('id'))
             if answer is None:
@@ -244,6 +249,31 @@ else:
             self.assertIsNone(report['monetary_ceiling'])
             self.assertEqual((report['total']['attempts'], report['total']['open']), (4, 0))
             self.assertGreater(Decimal(report['total']['calculated_exposure_usd']), 0)
+
+        def test_a_bounded_mapping_run_through_the_frozen_grader(self):
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            with override_settings(STATE_DIR=self.state, MEDIA_ROOT=self.state / 'files', **STAGE_SETTINGS['mapping']), \
+                    patch.dict(os.environ, st.STAGE_FLAGS['mapping']):
+                here = dataclasses.replace(self.declaration, qa_database=connection.settings_dict['NAME'])
+                self.assertEqual(st.check_configuration(st.settings_snapshot('mapping'), here, 'mapping',
+                                                        self.campaign.root), [])
+                result = st.run_stage(self.campaign, 'mapping', secret=SYNTHETIC_KEY,
+                                      provenance={'runner_commit': 'offline-test'}, database_prefix='test_quillmd_qa_',
+                                      max_sends=2)
+            self.assertEqual((result['verdict'], result['decision']), ('PASS', 'partial'), result['reasons'])
+            rows = self.campaign.ledger.rows()[1:]
+            self.assertEqual([a['send']['id'] for a, _ in rows], ['mapping:f1-guidance-confirmation',
+                                                                  'mapping:f2-leave-checkboxes'])
+            inputs = self.inputs['forms_sha256']
+            for attempt, outcome in rows:
+                self.assertEqual(outcome['class'], 'completed')
+                self.assertEqual(attempt['form_sha256'], inputs[f'mapping/{attempt["send"]["form"]}.docx'])
+                evidence = self.campaign.root / 'evidence' / f'{attempt["number"]:03d}'
+                self.assertTrue((evidence / 'graded.json').is_file())               # (the frozen grader ran)
+                classification = json.loads((evidence / 'classification.json').read_text())
+                self.assertFalse(classification['stops_stage'], classification)
+            self.assertTrue(all(s['max_tokens'] == 20000 for s in self.sent[1:]))
+            self.assertEqual(self.campaign.ledger.stage_state('mapping')['state'], 'open')
 
         def test_an_unsafe_default_adoption_stops_the_path(self):
             # (the frozen cases' adversarial simulations are all held by the application on this base — the historical
