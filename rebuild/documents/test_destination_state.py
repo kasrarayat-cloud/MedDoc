@@ -643,6 +643,65 @@ class LegacyEngineRoles(unittest.TestCase):
         fields, rep = report(lines('Signature of patient\t\t\tDate: ______'))
         self.assertEqual(fields[0]['kind'], 'date')
 
+    def assert_held_on_both(self, label, state, basis=None):
+        blob = two_col([label, 'Plan'])
+        row = next(v for k, v in self.roles(blob).items() if k != 'Plan')
+        self.assertEqual(row['state'], state, label)
+        if basis:
+            self.assertEqual(row['basis'], basis, label)
+        fields, rep = report(blob)
+        self.assertFalse(any(generated(f, rep) for f in fields if f['label'] != 'Plan'), label)
+
+    def assert_generated_on_both(self, label):
+        blob = two_col([label, 'Plan'])
+        row = next(v for k, v in self.roles(blob).items() if k != 'Plan')
+        self.assertEqual(row['state'], 'ordinary', label)
+        fields, rep = report(blob)
+        self.assertTrue(generated(fields[0], rep), label)
+
+    def test_a_placeholder_printed_as_the_label_is_read_as_its_own_words(self):
+        """'[Signature, date]' read with its brackets was the date question (generated on both engines' rows on
+        f5fe720f, and on legacy rows on the roles-2 commits before this one); 'Signature, date' is a signing place."""
+        for label, state in (('[Sign]', 'uncertain'), ('<Sign>', 'uncertain'), ('[Signature, date]', 'protected'),
+                             ('[Signature – Date]', 'protected'), ('[Sign name here]', 'protected')):
+            with self.subTest(label=label):
+                self.assert_held_on_both(label, state)
+        for label in ('[Patient name]', '[X weeks/months]', 'Troponin [ng/L]'):
+            with self.subTest(control=label):
+                self.assert_generated_on_both(label)
+        # a bracketed qualifier is read with the label, as a parenthesised one is (contract v3 reads '[initial]' in a
+        # label cell as a placeholder area of its own, a different place)
+        self.assertEqual(w.destination_state('Dose [initial]')['basis'], 'measure_head')
+
+    def test_a_bracketed_part_that_alone_holds_the_place_is_uncertain(self):
+        self.assertEqual(w.destination_state('Consent confirmed [Sign and date]')['basis'], 'bracketed_caption')
+        self.assert_held_on_both('Consent confirmed [Sign and date]', 'uncertain', 'bracketed_caption')
+        self.assert_held_on_both('[Witness to sign] — Relationship', 'uncertain', 'bracketed_caption')
+        # a bracketed note with no signing place, and evidence read on the whole, release as before
+        for label in ('Visit type [initial/follow-up]', 'Lactate [initial]'):
+            with self.subTest(control=label):
+                self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
+
+    def test_captions_writing_blanks_separate_in_one_label_are_read_one_by_one(self):
+        """A label cell printing 'Sign: ______ Date: ______' over an answer cell: read as words it was the date question
+        'Sign Date', generated into the legacy row on f5fe720f."""
+        for label in ('Sign: ______ Date: ______', 'Signature: ______ Date: ______',
+                      'Reviewed by: ______    Nurse sign: ______'):
+            with self.subTest(label=label):
+                self.assertEqual(w.destination_state(label)['basis'], 'stacked_caption')
+                row = next(v for k, v in self.roles(two_col([label, 'Plan'])).items() if k != 'Plan')
+                self.assertEqual(row['state'], 'uncertain', label)
+        for label in ('Date ______ Time ______', 'Patient signature obtained ______'):
+            with self.subTest(control=label):
+                self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
+
+    def test_an_abbreviation_period_does_not_hide_the_person(self):
+        """'Dr. sign' read 'dr.' as no person and was generated on both engines' rows (f5fe720f and before this)."""
+        for label in ('Dr. sign', 'Pt. sign', 'Dr.sign'):
+            with self.subTest(label=label):
+                self.assert_held_on_both(label, 'protected', 'person_sign')
+        self.assertEqual(w.destination_state('Consent form signed by Dr.')['state'], 'ordinary')
+
     def test_a_sequence_word_beside_a_bare_initial_in_the_same_table(self):
         rows = self.roles(two_col(['Initial', 'Repeat', 'Plan']))
         self.assertEqual((rows['Initial']['state'], rows['Initial']['basis']), ('ordinary', 'sequence_sibling'))

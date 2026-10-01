@@ -6966,7 +6966,7 @@ def _state(state, basis, kind=""):
 def _person(text) -> bool:
     """Whether the words name a person: an optional article, an optional qualifier word, a person noun (possessive or
     plural), an optional number ('Nurse 2', 'Checker 1'). A temporal first word ('Time patient ...') is no person."""
-    text = _plain(text).strip(" ,;:/-–—()")
+    text = _plain(text).strip(" ,;:/-–—().")      # an abbreviation's period ('Dr. sign') is no part of the noun
     if re.match(_TEMPORAL + r"\b", text):
         return False
     return re.fullmatch(r"(?:(?:the|a|an|each|every|both|all)\s+)?(?:" + _DW + r"[\w'-]*\s+)?" + _PERSON +
@@ -7055,13 +7055,39 @@ def destination_state(label, *, siblings=(), unit=False, lines=()) -> dict:
     breaks (and the captions a tab separates on one line), when it has several - two captions stacked in one label
     cell ('Signature' over 'Date', or 'Signature of patient<tab>Date') and one caption wrapped onto two lines ('Date of'
     over 'signature') print the same words, so a line that alone holds the place while the whole reads ordinary leaves
-    it UNCERTAIN (residual L1:F1, legacy half)."""
-    whole = _destination_state(label, siblings=siblings, unit=unit)
-    if whole["state"] == STATE_ORDINARY and len([x for x in lines if _plain(x)]) > 1:
-        held = [st for x in lines if _plain(x) and (st := _destination_state(x))["state"] != STATE_ORDINARY]
+    it UNCERTAIN (residual L1:F1, legacy half). The same holds for the captions a run of writing blanks separates in
+    one printed label ('Sign: ______ Date: ______' read as words is the date question 'Sign Date').
+
+    A placeholder's or an author's note's own brackets ('[Sign]', '<Signature, date>', '{Sign here}'): a label printed
+    wholly inside them is read as its own words, and a bracketed part of a longer label ('Consent confirmed [Sign and
+    date]') that alone holds the place leaves a label the whole reads ordinary without evidence UNCERTAIN. Parentheses
+    are a qualifier of the label ('Troponin (initial)') and are read with it."""
+    text = str(label or "")
+    enclosed = _ENCLOSED.fullmatch(text)
+    if enclosed:
+        text = next(g for g in enclosed.groups() if g is not None)
+    whole = _destination_state(text, siblings=siblings, unit=unit)
+    if whole["state"] != STATE_ORDINARY:
+        return whole
+    captions = [part for x in ([x for x in lines if _plain(x)] or [text]) for part in _CAPTION_GAP.split(x)
+                if _plain(part)]
+    if len(captions) > 1:
+        held = [st for x in captions if (st := _destination_state(x))["state"] != STATE_ORDINARY]
         if held:
             return _state(STATE_UNCERTAIN, "stacked_caption", held[0]["kind"] or "signature")
+    if whole["basis"] not in ORDINARY_EVIDENCE:
+        for m in _BRACKETED.finditer(text):
+            part = next(g for g in m.groups() if g is not None)
+            if _plain(part) and (st := _destination_state(part))["state"] != STATE_ORDINARY:
+                return _state(STATE_UNCERTAIN, "bracketed_caption", st["kind"] or "signature")
     return whole
+
+
+#: The brackets of a placeholder or an author's note (never parentheses), a label printed wholly inside them, and the
+#: writing blanks that separate two captions printed in one label.
+_BRACKETED = re.compile(r"\[([^\[\]]*)\]|<([^<>]*)>|\{([^{}]*)\}")
+_ENCLOSED = re.compile(r"\s*(?:\[([^\[\]]*)\]|<([^<>]*)>|\{([^{}]*)\})[\s:：.]*")
+_CAPTION_GAP = re.compile(r"\t+|_{3,}|\.{5,}|…{2,}")
 
 
 def _destination_state(label, *, siblings=(), unit=False) -> dict:
