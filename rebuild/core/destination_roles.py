@@ -9,6 +9,13 @@ mapping, which a removal, a re-added manual field or an old version could have c
 Gates: manual add (the engine's locate refuses), mapping confirmation, mapping-assistance resolution, generation (a
 field on a role place is never asked), review save and finalization (generated or accepted text there is refused; on the
 legacy path a clinician's own typed value is allowed and exports), and the v3 fill itself.
+
+ROLES-2 (documents.word_v3.destination_state): every place is ORDINARY, PROTECTED or UNCERTAIN, by ONE decision read
+from the original's printed label and structure on both engines. Protected: never generated; on v3 only a Signature or
+Initials field may sit there (a text field is refused at confirmation, save, fill and export). Uncertain: never
+generated, shown on the review page with what needs review; generated or accepted text is refused at save and
+finalization, and a clinician's own typed value is allowed (v3: after the clinician replaces the engine's Signature or
+Initials field by a text field). The reading is versioned (ROLE_READING) and is never applied to a finalized export.
 """
 import collections
 import threading
@@ -21,6 +28,10 @@ from .security import private_path
 ROLE_NOT_GENERATED = ('Signed or initialled by hand on the printed form: this answer area is never generated from notes. '
                       'Enter it yourself if it belongs in this document.')
 IDENTITY_NOT_GENERATED = 'Signature requires explicit review by the finalizing clinician; it is not generated from notes.'
+UNCERTAIN_NOT_GENERATED = ('Needs your review: the printed form does not show whether this is a signing or initials place '
+                           'or an ordinary answer. It is never filled from the notes. If it is an answer, enter it yourself.')
+#: Every reason a destination role gives an answer it never generated (shown on the review page).
+DESTINATION_REASONS = (ROLE_NOT_GENERATED, UNCERTAIN_NOT_GENERATED)
 #: A generation that would need to change what a contract's catalogue binds (the ordinary relations contract, the
 #: batched complete-form contract) is refused rather than silently narrowed.
 GENERATION_HELD_REFUSAL = ('This form\'s mapping places an answer area on a signing, initials, consent or protected place '
@@ -53,7 +64,9 @@ def report(version, fields=None):
     path = private_path(version.template.original_path)
     # The original and a mapping version are immutable, so one reading serves every gate of one request (generation
     # asks three) - kept on this in-memory version object, keyed by the exact mapping it judged.
-    key = hashlib.sha256(json.dumps([engine, version.template.sha256, fields], sort_keys=True, default=str).encode()).hexdigest()
+    from documents.word_v3 import ROLE_READING
+    key = hashlib.sha256(json.dumps([ROLE_READING, engine, version.template.sha256, fields], sort_keys=True,
+                                    default=str).encode()).hexdigest()
     cache = getattr(version, '_destination_role_reports', None)
     if cache is None:
         cache = {}
@@ -108,33 +121,47 @@ def _current_digest(path):
     return digest.hexdigest()
 
 
-def v3_held(version, fields=None):
-    """{key: reason} for every field of a contract v3 mapping that touches a role place it may not take."""
+def v3_protected(version, fields=None):
+    """{key: reason} for every field of a contract v3 mapping that touches a role place it may not take (refused at
+    confirmation, save, fill and export)."""
     result = report(version, fields)
     if not result:
         return {}
     return {key: row['reason'] for key, row in (result.get('violations') or {}).items()}
 
 
-def legacy_roles(version, *, fresh=False):
-    """{key: {'printed_label', 'role'}} for a legacy mapping: each field's PRINTED label and the role the engine's kind
-    rule gives it (documents.word_v3.legacy_role_kind).
+def v3_uncertain(version, fields=None):
+    """{key: reason} for every text field of a contract v3 mapping on an UNCERTAIN place (roles-2): never generated, its
+    generated or accepted text refused at save and finalization, a clinician's typed value allowed."""
+    result = report(version, fields)
+    if not result:
+        return {}
+    return {key: UNCERTAIN_NOT_GENERATED for key in (result.get('held') or {})}
 
-    fresh=True reads them from a fresh inspection of the original in the isolated parser (finalization, which fills
-    from that same inspection). Otherwise from the template's FIRST mapping version: the engine's own inspection of this
-    original, recorded at upload in an append-only row (a database trigger refuses UPDATE and DELETE) - a legacy
-    mapping can only rename labels, never add, remove or move a field, so its keys never change."""
-    if fresh:
-        result = report(version)
-        return (result or {}).get('legacy_roles') or {}
-    from documents.word_v3 import legacy_role_kind
-    first = version.template.versions.order_by('number').first()
-    inspected = {f['key']: f.get('label') for f in (first.fields if first is not None else []) if isinstance(f, dict)}
-    out = {}
-    for field in version.fields:
-        label = inspected.get(field['key'], field.get('label'))
-        out[field['key']] = {'printed_label': label, 'role': legacy_role_kind(label)}
-    return out
+
+def v3_held(version, fields=None):
+    """{key: reason} for every field of a contract v3 mapping that is never GENERATED for its place: protected
+    (v3_protected) or uncertain (v3_uncertain). A complete-form plan and a model-assisted mapping refuse them."""
+    result = report(version, fields)
+    if not result:
+        return {}
+    held = {key: UNCERTAIN_NOT_GENERATED for key in (result.get('held') or {})}
+    held.update({key: row['reason'] for key, row in (result.get('violations') or {}).items()})
+    return held
+
+
+def legacy_roles(version, *, fresh=True):
+    """{key: {'printed_label', 'role', 'state', 'basis', 'reading'}} for a legacy mapping: each field's PRINTED label
+    and its roles-2 destination state, read from a fresh inspection of the original in the isolated parser (the label
+    cell's paragraphs and line breaks read as spaces, the labels beside it in the same table read as its structure).
+
+    ⚠️ ALWAYS FRESH (roles-2, residual L3:F3-01). The first mapping version's stored labels join a wrapped label cell
+    with no separator ('Consultantsignature'), so generation and save read no role there while finalization, reading
+    the original, refused it - three gates, two answers. Every gate now reads the same original the same way (a
+    verified reading is reused in this process, so the cost is one isolated parse per template and mapping). `fresh`
+    is kept for callers; it no longer selects another reader."""
+    result = report(version)
+    return (result or {}).get('legacy_roles') or {}
 
 
 def printed(field, roles):
@@ -164,26 +191,50 @@ def printed(field, roles):
 
 
 def legacy_reason(field, row):
-    """Why a legacy field is never generated (its printed label is identity, a signature or initials, or another named
-    person's signature line - tab_review.another_signers_line), or ''."""
+    """Why a legacy field is never generated (its printed label is identity, its destination state protected - a
+    signature or initials place, or another named person's signature line (tab_review.another_signers_line) - or
+    uncertain), or ''."""
     from .tab_review import another_signers_line, clinician_identity
     if not row:
         return ''
     printed_field = {**field, 'label': row['printed_label']}
     if clinician_identity(printed_field):
         return IDENTITY_NOT_GENERATED
-    return ROLE_NOT_GENERATED if row.get('role') or another_signers_line(printed_field) else ''
+    if another_signers_line(printed_field):
+        return ROLE_NOT_GENERATED
+    state = row.get('state')
+    if state == 'uncertain':
+        return UNCERTAIN_NOT_GENERATED
+    return ROLE_NOT_GENERATED if state == 'protected' or (state is None and row.get('role')) else ''
 
 
-def held(version, *, fresh=False):
-    """{key: reason} for every field of this version that sits on a role place (v3, always read fresh) or reads as a
-    signature, initials or identity row by its printed label (legacy). The qualified WM form: empty."""
+def held(version, *, fresh=True):
+    """{key: reason} for every field of this version that is never generated: on a protected or uncertain place (v3) or
+    whose printed label is identity, a signing place or uncertain (legacy) - both read fresh from the original. The
+    qualified WM form: empty."""
     if not applies(version):
         return {}
     if v3_mapping.is_v3_version(version):
         return v3_held(version)
     roles = legacy_roles(version, fresh=fresh)
     return {f['key']: reason for f in version.fields if (reason := legacy_reason(f, roles.get(f['key'])))}
+
+
+def review_reasons(version):
+    """{key: reason} the review page shows for each field held by its destination state (roles-2), read from the
+    original now: legacy - the printed label's reason; v3 - a text field on an uncertain place, or any field (the
+    engine's Signature or Initials field included) on a place whose role cannot be established. Never called for a
+    finalized record (its stored answers are what was decided)."""
+    if not applies(version):
+        return {}
+    if v3_mapping.is_v3_version(version):
+        result = report(version) or {}
+        out = {key: UNCERTAIN_NOT_GENERATED for key in result.get('uncertain_places') or []}
+        out.update({key: UNCERTAIN_NOT_GENERATED for key in (result.get('held') or {})})
+        return out
+    roles = legacy_roles(version)
+    return {f['key']: reason for f in version.fields
+            if (reason := legacy_reason(f, roles.get(f['key']))) in DESTINATION_REASONS}
 
 
 def generation_fields(version):

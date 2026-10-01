@@ -696,18 +696,16 @@ class V3Round1(Walk, V3Fixture, TestCase):
                                     'label': 'Describe the initial presentation?'})
         self.assertEqual(response.status_code, 302)
 
-    def test_r2_04_an_initial_reading_can_be_replaced_by_its_text_answer(self):
+    def test_r2_04_an_initial_reading_is_generated_as_the_answer_it_asks(self):
+        """R2-04, superseded by roles-2: 'Initial GCS' was an initials field the clinician had to replace by hand; the
+        attributive 'initial' is now ordinary on evidence (documents.word_v3.destination_state), so the engine types it
+        as the answer it asks and generation fills it."""
         template, version = self.uploaded(data=lines('Initial GCS: ______', 'Plan: ______'), name='Synthetic R2-04')
         gcs = self.by_label(version)['Initial GCS']
-        self.assertEqual(gcs['kind'], 'initials')
-        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
-                                                                  'remove_' + gcs['key']: 'on'})
-        self.assertEqual(response.status_code, 302)
-        latest = self.latest(template)
-        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_add', 'mapping_version': latest.pk,
-                                    'slot': BODY + 'b/p[1]', 'kind': 'text', 'label': 'Initial GCS'})
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(self.confirm_status(template, self.latest(template)), 302)
+        self.assertEqual(gcs['kind'], 'text')
+        self.assertEqual(self.confirm_status(template, version), 302)
+        e = self.generated(version, 'Initial GCS: 15\nPlan: Rest.')
+        self.assertEqual(e.answers[gcs['key']]['text'], '15')
 
     def test_r2_05_an_unlocked_control_inside_a_locked_frame_is_confirmed(self):
         doc = Document(); doc.add_heading('Clinic record', level=2)
@@ -736,18 +734,23 @@ class V3Round1(Walk, V3Fixture, TestCase):
         self.assertEqual((e.answers[field['key']]['status'], e.answers[field['key']]['text']), ('missing', ''))
 
     def test_l1f6_the_line_under_a_signature_caption_is_listed_at_confirmation(self):
-        """L1:F6(a): the engine's 'Answer' field on the writing line under 'Consultant signature:' sits on the signing
-        place; confirmation lists it, and after its removal the mapping confirms."""
+        """L1:F6(a), roles-2: the engine now types the writing line under 'Consultant signature:' as a Signature field
+        itself (never generated, so the mapping confirms); a mapping stored before that, holding its text 'Answer' field
+        there, is listed at confirmation, and after its removal the mapping confirms."""
         doc = Document(); doc.add_heading('Clinic record', level=2); doc.add_paragraph('Consultant signature:')
         doc.add_paragraph('____________________'); doc.add_paragraph('Plan: ______')
         template, version = self.uploaded(data=saved(doc), name='Synthetic L1F6')
-        answer = next(f for f in version.fields if f['locator']['slot'] == 'b/p[2]')
-        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm', 'mapping_version': version.pk,
+        line = next(f for f in version.fields if f['locator']['slot'] == 'b/p[2]')
+        self.assertEqual(line['kind'], 'signature')
+        stored = TemplateVersion.objects.create(template=template, number=2, contract='v3', created_by=self.user,
+                                                fields=[{**f, 'kind': 'text', 'label': 'Answer'} if f['key'] == line['key']
+                                                        else f for f in version.fields])
+        response = self.client.post(f'/templates/{template.pk}/', {'action': 'v3_confirm', 'mapping_version': stored.pk,
                                                                    'checked_every_field': 'on'})
         self.assertEqual(response.status_code, 400)
-        self.assertIn(answer['label'], response.context['v3_error'])
-        self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': version.pk,
-                                                        'remove_' + answer['key']: 'on'})
+        self.assertIn('Answer', response.context['v3_error'])
+        self.client.post(f'/templates/{template.pk}/', {'action': 'v3_save', 'mapping_version': stored.pk,
+                                                        'remove_' + line['key']: 'on'})
         self.assertEqual(self.confirm_status(template, self.latest(template)), 302)
 
     def test_l1f7_declared_residual_a_typed_initial_in_a_log_tables_initials_column_exports(self):

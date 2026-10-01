@@ -676,14 +676,69 @@ def fill_docx(path, output, document, paragraphs, cells, fields, answers):
         document.save(output)
 
 
-def legacy_roles(fields, mapping):
+def _printed_text(element):
+    """A label cell's printed words as a reader sees them: each paragraph, line break and tab is a space. The engine's
+    own label joins the runs with no separator ('Consultant' + 'signature' -> 'Consultantsignature', residual
+    L1:RR1-05), which no reader can see as a signing place; the role is read from this text instead."""
+    out = []
+    for node in element.iter():
+        if node.tag == qn("w:t"):
+            out.append(node.text or "")
+        elif node.tag in (qn("w:p"), qn("w:br"), qn("w:cr"), qn("w:tab")):
+            out.append(" ")
+    return re.sub(r"\s+", " ", "".join(out)).strip()
+
+
+def _printed_lines(paragraph):
+    """A paragraph's printed lines (split at its line breaks)."""
+    out, line = [], []
+    for node in paragraph.iter():
+        if node.tag == qn("w:t"):
+            line.append(node.text or "")
+        elif node.tag == qn("w:tab"):
+            line.append(" ")
+        elif node.tag in (qn("w:br"), qn("w:cr")):
+            out.append("".join(line)); line = []
+    out.append("".join(line))
+    return [re.sub(r"\s+", " ", x).strip() for x in out]
+
+
+def legacy_roles(fields, mapping, cells=()):
     """The legacy default path's destination roles for a STORED mapping, read from a fresh inspection of the original:
-    each field's PRINTED label (the inspected one, never the mapping's edited label) and the role the engine's kind rule
-    gives it there (word_v3.legacy_role_kind: 'signature', 'initials' or ''). The mapping must be this original's."""
+    each field's PRINTED label (the inspected label cell read with its paragraphs and line breaks as spaces, never the
+    mapping's edited label) and its roles-2 destination state (word_v3.legacy_destination: ordinary, protected or
+    uncertain, with the signing kind of a held place as 'role'), read with the labels beside it in the same table (a
+    sequence word beside a bare 'Initial'). The mapping must be this original's."""
     if not isinstance(mapping, list) or structure(fields) != structure(mapping):
         fail("The field mapping does not match this original. Reinspect and create a new mapping version.", "mapping_mismatch")
-    return {"legacy_roles": {field["key"]: {"printed_label": field["label"],
-                                            "role": word_v3.legacy_role_kind(field["label"])} for field in fields}}
+    printed, table_of, stacked = {}, {}, {}
+    for field in fields:
+        printed[field["key"]] = field["label"]
+        number = (field.get("locator") or {}).get("cell")
+        if isinstance(number, int) and 0 <= number < len(cells):
+            answer = cells[number][0]
+            answer = getattr(answer, "_tc", answer)
+            label_cell = answer.getprevious()
+            while label_cell is not None and label_cell.tag != qn("w:tc"):
+                label_cell = label_cell.getprevious()
+            if label_cell is not None:
+                printed[field["key"]] = _printed_text(label_cell) or field["label"]
+                # its own paragraphs and line breaks: two captions stacked in one label cell are read one by one
+                stacked[field["key"]] = [line for p in label_cell.iter(qn("w:p"))
+                                         for line in _printed_lines(p) if line]
+            table = next((a for a in answer.iterancestors() if a.tag == qn("w:tbl")), None)
+            table_of[field["key"]] = id(table) if table is not None else None
+        elif "tab_form" in (field.get("locator") or {}):
+            table_of[field["key"]] = "tab_form"
+    out = {}
+    for field in fields:
+        key = field["key"]
+        group = table_of.get(key)
+        siblings = [printed[other["key"]] for other in fields
+                    if other["key"] != key and group is not None and table_of.get(other["key"]) == group]
+        row = word_v3.legacy_destination(printed[key], siblings=siblings, lines=stacked.get(key, ()))
+        out[key] = {"printed_label": printed[key], **row}
+    return {"legacy_roles": out, "reading": word_v3.ROLE_READING}
 
 
 def process(workspace, request):
@@ -744,7 +799,7 @@ def process(workspace, request):
             document, paragraphs, cells, fields, _ = legacy
             result["fields"] = fields
     if request["operation"] == "roles":
-        return legacy_roles(fields, request.get("mapping"))
+        return legacy_roles(fields, request.get("mapping"), cells if fmt == "docx" else ())
     validate_mapping(fields, request["mapping"], answers)
     if fmt == "docx":
         fill_docx(path, workspace / "output.docx", document, paragraphs, cells, fields, answers)

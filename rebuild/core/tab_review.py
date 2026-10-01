@@ -72,8 +72,31 @@ def signature_line(label):
     return any(pattern.fullmatch(text) for pattern in SIGNATURE_PATTERNS)
 
 
+#: The SIGNER a signature line names: its parenthetical, or what follows 'by' / 'of' - read from its head word, after
+#: an article and any possessive ('the patient's consultant' -> 'consultant').
+_POSSESSIVE = re.compile(r"^(?:(?:the|a|an)\s+)?(?:[\w-]+(?:'s|’s|s'|s’)\s+)+")
+
+
+def _names_another_signer(text):
+    """Whether the line's SIGNER is somebody other than the clinician: the head of its parenthetical or 'by'/'of'
+    phrase is a NOT_THE_CLINICIAN person. A person merely mentioned there is not the signer.
+
+    ⚠️ roles-2 (residual L2:RR3-05): searched over the WHOLE label, 'patient' in 'Signed by (doctor responsible for
+    patient)' and "Signature (patient's consultant)" released the finalizer's own line from identity, so another
+    clinician's typed name finalized. The head is read instead; this only ever ADDS identity (a line whose head is
+    another person - 'Signature (patient)', 'Signed by (witness, DOB)' - is another signer's exactly as before)."""
+    inner = QUALIFIER.search(text)
+    after = re.search(r'\b(?:by|of)\s+(.+)$', text)
+    if inner is None and after is None:
+        return bool(NOT_THE_CLINICIAN.search(text))
+    signer = inner.group(1) if inner is not None else after.group(1)
+    signer = re.split(r'[,;]', signer.strip(' ()[]:'))[0].strip()
+    head = _POSSESSIVE.sub('', signer).strip(' ()[]')
+    return not head or bool(NOT_THE_CLINICIAN.match(head))
+
+
 def signature_label(label):
-    if NOT_THE_CLINICIAN.search(_normal(label)):
+    if NOT_THE_CLINICIAN.search(_normal(label)) and _names_another_signer(_normal(label)):
         return False
     return signature_line(label)
 
@@ -88,7 +111,8 @@ def another_signers_line(field):
     date word the role reader treats as a date question) is never generated; a clinician's typed value still exports.
     'Signature (participant, dd/mm/yyyy)' and 'Signed (mother, DOB)' are identity rows again (43fcf214's hold)."""
     label = (field or {}).get('label')
-    return bool(NOT_THE_CLINICIAN.search(_normal(label))) and signature_line(label)
+    return bool(NOT_THE_CLINICIAN.search(_normal(label))) and _names_another_signer(_normal(label)) \
+        and signature_line(label)
 
 
 def clinician_identity(field):

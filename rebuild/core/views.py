@@ -656,6 +656,10 @@ ROLE_SAVE_REFUSAL=('These answers sit on a signing, initials, consent or protect
                    'takes a typed or generated answer: ')
 LEGACY_ROLE_SAVE_REFUSAL=('These answers were generated from the notes or accepted from a suggestion, but the form prints '
                           'them as a signature, initials or signer row, which QuillMD never fills from notes: ')
+#: roles-2: a place whose role the printed form does not establish takes the clinician's own entry only.
+UNCERTAIN_SAVE_REFUSAL=('These answers were generated from the notes or accepted from a suggestion, but the printed form does '
+                        'not show whether each is a signing or initials place or an ordinary answer, so QuillMD never fills '
+                        'them from notes: ')
 
 def v3_confirm(request,t):
     """The clinician's statement that every field was checked against the form, recorded with who and when."""
@@ -677,7 +681,7 @@ def v3_confirm(request,t):
         # (or without the place's printed authorship/review requirement) can never be answered there, whoever put it
         # there - a removed engine field re-added by hand, a model proposal, or a version stored before this check.
         from . import destination_roles
-        held=destination_roles.v3_held(latest)
+        held=destination_roles.v3_protected(latest)
         if held:raise ValidationError(ROLE_CONFIRM_REFUSAL+field_list([v3_mapping.label_of(f) for f in latest.fields if f['key'] in held])+' Remove each one (only a Signature or Initials field may sit there), then confirm.')
         if latest.confirmed:
             messages.info(request,'This mapping version was already confirmed.')
@@ -748,16 +752,24 @@ def encounter_detail(request,pk):
     accepters={str(pk):email for pk,email in User.objects.filter(
         pk__in={row['accepted_by'] for row in rows if row.get('accepted_by')}).values_list('pk','email')}
     from .tab_review import clinician_identity
-    from .destination_roles import ROLE_NOT_GENERATED as role_not_generated
-    printed_roles={}
+    from .destination_roles import DESTINATION_REASONS as destination_reasons
+    printed_roles={};current_reasons={}
     if not is_wm and not is_v3 and e.status!='finalized':
         # Identity is read from each field's PRINTED label (core.destination_roles), as saving and finalization read it.
         from . import destination_roles
         try:printed_roles=destination_roles.legacy_roles(e.template_version)
         except (ValidationError,DocumentError):printed_roles={}
         from .destination_roles import printed as printed_field
+        current_reasons={f['key']:reason for f in e.template_version.fields
+                         if (reason:=destination_roles.legacy_reason(f,printed_roles.get(f['key']))) in destination_reasons}
     else:
         printed_field=lambda field,roles:field
+        if is_v3 and e.status!='finalized':
+            # roles-2: what the page says needs review on a v3 form, read from the original now (never re-judges a
+            # finalized record, which keeps the reasons its stored answers carry).
+            from . import destination_roles
+            try:current_reasons=destination_roles.review_reasons(e.template_version)
+            except (ValidationError,DocumentError):current_reasons={}
     editors={str(pk):email for pk,email in User.objects.filter(
         pk__in={row.get('edited_by') for row in rows} - {None}).values_list('pk','email')}
     deciders={str(pk):email for pk,email in User.objects.filter(
@@ -807,10 +819,11 @@ def encounter_detail(request,pk):
         row['reviewed']=row['stored_reviewed'] and answer.get('reviewed_by')==str(request.user.pk)
         row['reviewed_by_other']=row['stored_reviewed'] and not row['reviewed']
         row['identity']=clinician_identity(printed_field(row,printed_roles))
-        # Why a signing or initials row was never generated (destination roles): the stored answer's reason, shown on
-        # the page so the clinician is told rather than only seeing 'no supporting passage' (demo rehearsal gap).
+        # Why a signing, initials or uncertain row was never generated (destination roles): the stored answer's reason,
+        # or the original's current reading (roles-2: a draft from before it, or a row nothing was generated for), shown
+        # on the page so the clinician is told rather than only seeing 'no supporting passage' (demo rehearsal gap).
         row['destination_reason']=(answer.get('reason') if answer.get('status')=='missing'
-                                   and answer.get('reason')==role_not_generated else '')
+                                   and answer.get('reason') in destination_reasons else '') or current_reasons.get(row['key'],'')
         if is_v3:
             # How the page asks for each kind; the stored answer stays its text form (core/v3_mapping.py).
             kind=row.get('kind')
@@ -1342,15 +1355,22 @@ def save_answers(request,pk):
                 report=destination_roles.report(e.template_version) if texted else None
                 held=(report or {}).get('violations') or {}
                 refused=[f['label'] for f in texted if f['key'] in held];refusal=ROLE_SAVE_REFUSAL
+                # roles-2: on an UNCERTAIN place a clinician's own typed value is kept; generated or accepted text is not.
+                uncertain=(report or {}).get('held') or {}
+                if not refused:
+                    refused=[f['label'] for f in texted if f['key'] in uncertain
+                             and destination_roles.generated_text(answers[f['key']])];refusal=UNCERTAIN_SAVE_REFUSAL
             else:
                 generated=[f for f in e.template_version.fields if destination_roles.generated_text(answers[f['key']])]
-                refused=[f['label'] for f in generated if destination_roles.legacy_reason(f,legacy_roles().get(f['key']))]
-                refusal=LEGACY_ROLE_SAVE_REFUSAL
+                reasons={f['key']:destination_roles.legacy_reason(f,legacy_roles().get(f['key'])) for f in generated}
+                refused=[f['label'] for f in generated if reasons[f['key']]]
+                refusal=(UNCERTAIN_SAVE_REFUSAL if refused and all(r in ('',destination_roles.UNCERTAIN_NOT_GENERATED)
+                                                                   for r in reasons.values()) else LEGACY_ROLE_SAVE_REFUSAL)
         except (ValidationError,DocumentError) as exc:
             return document_refusal(request,e,'The original form could not be verified: '+error_message(exc)+' Nothing was saved.',409)
         if refused:
             return document_refusal(request,e,refusal+field_list(refused)+(' Clear each one: it is completed by hand on the printed form.'
-                                    if is_v3 else ' Clear each one and save; you may then type your own entry.')+' Nothing was saved.',400)
+                                    if is_v3 and refusal==ROLE_SAVE_REFUSAL else ' Clear each one and save; you may then type your own entry.')+' Nothing was saved.',400)
     decisions={}
     if is_wm:
         for requirement in e.template_version.review_requirements:
@@ -1541,15 +1561,23 @@ def finalize(request,pk):
                 identity_fields=version.fields
                 if destination_roles.applies(version):
                     if is_v3:
-                        held=destination_roles.v3_held(version)
+                        held=destination_roles.v3_protected(version)
                         refused=[f['label'] for f in version.fields if f['key'] in held
                                  and (e.answers.get(f['key'],{}).get('text') or '').strip()]
                         if refused:raise ValidationError(ROLE_SAVE_REFUSAL+field_list(refused)+' Clear each one: it is completed by hand on the printed form. Nothing was finalized.')
+                        # roles-2: an uncertain place exports the clinician's own typed value, never generated text.
+                        uncertain=destination_roles.v3_uncertain(version)
+                        refused=[f['label'] for f in version.fields if f['key'] in uncertain
+                                 and destination_roles.generated_text(e.answers.get(f['key']))]
+                        if refused:raise ValidationError(UNCERTAIN_SAVE_REFUSAL+field_list(refused)+' Clear each one and save; you may then type your own entry. Nothing was finalized.')
                     else:
                         roles=destination_roles.legacy_roles(version,fresh=True)
-                        refused=[f['label'] for f in version.fields if destination_roles.legacy_reason(f,roles.get(f['key']))
-                                 and destination_roles.generated_text(e.answers.get(f['key']))]
-                        if refused:raise ValidationError(LEGACY_ROLE_SAVE_REFUSAL+field_list(refused)+' Clear each one and save; you may then type your own entry. Nothing was finalized.')
+                        reasons={f['key']:destination_roles.legacy_reason(f,roles.get(f['key'])) for f in version.fields
+                                 if destination_roles.generated_text(e.answers.get(f['key']))}
+                        refused=[f['label'] for f in version.fields if reasons.get(f['key'])]
+                        refusal=(UNCERTAIN_SAVE_REFUSAL if all(r in ('',destination_roles.UNCERTAIN_NOT_GENERATED)
+                                                               for r in reasons.values()) else LEGACY_ROLE_SAVE_REFUSAL)
+                        if refused:raise ValidationError(refusal+field_list(refused)+' Clear each one and save; you may then type your own entry. Nothing was finalized.')
                         identity_fields=[destination_roles.printed(f,roles) for f in version.fields]
                 validate_identity(identity_fields,e.answers,request.user)
                 # A v3 answer is re-read from its text form (the same reader as saving) and converted per kind: an

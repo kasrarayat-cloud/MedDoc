@@ -493,14 +493,20 @@ class SigningCaptionAndLine(unittest.TestCase):
     """L1:F6: a caption over its writing line is one signing place."""
 
     def test_l1f6_the_writing_line_under_a_signature_caption(self):
-        """(a) 'Consultant signature:' then '____': the engine maps the underline as an ordinary 'Answer' field, and fill
-        wrote 'Dr Example' on it. Now that field sits on a signing place (confirmation lists it for removal)."""
+        """(a) 'Consultant signature:' then '____': the engine mapped the underline as an ordinary 'Answer' field, and fill
+        wrote 'Dr Example' on it. That field sat on a signing place (confirmation listed it for removal). roles-2: the
+        caption governs its line (Detector.assign_destinations), so the engine's own field there is a Signature field;
+        a mapping stored with the text field is still refused."""
         doc = Document(); doc.add_heading('Clinic record', level=2)
         doc.add_paragraph('Consultant signature:'); doc.add_paragraph('____________________'); doc.add_paragraph('Plan: ______')
         blob = data(doc)
         engine = w.inspect(blob)['fields']
         answer = next(f for f in engine if f['locator']['slot'] == 'b/p[2]')
-        self.assertEqual(answer['kind'], 'text')
+        self.assertEqual(answer['kind'], 'signature')
+        self.assertEqual(w.destination_roles(blob, engine)['violations'], {})
+        stored = dict(answer, kind='text', label='Answer')
+        engine = [stored if f is answer else f for f in engine]
+        answer = stored
         self.assertIn(answer['key'], w.destination_roles(blob, engine)['violations'])
         self.assertEqual(refusal(blob, engine, answer['key'], 'Dr Example'), 'protected_signing_area')
         plan = next(f for f in engine if f['label'] == 'Plan')
@@ -656,18 +662,20 @@ class ReadingsReleased(unittest.TestCase):
         self.assertEqual(located(blob, BODY + 'b/tbl[0]/tr[0]/tc[0]', 'long_text', 'Capacity')[1], 'destination_role')
 
     def test_r2_04_a_clinical_reading_the_kind_rule_types_initials_is_not_a_role(self):
-        """R2-04: 'Initial GCS: ____' is still an initials field (never generated), but it is no longer a role, so the
-        clinician can remove it and add the text answer the form asks for."""
-        for label in ('Initial GCS', 'Initial assessment', 'Initial dose', 'Initial ECG', 'Initial lactate',
-                      'Consent form signed', 'Time signed'):
+        """R2-04, superseded by roles-2: 'Initial GCS: ____' was an initials field (never generated) the clinician had to
+        replace. The destination state reads these on evidence as ordinary (an attributive 'initial', a document or a
+        time before a closing 'signed'), so the engine types them as the answer they ask: no role, generated, filled."""
+        for label, kind in (('Initial GCS', 'text'), ('Initial assessment', 'text'), ('Initial dose', 'text'),
+                            ('Initial ECG', 'text'), ('Initial lactate', 'text'), ('Consent form signed', 'text'),
+                            ('Time signed', 'time')):
             with self.subTest(label=label):
                 blob = line_form(label + ': ______')
                 engine = w.inspect(blob)['fields']
-                self.assertIn(engine[0]['kind'], ('signature', 'initials'))
-                self.assertEqual([r for r in w.destination_roles(blob)['roles'] if r['class'] == 'signing'], [])
-                added, code = located(blob, BODY + 'b/p[1]', label=label)
-                self.assertIsNone(code)
-                self.assertIn('SYNVAL', xml(w.fill(blob, engine[1:] + [added], {added['key']: 'SYNVAL'})))
+                self.assertEqual(engine[0]['kind'], kind)
+                rep = w.destination_roles(blob, engine)
+                self.assertEqual([r for r in rep['roles'] if r['class'] in ('signing', 'uncertain')], [])
+                self.assertEqual((rep['violations'], rep['held']), ({}, {}))
+                self.assertIn('SYNVAL', xml(w.fill(blob, engine, {engine[0]['key']: 'SYNVAL'})))
 
     def test_r2_05_an_unlocked_control_inside_a_locked_frame_is_answerable(self):
         """R2-05: a contentLocked rich-text frame around 'Hospital number: ' + an unlocked plain-text control: the
@@ -721,8 +729,15 @@ class DashQualifiedInitial(unittest.TestCase):
         self.assertEqual(w.signing_place('Nurse — Initial'), '')
 
     def test_the_v3_kind_rule_is_unchanged(self):
-        # On contract v3 the area stays an initials field (never generated); only its role is released.
-        self.assertEqual(w.Detector.kind_for(None, 'Troponin — Initial'), 'initials')
+        # The wording kind rule is unchanged; roles-2 (destination_state) reads a measured head before the dash as a
+        # qualifier on evidence, so the engine types the area as the answer it asks.
+        self.assertEqual(w.kind_rule('Troponin — Initial'), 'initials')
+        self.assertEqual(w.Detector.kind_for(None, 'Troponin — Initial'), 'text')
+
+    def test_roles2_a_person_before_the_dash_is_held(self):
+        # The declared cost above is closed by roles-2: a person's head is a signing place on both engines.
+        self.assertEqual(w.destination_state('Nurse — Initial')['state'], 'protected')
+        self.assertEqual(w.legacy_role_kind('Nurse — Initial'), 'initials')
 
 
 # ─── b2 repair round (refutation of 258650f2): regressions vs 43fcf214 removed by dropping or narrowing their cause ───
