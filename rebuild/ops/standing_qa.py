@@ -50,8 +50,9 @@ never a large number. Every NON-monetary control stays, each stated so a reader 
                         `run` requires one whose returned id is the declared model.
 
 The historical campaign quillmd-v1-sonnet5-staged-40 (its declaration, ledger, limits, attempts 1-24, failures and
-verdicts) is untouched: its runner (ops/sonnet5_qa.py) still reads it (plan, status) and refuses every write to it
-(sonnet5_qa.require_not_historical); this runner refuses its campaign id, root and database.
+verdicts) is untouched: its runner (ops/sonnet5_qa.py) still reads it (plan, status), refuses every write to its root
+(sonnet5_qa.require_not_historical) and sends nothing again at any root (sonnet5_qa.SENDS_CLOSED: `run` and `_inner`
+refuse before reading anything); this runner refuses its campaign id, root and database.
 
 Commands (from the candidate checkout; `run` and `preflight` only through the ruled-mutation door; every command but
 `pricing` takes `--declaration docs/foundation/mutations/<YYYYMMDD>-quillmd-v1-standing-api-testing[-<n>].md` for a
@@ -691,13 +692,33 @@ def plan_definitions(inputs):
     return report
 
 
+def stranded(remaining):
+    """The encounters in `remaining` whose form's mapping send is not in it — it was made in an earlier run. An
+    encounter needs its form's proposal in the same process (sonnet5_stages.Run.templates), so it can never be sent in
+    this campaign, and a stage with one left can never pass here."""
+    ids = {send.id for send in remaining}
+    return [send for send in remaining if send.path == 'mapping_encounter' and f'mapping:{send.form}' not in ids]
+
+
+def require_none_stranded(stage, remaining):
+    """The historical rule (sonnet5_stages.pending_sends, f5fe720f): a remainder holding an encounter whose form's mapping
+    send was already made is refused WHOLE, before anything is written — the encounter is not sent, and nothing else is.
+    Refutation R1-F2/R2-F1: setting such an encounter aside as `not_exercised` let the stage PASS with it never sent."""
+    found = stranded(remaining)
+    require(not found, '; '.join(f'{send.id} needs its form\'s mapping send in the same run, and that send was already '
+                                 'made; it is not sent' for send in found)
+            + ('.' if stage is None else
+               f'. Stage {stage} cannot pass in this campaign: its remainder is not sent (a later campaign, a new '
+               'declaration <YYYYMMDD>-quillmd-v1-standing-api-testing-<n>.md, measures the stage again).'))
+    return remaining
+
+
 def select_batch(remaining, cap):
-    """(the next sends of a run, the sends that can never be made). In plan order, at most `cap`; a mapping form's send
-    and the encounter that needs its proposal in the same process are selected together or not at all. An encounter
-    whose form's mapping send was already made (in an earlier run) can never be made: it is returned apart, to be
-    recorded as not exercisable, never selected."""
+    """The next sends of a run: in plan order, at most `cap`; a mapping form's send and the encounter that needs its
+    proposal in the same process are selected together or not at all. A remainder with a stranded encounter is refused
+    (require_none_stranded) — it is never set aside."""
+    require_none_stranded(None, remaining)
     by_id = {send.id: send for send in remaining}
-    orphans = [send for send in remaining if send.path == 'mapping_encounter' and f'mapping:{send.form}' not in by_id]
     chosen = set()
     for send in remaining:
         if send.path == 'mapping_encounter':
@@ -708,8 +729,8 @@ def select_batch(remaining, cap):
         if len(chosen) + len(group) > cap:
             break                                       # (the next run starts with this send, or this pair)
         chosen.update(group)
-    require(chosen or orphans, f'No send fits in a run of {cap}.')
-    return [send for send in remaining if send.id in chosen], orphans
+    require(chosen, f'No send fits in a run of {cap}.')
+    return [send for send in remaining if send.id in chosen]
 
 
 # ── the ledger, the runs and admission ───────────────────────────────────────────────────────────────────────────
@@ -968,7 +989,8 @@ def earlier_stops(campaign, stage, current=()):
 
 def remaining_sends(campaign, stage, plan):
     """The plan's sends with no attempt in this campaign and not recorded as not exercisable (duplicates are never
-    planned), in plan order."""
+    planned), in plan order. A row is `not_exercised` only when the worker found an encounter it could not confirm
+    without removing a field (sonnet5_stages.Run.encounter_send), never because its form was mapped in another run."""
     attempted = {(a.get('send') or {}).get('id') for a, _ in campaign.ledger.rows() if a.get('stage') == stage}
     unexercised = set()
     for opened, closed in campaign.runs.listing():
@@ -1279,8 +1301,11 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     """One bounded run of a mapping or notes stage, through the historical per-send machinery (sonnet5_stages.Run: the
     real views and worker, admission per send, the attempt before the one request, the outcome, the contract checks, the
     frozen graders, the export read-back, the billing audit, the leak scan). Only sends with no attempt in this campaign
-    are planned; at most min(max_sends, max_sends_per_run). The stage is decided failed on any stop, passed when every
-    planned send is made and none ever stopped it; otherwise the run closes and the stage stays open."""
+    are planned; at most min(max_sends, max_sends_per_run). A remainder holding an encounter whose form's mapping send was
+    made in an earlier run (a halt between the two, or a stop before the encounter's attempt) is refused whole before
+    anything is written (require_none_stranded: the historical rule) — the stage can never pass in this campaign. The
+    stage is decided failed on any stop, passed when every planned send is made and none ever stopped it; otherwise the
+    run closes and the stage stays open."""
     stages = sq.stages_module()
     declaration, ledger, root = campaign.declaration, campaign.ledger, campaign.root
     require(stage in STAGE_KIND and stage != 'model_check', f'No stage run for {stage!r} here.')
@@ -1299,9 +1324,10 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     remaining = remaining_sends(campaign, stage, plan)
     require(remaining, f'Every send of {stage} already has an attempt (or was recorded not exercisable); nothing is '
                        'sent twice.')
+    require_none_stranded(stage, remaining)                 # (before anything is written: the historical rule)
     cap = limits.max_sends_per_run if max_sends is None else min(int(max_sends), limits.max_sends_per_run)
     require(cap > 0, 'A run makes at least one send.')
-    selected, orphans = select_batch(remaining, cap)
+    selected = select_batch(remaining, cap)
     run = begin_run(campaign, stage, selected, inputs, cap, provenance)
     try:
         forms = stages.build_forms(root / 'forms' / stage, kind, inputs)
@@ -1313,10 +1339,6 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
         stale = sq.cancel_stale_jobs(world)
         worker = stages.Run(campaign, stage, secret=secret, provenance=provenance, inputs=inputs, forms=forms,
                             world=world, checked=checked, deadline=limits.request_deadline_seconds)
-        for orphan in orphans:
-            worker.sends.append({'send': orphan.record(), 'not_exercised': 'its form\'s mapping send was made in an '
-                                                                           'earlier run; it needs that proposal in the '
-                                                                           'same process and is never sent'})
         scratch = pc.private_directory(root / 'tmp' / f'price-{stage}-{run["run_id"]}')
         worker.planned = {key: value['maximum_cost'] for key, value in price_sends(
             stage, selected, inputs, scratch, declaration, limits).items()}
@@ -1353,9 +1375,11 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
 
 def decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base, *, halted=None):
     """The run's close and, when it is due, the stage's decision: failed on any stop (that path stops until a committed
-    diagnosis and repair reopen it); passed only when every planned send has been made (or recorded not exercisable)
-    and no attempt of any run ever stopped it; otherwise the run closes and the stage stays open for the next run —
-    `halted` (the operator's Stop file during the run) included: a halt is not a failure."""
+    diagnosis and repair reopen it); passed only when every planned send has been made (or, for an encounter whose form
+    was mapped in the same run, recorded not exercisable by the worker), this run made at least one, and no attempt of
+    any run ever stopped it; otherwise the run closes and the stage stays open for the next run — `halted` (the
+    operator's Stop file during the run) included: a halt is not a failure (a halt that strands an encounter leaves a
+    remainder the next run refuses: require_none_stranded)."""
     ledger = campaign.ledger
     attempts = [row.get('attempt') for row in worker.sends if row.get('attempt')]
     earlier = earlier_stops(campaign, stage, attempts)
@@ -1373,7 +1397,9 @@ def decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base, *, h
     summary = {'run': run['run_id'], 'plan': [send.id for send in plan], 'selected': run['sends'],
                'sends': worker.sends, 'not_sent': not_sent, 'veto_evidence': worker.veto_evidence, 'attempts': attempts,
                'earlier_stops': earlier, 'remaining_after': left, 'monetary_ceiling': None, **base}
-    if not attempts and not reasons and not halted and not any('not_exercised' in row for row in worker.sends):
+    if not attempts and not reasons and not halted:
+        # (the historical rule, sonnet5_stages.decide_stage: a run that made no send is never a pass — whatever rows it
+        # recorded as not exercisable; a not-exercisable encounter is only ever one whose form was mapped in this run)
         reasons = ['no send was made']
     summary['halted'] = halted
     decision = 'partial'
@@ -1454,7 +1480,9 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
             if not entry.get('established') or name == 'transcription':
                 continue
             sends = standing_plan(name, inputs)
-            entry['remaining'] = [send.id for send in remaining_sends(campaign, name, sends)]
+            left = remaining_sends(campaign, name, sends)
+            entry['remaining'] = [send.id for send in left]
+            entry['stranded'] = [send.id for send in stranded(left)]         # (never sent here: the stage cannot pass)
             entry['stage_state'] = campaign.ledger.stage_state(name)['state']
             entry['earlier_stops'] = earlier_stops(campaign, name)
         report['declaration'] = {'path': str(path), 'sha256': declaration.sha256, 'commit': declaration.commit}
@@ -1688,10 +1716,12 @@ def reopen(stage, diagnosis, root=None, declaration_path=None, *, repository=Non
     campaign = StandingCampaign(declaration, root)
 
     def remainder():
+        # (the historical reopening's rule, sonnet5_qa.reopen -> pending_sends: a remainder the stage runner would refuse
+        # — nothing left, or a stranded encounter — is refused here, before the reopening is written)
         inputs = sq.stages_module().frozen_inputs() if stage != 'model_check' else None
-        left = [send.id for send in remaining_sends(campaign, stage, standing_plan(stage, inputs))]
+        left = remaining_sends(campaign, stage, standing_plan(stage, inputs))
         require(left, f'Stage {stage} has no send left that was never made; a reopening would send nothing.')
-        return left
+        return [send.id for send in require_none_stranded(stage, left)]
     campaign.ledger.acquire()
     try:
         record = campaign.reopen(stage, diagnosis, runner_commit=identity['commit'], remainder=remainder)

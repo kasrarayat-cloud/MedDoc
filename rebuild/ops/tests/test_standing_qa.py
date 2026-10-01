@@ -16,7 +16,13 @@ What each group proves, stated so a reader can see how it would fail:
     allow and a restricted development original are refused at the last door before a send.
   · RUNS AND RECONCILIATION — gapless runs, one open; an attempt left without an outcome is recorded interrupted_unknown,
     its stage failed and its run closed as interrupted, and the path stays stopped; a closed partial run keeps its stage
-    open; remaining sends skip attempted and unexercisable ones; batches never split a mapping form from its encounter.
+    open; remaining sends skip attempted and unexercisable ones; batches never split a mapping form from its encounter,
+    and a remainder holding an encounter whose form was mapped in an earlier run is refused, never set aside.
+  · STAGE RUNS — the real run_stage (only the Django-bound helpers and the per-send worker stood in): a full mapping run
+    passes with both encounters sent; a Stop-file halt that strands an encounter, or a stop before an encounter's
+    attempt, never becomes a pass — every later run is refused before a run opens, and the reopening is refused before
+    it is written (refutation R1-F2/R2-F1, the historical pending_sends rule restored); a run that made no send is
+    never a pass.
   · CONFIGURATION — the eligible configuration passes; a contract flag, a non-QA database, the installed database, tree
     or state, a layout socket, another model or rate, an invalid profile, a profile past the per-request bounds and a
     wrong pricing version are each a problem.
@@ -28,8 +34,10 @@ What each group proves, stated so a reader can see how it would fail:
     or refuse; no key is retained; it is never generation proof, and `run` requires a matching one.
   · REQUEST BOUNDS — the capture refuses a request naming another model or asking for more output than the bound, before
     it is recorded or sent.
-  · HISTORICAL — the historical runner refuses run/reopen/recover on the historical root before reading anything, keeps
-    `status` and `plan` readable, its declaration is byte-identical, its declaration and ledger are refused here.
+  · HISTORICAL — the historical runner's `run` and request process (`_inner`) refuse at ANY root and under any
+    declaration before reading anything (refutation R1-F1: a fresh root used to pass with the historical declaration);
+    reopen/recover refuse on the historical root; `status` and `plan` stay readable; its declaration is byte-identical;
+    its declaration and ledger are refused here.
   · PLANS — the plan definitions: model_check 1, mapping 10 (f1-f6), the notes comparison 28 (14 cases x 2 requests),
     D30/D31-structure and transcription not established; the declared send counts equal the plans; flags agree with the
     historical runner's.
@@ -734,25 +742,209 @@ class RunsAndReconciliationTests(Base):
             {'send': plan[0].record(), 'attempt': attempt['number'], 'stops_stage': True, 'recorded_as': 'unsafe'}]})
         self.assertEqual(st.earlier_stops(campaign, 'notes_comparison')[0]['why'], 'it stopped the stage (unsafe)')
 
-    def test_batches_keep_a_mapping_form_with_its_encounter_and_set_aside_orphans(self):
+    def test_batches_keep_a_mapping_form_with_its_encounter_and_refuse_a_stranded_one(self):
         inputs = sq.stages_module().frozen_inputs()
         plan = st.standing_plan('mapping', inputs)
-        chosen, orphans = st.select_batch(plan, 8)
+        chosen = st.select_batch(plan, 8)
         self.assertEqual([s.id for s in chosen], ['mapping:f1-guidance-confirmation', 'mapping:f2-leave-checkboxes',
                                                   'mapping:f2b-leave-checkboxes-owner', 'mapping:f3-selection-instructions',
                                                   'mapping:f4-exam-grid', 'mapping:f5-negative-controls',
                                                   'mapping:f6a-long-answer', 'generation:f6a-long-answer'])
-        self.assertEqual(orphans, [])
+        self.assertEqual(st.stranded(plan), [])
         rest = [s for s in plan if s not in chosen]
-        self.assertEqual([s.id for s in st.select_batch(rest, 8)[0]],
+        self.assertEqual([s.id for s in st.select_batch(rest, 8)],
                          ['mapping:f6b-admin-missing', 'generation:f6b-admin-missing'])
-        self.assertEqual([s.id for s in st.select_batch(plan, 10)[0]], [s.id for s in plan])
+        self.assertEqual([s.id for s in st.select_batch(plan, 10)], [s.id for s in plan])
         without_form = [s for s in plan if s.id != 'mapping:f6a-long-answer']
-        chosen, orphans = st.select_batch(without_form, 10)
-        self.assertEqual([s.id for s in orphans], ['generation:f6a-long-answer'])
-        self.assertNotIn('generation:f6a-long-answer', [s.id for s in chosen])
+        self.assertEqual([s.id for s in st.stranded(without_form)], ['generation:f6a-long-answer'])
+        for refused in (lambda: st.select_batch(without_form, 10), lambda: st.require_none_stranded('mapping', without_form)):
+            with self.assertRaisesRegex(pc.Refused, "generation:f6a-long-answer needs its form's mapping send in the same "
+                                                    'run, and that send was already made; it is not sent'):
+                refused()
         notes = st.standing_plan('notes_comparison', inputs)
-        self.assertEqual(len(st.select_batch(notes, 10)[0]), 10)
+        self.assertEqual(len(st.select_batch(notes, 10)), 10)
+
+
+# ── stage runs (the real run_stage, offline) ─────────────────────────────────────────────────────────────────────
+
+class FakeWorker:
+    """Stands in for sonnet5_stages.Run in the request process, in Run.run_send's order: the preview admit on the planned
+    maximum, the pre-attempt work (upload, queue, price: hook `pre_attempt`), admit, write_attempt, the ONE request in
+    flight (hook `in_flight`), the outcome, a clean per-send record. Like the real worker it keeps a mapping form's
+    proposal for that form's encounter only inside its own process (Run.templates): an encounter whose form was not
+    mapped by this worker is not made (Run.encounter_send returns None)."""
+    hooks = {}
+
+    def __init__(self, campaign, stage, *, secret, provenance, inputs, forms, world, checked, deadline):
+        self.campaign, self.stage, self.secret, self.provenance, self.inputs = campaign, stage, secret, provenance, inputs
+        self.ledger = campaign.ledger
+        self.sends, self.veto_evidence, self.stopped, self.planned, self.templates = [], [], None, {}, {}
+
+    def run_send(self, send):
+        commit = self.provenance.get('runner_commit')
+        if self.planned.get(send.id) is not None:
+            self.campaign.admit(self.stage, self.planned[send.id], runner_commit=commit)
+        if send.path == 'mapping_encounter' and send.form not in self.templates:
+            return None
+        FakeWorker.hooks.get('pre_attempt', lambda send: None)(send)
+        maximum = Decimal('0.10')
+        bound = self.campaign.admit(self.stage, maximum, runner_commit=commit)
+        d, number = self.campaign.declaration, len(self.ledger.rows()) + 1
+        self.ledger.write_attempt({
+            'number': number, 'campaign': d.campaign, 'authority_id': d.authority_id, 'stage': self.stage,
+            'send': send.record(), 'maximum_cost': format(maximum, 'f'), 'exposure_bound': format(bound, 'f'),
+            'rates': d.rates.as_dict(), 'form_sha256': st.send_inputs(send, self.inputs)['form_sha256'],
+            'limits': self.campaign.limits().record(), 'terms': self.campaign.pinned_terms().record(),
+            'runner_commit': commit, 'started_at': pc.now()})
+        FakeWorker.hooks.get('in_flight', lambda send: None)(send)
+        self.ledger.write_outcome(number, {'class': 'completed', 'usage': {
+            'input_tokens': 1000, 'output_tokens': 200, 'inference_geo': 'global'}})
+        if send.kind == 'mapping':
+            self.templates[send.form] = 'proposal'
+        record = {'send': send.record(), 'attempt': number, 'class': 'completed', 'findings': [],
+                  'verdict': {'unsafe': []}, 'stops_stage': False, 'recorded_as': None}
+        self.sends.append(record)
+        return record, False
+
+
+STRANDED = "needs its form's mapping send in the same run, and that send was already made; it is not sent"
+
+
+class StageRunTests(Base):
+    """The REAL run_stage — selection, runs, admission, the ledger, reopening and the decision — with only the Django-bound
+    helpers and the per-send worker stood in (FakeWorker). Refutation R1-F2/R2-F1: an encounter whose form's mapping send
+    was made in an EARLIER run (a Stop-file halt between the two, or a stop before the encounter's attempt and a
+    reopening) was recorded `not_exercised` and the stage PASSED without the encounter ever being sent. The historical
+    rule (sonnet5_stages.pending_sends, f5fe720f) is restored: such an encounter is never sent and its remainder is
+    refused, so the stage can never pass in that campaign."""
+
+    def setUp(self):
+        stages = sq.stages_module()
+        FakeWorker.hooks = {}
+        for stand_in in (patch.object(stages, 'stage_preconditions', lambda *a, **k: {'stand_in': True}),
+                         patch.object(stages, 'build_forms', lambda *a, **k: {}),
+                         patch.object(stages, 'seed_account', lambda root: object()),
+                         patch.object(sq, 'cancel_stale_jobs', lambda world: []),
+                         patch.object(stages, 'Run', FakeWorker),
+                         patch.object(st, 'price_sends', lambda stage, sends, *a, **k: {
+                             s.id: {'maximum_cost': Decimal('0.10')} for s in sends})):
+            stand_in.start()
+            self.addCleanup(stand_in.stop)
+
+    def prepared(self):
+        campaign = self.campaign()
+        self.pass_model_check(campaign)
+        folder = campaign.root / 'preflight' / '001'
+        folder.mkdir(parents=True)
+        (folder / 'result.json').write_text(json.dumps({'matches_declared': True, 'campaign': campaign.declaration.campaign,
+                                                         'model_returned': campaign.declaration.model}))
+        return campaign
+
+    def run_mapping(self, campaign, runner_commit=RUNNER_COMMIT, **kwargs):
+        return st.run_stage(campaign, 'mapping', secret=SYNTHETIC_KEY, provenance={'runner_commit': runner_commit},
+                            **kwargs)
+
+    def attempted(self, campaign):
+        return [a['send']['id'] for a, _ in campaign.ledger.rows() if a['stage'] == 'mapping']
+
+    def halt_at(self, campaign, send_id):
+        def in_flight(send):
+            if send.id == send_id:
+                campaign.stop_file().write_text('')          # (the operator halts while this send is in flight)
+        FakeWorker.hooks = {'in_flight': in_flight}
+        result = self.run_mapping(campaign)
+        FakeWorker.hooks = {}
+        campaign.stop_file().unlink()                         # (and lifts the halt)
+        return result
+
+    def assert_never_passes(self, campaign, stranded, runs):
+        for _ in range(2):                                     # (the refusal holds on every later run)
+            with self.assertRaises(pc.Refused) as caught:
+                self.run_mapping(campaign)
+            for send_id in stranded:
+                self.assertIn(f'{send_id} {STRANDED}', str(caught.exception))
+            self.assertIn('Stage mapping cannot pass in this campaign', str(caught.exception))
+            self.assertEqual(len(campaign.runs.listing()), runs)              # (no run was opened)
+        self.assertNotEqual(campaign.ledger.stage_state('mapping')['state'], 'passed')
+
+    def test_a_full_run_makes_every_send_and_passes(self):
+        campaign = self.prepared()
+        result = self.run_mapping(campaign)
+        self.assertEqual((result['decision'], result['verdict']), ('passed', 'PASS'), result['reasons'])
+        self.assertEqual(sorted(self.attempted(campaign)),
+                         sorted(s.id for s in st.standing_plan('mapping', sq.stages_module().frozen_inputs())))
+
+    def test_a_halt_between_both_forms_and_their_encounters_refuses_every_later_run(self):
+        campaign = self.prepared()
+        first = self.halt_at(campaign, 'mapping:f6b-admin-missing')
+        self.assertEqual((first['decision'], first['summary']['not_sent']),
+                         ('halted', ['generation:f6a-long-answer', 'generation:f6b-admin-missing']))
+        made = self.attempted(campaign)
+        self.assert_never_passes(campaign, ['generation:f6a-long-answer', 'generation:f6b-admin-missing'], runs=2)
+        self.assertEqual(self.attempted(campaign), made)
+        self.assertFalse([s for s in made if s.startswith('generation:')])
+        self.assertEqual(campaign.ledger.stage_state('mapping')['state'], 'open')
+        report = st.plan_report('mapping', root=campaign.root, declaration_path=Path(campaign.declaration.path),
+                                repository=campaign.declaration.repository)
+        self.assertEqual(report['stages']['mapping']['stranded'],
+                         ['generation:f6a-long-answer', 'generation:f6b-admin-missing'])
+
+    def test_a_halt_after_one_form_refuses_the_whole_remainder(self):
+        campaign = self.prepared()
+        first = self.halt_at(campaign, 'mapping:f6a-long-answer')
+        self.assertEqual(first['decision'], 'halted')
+        self.assert_never_passes(campaign, ['generation:f6a-long-answer'], runs=2)
+        self.assertNotIn('mapping:f6b-admin-missing', self.attempted(campaign))   # (the historical rule: nothing sent)
+
+    def test_an_encounter_stopped_before_its_attempt_is_never_reopened_into_a_pass(self):
+        campaign = self.prepared()
+        repo = Path(campaign.declaration.repository)
+        failed_runner = git(repo, 'rev-parse', 'HEAD').stdout.decode().strip()
+
+        def pre_attempt(send):
+            if send.id == 'generation:f6a-long-answer':
+                raise pc.Refused('The area decisions were refused (500).')
+        FakeWorker.hooks = {'pre_attempt': pre_attempt}
+        first = self.run_mapping(campaign, runner_commit=failed_runner)
+        FakeWorker.hooks = {}
+        self.assertEqual(first['decision'], 'failed')
+        failed = [a['number'] for a, _ in campaign.ledger.rows() if a['stage'] == 'mapping']
+        # (an offline repair touching a watched file, a committed diagnosis naming the failure, a runner carrying both)
+        (repo / 'rebuild' / 'ops').mkdir(parents=True)
+        (repo / 'rebuild' / 'ops' / 'standing_qa.py').write_text('# synthetic repair\n')
+        git(repo, 'add', '--', 'rebuild/ops/standing_qa.py')
+        git(repo, 'commit', '-q', '-m', 'Synthetic repair')
+        repair = git(repo, 'rev-parse', 'HEAD').stdout.decode().strip()
+        diagnosis = repo / 'docs' / 'diagnosis-mapping.txt'
+        diagnosis.write_text(f'reopen_stage: mapping\nfailed_attempts: {", ".join(map(str, failed))}\n'
+                             f'repair_commit: {repair}\n')
+        git(repo, 'add', '--', 'docs/diagnosis-mapping.txt')
+        git(repo, 'commit', '-q', '-m', 'Synthetic diagnosis')
+        campaign.ledger.release()
+        real = st.declared_standing
+
+        def test_use(path, **kwargs):                       # (the reopening reads the declaration; this one is `test`)
+            return real(path, **{**kwargs, 'uses': ('live', 'test')})
+        with self.assertRaises(pc.Refused) as caught, patch.object(st, 'declared_standing', test_use), \
+                redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            st.reopen('mapping', str(diagnosis), root=campaign.root, declaration_path=Path(campaign.declaration.path),
+                      repository=str(repo), rebuild=repo)
+        self.assertIn(f'generation:f6a-long-answer {STRANDED}', str(caught.exception))
+        campaign.ledger.acquire()
+        self.assertEqual(campaign.ledger.stage_state('mapping')['state'], 'failed')      # (no reopening was written)
+        self.assertEqual(campaign.ledger.stage_state('mapping')['reopenings'], 0)
+        self.assertNotIn('generation:f6a-long-answer', self.attempted(campaign))
+
+    def test_a_run_that_made_no_send_is_never_a_pass(self):
+        campaign = self.prepared()
+        inputs = sq.stages_module().frozen_inputs()
+        send = next(s for s in st.standing_plan('mapping', inputs) if s.id == 'generation:f6a-long-answer')
+        run = st.begin_run(campaign, 'mapping', [send], inputs, 1, {'runner_commit': RUNNER_COMMIT})
+        worker = FakeWorker(campaign, 'mapping', secret=SYNTHETIC_KEY, provenance={}, inputs=inputs, forms={},
+                            world=None, checked={}, deadline=1)
+        worker.sends.append({'send': send.record(), 'not_exercised': 'set aside'})
+        result = st.decide_run(campaign, 'mapping', run, [send], worker, [], [], {})
+        self.assertEqual((result['decision'], result['reasons']), ('failed', ['no send was made']))
 
 
 # ── configuration ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1166,6 +1358,41 @@ class HistoricalTests(Base):
                 err = io.StringIO()
                 with redirect_stderr(err):
                     self.assertEqual(sq.main(argv), 2, argv)
+                self.assertIn('closed for new sends', err.getvalue())
+
+    def test_its_request_process_refuses_at_any_root_before_reading_anything(self):
+        """Refutation R1-F1: `_inner` started by hand with a context naming a FRESH root and the historical declaration
+        passed every check and reached the database migration — a fresh ledger, so the closed $40 authority with its
+        budget reset. The campaign is closed, not its directory: the request process refuses wherever it is pointed."""
+        def forbidden(*args, **kwargs):
+            raise AssertionError('the historical request process read something before refusing')
+        for root in (scratch(self) / 'fresh-root', sq.HISTORICAL_ROOT, st.LIVE_ROOT):
+            context = json.dumps({'root': str(root), 'declaration': str(HISTORICAL_DECLARATION), 'stage': 'model_check',
+                                  'runner_commit': RUNNER_COMMIT})
+            err = io.StringIO()
+            with self.subTest(root=root), patch.dict(os.environ, {'SONNET5_QA_CONTEXT': context,
+                                                                  'QUILLMD_ENV_MANAGED': '1'}, clear=True), \
+                    patch.object(sq, 'env_file_present', return_value=False), patch.object(pc, 'declared', forbidden), \
+                    patch.object(pc, 'load_credential', forbidden), patch.object(pc, 'Campaign', forbidden), \
+                    patch.object(pc, 'scrubbed_now', forbidden), patch('django.setup', forbidden), \
+                    patch('signal.signal'), patch('os.umask', return_value=0o022):
+                with redirect_stderr(err):
+                    code = sq.main(['_inner'])
+                self.assertEqual(code, 2)
+                self.assertIn('closed for new sends', err.getvalue())
+
+    def test_its_run_command_refuses_whatever_root_it_is_given(self):
+        def forbidden(*args, **kwargs):
+            raise AssertionError('the historical runner read something before refusing')
+        for root in (scratch(self) / 'fresh-root', sq.HISTORICAL_ROOT):
+            err = io.StringIO()
+            with self.subTest(root=root), patch.object(sq, 'LIVE_ROOT', root), patch.object(pc, 'declared', forbidden), \
+                    patch.object(pc, 'git_identity', forbidden), patch.object(pc, 'load_credential', forbidden), \
+                    patch.object(pc, 'read_private', forbidden), patch.object(os, 'execve', forbidden), \
+                    patch('sys.stdout', io.StringIO()):
+                with redirect_stderr(err):
+                    code = sq.main(['run', '--stage', 'model_check'])
+                self.assertEqual(code, 2)
                 self.assertIn('closed for new sends', err.getvalue())
 
     def test_its_closure_covers_the_root_and_everything_under_it_and_nothing_else(self):

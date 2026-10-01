@@ -97,7 +97,9 @@ other credential sources absent; `rebuild/.env` is never read by any route. An i
 candidate's real views and its real worker function on a synthetic database on the QA server 127.0.0.1:55731 — QA-worker
 evidence, never installed-worker evidence. The installed release, its tree, services, database (port 55438) and state
 are not touched. Every send and the preflight run only through `scripts/run-ruled-mutation.sh` with this declaration.
-The Stop file `<root>/STOP` halts every send while it exists.
+The Stop file `<root>/STOP` halts every send while it exists. A halt between a mapping form's send and its
+encounter's (or a stop before the encounter's attempt) strands that encounter, which needs its form's proposal in the
+same run: the remainder is then refused whole and the mapping stage cannot pass in this campaign.
 
 ## Inputs
 
