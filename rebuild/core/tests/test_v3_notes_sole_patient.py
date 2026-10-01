@@ -70,14 +70,14 @@ class SinglePatientRelease(Floors, SimpleTestCase):
     def test_the_freezes_answers_are_filled(self):
         fields = clinic_form()
         self.assert_filled(N01, fields, {
-            'v3_2': ['The headaches started two months ago and are worse in the morning.',
-                     'She denies visual changes, nausea, or weakness.'],
             'v3_4': ['She takes ibuprofen as needed.'], 'v3_6': ['She is a nonsmoker.'],
             'v3_9': ['Plan is to start amitriptyline 10 mg at night.', 'She will follow up in six weeks.']},
-            {'v3_2': 'The headaches started two months ago and are worse in the morning.\n'
-                     'She denies visual changes, nausea, or weakness.',
-             'v3_4': 'She takes ibuprofen as needed.', 'v3_6': 'No',
+            {'v3_4': 'She takes ibuprofen as needed.', 'v3_6': 'No',
              'v3_9': 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'}, choices=NO)
+        # (round 5, R1) the history's symptom denial is held: two other lines name a symptom ('headaches'), and only
+        # meaning says a headache is not the visual change, nausea or weakness it denies - fail closed, as the base
+        self.assert_held(N01, fields, {'v3_2': ['The headaches started two months ago and are worse in the morning.',
+                                                'She denies visual changes, nausea, or weakness.']}, 'v3_2')
         self.assert_filled(N03, order_form(), {'v3_2': ['She attends the clinic every week.']},
                            {'v3_2': 'She attends the clinic every week.'})
         # The explicit-subject form of the same statement stays filled (its completeness comes from `syntax_complete`,
@@ -96,11 +96,12 @@ class SinglePatientRelease(Floors, SimpleTestCase):
 
     def test_the_presenting_opener_with_an_article(self):
         notes = 'A ' + N04
-        self.assert_filled(notes, clinic_form(), {'v3_1': ['A ' + N04.split('. ')[0] + '.'],
-                                                  'v3_7': ['On examination there is a small effusion and medial joint '
+        self.assert_filled(notes, clinic_form(), {'v3_7': ['On examination there is a small effusion and medial joint '
                                                            'line tenderness.']},
-                           {'v3_1': 'A ' + N04.split('. ')[0] + '.',
-                            'v3_7': 'On examination there is a small effusion and medial joint line tenderness.'})
+                           {'v3_7': 'On examination there is a small effusion and medial joint line tenderness.'})
+        # (round 5, R2) the complaint ('knee pain ... after a fall', an injury) beside the assessment's doubt about an
+        # injury ('a probable medial meniscus tear') is held: the doubt names a condition-like term of its class
+        self.assert_held(notes, clinic_form(), {'v3_1': ['A ' + N04.split('. ')[0] + '.']}, 'v3_1')
         self.assert_filled(OPENER + ' She takes warfarin.', clinic_form(),
                            {'v3_1': [OPENER], 'v3_4': ['She takes warfarin.']},
                            {'v3_1': OPENER, 'v3_4': 'She takes warfarin.'})
@@ -156,6 +157,7 @@ CHANGED = (
      'She is allergic to penicillin.', 'v3_5', None),
     ('an incomplete answer', OPENER + ' She is allergic to penicillin. She is also allergic to latex.',
      'She is allergic to penicillin.', 'v3_5', None),
+    ('an unplaced second answer', OPENER + ' She takes warfarin. She takes aspirin.', 'She takes warfarin.', 'v3_4', None),
     ('a resolved complaint', OPENER + ' The headaches are worse in the morning. She is now headache free.',
      'The headaches are worse in the morning.', 'v3_2', None),
     ('another destination', OPENER + ' She takes no medicines.', 'She takes no medicines.', 'v3_3', None),
@@ -223,6 +225,7 @@ class SinglePatientRefusals(Floors, SimpleTestCase):
                 (OPENER + ' ' + effusion + ' The right knee is swollen.', effusion, 'v3_7'),
                 # uncertainty outside an assessment's own line withdraws the note's single-patient scope
                 (OPENER + ' She takes warfarin. Asthma is uncertain.', 'She takes warfarin.', 'v3_4'),
+                (OPENER + ' She takes warfarin. The asthma is uncertain.', 'She takes warfarin.', 'v3_4'),
                 # a line continuing another ('And ...') inherits its subject: it is not whole on its own
                 (OPENER + ' She has asthma. And takes warfarin.', 'And takes warfarin.', 'v3_4')):
             with self.subTest(notes=notes):
@@ -595,10 +598,15 @@ class AssessmentNamingTheAnswer(RoundFour, SimpleTestCase):
             ([W45, 'She has asthma.', 'Assessment: lung disease ruled out.'], 'She has asthma.', 'v3_3', None)))
 
     def test_an_assessment_about_something_else_does_not(self):
+        # (round 5, R2) 'about something else' is another topic CLASS: a doubt naming a condition-like term of the
+        # answer's own class holds it ('Assessment: probable eczema.' beside 'She has asthma.', both conditions)
         self.filled_everywhere((
-            ([W45, 'She has asthma.', 'Assessment: probable eczema.'], 'She has asthma.', 'v3_3', None, 'She has asthma.'),
-            ([W45, 'She takes warfarin.', 'Assessment: asthma excluded.'], 'She takes warfarin.', 'v3_4', None,
+            ([W45, 'She has asthma.', 'Assessment: probable knee sprain.'], 'She has asthma.', 'v3_3', None,
+             'She has asthma.'),
+            ([W45, 'She takes warfarin.', 'Assessment: no asthma.'], 'She takes warfarin.', 'v3_4', None,
              'She takes warfarin.')))
+        self.held_everywhere((
+            ([W45, 'She has asthma.', 'Assessment: probable eczema.'], 'She has asthma.', 'v3_3', None),))
 
 
 @override_settings(**RELATIONS)
@@ -657,8 +665,12 @@ class GroupsNamesAndOtherQuestions(RoundFour, SimpleTestCase):
     def test_a_thing_as_a_subject_is_still_a_thing(self):
         self.filled_everywhere((
             ([W45, 'The rash is red.'], 'The rash is red.', 'v3_7', None, 'The rash is red.'),
-            ([W45, 'Pain is worse at night.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None,
+            ([W45, 'Knee pain is worse at night.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None,
              'She takes warfarin.')))
+        # (round 5, R3) a BARE noun subject may be a name whatever its verb ('Spot is in pain.'): 'Pain is worse at
+        # night.' is held with it, fail closed (the base holds both)
+        self.held_everywhere((
+            ([W45, 'Pain is worse at night.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None),))
 
     def test_a_question_with_an_unknown_word_is_not_answered(self):
         for label, notes, pick in (('Maternal conditions', W45 + ' She has asthma.', 'She has asthma.'),
@@ -687,6 +699,114 @@ class GroupsNamesAndOtherQuestions(RoundFour, SimpleTestCase):
         self.assertTrue(actors.neutral_field('Medications', TITLE))
         self.assert_filled(W45 + ' She takes warfarin.', [v3('f', 'Current medications', 'long_text', TITLE)],
                            {'f': ['She takes warfarin.']}, {'f': 'She takes warfarin.'})
+
+WI = 'A 45-year-old woman presents with itching.'
+
+
+@override_settings(**RELATIONS)
+class DenialAgainstItsClass(RoundFour, SimpleTestCase):
+    """Refutation round 5, R1: an answer that denies, ends or contraindicates ('She takes no medicines.', 'She has no
+    allergies.', 'She is allergic to paracetamol.') is held by ANY other line - the presenting line and another
+    question's labelled line included - naming a topic class it bears on (`v3_actors.sole_bears_on`), or, for a
+    clinical or allergy denial, a word that may describe the state it denies. A general noun, a drug or condition name,
+    a synonym or a UK/US spelling shares no word with the denial; the model's 'independent' for that line is not
+    believed."""
+
+    def test_a_denial_beside_its_class_in_other_words_is_held(self):
+        bleeding = 'A 45-year-old woman presents with bleeding on {}.'
+        self.held_everywhere((
+            ([bleeding.format('warfarin'), 'She takes no medicines.'], 'She takes no medicines.', 'v3_4', None),
+            ([bleeding.format('warfarin'), 'She takes no tablets.'], 'She takes no tablets.', 'v3_4', None),
+            ([bleeding.format('warfarin'), 'She takes no pills.'], 'She takes no pills.', 'v3_4', None),
+            ([bleeding.format('apixaban'), 'She takes no medicines.'], 'She takes no medicines.', 'v3_4', None),
+            ([bleeding.format('apixaban'), 'She takes no drug.'], 'She takes no drug.', 'v3_4', None),
+            ([W45, 'Chief complaint: bleeding on apixaban.', 'She takes no drug.'], 'She takes no drug.', 'v3_4', None),
+            ([W45, 'Assessment: diabetes on insulin.', 'She takes no medicines.'], 'She takes no medicines.', 'v3_4',
+             None),
+            # a condition named alone may be a treated one: a medication denial is not positively apart from it
+            ([W45, 'Assessment: diabetes.', 'She takes no medicines.'], 'She takes no medicines.', 'v3_4', None),
+            (['A 45-year-old woman presents with diabetes on insulin.', 'She takes no drug.'], 'She takes no drug.',
+             'v3_4', None),
+            ([W45, 'Chief complaint: diarrhoea.', 'She has no diarrhea.'], 'She has no diarrhea.', 'v3_2', None),
+            (['A 45-year-old woman presents with diarrhoea.', 'She has no diarrhea.'], 'She has no diarrhea.', 'v3_2',
+             None),
+            (['A 45-year-old woman presents with fever.', 'She has no temperature.'], 'She has no temperature.', 'v3_2',
+             None),
+            (['A 45-year-old woman presents with migraine.', 'She has no headache.'], 'She has no headache.', 'v3_2',
+             None),
+            (['A 45-year-old woman presents with wheeze.', 'She has no breathlessness.'], 'She has no breathlessness.',
+             'v3_2', None),
+            ([W45, 'She has no tumor.', 'Assessment: tumour.'], 'She has no tumor.', 'v3_3', None),
+            ([W45, 'She has no condition.', 'Assessment: diabetes.'], 'She has no condition.', 'v3_3', None),
+            (['A 45-year-old woman presents with asthma.', 'She has no illness.'], 'She has no illness.', 'v3_3', None),
+            (['A 45-year-old woman presents with knee effusion.', 'There is no swelling.'], 'There is no swelling.',
+             'v3_7', None),
+            (['A 45-year-old woman presents with anaphylaxis.', 'She has no allergies.'], 'She has no allergies.', 'v3_5',
+             None),
+            (['A 45-year-old woman presents with a rash after amoxicillin.', 'She has no allergies.'],
+             'She has no allergies.', 'v3_5', None),
+            # a contraindication beside the same drug in its other name
+            ([W45, 'She is allergic to paracetamol.', 'Medications: acetaminophen.'], 'She is allergic to paracetamol.',
+             'v3_5', None),
+            # a word that may describe what is denied, with no topic noun of its own
+            (['A 45-year-old woman presents with knee pain.', 'The knee is swollen.', 'There is no swelling.'],
+             'There is no swelling.', 'v3_7', None),
+            (['A 45-year-old woman presents for attendance.', 'The knee is swollen.', 'There is no swelling.'],
+             'There is no swelling.', 'v3_7', None)))
+
+    def test_a_denial_beside_other_classes_only_is_still_answered(self):
+        self.filled_everywhere((
+            ([M45, 'He takes no medicines.'], 'He takes no medicines.', 'v3_4', None, 'He takes no medicines.'),
+            ([W45, 'She is a nonsmoker.'], 'She is a nonsmoker.', 'v3_6', NO, 'No'),
+            ([OPENER, 'She is allergic to penicillin.'], 'She is allergic to penicillin.', 'v3_5', None,
+             'She is allergic to penicillin.'),
+            (['A 45-year-old woman presents for attendance.', 'There is no swelling.'], 'There is no swelling.', 'v3_7',
+             None, 'There is no swelling.')))
+        self.assertEqual(actors.sole_bears_on({'smoking'}), {'smoking'})
+        self.assertLessEqual(actors.SOLE_CLINICAL, actors.sole_bears_on({'allergy'}))
+        # a class with no row bears on every class (fail closed)
+        self.assertEqual(actors.sole_bears_on({'care'}), actors.SOLE_EVERY_CLASS)
+
+
+@override_settings(**RELATIONS)
+class DoubtAboutItsClass(RoundFour, SimpleTestCase):
+    """Refutation round 5, R2: an assessment's doubt is set apart only where it names no condition-like term of the
+    answer's class; a spelling variant or a synonym of the answer's own condition holds it."""
+
+    def test_a_doubt_in_other_words_holds_the_answer(self):
+        self.held_everywhere((
+            ([W45, 'She has diarrhoea.', 'Assessment: diarrhea unlikely.'], 'She has diarrhoea.', 'v3_2', None),
+            ([W45, 'She has a tumour.', 'Assessment: tumor unlikely.'], 'She has a tumour.', 'v3_3', None),
+            ([W45, 'She has a temperature.', 'Assessment: fever unlikely.'], 'She has a temperature.', 'v3_2', None),
+            ([WI, 'She has eczema.', 'Assessment: dermatitis unlikely.'], 'She has eczema.', 'v3_3', None),
+            ([W45, 'She has fatigue.', 'Assessment: tiredness unlikely.'], 'She has fatigue.', 'v3_2', None),
+            ([W45, 'She has a migraine.', 'Assessment: headache unlikely.'], 'She has a migraine.', 'v3_2', None),
+            (['A 45-year-old woman presents with knee pain.', 'She has osteoarthritis.', 'Assessment: arthritis unlikely.'],
+             'She has osteoarthritis.', 'v3_3', None)))
+
+
+@override_settings(**RELATIONS)
+class BareNamedSubject(RoundFour, SimpleTestCase):
+    """Refutation round 5, R3: a noun standing ALONE as a subject or a possessor may be a name the lexicon knows, with
+    any verb ('Spot is in pain.', 'Spot is with fever.', 'Spot itches.', "Spot's knee ..."): not the patient."""
+
+    def test_a_bare_name_with_be_and_a_preposition_is_not_the_patient(self):
+        self.held_everywhere((
+            ([WI, 'Spot is in pain.'], 'Spot is in pain.', 'v3_2', None),
+            ([WI, 'Spot is in pain.'], 'Spot is in pain.', 'v3_1', None),
+            ([WI, 'Flash is in pain.'], 'Flash is in pain.', 'v3_2', None),
+            ([WI, 'Spot is with fever.'], 'Spot is with fever.', 'v3_2', None),
+            ([WI, 'Spot is in pain at night.'], 'Spot is in pain at night.', 'v3_2', None),
+            ([WI, 'Spot itches.'], 'Spot itches.', 'v3_2', None),
+            ([WI, "Spot's knee has an effusion."], "Spot's knee has an effusion.", 'v3_7', None),
+            ([WI, 'Spot is in pain.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None)))
+
+    def test_a_determined_thing_or_a_heading_word_is_still_a_thing(self):
+        self.filled_everywhere((
+            ([WI, 'The rash is red.'], 'The rash is red.', 'v3_7', None, 'The rash is red.'),
+            ([W45, 'Assessment is asthma.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None,
+             'She takes warfarin.')))
+
 
 ON55 = dict(LIVE, AI_MODEL=g.SONNET_5_5, V3_HISTORY_CONTEXT=False, V3_FIELD_RELATIONS=False, V3_FIELD_RELATIONS_SWITCH=None,
             V3_GENERATION_BATCHES=False)

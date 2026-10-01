@@ -386,18 +386,24 @@ def sole_independent(reading, unit, chosen, label):
       - a word that is neither a known noun, a known operator nor a known neutral word, anywhere (an unknown word may
         deny, end or correct: 'She is not anticoagulated.', 'She was misheard.') - fail closed;
       - a correction or a pointer to another line, anywhere ('The previous line is incorrect.', 'Sorry, ...');
-      - another line about the same topic that denies, ends, restricts, conditions or doubts it ('She takes no
+      - another line about the same topic class that denies, ends, restricts, conditions or doubts it ('She takes no
         medicines.', 'The patient used to smoke.', 'The patient is allergic to latex only.', 'Plan: switch to apixaban.')
-        - only doubt in an assessment's own line about something else excepted ('Assessment is a probable medial
-        meniscus tear.' beside 'He has knee pain.'; never 'Assessment: asthma unlikely.' beside 'She has asthma.', and an
-        exclusion is a denial, not a doubt: `v3_actors.SOLE_EXCLUSION`);
+        - an assessment's doubt included, in whatever word ('Assessment: diarrhea unlikely.' beside 'She has
+        diarrhoea.', round 5 R2); a doubt about another class only shares no class ('Assessment is a probable medial
+        meniscus tear.' beside 'He has knee pain.'), and an exclusion is a denial (`v3_actors.SOLE_EXCLUSION`);
       - another line naming the same word with a contraindication ('She is allergic to amitriptyline.');
       - another line about the same topic that is neither the presenting line nor written as ANOTHER printed question's
         answer ('She has twenty cigarettes a day.' beside 'She is a nonsmoker.': the answer may be contradicted or
         incomplete), and any line written as THIS question's answer that it did not select;
       - for an answer that itself denies, ends, restricts or contraindicates, another line sharing one of its words
-        ('She denies headaches.' beside 'Assessment is tension-type headache.').
+        ('She denies headaches.' beside 'Assessment is tension-type headache.'), and ANY other line - the presenting
+        line and other questions' labelled lines included - naming a topic class it bears on
+        (`v3_actors.sole_bears_on`: 'She takes no medicines.' beside 'bleeding on warfarin' or 'Assessment: diabetes on
+        insulin.'; 'She has no temperature.' beside 'presents with fever'), or, for a clinical or allergy denial, a
+        word that may describe the state it denies ('There is no swelling.' beside 'The knee is swollen.') - round 5,
+        R1: a general noun, a synonym or another spelling shares no word with it, so only the class tells, fail closed.
     The lines it selected are its answer. Read only for a single-patient release; nothing else is changed by it."""
+    from .v3_actors import SOLE_CLINICAL, sole_bears_on
     units, actors = reading['units'], reading['actors']
     mine = actors[unit['id']]['sole']
     found = actors[unit['id']]
@@ -419,6 +425,15 @@ def sole_independent(reading, unit, chosen, label):
         if not mine['classes'] <= allowed or (required is not None and not mine['classes'] & required):
             return False
     first = units[0]['id'] if units else None
+    # (round 5, R1) an answer that itself denies, ends or contraindicates ('She takes no medicines.', 'She has no
+    # allergies.', 'She is allergic to paracetamol.') is borne on by every topic class `v3_actors.sole_bears_on` names
+    # for its own: a general noun ('medicines', 'drugs', 'tablets'), a drug or condition name, a synonym or another
+    # spelling of what it denies shares no WORD with it, so only the class can tell, and only fail closed.
+    # A contraindication that denies nothing ('She is allergic to penicillin.') is contradicted only through its own
+    # topic, an allergen or a drug ('Medications: acetaminophen.' beside 'She is allergic to paracetamol.').
+    bears = (sole_bears_on(mine['classes']) if 'class' in mine['reach']
+             else mine['classes'] | {'allergy', 'medication'} if mine['reach'] else frozenset())
+    denies = 'class' in mine['reach']
     for other in units:
         oid = other['id']
         if oid in chosen:
@@ -430,13 +445,21 @@ def sole_independent(reading, unit, chosen, label):
         owner = _owner(reading, oid)
         shared_class = bool(theirs['classes'] & mine['classes'])
         shared_key = bool(theirs['keys'] & mine['keys'])
-        # (round 4) only an assessment's doubt about something ELSE is set apart: one naming the answer's own word
-        # ('She has asthma.' beside 'Assessment: possible asthma.') may change it
-        doubt_in_assessment = (owner in ('assessment', 'impression', 'diagnosis') and theirs['doubt_only']
-                               and not theirs['keys'] & mine['keys'])
+        # (round 5, R1) ... by ANY other line naming such a class - the presenting line and another printed question's
+        # labelled line included ('A 45-year-old woman presents with bleeding on warfarin.', 'Assessment: diabetes on
+        # insulin.', 'Chief complaint: diarrhoea.' beside 'She has no diarrhea.') - or, for a clinical or allergy denial,
+        # carrying a word that may describe the state it denies ('The knee is swollen.' beside 'There is no swelling.').
+        # The model's 'independent' for that line is not believed: nothing in the note shows it apart.
+        if bears and (theirs['classes'] & bears or (denies and theirs['descriptive'] and bears & SOLE_CLINICAL)):
+            return False
+        # (round 5, R2) an assessment's doubt is set apart only where it names no condition-like term at all - and a
+        # doubt naming no topic at all reaches every line ('global', above) - so a doubt about the answer's own topic
+        # class holds it, whatever word it uses ('She has diarrhoea.' beside 'Assessment: diarrhea unlikely.',
+        # 'She has a temperature.' beside 'Assessment: fever unlikely.'); one about another class only ('He has knee
+        # pain.' beside 'Assessment is a probable medial meniscus tear.') shares no class and does not reach it.
         if 'key' in theirs['reach'] and shared_key:
             return False
-        if 'class' in theirs['reach'] and shared_class and not doubt_in_assessment:
+        if 'class' in theirs['reach'] and shared_class:
             return False
         if owner is not None and owner == label:
             return False

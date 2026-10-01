@@ -3029,6 +3029,23 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
     openers = frozenset(u['id'] for u in units if u['id'] not in age_presentations and SOLE_OPENER.match(u['quote']))
     actors = actors_read(units, groups, colon=colon, parsed=parsed, subjects=subjects, explicit=explicit_patient,
                          ages=age_presentations, openers=openers)
+    # (round 5, D30) SYNTAX ONLY, never who a line is about: the parser's whole-clause check (`v3_syntax._complete` with
+    # no actor span, read on the actor reader's own parse: `v3_actors` 'clause_complete') for a sentence lacking the
+    # finite-word proof whose main verb takes the explicit patient as its object ('The clinical supervisor saw the
+    # patient at the community clinic on 20 September 2026.') or whose subject positively names no person
+    # (`v3_actors._thing_subject`: 'The current supported residence provides staff supervision ...'); at most the first
+    # `v3_syntax.MAX_UNITS` such sentences, as `complete_ids` bounds its own. It only removes the 'fragment' reason
+    # (`v3_complete_statement`); every actor, neighbour and word hold still applies, and it is NOT patient evidence
+    # (`syntax_complete` is, for the relation reader).
+    # No allowance without the pinned, verified parser - checked here exactly as `complete_ids` checks it (the actor
+    # reader's model is loaded once and kept, so it alone cannot say the parser is still the verified one).
+    from .v3_syntax import MAX_UNITS as SYNTAX_UNITS, _parser as syntax_parser
+    syntax_only = set() if syntax_parser() is None else {
+        u['id'] for u in [u for u in units if ':' not in u['quote'] and not FINITE_STATEMENT_V3.search(u['quote'])
+                          and u['id'] not in syntax_complete
+                          and (actors['units'][u['id']].get('patient_object')
+                               or actors['units'][u['id']].get('thing_subject'))][:SYNTAX_UNITS]
+        if actors['units'][u['id']].get('clause_complete')}
     # PRE-2: a labelled value naming a side, an identity or an error ('Left knee: wrong side.', 'Allergies: wrong
     # patient.') is not PLAIN for rule (a): it may change what came before it.
     strict_plain = [is_plain and not v3_identity_value(parsed[u['id']][1]) for u, is_plain in zip(units, plain_values)]
@@ -3150,7 +3167,7 @@ def v3_preceding_reading(notes, fields, context_labels, units, parsed_units=None
             'barriers': barriers, 'patients': patients, 'named': named,
             'actor_relations': actor, 'actor_barriers': actor_barriers, 'actor_destinations': actor_destinations,
             'subjects': subjects, 'subject_spans': subject_spans, 'clinical': clinical,
-            'declarations': declarations, 'syntax_complete': syntax_complete,
+            'declarations': declarations, 'syntax_complete': syntax_complete, 'syntax_only': syntax_only,
             'ambiguous_subjects': ambiguous_subjects, 'unresolved_subjects': unresolved_subjects,
             'coupled': coupled, 'unchanged_references': unchanged_references,
             'neutral_references': neutral_references,
@@ -3199,8 +3216,17 @@ def v3_scope_selection(reading, label, evidence):
     block. Other blocks remain relevant when they carry existing scope warnings.
     """
     label = question_key(label)
+    # (round 5, D30) the parser's syntax-only completeness (`v3_preceding_reading` 'syntax_only') for THIS question: a
+    # clause in the past, or naming a past time, completes only an answer to a question about the past ('When was the
+    # patient last seen ...'); for a question about what is so now ('Does a CTO currently apply ...', 'Is the patient
+    # subject to ...') it stays a fragment, as on the base. A repeated or unknown label reads as a question about now.
+    matches = reading['named'].get(label, ())
+    now = not (len(matches) == 1 and not v3_current_state_field(matches[0]))
+    syntax_only = {uid for uid in reading.get('syntax_only', ())
+                   if not (now and (reading['actors'][uid]['finite_past'] or reading['actors'][uid]['past_time']))}
     if label in reading['ambiguous_subjects'] or label in reading['coupled']:
-        return {'before': set(), 'after': set(), 'complete': set(), 'before_note': set(), 'after_note': set()}
+        return {'before': set(), 'after': set(), 'complete': set(), 'before_note': set(), 'after_note': set(),
+                'syntax_only': syntax_only}
     chosen = set(v3_evidence_units(reading, evidence))
     # ⚠️ ROUND 3 (2026-09-29), HOLD-ONLY: fewer blocks are independent, never more.
     #  X4: a colon-labelled block sharing a core word with the answer may change it ('The patient has a swollen right
@@ -3256,7 +3282,7 @@ def v3_scope_selection(reading, label, evidence):
             after.update(ids)
             if all_independent(denied_after, high, count):
                 after_note.update(ids)
-    return {'before': before, 'after': after, 'complete': complete, 'before_note': before_note,
+    return {'syntax_only': syntax_only, 'before': before, 'after': after, 'complete': complete, 'before_note': before_note,
             'after_note': after_note}
 
 
@@ -3355,7 +3381,9 @@ def v3_nearest(positions, at, exclude=frozenset()):
 
 def v3_added_causes(reading, unit, label, scoped, complete, selected, proven=frozenset(), proven_by_relation=False,
                     field_key=None):
-    """⚠️ ROUND 3 (2026-09-29): EVERY HOLD ADDED TO debaefd9's POSITIONAL RULES, AND NOTHING THAT RELEASES. Returns
+    """⚠️ ROUND 3 (2026-09-29): EVERY HOLD ADDED TO debaefd9's POSITIONAL RULES, AND NOTHING THAT RELEASES - but the two
+    round-5 exceptions to rules (a)/(b) below (2026-10-01, D30), each read positively from both lines: a line's own
+    present frame, and two plain lines repeating one word (`v3_actors.OWN_FRAME`, `v3_actors._plain`). Returns
     [(cause unit, flag)] for one selected unit; `flag` ('unread', 'syntax_incomplete', 'other_person') marks the unit
     itself, None another unit shown with it. An empty list leaves debaefd9's reading unchanged. Each rule is structural
     or only HOLDS on a word: a shared word may add a hold, never release one. The page, save, finalization and
@@ -3422,8 +3450,15 @@ def v3_added_causes(reading, unit, label, scoped, complete, selected, proven=fro
         # It depends on the paragraph before when it does not stand on its own ('She presented with chest pain.'), when
         # either repeats the other's core word, or when that paragraph ends on an explicit-patient past event, which may
         # set its frame ('The patient was seen in A&E yesterday.' / blank line / 'Examination is normal.').
+        # (round 5, D30) Two exceptions, each read positively from both lines: a line stating its OWN present frame
+        # ('No new physical illness has affected treatment attendance during this reporting period.', `v3_actors.
+        # OWN_FRAME`) is not framed by an earlier past event; and a repeated core word joins nothing when BOTH lines
+        # are plain (`v3_actors._plain`: 'The prescribed medication is administered by residence staff and each
+        # administered dose is recorded.' / blank line / 'The patient has taken every prescribed dose during this
+        # reporting period.') - a stop, a change, a number, a time or any word outside the plain lists holds as before.
         if (not info or not info['readable'] or not info['standalone'] or not before_info or not before_info['readable']
-                or before_info['patient_past'] or info['core_keys'] & before_info['core_keys']):
+                or (before_info['patient_past'] and not info['own_frame'])
+                or (info['core_keys'] & before_info['core_keys'] and not (info['plain'] and before_info['plain']))):
             causes.append((crossed, None))
     held_a = (changer is not None and uid not in complete and uid not in scoped['after']
               and not (uid in scoped['complete'] and changer['id'] in scoped['complete']
@@ -3431,10 +3466,15 @@ def v3_added_causes(reading, unit, label, scoped, complete, selected, proven=fro
     if not held_a and uid not in scoped['after_note']:
         later = reading['cross_changer'].get(uid)
         if info and info['readable']:
-            # ... or any line of a later paragraph that repeats this answer's core word.
+            # ... or any line of a later paragraph that repeats this answer's core word - (round 5, D30) but a plain
+            # line repeating it beside a plain answer (`v3_actors._plain`, both read positively) joins nothing.
             start = reading['paragraph_first'][reading['paragraph_of'][uid] + 1]
-            repeats = [positions[bisect.bisect_left(positions, start)] for key in info['core_keys']
-                       if (positions := reading['core_index'].get(key)) and positions[-1] >= start]
+            units_all, actors_all = reading['units'], reading['actors']
+            def joins(p):
+                return not (info['plain'] and (actors_all.get(units_all[p]['id']) or {}).get('plain'))
+            repeats = [p for key in info['core_keys'] if (positions := reading['core_index'].get(key))
+                       for p in [next((q for q in positions[bisect.bisect_left(positions, start):] if joins(q)), None)]
+                       if p is not None]
             if repeats and (later is None or min(repeats) < reading['position'][later['id']]):
                 later = reading['units'][min(repeats)]
         if later is not None:
@@ -3889,7 +3929,7 @@ def v3_complete_statement(reading, unit, scoped):
     exceptions retain their contract. The parser adds no context exemption.
     """
     return (':' in unit['quote'] or bool(FINITE_STATEMENT_V3.search(unit['quote']))
-            or unit['id'] in reading['syntax_complete']
+            or unit['id'] in reading['syntax_complete'] or unit['id'] in scoped.get('syntax_only', ())
             or unit['id'] in scoped.get('ordinary_syntax', set())
             or (unit['id'] in scoped['complete']
                 and unit['id'] in (reading['conditional_units'] | reading['declarations'])))
