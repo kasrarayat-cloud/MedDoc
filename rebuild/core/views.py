@@ -1732,7 +1732,7 @@ def team(request):
         else:messages.warning(request,'Invitation saved, but email delivery could not be confirmed. Ask your administrator to recover the private invitation link or send a new invitation after delivery is repaired.')
         return redirect('team')
     ds=departments(request.user)
-    return render(request,'team.html',{'form':form,'department_form':DepartmentForm(),'memberships':Membership.objects.filter(department__in=ds).select_related('user','department'),'invitations':Invitation.objects.filter(department__in=ds).select_related('department'),'departments':ds,'now':timezone.now()})
+    return render(request,'team.html',{'form':form,'department_form':DepartmentForm(user=request.user),'memberships':Membership.objects.filter(department__in=ds).select_related('user','department'),'invitations':Invitation.objects.filter(department__in=ds).select_related('department'),'departments':ds,'now':timezone.now()})
 
 @require_POST
 @transaction.atomic
@@ -1748,15 +1748,17 @@ def invitation_revoke(request,pk):
 @require_POST
 @transaction.atomic
 def create_department(request):
-    form=DepartmentForm(request.POST)
-    owner=Membership.objects.filter(user=request.user,active=True,role='owner').select_related('department__organization').first()
-    if not owner:raise PermissionDenied
+    form=DepartmentForm(request.POST,user=request.user)
+    if not form.owned:raise PermissionDenied
     if form.is_valid():
-        d=Department.objects.create(organization=owner.department.organization,**form.cleaned_data)
+        organization=form.cleaned_data['organization']
+        # The choice is re-read under this transaction: an active owner membership in THAT organization, locked.
+        if not Membership.objects.select_for_update().filter(user=request.user,active=True,role='owner',department__organization=organization).exists():raise PermissionDenied
+        d=Department.objects.create(organization=organization,name=form.cleaned_data['name'],organization_pays=form.cleaned_data['organization_pays'])
         Membership.objects.create(user=request.user,department=d,role='owner')
         Wallet.objects.get_or_create(organization=d.organization,kind='paid')
         audit(request.user,'department.create',d.pk,department=d)
-    else:messages.error(request,'Enter a department name.')
+    else:messages.error(request,' '.join(error for errors in form.errors.values() for error in errors) or 'Enter a department name.')
     return redirect('team')
 
 @require_POST
@@ -1773,6 +1775,9 @@ def membership_update(request,pk):
 
 @require_http_methods(['GET','POST'])
 def invite_accept(request,raw):
+    # A department invitation is accepted on the doctor surface only, as a clinic-owner invitation is (clinic_invitations):
+    # on the administration host a signed-in administrator would join a clinic through it (inventory 7A, LOW).
+    if settings.ADMIN_SITE:raise Http404
     invite=get_object_or_404(Invitation,token_hash=digest(raw),expires_at__gt=timezone.now(),accepted_at__isnull=True)
     existing_account=User.objects.filter(email__iexact=invite.email).exists()
     form=RegisterForm(request.POST or None,initial={'email':invite.email})
