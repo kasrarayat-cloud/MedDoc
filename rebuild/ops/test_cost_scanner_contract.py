@@ -116,8 +116,13 @@ class AdditionalCostContracts(unittest.TestCase):
             ('core/mapping_assistance.py', 'cost*=generation.US_INFERENCE_MULTIPLIER', 'cost*=0'),
             ('core/mapping_assistance.py', 'bound=size+12000', 'bound=size'),
             ('core/mapping_assistance.py', 'return profile', 'return base'),
-            ('core/mapping_assistance.py', "request=generation.anthropic_request(config['model'],profile,SYSTEM,payload,wire.Proposal)",
-             "request=generation.anthropic_request(config['model'],base,SYSTEM,payload,wire.Proposal)"),
+            ('core/mapping_assistance.py', "request=generation.anthropic_request(config['model'],profile,SYSTEM,payload,schema)",
+             "request=generation.anthropic_request(config['model'],base,SYSTEM,payload,schema)"),
+            # (standing attempt 32's repair: the per-request schema and the model's mapping thinking are pinned too)
+            ('core/mapping_assistance.py', "schema=wire.request_schema(payload) if config['model']==generation.SONNET_5_5 else wire.Proposal",
+             "schema=dict(wire.request_schema(payload),max_tokens=90000)"),
+            ('core/mapping_assistance.py', "'max_output_tokens':MAX_OUTPUT_TOKENS,\n             'timeout_seconds':TIMEOUT_SECONDS}",
+             "'max_output_tokens':MAX_OUTPUT_TOKENS,\n             'timeout_seconds':TIMEOUT_SECONDS,**MAPPING_THINKING.get(config['model'],{})}"),
         ]
         for relative, old, new in cases:
             with self.subTest(file=relative, mutation=new):
