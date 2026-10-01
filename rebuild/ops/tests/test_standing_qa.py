@@ -1784,12 +1784,16 @@ class PricingCommandTests(unittest.TestCase):
         # (positive control: at the historical rate the transcription settings price exactly as the notes stage —
         # mip_opt_out and smart formatting are not part of the price)
         self.assertEqual(same['pricing_versions']['transcription'], same['pricing_versions']['ordinary_notes'])
+        # (and with field relations on, the voice-notes version is the notes stage's relations version at that rate)
+        self.assertEqual(same['pricing_versions']['voice_notes_field_relations'],
+                         same['pricing_versions']['ordinary_notes_field_relations'])
         declared = self.pricing('claude-sonnet-5', ('2', '10', '0.20'), '--deepgram-rate-per-minute', '0.0077')
         self.assertEqual(declared.returncode, 0, declared.stderr)
         other = json.loads(declared.stdout)
-        self.assertNotEqual(other['pricing_versions']['transcription'], same['pricing_versions']['transcription'])
-        self.assertEqual({k: v for k, v in other['pricing_versions'].items() if k != 'transcription'},
-                         {k: v for k, v in same['pricing_versions'].items() if k != 'transcription'})
+        for key in st.VOICE_PRICING_KEYS:                                 # (both voice keys move with the rate)
+            self.assertNotEqual(other['pricing_versions'][key], same['pricing_versions'][key])
+        self.assertEqual({k: v for k, v in other['pricing_versions'].items() if k not in st.VOICE_PRICING_KEYS},
+                         {k: v for k, v in same['pricing_versions'].items() if k not in st.VOICE_PRICING_KEYS})
         self.assertIn('pricing_version transcription: ' + other['pricing_versions']['transcription'],
                       other['declaration_lines'])
         self.assertEqual((other['transcription']['rate_per_minute'], other['transcription']['declaration_line']),
@@ -1871,6 +1875,36 @@ class TranscriptionDeclarationTests(Base):
         self.assertEqual(st.expected_settings('transcription', off)['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'false')
         self.assertEqual(st.expected_settings('transcription')['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'false')
         self.assertEqual(st.STAGE_FLAGS['transcription']['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'false')   # (the default)
+
+    def test_a_declared_notes_contract_prices_and_names_the_transcript_generation(self):
+        """Campaign 2's transcripts were generated on the plain request although the candidate's claude-sonnet-5-5
+        default is field relations. A declaration may state `transcription_notes_contract: field_relations`; absent, it
+        is `default`, what campaigns 1 and 2 ran."""
+        plain = parse(self)
+        self.assertEqual(plain.transcription.notes_contract, 'default')
+        price = ('pricing_version transcription: configured-v1:' + 'e' * 64 + '\n')
+        with_price = edited(price, price + 'pricing_version voice_notes_field_relations: configured-v1:' + '9' * 64 + '\n')
+        contract = ('transcription_smart_format: false\n',
+                    'transcription_smart_format: false\ntranscription_notes_contract: field_relations\n')
+        relations = parse(self, edited(*contract, text=with_price))
+        with self.assertRaisesRegex(pc.Refused, 'no declared pricing version for voice_notes_field_relations'):
+            parse(self, edited(*contract))
+        self.assertEqual(relations.transcription.notes_contract, 'field_relations')
+        self.assertEqual(relations.transcription.record()['notes_contract'], 'field_relations')
+        for declaration, key in ((plain, 'transcription'), (relations, 'voice_notes_field_relations')):
+            sends = st.standing_plan('transcription', st.stage_inputs('transcription', declaration))
+            self.assertEqual([s.pricing_key for s in sends if s.path == 'transcription_generation'], [key, key])
+            self.assertEqual({s.pricing_key for s in sends if s.path == 'transcription'}, {'transcription'})
+        for old, new, why in [
+                ('transcription_smart_format: false\n',
+                 'transcription_smart_format: false\ntranscription_notes_contract: relations\n', '`default` or `field_relations`'),
+                ('transcription_smart_format: false\n',
+                 'transcription_smart_format: false\ntranscription_notes_contract: default\n'
+                 'transcription_notes_contract: field_relations\n', 'at most once'),
+                ('transcription_smart_format: false\n',
+                 'transcription_smart_format: false\n- transcription_notes_contract: field_relations\n', 'transcription_notes_contract')]:
+            with self.subTest(new=new[-60:]), self.assertRaisesRegex(pc.Refused, why):
+                parse(self, edited(old, new))
 
     def test_only_allowlisted_recordings_with_their_pinned_sha256_are_named(self):
         soap = 'transcription_input: soap-ankle-speech 3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7'
@@ -2258,6 +2292,20 @@ class TranscriptionLedgerTests(Base):
         with self.assertRaisesRegex(pc.Refused, 'other Deepgram parameters'):
             st.StandingCampaign(flipped, campaign.root).stage_open('transcription')
         campaign.stage_open('transcription')                                   # (the declared value still admits)
+
+    def test_an_edited_notes_contract_admits_nothing_after_a_transcript_generation(self):
+        """The notes contract of a transcript's generation is pinned per campaign, like the Deepgram parameters."""
+        campaign = self.campaign()
+        self.pass_model_check(campaign)
+        _, sends, inputs = self.open_run(campaign)
+        generation = [s for s in sends if s.path == 'transcription_generation'][0]
+        campaign.ledger.write_attempt(self.transcription_attempt(campaign, generation, inputs))
+        self.completed(campaign, len(campaign.ledger.rows()))
+        flipped = dataclasses.replace(campaign.declaration, transcription=dataclasses.replace(
+            campaign.declaration.transcription, notes_contract='field_relations'))
+        with self.assertRaisesRegex(pc.Refused, 'another notes contract'):
+            st.StandingCampaign(flipped, campaign.root).stage_open('transcription')
+        campaign.stage_open('transcription')
 
     def test_an_allowlisted_recording_is_admitted_and_recorded(self):
         campaign = self.campaign()

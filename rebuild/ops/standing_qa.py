@@ -208,7 +208,8 @@ STAGE_FLAGS = {'model_check': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'legacy'},
 PRICING_FLAGS = {'model_check': STAGE_FLAGS['model_check'], 'mapping': STAGE_FLAGS['mapping'],
                  'ordinary_notes': STAGE_FLAGS['notes_comparison'],
                  'ordinary_notes_field_relations': {**STAGE_FLAGS['notes_comparison'], 'QUILLMD_V3_FIELD_RELATIONS': '1'},
-                 'transcription': STAGE_FLAGS['transcription']}
+                 'transcription': STAGE_FLAGS['transcription'],
+                 'voice_notes_field_relations': {**STAGE_FLAGS['transcription'], 'QUILLMD_V3_FIELD_RELATIONS': '1'}}
 #: How each flag is read back from Django settings (name, type).
 FLAG_SETTINGS = {'QUILLMD_WM_NARRATIVE': ('WM_NARRATIVE', bool), 'QUILLMD_V3_HISTORY_CONTEXT': ('V3_HISTORY_CONTEXT', bool),
                  'QUILLMD_V3_GENERATION_BATCHES': ('V3_GENERATION_BATCHES', bool),
@@ -492,6 +493,10 @@ class TranscriptionTerms:
     smart_format: str
     credential_file: str
     inputs: tuple
+    #: The notes contract each transcript's generation runs under: 'default' (the plain request, every contract flag off)
+    #: or 'field_relations' (the candidate's claude-sonnet-5-5 default; switched on around that send only, priced under
+    #: ordinary_notes_field_relations). Optional in a declaration; absent means 'default', what campaigns 1 and 2 ran.
+    notes_contract: str = 'default'
 
     def parameters(self):
         """The query parameters the one request carries, exactly (core.jobs.deepgram_parameters' shape)."""
@@ -499,12 +504,22 @@ class TranscriptionTerms:
 
     def record(self):
         return {'provider': self.provider, 'model': self.model, 'rate_per_minute': self.rate_per_minute,
-                'parameters': self.parameters(), 'inputs': [AUDIO_BY_ID[i].record() for i in self.inputs]}
+                'parameters': self.parameters(), 'notes_contract': self.notes_contract,
+                'inputs': [AUDIO_BY_ID[i].record() for i in self.inputs]}
 
 
 #: The transcription section's one-value lines, each stated exactly once when a transcription stage is declared.
 TRANSCRIPTION_LINES = ('transcription_provider', 'transcription_model', 'transcription_rate_per_minute',
                        'transcription_mip_opt_out', 'transcription_smart_format', 'transcription_credential_file')
+#: Transcription lines a declaration MAY state, at most once each.
+TRANSCRIPTION_OPTIONAL_LINES = ('transcription_notes_contract',)
+#: The pricing key a transcript's generation is quoted under, per declared notes contract. `voice_notes_field_relations`
+#: is computed under the transcription stage's flags (its declared voice rate, which every pricing version hashes) with
+#: field relations on — never the notes stage's relations version, whose voice rate is another.
+TRANSCRIPTION_NOTES_CONTRACTS = {'default': 'transcription', 'field_relations': 'voice_notes_field_relations'}
+#: The pricing keys computed under the declared per-minute voice rate (and only when a rate is given). (Named without a
+#: `transcription_` prefix: every `transcription_*:` token in a declaration is read as a transcription term.)
+VOICE_PRICING_KEYS = tuple(TRANSCRIPTION_NOTES_CONTRACTS.values())
 TRANSCRIPTION_INPUT = re.compile(r'^transcription_input: ([a-z0-9][a-z0-9-]{0,63}) ([0-9a-f]{64})[ \t]*$', re.M)
 
 
@@ -524,7 +539,12 @@ def transcription_terms(text, seen, stages, credential_file):
     for name in TRANSCRIPTION_LINES:
         require(len(re.findall(rf'(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I)) == 1,
                 f'A transcription stage states `{name}:` exactly once.')
-    unknown = sorted({name.lower() for name in named} - set(TRANSCRIPTION_LINES) - {'transcription_input'})
+    optional = TRANSCRIPTION_OPTIONAL_LINES
+    for name in optional:
+        require(len(re.findall(rf'(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I)) <= 1,
+                f'A transcription stage states `{name}:` at most once.')
+    unknown = sorted({name.lower() for name in named} - set(TRANSCRIPTION_LINES) - set(optional)
+                     - {'transcription_input'})
     require(not unknown, 'The declaration states transcription terms this runner does not know: ' + ', '.join(unknown))
 
     def one(name, pattern=r'(\S+)'):
@@ -558,8 +578,13 @@ def transcription_terms(text, seen, stages, credential_file):
     require(declared[0].sends == 2 * len(found),
             f'The transcription stage makes two sends per recording (its transcription and its generation): '
             f'{2 * len(found)}, not {declared[0].sends}.')
+    contract = 'default'
+    if re.findall(r'(?<![A-Za-z0-9_])transcription_notes_contract(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I):
+        contract = one('transcription_notes_contract')     # (stated: it must be one plain line, as every term is)
+    require(contract in TRANSCRIPTION_NOTES_CONTRACTS,
+            'transcription_notes_contract is `default` or `field_relations`.')
     return TranscriptionTerms(provider, model, rate, 'true', smart_format, credential,
-                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)))
+                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)), contract)
 
 
 #: Exactly one authorization line (provider_campaign.AUTHORIZATION_LINE finds every line that reads as one), this form.
@@ -722,6 +747,9 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
     for named in (credential_file, password_file, restricted):
         pc.refuse_env_path(named)
     transcription = transcription_terms(text, seen, stages, credential_file)
+    if transcription is not None and transcription.notes_contract != 'default':
+        key = TRANSCRIPTION_NOTES_CONTRACTS[transcription.notes_contract]
+        require(key in names, f'Stage transcription has no declared pricing version for {key} (its notes contract).')
     declaration = StandingDeclaration(
         path=str(path), sha256=hashlib.sha256(data).hexdigest(), commit=commit, commit_time=commit_time,
         repository=str(root), campaign=campaign, authority_id=authority_id, authority_record=AUTHORITY_RECORD,
@@ -913,6 +941,9 @@ def standing_plan(stage, inputs=None):
     if stage == 'transcription':
         chosen = (inputs or {}).get('transcription_audio')
         chosen = [audio.id for audio in TRANSCRIPTION_AUDIO] if chosen is None else list(chosen)
+        contract = (inputs or {}).get('transcription_notes_contract', 'default')
+        require(contract in TRANSCRIPTION_NOTES_CONTRACTS, 'transcription_notes_contract is `default` or `field_relations`.')
+        generation_key = TRANSCRIPTION_NOTES_CONTRACTS[contract]  # (the generation on a transcript is priced under it)
         require(chosen and all(audio_id in AUDIO_BY_ID for audio_id in chosen) and len(set(chosen)) == len(chosen),
                 'The transcription plan sends allowlisted recordings only, each once.')
         sends = []
@@ -921,7 +952,7 @@ def standing_plan(stage, inputs=None):
                 sends.append(Send(len(sends) + 1, f'transcription:{audio.id}', 'transcription', TRANSCRIPTION_FORM,
                                   'transcription', 'transcription', audio.id, 'transcription'))
                 sends.append(Send(len(sends) + 1, f'generation:{audio.id}', 'generation', TRANSCRIPTION_FORM,
-                                  'transcription_generation', 'transcription', audio.id, 'transcription'))
+                                  'transcription_generation', 'transcription', audio.id, generation_key))
         return sends
     if stage == 'mapping':
         return stages.plan_sends('mapping', inputs)
@@ -978,7 +1009,8 @@ def stage_inputs(stage, declaration):
     inputs = sq.stages_module().frozen_inputs()
     if stage == 'transcription':
         require(declaration.transcription is not None, 'The declaration declares no transcription stage.')
-        inputs = {**inputs, 'transcription_audio': declaration.transcription.inputs}
+        inputs = {**inputs, 'transcription_audio': declaration.transcription.inputs,
+                  'transcription_notes_contract': declaration.transcription.notes_contract}
     return inputs
 
 
@@ -1256,6 +1288,13 @@ class StandingCampaign(pc.Campaign):
             require(all(parameters == declared for parameters in earlier),
                     'The campaign\'s earlier transcription attempts were sent with other Deepgram parameters than the '
                     f'declared {declared}; an edited declaration never changes what is admitted.')
+            key = TRANSCRIPTION_NOTES_CONTRACTS[self.declaration.transcription.notes_contract]
+            generated = [attempt['send'].get('pricing_key') for attempt, _ in rows
+                         if attempt.get('stage') == 'transcription' and isinstance(attempt.get('send'), dict)
+                         and attempt['send'].get('path') == 'transcription_generation']
+            require(all(found == key for found in generated),
+                    'The campaign\'s earlier transcript generations ran under another notes contract than the declared '
+                    f'{self.declaration.transcription.notes_contract!r}; an edited declaration never changes what is admitted.')
         in_force = self.limits(rows).stage(stage.id)
         for prerequisite in in_force.requires:
             require(self.ledger.stage_state(prerequisite)['state'] == 'passed',
@@ -1969,7 +2008,8 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                 if declaration.transcription is None:
                     entry['declared'] = False                # (defined, not declared: nothing of it can be sent)
                     continue
-                sends = standing_plan(name, {**inputs, 'transcription_audio': declaration.transcription.inputs})
+                sends = standing_plan(name, {**inputs, 'transcription_audio': declaration.transcription.inputs,
+                                             'transcription_notes_contract': declaration.transcription.notes_contract})
                 entry['declared_terms'] = declaration.transcription.record()
                 # (the definitions show the product's default; with a declaration, report what IS sent — refutation r1
                 # B-F3: a `true` declaration printed smart_format 'false')
@@ -2035,10 +2075,10 @@ def pricing(model, rates, thinking, effort, inference_geo='', *, transcription_r
         from core import audio as app_audio, generation, jobs as app_jobs, mapping_assistance
         versions, profiles, previews = {}, {}, {}
         for key, flags in PRICING_FLAGS.items():
-            if key == 'transcription' and transcription_rate is None:
+            if key in VOICE_PRICING_KEYS and transcription_rate is None:
                 continue
             saved = os.environ.get('QUILLMD_DEEPGRAM_RATE_PER_MINUTE')
-            if key == 'transcription':
+            if key in VOICE_PRICING_KEYS:
                 os.environ['QUILLMD_DEEPGRAM_RATE_PER_MINUTE'] = str(transcription_rate)
             try:
                 with override_settings(**expected_settings_from_flags(flags)):

@@ -346,6 +346,12 @@ class TranscriptionRun(stages.Run):
         if send.path == 'transcription':
             return self.transcription_send(send)
         if send.path == 'transcription_generation':
+            if self.terms.notes_contract == 'field_relations':
+                # (the candidate's claude-sonnet-5-5 default contract, switched on around this send only — the notes
+                # stage's own rule for its field-relations sends; the process stays at every contract flag off)
+                from django.test import override_settings
+                with override_settings(**steps.PATH_FLAGS['field_relations']):
+                    return self.transcript_generation_send(send)
             return self.transcript_generation_send(send)
         raise Refused(f'The transcription stage has no path {send.path!r}.')
 

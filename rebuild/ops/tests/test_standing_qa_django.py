@@ -112,6 +112,16 @@ else:
                                         'QUILLMD_DEEPGRAM_RATE_PER_SECOND': ''}):
             return generation.configuration()['pricing_version']
 
+    def transcription_relations_version():
+        """transcription_version() with field relations on: the version a transcript's generation is quoted under when
+        the declaration states `transcription_notes_contract: field_relations`."""
+        from core import generation
+        with override_settings(**{**STAGE_SETTINGS['ordinary_notes'], 'V3_FIELD_RELATIONS': True},
+                               QUILLMD_DEEPGRAM_MIP_OPT_OUT='true', QUILLMD_DEEPGRAM_SMART_FORMAT='false'), \
+                patch.dict(os.environ, {**sq.PRICE_SETTINGS, 'QUILLMD_DEEPGRAM_RATE_PER_MINUTE': '0.0077',
+                                        'QUILLMD_DEEPGRAM_RATE_PER_SECOND': ''}):
+            return generation.configuration()['pricing_version']
+
     def sonnet5_declaration_text():
         """The committed TEST declaration with the one Sonnet 5 profile the application has (see the module note)."""
         text = fixture_text()
@@ -554,6 +564,38 @@ else:
                                                      'mip_opt_out': 'true'})
             for attempt, _ in [(a, o) for a, o in self.campaign.ledger.rows() if a['stage'] == 'transcription'][0::2]:
                 self.assertEqual(attempt['transcription']['parameters']['smart_format'], 'true')
+
+        def test_a_transcript_generated_under_the_field_relations_contract(self):
+            """The candidate's claude-sonnet-5-5 default: the generation on each transcript runs under field relations
+            (switched on around that send only), is quoted and priced under ordinary_notes_field_relations, and the
+            process is back at every contract flag off afterwards."""
+            from django.conf import settings
+            from core.models import Job
+            for audio in st.TRANSCRIPTION_AUDIO:
+                if not os.path.exists(audio.path):
+                    self.skipTest(f'{audio.path} is not on this host')
+            relations = dataclasses.replace(
+                self.declaration,
+                transcription=dataclasses.replace(self.declaration.transcription, notes_contract='field_relations'),
+                pricing_versions=tuple(sorted(self.declaration.pricing_versions
+                                              + (('voice_notes_field_relations', transcription_relations_version()),))))
+            self.assertNotEqual(relations.pricing_version('voice_notes_field_relations'),
+                                relations.pricing_version('ordinary_notes_field_relations'))   # (another voice rate)
+            self.declaration = self.campaign.declaration = relations
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            self.transcription_setup()
+            result = self.transcription_run()
+            self.assertEqual((result['verdict'], result['decision']), ('PASS', 'passed'), result['reasons'])
+            generations = [(a, o) for a, o in self.campaign.ledger.rows()
+                           if a['stage'] == 'transcription' and a['send']['path'] == 'transcription_generation']
+            self.assertEqual(len(generations), 2)
+            for attempt, outcome in generations:
+                self.assertEqual(attempt['send']['pricing_key'], 'voice_notes_field_relations')
+                self.assertEqual(attempt['pricing_version'], relations.pricing_version('voice_notes_field_relations'))
+                self.assertEqual(outcome['class'], 'completed')
+                job = Job.objects.get(pk=attempt['job'])
+                self.assertTrue(job.config.get('ordinary_field_contract'))
+            self.assertFalse(settings.V3_FIELD_RELATIONS)                  # (switched on around the send only)
 
         def test_an_empty_transcript_stops_the_stage_before_its_generation(self):
             audio = st.AUDIO_BY_ID['soap-ankle-speech']
