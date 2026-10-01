@@ -33,7 +33,9 @@ Mapping was reopened (reopening 1, diagnosis `diagnosis-mapping-failure-1-202610
 plan: 9 sends, worst case $2.3745, `can_pass: false`). The first send, attempt 24 (`mapping:f2-leave-checkboxes`,
 $0.018776), returned a proposal that left 11 of 35 slots unclassified; the whole-response rule refused it and the stage
 stopped again (failed-2) before the other eight. Nothing unsafe was adopted. Repair `f8adebd9` holds omitted IDs for
-review (`diagnosis-mapping-failure-2-20261001.md`).
+review (`diagnosis-mapping-failure-2-20261001.md`). The stage is NOT reopened: the runner's
+repair check watches no mapping-assistance module, and passing it through an unrelated watched-file change would weaken
+a stop rule (see the diagnosis). A further mapping measurement needs an owner decision.
 
 | stage | attempts | exposure | remaining | decisions |
 |---|---|---|---|---|
