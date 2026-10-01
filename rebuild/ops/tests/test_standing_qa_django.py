@@ -437,10 +437,10 @@ else:
             for audio in st.TRANSCRIPTION_AUDIO:
                 self.answers[f'generation:{audio.id}'] = chief_complaint
 
-        def transcription_run(self, **kwargs):
+        def transcription_run(self, smart_format='false', **kwargs):
             with override_settings(STATE_DIR=self.state, MEDIA_ROOT=self.state / 'files',
                                    **STAGE_SETTINGS['ordinary_notes'], QUILLMD_DEEPGRAM_MIP_OPT_OUT='true',
-                                   QUILLMD_DEEPGRAM_SMART_FORMAT='false'), \
+                                   QUILLMD_DEEPGRAM_SMART_FORMAT=smart_format), \
                     patch.dict(os.environ, st.stage_flags('transcription', self.campaign.declaration)):
                 here = dataclasses.replace(self.campaign.declaration, qa_database=connection.settings_dict['NAME'])
                 self.assertEqual(st.check_configuration(st.settings_snapshot('transcription'), here, 'transcription',
@@ -533,6 +533,27 @@ else:
             with self.assertRaisesRegex(pc.Refused, 'already passed'):
                 self.transcription_run()                                           # (never twice)
             self.assertEqual(len(self.deepgram_requests), 2)
+
+        def test_a_declared_smart_formatted_transcription_sends_exactly_that(self):
+            """Refutation r1 B-F2: no test ran a `true` declaration through the transcription preconditions, so a
+            precondition reverted to demand 'false' stayed green. Here the declaration states true: the process, the
+            preconditions, the job's recorded parameters and the one request each carry smart_format=true."""
+            for audio in st.TRANSCRIPTION_AUDIO:
+                if not os.path.exists(audio.path):
+                    self.skipTest(f'{audio.path} is not on this host')
+            flipped = dataclasses.replace(self.declaration, transcription=dataclasses.replace(
+                self.declaration.transcription, smart_format='true'))
+            self.declaration = self.campaign.declaration = flipped
+            self.assertEqual(self.model_check()['verdict'], 'PASS')
+            self.transcription_setup()
+            result = self.transcription_run(smart_format='true')
+            self.assertEqual((result['verdict'], result['decision']), ('PASS', 'passed'), result['reasons'])
+            self.assertEqual(len(self.deepgram_requests), 2)
+            for request in self.deepgram_requests:
+                self.assertEqual(request['params'], {'model': 'nova-3-medical', 'smart_format': 'true',
+                                                     'mip_opt_out': 'true'})
+            for attempt, _ in [(a, o) for a, o in self.campaign.ledger.rows() if a['stage'] == 'transcription'][0::2]:
+                self.assertEqual(attempt['transcription']['parameters']['smart_format'], 'true')
 
         def test_an_empty_transcript_stops_the_stage_before_its_generation(self):
             audio = st.AUDIO_BY_ID['soap-ankle-speech']

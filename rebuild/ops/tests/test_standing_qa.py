@@ -2243,6 +2243,22 @@ class TranscriptionLedgerTests(Base):
         record.update(changes)
         return record
 
+    def test_an_edited_smart_formatting_admits_nothing_after_a_transcription_attempt(self):
+        """Refutation r1 B-F1: smart formatting is in no pricing version, so the pinned terms did not hold it. A
+        transcription attempt's recorded parameters now pin it for the rest of the campaign, both ways."""
+        campaign = self.campaign()
+        self.pass_model_check(campaign)
+        _, sends, inputs = self.open_run(campaign)
+        sent = {'model': 'nova-3-medical', 'smart_format': 'false', 'mip_opt_out': 'true'}
+        campaign.ledger.write_attempt(self.transcription_attempt(campaign, sends[0], inputs,
+                                                                 transcription={'parameters': sent}))
+        self.completed(campaign, len(campaign.ledger.rows()))
+        flipped = dataclasses.replace(campaign.declaration, transcription=dataclasses.replace(
+            campaign.declaration.transcription, smart_format='true'))
+        with self.assertRaisesRegex(pc.Refused, 'other Deepgram parameters'):
+            st.StandingCampaign(flipped, campaign.root).stage_open('transcription')
+        campaign.stage_open('transcription')                                   # (the declared value still admits)
+
     def test_an_allowlisted_recording_is_admitted_and_recorded(self):
         campaign = self.campaign()
         self.pass_model_check(campaign)

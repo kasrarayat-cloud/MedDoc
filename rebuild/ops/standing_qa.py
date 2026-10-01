@@ -1245,6 +1245,17 @@ class StandingCampaign(pc.Campaign):
         rows = self.rows() if rows is None else rows
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before admitting.')
         self.require_pinned_terms(rows)
+        if stage.id == 'transcription' and self.declaration.transcription is not None:
+            # The Deepgram request parameters are pinned like the terms (refutation r1 B-F1): smart formatting is in no
+            # pricing version, so without this an edited declaration could flip it inside one stage and one `passed`
+            # verdict would cover two different requests.
+            declared = self.declaration.transcription.parameters()
+            earlier = [attempt['transcription']['parameters'] for attempt, _ in rows
+                       if attempt.get('stage') == 'transcription' and isinstance(attempt.get('transcription'), dict)
+                       and 'parameters' in attempt['transcription']]
+            require(all(parameters == declared for parameters in earlier),
+                    'The campaign\'s earlier transcription attempts were sent with other Deepgram parameters than the '
+                    f'declared {declared}; an edited declaration never changes what is admitted.')
         in_force = self.limits(rows).stage(stage.id)
         for prerequisite in in_force.requires:
             require(self.ledger.stage_state(prerequisite)['state'] == 'passed',
@@ -1960,6 +1971,10 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                     continue
                 sends = standing_plan(name, {**inputs, 'transcription_audio': declaration.transcription.inputs})
                 entry['declared_terms'] = declaration.transcription.record()
+                # (the definitions show the product's default; with a declaration, report what IS sent — refutation r1
+                # B-F3: a `true` declaration printed smart_format 'false')
+                entry['parameters'] = declaration.transcription.parameters()
+                entry['flags'] = stage_flags(name, declaration)
             else:
                 sends = standing_plan(name, inputs)
             left = remaining_sends(campaign, name, sends)
