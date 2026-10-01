@@ -259,6 +259,9 @@ def login_view(request):
             form.add_error(None,'Too many sign-in attempts. Try again later.')
         else:
             user=authenticate(request,username=found.username if found else email,password=form.cleaned_data['password'])
+            # WHY it failed, for the audit trail only (inventory 7A, F4): the person signing in still reads one sentence
+            # whatever the reason, so the classification tells an administrator what an attacker is never told.
+            reason=None if user else 'unknown_account' if found is None else 'inactive' if not found.is_active else 'password'
             device=None
             enrol=False
             # Administrators always need a confirmed authenticator. With QUILLMD_MFA_REQUIRED_ALL every account
@@ -268,10 +271,10 @@ def login_view(request):
                 with transaction.atomic():
                     device=TOTPDevice.objects.select_for_update().filter(user=user,confirmed=True).first()
                     if device:
-                        if not device.verify_token(form.cleaned_data['otp']): user=None
+                        if not device.verify_token(form.cleaned_data['otp']): user=None;reason='authenticator'
                     # An administrator without one signs in only to re-enrol after a DECLARED reset, on the
                     # administration surface, inside its window (core.admin_authority.reenrolment_open).
-                    elif user.is_staff and not reenrolment_open(user): user=None
+                    elif user.is_staff and not reenrolment_open(user): user=None;reason='authenticator_missing'
                     else: enrol=True
             if user and user.verified_at and (not settings.ADMIN_SITE or user.is_staff):
                 auth_login(request,user)
@@ -281,7 +284,8 @@ def login_view(request):
                     return redirect('mfa_setup')
                 audit(user,'auth.login')
                 return redirect(next_url or ('admin_dashboard' if settings.ADMIN_SITE else 'dashboard'))
-            audit(None,'auth.login_failed',details='No credentials recorded')
+            if user:reason='unverified' if not user.verified_at else 'not_administrator'
+            audit(None,'auth.login_failed',found.pk if found else '',details='No credentials recorded',reason=reason)
             form.add_error(None,'Sign-in failed. Check your credentials, verification, and authenticator code.')
     return render(request,'login.html',{'form':form,'next':next_url})
 
