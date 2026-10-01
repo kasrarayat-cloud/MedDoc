@@ -18,7 +18,7 @@ only what transcription needs, stated so a reader can see how each would fail:
                   run_stage, and by the guard below.
   the request     install_transcription_guard sits on the campaign's transport guard: during a transcription attempt it
                   admits exactly ONE request, POST https://api.deepgram.com/v1/listen carrying exactly the declared
-                  parameters (model nova-3-medical, smart_format false, mip_opt_out true) and exactly the declared key —
+                  parameters (model nova-3-medical, smart_format as declared, mip_opt_out true) and exactly the declared key —
                   a key of its own against the attempt's Anthropic key, which is in no header and not in the body;
                   it records the request (its credential header removed) and its body BEFORE anything leaves, then the
                   response as received. Anything else — another host, URL, parameter, credential, a second request, a
@@ -222,8 +222,8 @@ def preconditions(campaign, *, secret, transcription_secret, database_prefix=sq.
     require(not settings.QUILLMD_LAYOUT_SOCKET, 'The deployed-equivalent path has no layout socket.')
     require(not (settings.QUILLMD_MAPPING_ASSISTANCE or settings.QUILLMD_MAPPING_ASSISTANCE_LIVE),
             'Mapping assistance is off for the transcription stage.')
-    require(settings.QUILLMD_DEEPGRAM_MIP_OPT_OUT == 'true' and settings.QUILLMD_DEEPGRAM_SMART_FORMAT == 'false',
-            'The transcription stage runs with QUILLMD_DEEPGRAM_MIP_OPT_OUT=true and smart formatting off.')
+    require(settings.QUILLMD_DEEPGRAM_MIP_OPT_OUT == 'true' and settings.QUILLMD_DEEPGRAM_SMART_FORMAT == terms.smart_format,
+            f'The transcription stage runs with QUILLMD_DEEPGRAM_MIP_OPT_OUT=true and smart formatting {terms.smart_format}.')
     require(environ.get('QUILLMD_DEEPGRAM_RATE_PER_MINUTE') == terms.rate_per_minute
             and not environ.get('QUILLMD_DEEPGRAM_RATE_PER_SECOND'),
             f'The application\'s transcription rate is not the declared {terms.rate_per_minute} USD per minute.')

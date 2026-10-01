@@ -195,7 +195,7 @@ _ALL_OFF = {'QUILLMD_WM_NARRATIVE': '0', 'QUILLMD_V3_HISTORY_CONTEXT': '0', 'QUI
 #: The request process's contract flags per stage — EXACTLY these (check_configuration). Field relations is switched on
 #: only around the field-relations sends (the frozen app-path steps' PATH_FLAGS), never for the process. The
 #: transcription stage runs the notes stage's v3 engine with every contract flag off, Deepgram's Model Improvement
-#: opt-out ON and smart formatting off; its declared per-minute rate is added by stage_flags.
+#: opt-out ON and smart formatting off by default; stage_flags adds its declared per-minute rate and smart formatting.
 STAGE_FLAGS = {'model_check': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'legacy'},
                'mapping': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_MAPPING_ASSISTANCE': '1',
                            'QUILLMD_MAPPING_ASSISTANCE_LIVE': '1'},
@@ -481,8 +481,10 @@ class StandingDeclaration:
 @dataclasses.dataclass(frozen=True)
 class TranscriptionTerms:
     """The declared transcription request: provider, model, the rate the lead read from the provider's pricing page, the
-    Model Improvement opt-out (always 'true'), smart formatting (the product's default 'false'), the Deepgram credential
-    file, and the allowlisted recordings it sends (ids, in allowlist order)."""
+    Model Improvement opt-out (always 'true'), smart formatting ('false', the product's default, or 'true' — the
+    per-deployment setting QUILLMD_DEEPGRAM_SMART_FORMAT, which Deepgram lists as included and the application leaves
+    out of every quote), the Deepgram credential file, and the allowlisted recordings it sends (ids, in allowlist
+    order)."""
     provider: str
     model: str
     rate_per_minute: str
@@ -510,7 +512,7 @@ def transcription_terms(text, seen, stages, credential_file):
     """The declaration's transcription section, verified (pure): None when no transcription stage is declared — and
     then no transcription line may stand at all — otherwise every TRANSCRIPTION_LINES name exactly once (decorated
     copies counted), provider deepgram, model nova-3-medical, a positive per-minute rate, mip_opt_out true, smart
-    formatting false, a Deepgram credential file of its own, and one or more `transcription_input: <id> <sha256>`
+    formatting `true` or `false`, a Deepgram credential file of its own, and one or more `transcription_input: <id> <sha256>`
     lines, each an allowlisted recording with exactly its pinned sha256, none twice; and the stage's send count is two
     per recording (its transcription and its generation)."""
     declared = [stage for stage in stages if stage.id == 'transcription']
@@ -536,8 +538,9 @@ def transcription_terms(text, seen, stages, credential_file):
             'read from its pricing page when the declaration is written.')
     require(one('transcription_mip_opt_out') == 'true',
             'transcription_mip_opt_out is `true`: no synthetic recording is offered to the provider\'s model improvement.')
-    require(one('transcription_smart_format') == 'false',
-            'transcription_smart_format is `false`, the product\'s own request.')
+    smart_format = one('transcription_smart_format')
+    require(smart_format in ('true', 'false'),
+            'transcription_smart_format is `true` or `false`, a value the product\'s setting takes.')
     credential = one('transcription_credential_file', r'(/\S+)')
     pc.refuse_env_path(credential)
     require(os.path.abspath(credential) != os.path.abspath(credential_file),
@@ -555,7 +558,7 @@ def transcription_terms(text, seen, stages, credential_file):
     require(declared[0].sends == 2 * len(found),
             f'The transcription stage makes two sends per recording (its transcription and its generation): '
             f'{2 * len(found)}, not {declared[0].sends}.')
-    return TranscriptionTerms(provider, model, rate, 'true', 'false', credential,
+    return TranscriptionTerms(provider, model, rate, 'true', smart_format, credential,
                               tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)))
 
 
@@ -1242,6 +1245,17 @@ class StandingCampaign(pc.Campaign):
         rows = self.rows() if rows is None else rows
         require(all(outcome is not None for _, outcome in rows), 'An attempt has no outcome; reconcile before admitting.')
         self.require_pinned_terms(rows)
+        if stage.id == 'transcription' and self.declaration.transcription is not None:
+            # The Deepgram request parameters are pinned like the terms (refutation r1 B-F1): smart formatting is in no
+            # pricing version, so without this an edited declaration could flip it inside one stage and one `passed`
+            # verdict would cover two different requests.
+            declared = self.declaration.transcription.parameters()
+            earlier = [attempt['transcription']['parameters'] for attempt, _ in rows
+                       if attempt.get('stage') == 'transcription' and isinstance(attempt.get('transcription'), dict)
+                       and 'parameters' in attempt['transcription']]
+            require(all(parameters == declared for parameters in earlier),
+                    'The campaign\'s earlier transcription attempts were sent with other Deepgram parameters than the '
+                    f'declared {declared}; an edited declaration never changes what is admitted.')
         in_force = self.limits(rows).stage(stage.id)
         for prerequisite in in_force.requires:
             require(self.ledger.stage_state(prerequisite)['state'] == 'passed',
@@ -1401,14 +1415,17 @@ def stage_flags(stage, declaration):
     if stage == 'transcription':
         require(declaration.transcription is not None, 'The declaration declares no transcription stage.')
         flags.update(QUILLMD_DEEPGRAM_RATE_PER_MINUTE=declaration.transcription.rate_per_minute,
-                     QUILLMD_DEEPGRAM_RATE_PER_SECOND='')
+                     QUILLMD_DEEPGRAM_RATE_PER_SECOND='',
+                     QUILLMD_DEEPGRAM_SMART_FORMAT=declaration.transcription.smart_format)
     return flags
 
 
-def expected_settings(stage):
-    """The Django settings values the stage's flags mean."""
+def expected_settings(stage, declaration=None):
+    """The Django settings values the stage's flags mean (with a declaration, its declared transcription terms)."""
     values = {}
-    for flag, value in STAGE_FLAGS[stage].items():
+    flags = (stage_flags(stage, declaration) if declaration is not None and stage == 'transcription'
+             and declaration.transcription is not None else STAGE_FLAGS[stage])
+    for flag, value in flags.items():
         if flag in FLAG_SETTINGS:
             name, kind = FLAG_SETTINGS[flag]
             values[name] = (value == '1') if kind is bool else value
@@ -1450,7 +1467,7 @@ def check_configuration(snapshot, declaration, stage, root, *, rebuild=REBUILD, 
             declaration.thinking, declaration.effort, declaration.inference_geo):
         problems.append('the configured thinking, effort or inference geography is not the declared one')
     flags = snapshot.get('settings') or {}
-    for name, value in expected_settings(stage).items():
+    for name, value in expected_settings(stage, declaration).items():
         if flags.get(name) != value:
             problems.append(f'the contract flag {name} is {flags.get(name)!r}, not {value!r} for stage {stage}')
     if not sq.stages_module().within_bounds(snapshot.get('request_profile'), declaration.expect(limits)):
@@ -1954,6 +1971,10 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
                     continue
                 sends = standing_plan(name, {**inputs, 'transcription_audio': declaration.transcription.inputs})
                 entry['declared_terms'] = declaration.transcription.record()
+                # (the definitions show the product's default; with a declaration, report what IS sent — refutation r1
+                # B-F3: a `true` declaration printed smart_format 'false')
+                entry['parameters'] = declaration.transcription.parameters()
+                entry['flags'] = stage_flags(name, declaration)
             else:
                 sends = standing_plan(name, inputs)
             left = remaining_sends(campaign, name, sends)
