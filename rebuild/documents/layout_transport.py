@@ -9,17 +9,21 @@ import stat
 import struct
 
 MAX_FRAME = 48 * 1024 * 1024
-#: ⚠️ WHAT AN ABSENT VERIFIER MEANS FOR THE WHOLE FORM, said in one place. `word_v3.fill` refuses EVERY non-empty answer
-#: set on an original with a tab-column layout candidate unless this verifier measured it — one answer in an unrelated
-#: text field included — so without it no answer on the form can be exported, only the unchanged form. The previous
-#: wording ('... before its tab-column answers can be used') read as if the other answers could be; D10 was then
-#: generated, held and charged, and refused only at finalization. Stored as an inspection note at upload, raised as the
-#: export refusal, and read by core.v3_mapping to explain it before generation.
+#: ⚠️ TWO CALLERS ASK THE VERIFIER, AND ONLY ONE OF THEM KNOWS WHAT ITS ABSENCE COSTS. Said in one place each:
+#: - EXPORT (a mapping and answers: documents.service after `word_v3.fill` or `effective_values` refused for want of it).
+#:   That gate fires on the original's proposal-mode tab-column candidates for ANY non-empty answer set — one answer in an
+#:   unrelated text field included — so without the verifier no answer on this form can be exported, only the unchanged
+#:   form. The previous wording read as if the other answers could be; D10 was generated, held and charged, and refused
+#:   only at finalization.
+#: - INSPECTION (no mapping: documents.service when the inspection counts a tab-column candidate, at upload and at every
+#:   fresh inspection). It does NOT know that: fill's reader can withdraw what the inspection counted (a complete question
+#:   or section past the mapping limit, refutation FV:F1), and such a form exports without any verifier. So the note
+#:   stored at upload keeps the base wording, which claims nothing about the other answers. Whether generation is
+#:   refused is fill's own answer, asked at admission (core.v3_mapping.admission_refusals).
 LAYOUT_UNAVAILABLE = ('This form has tab-column answers that only the isolated layout verifier can check, and it is not '
                       'available here. Until it is, no answer on this form can be exported; the unchanged form can '
                       'still be downloaded.')
-#: The wording uploads stored before 2026-10-01. Recognised in stored notes, never written.
-LAYOUT_UNAVAILABLE_BEFORE = 'This form needs the isolated layout verifier before its tab-column answers can be used.'
+LAYOUT_NEEDED = 'This form needs the isolated layout verifier before its tab-column answers can be used.'
 
 
 def canonical(value):
@@ -45,26 +49,17 @@ def send(stream, value):
     stream.sendall(struct.pack('!I', len(payload)) + payload)
 
 
-def _endpoint():
-    try:
-        from django.conf import settings
-        return getattr(settings, 'QUILLMD_LAYOUT_SOCKET', ''), getattr(settings, 'QUILLMD_LAYOUT_SERVICE_UID', None)
-    except Exception:
-        return os.getenv('QUILLMD_LAYOUT_SOCKET', ''), os.getenv('QUILLMD_LAYOUT_SERVICE_UID', '')
-
-
-def configured():
-    """Whether this deployment names a layout verifier at all. Not whether it answers: a configured verifier that is
-    down or does not verify a form is found by asking it (verify_document), never assumed from this."""
-    endpoint, expected_uid = _endpoint()
-    return bool(endpoint) and expected_uid not in (None, '')
-
-
 def verify_document(data, mapping=None, answers=None):
     from .service import DocumentError
-    endpoint, expected_uid = _endpoint()
+    try:
+        from django.conf import settings
+        endpoint = getattr(settings, 'QUILLMD_LAYOUT_SOCKET', '')
+        expected_uid = getattr(settings, 'QUILLMD_LAYOUT_SERVICE_UID', None)
+    except Exception:
+        endpoint = os.getenv('QUILLMD_LAYOUT_SOCKET', '')
+        expected_uid = os.getenv('QUILLMD_LAYOUT_SERVICE_UID', '')
     if not endpoint or expected_uid in (None, ''):
-        raise DocumentError(LAYOUT_UNAVAILABLE, 'layout_unavailable')
+        raise DocumentError(LAYOUT_NEEDED if mapping is None else LAYOUT_UNAVAILABLE, 'layout_unavailable')
     try:
         path = Path(endpoint)
         meta = path.lstat()

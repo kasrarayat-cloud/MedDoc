@@ -3,10 +3,17 @@
 A contract v3 form whose tab-column answers need the isolated layout verifier can export NO answer while the verifier
 is absent: `word_v3.fill` refuses every non-empty answer set when the original has a tab-column layout candidate, even
 one answer in an unrelated text field (documents/word_v3.py fill: `layout_nodes and retained_layout is None and any
-answer`), and `layout_transport.verify_document` then refuses with 'layout_unavailable'. The fresh inspection already
-knows: it reports `layout_pending` and the verifier's refusal. So a NEW generation request is refused at ADMISSION —
-`core.jobs.enqueue`, for the single request and the complete-form batch alike — before any hold and before any provider
-call, and the encounter page says why.
+answer`), and `layout_transport.verify_document` then refuses with 'layout_unavailable'. So a NEW generation request is
+refused at ADMISSION — `core.jobs.enqueue`, for the single request and the complete-form batch alike — before any hold
+and before any provider call, and its refusal says why.
+
+⚠️ THE GATE IS FILL'S OWN ANSWER, NOT THE INSPECTION'S COUNT (refutation FV:F1). The inspection counts tab-column
+candidates without fill's reader; fill's reader (proposal mode) withdraws a candidate whose complete question or section
+passes the mapping limit, and that form exports with NO verifier — while the verifier's own preparer refuses it, so a
+configured verifier never helps. Admission refused such forms permanently. It now asks the export path itself
+(v3_mapping.export_needs_verifier) whenever the fresh inspection still reports `layout_pending`, and refuses only when
+export refuses for want of the verifier. For the same reason the encounter page no longer explains the layout from the
+stored note (it cannot tell the two apart), and the inspection-time note keeps the base wording.
 
 ⚠️ ADMISSION ONLY. The first version put this refusal inside `v3_mapping.generation_refusal`, which the worker, the batch
 before EVERY part and the batch at adoption also call. A verifier outage after a send then discarded output already paid
@@ -14,8 +21,8 @@ for (batch failed, parts absorbed, no answers), where the base adopted the draft
 (refutation L1:F1). After admission the layout never refuses or discards: the request runs as on the base, its cost is
 the true cost, and finalization asks the verifier itself. Pinned below in both directions.
 
-Synthetic only: python-docx forms with one tab-column row (the D10 shape) and ordinary text cells. The provider client
-is patched; its call count is the evidence that nothing was sent.
+Synthetic only: python-docx forms with one tab-column row (the D10 shape) and ordinary text cells, and the two over-limit
+shapes of FV:F1. The provider client is patched; its call count is the evidence that nothing was sent.
 """
 import io
 import json
@@ -157,14 +164,20 @@ class LayoutGenerationGate(V3Fixture, TestCase):
         encounter.refresh_from_db()
         self.assertEqual((encounter.status, encounter.answers), ('draft', {}))
 
-    def test_the_explanation_is_on_the_mapping_review_and_the_encounter_page_before_generation(self):
+    def test_the_mapping_review_keeps_the_base_note_and_the_refusal_at_generate_is_the_explanation(self):
+        """The inspection that writes the upload note does not know whether fill will refuse (FV:F1), so the note claims
+        nothing about the other answers and the encounter page states nothing from it (both as on the base). The
+        precise words come from fill's own answer: at Generate, and at finalization of a typed answer (below)."""
         template, version, encounter = self.ready()
-        self.assertIn(layout_transport.LAYOUT_UNAVAILABLE, template.warnings)
-        self.assertContains(self.client.get(f'/templates/{template.pk}/'), layout_transport.LAYOUT_UNAVAILABLE)
+        self.assertIn(layout_transport.LAYOUT_NEEDED, template.warnings)
+        self.assertNotIn(layout_transport.LAYOUT_UNAVAILABLE, template.warnings)
+        self.assertContains(self.client.get(f'/templates/{template.pk}/'), layout_transport.LAYOUT_NEEDED)
         page = self.client.get(f'/encounters/{encounter.pk}/')
-        self.assertEqual(page.context['export_refusal'], layout_transport.LAYOUT_UNAVAILABLE)
-        self.assertContains(page, 'data-export-refusal')
-        self.assertContains(page, layout_transport.LAYOUT_UNAVAILABLE)
+        self.assertEqual(page.context['export_refusal'], '')
+        self.assertNotContains(page, 'data-export-refusal')
+        response = self.client.post(f'/encounters/{encounter.pk}/generate/', {'usage_quote': page.context['usage_quote']},
+                                    follow=True)
+        self.assertEqual([str(m) for m in response.context['messages']], [v3_mapping.GENERATION_LAYOUT_REFUSAL])
 
     def test_enqueue_refuses_before_any_job_or_hold_and_the_worker_gate_is_unchanged(self):
         from core.jobs import enqueue
@@ -193,12 +206,35 @@ class LayoutGenerationGate(V3Fixture, TestCase):
         encounter.refresh_from_db()
         self.assertEqual(encounter.status, 'review')
 
-    def test_old_stored_wording_is_still_recognised_on_the_page(self):
+    def test_no_stored_layout_note_becomes_a_page_explanation(self):
+        """Either wording a layout note was ever stored with (base and 7e454096 uploads) explains nothing on the page."""
         template, version, encounter = self.ready()
-        template.warnings = [w if w != layout_transport.LAYOUT_UNAVAILABLE else layout_transport.LAYOUT_UNAVAILABLE_BEFORE
-                             for w in template.warnings]
-        template.save(update_fields=['warnings'])
-        self.assertEqual(v3_mapping.export_refusal(template), layout_transport.LAYOUT_UNAVAILABLE)
+        for note in (layout_transport.LAYOUT_NEEDED, layout_transport.LAYOUT_UNAVAILABLE):
+            with self.subTest(note=note):
+                template.warnings = [w for w in template.warnings if 'layout verifier' not in w] + [note]
+                template.save(update_fields=['warnings'])
+                self.assertEqual(v3_mapping.export_refusal(template), '')
+
+    def test_a_probe_that_cannot_answer_refuses_as_an_unverifiable_original_before_any_job_or_hold(self):
+        """Fail closed: when the inspection reports a tab-column candidate and the export probe is refused for any
+        reason other than the verifier's, fill's answer is unknown, so the request is refused — never admitted on a
+        guess — and only as a new request (after the replay answer), like the layout refusal."""
+        from core.jobs import enqueue
+        from documents.service import DocumentError
+        _, version, encounter = self.ready()
+        with patch('documents.fill_template', side_effect=DocumentError('Document processing exceeded its time limit.',
+                                                                        'parser_timeout')) as probe, \
+                patch('anthropic.Anthropic') as provider:
+            self.assertEqual(v3_mapping.admission_refusals(version), ('', v3_mapping.GENERATION_SOURCE_REFUSAL))
+            with self.assertRaisesMessage(v3_mapping.ValidationError, v3_mapping.GENERATION_SOURCE_REFUSAL):
+                enqueue(encounter, self.user)
+            self.assertFalse(provider.called)
+            self.assertTrue(probe.called)
+        self.assertFalse(Job.objects.exists())
+        self.assertFalse(Reservation.objects.exists())
+        # A mapping the probe cannot run on (no contract v3 field) is the same unknown.
+        version.fields = []
+        self.assertEqual(v3_mapping.export_needs_verifier(version), v3_mapping.GENERATION_SOURCE_REFUSAL)
 
 
 @override_settings(**dict(LIVE, **ABSENT_WITNESS))
@@ -438,3 +474,201 @@ class OrdinaryFormIsNotGated(V3Fixture, TestCase):
             self.assertEqual(provider.return_value.messages.create.call_count, 1)
         job.refresh_from_db()
         self.assertEqual(job.state, 'succeeded')
+
+
+# ─── FV:F1 (extends L2:F1): admission must ask fill's own question, not the inspection's ─────────────────────────────
+#: The two over-limit shapes of the final verification (flow-implement-final/harness test_vf_l2.form(989) and
+#: test_fv_verifier.dup_form(850)). The inspection counts their tab-column row as a layout candidate, but fill's reader
+#: (word_v3.Detector in proposal mode) withdraws it — its complete question or section exceeds the 1000-character mapping
+#: limit once the side heading or the duplicate occurrence is added — so fill finds no layout node and exports WITHOUT any
+#: verifier, as on the base. The verifier's own preparer (layout_source.prepare, proposal mode) refuses the same shapes
+#: ('No bounded tab-column proposal is available.'), so a configured, answering verifier never verifies them either.
+FILLER = 'Tenderness along the medial joint line on palpation with effusion; '
+CLINICIAN_NOTES = 'Clinician name: Jane Example.'
+#: What the REAL transport (layout_transport.verify_document) raises when the verifier answered 'not verified'.
+UNRESOLVED = 'The rendered form does not establish these tab-column answer destinations. Review the original.'
+
+
+def _text_of(n):
+    text = (FILLER * 40)[:n]
+    return text[:-1] + 'x' if text.endswith(' ') else text
+
+
+def _tab_cell(doc, title, label):
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    cell = doc.add_table(rows=1, cols=2).cell(0, 0)
+    cell.text = title
+    header = cell.add_paragraph('\tPresent\tAbsent')
+    row = cell.add_paragraph(label)
+    for i in range(2):
+        row.add_run('\t' + str(5 - i) + ' '); row.add_run('☐')
+    for paragraph in (header, row):
+        tabs = OxmlElement('w:tabs')
+        for i in range(2):
+            tab = OxmlElement('w:tab'); tab.set(qn('w:val'), 'center'); tab.set(qn('w:pos'), str(2000 + i * 1000))
+            tabs.append(tab)
+        paragraph._p.get_or_add_pPr().append(tabs)
+
+
+def long_row_label_form(chars=989):
+    """'Clinician name' + a 'Left knee' heading + one tab-column row whose own label is `chars` long (989 passes the
+    source limit; the side heading pushes it past the mapping limit in fill's reader)."""
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph('Clinician name: ______________________')
+    doc.add_paragraph('Left knee', style='Heading 2')
+    _tab_cell(doc, 'Knee examination', _text_of(chars))
+    return _bytes(doc)
+
+
+def duplicate_long_titles_form(chars=850):
+    """'Clinician name' + two identical tab-column tables with `chars`-long titles (the duplicate's occurrence context
+    pushes each past the mapping limit in fill's reader)."""
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph('Clinician name: ______________________')
+    doc.add_paragraph('Knee findings', style='Heading 2')
+    for _ in range(2):
+        _tab_cell(doc, _text_of(chars), 'Effusion')
+    return _bytes(doc)
+
+
+OVER_LIMIT_SHAPES = (('989-character row label', long_row_label_form), ('two identical 850-character titles',
+                                                                          duplicate_long_titles_form))
+
+
+class AnsweringVerifier:
+    """A configured layout verifier that ANSWERS: it runs the real first step of documents.layout_server.qualify (the
+    isolated preparer, documents.layout_source.prepare) and reports 'not verified' exactly as the real transport does
+    when that step refuses. It never renders: a form it would have to render is outside these tests (asserted)."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, raw, mapping=None, answers=None):
+        from documents import layout_source, word_v3
+        from documents.service import DocumentError
+        self.calls.append('inspection' if mapping is None else 'export')
+        try:
+            layout_source.prepare(raw, mapping=mapping, answers=answers)
+        except word_v3.V3Failure:
+            raise DocumentError(UNRESOLVED, 'layout_unresolved') from None
+        raise AssertionError('the preparer accepted this form; a render would be needed')
+
+
+class OverLimitShapes:
+    """The walk: upload -> confirm -> notes -> Generate -> worker -> review -> finalize -> download."""
+
+    @staticmethod
+    def reply(**wire):
+        """provider_reply under a fresh provider message id: two walks in one test are two provider responses."""
+        reply = provider_reply(**wire)
+        reply.id, reply._request_id = 'msg_' + uuid.uuid4().hex, 'req_' + uuid.uuid4().hex
+        reply.model_dump = lambda **kwargs: {'id': reply.id}
+        return reply
+
+    def walk(self, name, original):
+        from core.jobs import run_one
+        template, version = self.uploaded(data=original, name='SYNTHETIC over-limit ' + name)
+        # Fill's reader withdraws the row; the clinician's text field is the form's one answer.
+        self.assertEqual([f['label'] for f in version.fields], ['Clinician name'])
+        version = self.confirm(template, version)
+        self.assertEqual(self.new_encounter(version, notes=CLINICIAN_NOTES).status_code, 302)
+        encounter = Encounter.objects.latest('created_at')
+        self.assertEqual(v3_mapping.admission_refusals(version), ('', ''))
+        page = self.client.get(f'/encounters/{encounter.pk}/')
+        with patch('anthropic.Anthropic') as provider:
+            provider.return_value.messages.create.side_effect = self.reply
+            response = self.client.post(f'/encounters/{encounter.pk}/generate/',
+                                        {'revision': encounter.revision, 'usage_quote': page.context['usage_quote']},
+                                        follow=True)
+            self.assertEqual([str(m) for m in response.context['messages']],
+                             ['Generation queued. Refresh this page to view the result.'])
+            self.assertTrue(run_one())
+            self.assertEqual(provider.return_value.messages.create.call_count, 1)
+        job = Job.objects.get(encounter=encounter)
+        self.assertEqual((job.state, job.error), ('succeeded', ''))
+        self.assertTrue(Usage.objects.get(job=job).charged_cost > 0)
+        encounter.refresh_from_db()
+        self.assertEqual([v.get('text') for v in encounter.answers.values()], ['Jane Example.'])
+        status, messages = finalize(self, encounter)
+        self.assertEqual(status, 'finalized', messages)
+        download = self.client.get(f'/encounters/{encounter.pk}/export/')
+        self.assertEqual(download.status_code, 200)
+        import hashlib
+        import zipfile
+        raw = b''.join(download.streaming_content)
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), encounter.export_sha256)
+        self.assertIn(b'Jane Example', zipfile.ZipFile(io.BytesIO(raw)).read('word/document.xml'))
+        return template, encounter
+
+
+@override_settings(**dict(LIVE, **NO_WITNESS))
+class OverLimitShapesWithoutTheVerifier(OverLimitShapes, V3Fixture, TestCase):
+    """FV:F1 (a): no verifier configured. 7e454096 refused Generate (0 provider calls) while a typed answer exported."""
+
+    def setUp(self):
+        super().setUp()
+        deny = patch('socket.socket.connect', side_effect=AssertionError('Network denied')); deny.start()
+        self.addCleanup(deny.stop)
+
+    def test_the_over_limit_shapes_generate_and_export_as_on_the_base(self):
+        for name, build in OVER_LIMIT_SHAPES:
+            with self.subTest(shape=name):
+                self.walk(name, build())
+
+    def test_the_page_does_not_say_that_no_answer_can_be_exported(self):
+        """The encounter page reads stored notes only; it cannot tell these shapes from D10's, so it states neither (the
+        base page). The refusal at Generate is what explains D10 (computed from fill's own question)."""
+        for name, build in OVER_LIMIT_SHAPES:
+            with self.subTest(shape=name):
+                template, version = self.uploaded(data=build(), name='SYNTHETIC over-limit page ' + name)
+                self.assertFalse([w for w in template.warnings if 'no answer on this form can be exported' in w])
+                version = self.confirm(template, version)
+                self.assertEqual(self.new_encounter(version, notes=CLINICIAN_NOTES).status_code, 302)
+                page = self.client.get(f"/encounters/{Encounter.objects.latest('created_at').pk}/")
+                self.assertEqual(page.context['export_refusal'], '')
+                self.assertNotContains(page, 'data-export-refusal')
+
+
+@override_settings(**dict(LIVE, **ABSENT_WITNESS))
+class OverLimitShapesWithAnAnsweringVerifier(OverLimitShapes, V3Fixture, TestCase):
+    """FV:F1 (b): a configured verifier that answers. It refuses these shapes at its first step, so on 7e454096 the
+    refusal was permanent in every deployment; fill never asks it for them."""
+
+    def setUp(self):
+        super().setUp()
+        deny = patch('socket.socket.connect', side_effect=AssertionError('Network denied')); deny.start()
+        self.addCleanup(deny.stop)
+        self.verifier = AnsweringVerifier()
+        verifier = patch('documents.layout_transport.verify_document', side_effect=self.verifier)
+        verifier.start(); self.addCleanup(verifier.stop)
+
+    def test_the_over_limit_shapes_generate_and_export_and_export_never_asks_the_verifier(self):
+        for name, build in OVER_LIMIT_SHAPES:
+            with self.subTest(shape=name):
+                self.verifier.calls.clear()
+                self.walk(name, build())
+                self.assertIn('inspection', self.verifier.calls)
+                self.assertNotIn('export', self.verifier.calls)
+
+    def test_d10s_shape_is_still_refused_when_the_answering_verifier_does_not_verify_it(self):
+        """Positive control: D10's miniature under a configured verifier that answers 'not verified'. Its preparer
+        ACCEPTS this form (a render would follow), so the witness here is the transport's own 'not verified' answer to
+        every request, from upload on."""
+        from core.jobs import enqueue
+        from documents.service import DocumentError
+        unresolved = DocumentError(UNRESOLVED, 'layout_unresolved')
+        with patch('documents.layout_transport.verify_document', side_effect=unresolved) as verifier:
+            template, version = self.uploaded(data=mixed_form(), name='SYNTHETIC D10 miniature, verifier unresolved')
+            version = self.confirm(template, version)
+            self.assertEqual(self.new_encounter(version, notes=NOTES).status_code, 302)
+            encounter = Encounter.objects.latest('created_at')
+            with patch('anthropic.Anthropic') as provider:
+                with self.assertRaisesMessage(v3_mapping.ValidationError, v3_mapping.GENERATION_LAYOUT_REFUSAL):
+                    enqueue(encounter, self.user)
+                self.assertFalse(provider.called)
+            self.assertTrue(verifier.called)
+        self.assertFalse(Job.objects.exists())
+        self.assertFalse(Reservation.objects.exists())

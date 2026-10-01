@@ -55,21 +55,18 @@ def answerable(fields):
 
 
 def export_refusal(template):
-    """Why no answer on this v3 form can be exported, for the encounter page, before anything is generated or typed.
+    """The encounter page's explanation, from the STORED inspection notes only (no sandbox run on a page view): the
+    floating initials refusal, as on the base.
 
-    From the STORED inspection notes only (no sandbox run on a page view). The layout reason is shown only while this
-    deployment names no layout verifier, because a stored 'not available' describes the upload's configuration, not
-    today's. It can still be stale in one way: an engine release that no longer finds the form's tab-column candidate
-    leaves the note behind. admission_refusals re-inspects and is what refuses (core.jobs.enqueue); this only explains."""
-    from documents import layout_transport
+    ⚠️ IT DOES NOT EXPLAIN THE LAYOUT VERIFIER, DELIBERATELY. A stored layout note says the inspection counted a
+    tab-column candidate, not that fill will refuse: fill's reader (word_v3.Detector in proposal mode) withdraws a
+    candidate whose complete question or section passes the mapping limit, and that form exports with no verifier
+    (refutation FV:F1: a 989-character row label under a side heading; two identical tables with 850-character titles).
+    Read from the note, the page told those forms that no answer could be exported, on a page whose export had just
+    succeeded. Only fill's own question separates the two, and it is asked at admission (admission_refusals), whose
+    refusal says why."""
     from documents.word_v3 import FLOATING_INITIALS_REFUSAL
-    if FLOATING_INITIALS_REFUSAL in template.warnings:
-        return FLOATING_INITIALS_REFUSAL
-    if not layout_transport.configured() and any(
-            note in (layout_transport.LAYOUT_UNAVAILABLE, layout_transport.LAYOUT_UNAVAILABLE_BEFORE)
-            for note in template.warnings):
-        return layout_transport.LAYOUT_UNAVAILABLE
-    return ''
+    return FLOATING_INITIALS_REFUSAL if FLOATING_INITIALS_REFUSAL in template.warnings else ''
 
 
 
@@ -79,10 +76,18 @@ GENERATION_SOURCE_REFUSAL = ("The original form could not be verified for genera
                             "Ask an administrator to check the original before trying again.")
 #: ⚠️ D10 (V1 B-W1): without the isolated layout verifier a form with a tab-column answer was generated — quoted, held,
 #: sent, charged — and refused only at finalization, because word_v3.fill refuses EVERY non-empty answer on such a form
-#: until the verifier has measured it. Predictable from the original, so a NEW request is refused at admission
-#: (admission_refusals, core.jobs.enqueue), before all of that. Never raised after admission (see admission_refusals).
+#: until the verifier has verified it. Predictable from the original, so a NEW request is refused at admission
+#: (admission_refusals, core.jobs.enqueue), before all of that, and only when fill itself refuses (export_needs_verifier).
+#: Never raised after admission (see admission_refusals). Worded for both ways the verifier fails it: absent or
+#: unreachable, or answering that it cannot establish the form's tab-column answer places.
 GENERATION_LAYOUT_REFUSAL = ("Generation is unavailable: no answer on this form can be exported until the isolated "
-                             "layout verifier checks it. Nothing was sent or charged.")
+                             "layout verifier has verified its tab-column answers. Nothing was sent or charged.")
+#: The refusals of the export path that mean "the layout verifier did not verify this export" (documents.layout_transport
+#: verify_document): not configured, unreachable or incomplete ('layout_unavailable'), or answered 'not verified'
+#: ('layout_unresolved'). Any other refusal of the admission probe is not a layout answer (see export_needs_verifier).
+LAYOUT_REFUSAL_CODES = ('layout_unavailable', 'layout_unresolved')
+#: The probe's one answer, under a key no field of the mapping has (export_needs_verifier).
+LAYOUT_PROBE_KEY = 'quillmd-layout-admission-probe'
 
 
 def generation_refusal(version):
@@ -99,46 +104,83 @@ def generation_refusal(version):
     original's: it is refused at admission only (admission_refusals). Refutation L1:F1 measured the other placement — an
     outage before the second part or at adoption failed a two-part batch whose parts were settled, and absorbed them.
     """
-    return _refusals(version)[0]
+    return _source_refusal(version)[0]
 
 
 def admission_refusals(version):
-    """(refusal, layout_refusal) for a NEW generation request, from ONE fresh inspection: core.jobs.enqueue only.
+    """(refusal, layout_refusal) for a NEW generation request: core.jobs.enqueue only.
 
-    `refusal` is generation_refusal's answer. `layout_refusal` is GENERATION_LAYOUT_REFUSAL when the fresh inspection
-    still reports `layout_pending`: documents.service keeps it only when the original has a tab-column layout candidate
-    AND the verifier did not verify it now (not configured, unreachable, or not verified); a verified inspection replaces
-    the response and carries no `layout_pending`. Export then needs the same verifier for ANY answer, so the request could
-    only end in a charge and a refusal. The stored upload note is never read here: a verifier configured since is
-    honoured and one lost since is caught.
+    `refusal` is generation_refusal's answer, from one fresh inspection. `layout_refusal` is fill's OWN answer, asked only
+    when that inspection still reports `layout_pending` (documents.service keeps it only when the inspection counted a
+    tab-column candidate AND the verifier did not verify it now: not configured, unreachable, or not verified):
+    export_needs_verifier runs the real export path on the original with one non-empty answer, and refuses only if fill
+    then refuses for want of the verifier. The inspection's count is not that answer — fill's reader can withdraw what it
+    counted, and those forms export with no verifier (refutation FV:F1) — so it only decides whether to ask. A verified
+    inspection carries no `layout_pending` and is admitted as before. The stored upload note is never read here: a
+    verifier configured since is honoured and one lost since is caught.
 
     ⚠️ THE CALLER RAISES `layout_refusal` ONLY FOR A REQUEST THAT WOULD TAKE A NEW HOLD — after its own replay answers
     (an admitted request re-posted from a stale page stays that request) and never after admission. Once admitted the
     request runs as before: a verifier lost later costs the true cost and keeps the draft, and export asks the verifier
     itself (word_v3.fill), so the draft can be exported when it answers again.
     """
-    return _refusals(version)
+    refusal, inspection = _source_refusal(version)
+    if refusal or not inspection.get('layout_pending'):
+        return refusal, ''
+    return '', export_needs_verifier(version)
 
 
-def _refusals(version):
+def export_needs_verifier(version):
+    """GENERATION_LAYOUT_REFUSAL when the export of this version refuses a non-empty answer set for want of the layout
+    verifier; '' when it does not.
+
+    ⚠️ THE SAME PREDICATE AS EXPORT, BECAUSE IT IS EXPORT: documents.fill_template — the finalization path — on the
+    stored mapping, in the sandbox, with ONE non-empty answer under a key no field has, and no output written.
+    word_v3.fill's gate reads only the original (its proposal-mode tab-column candidates) and whether ANY answer is
+    non-empty, so this answer stands for every non-empty answer set; the unknown key writes nothing. When the gate fires,
+    documents.service asks the verifier exactly as finalization would, and only its refusal (LAYOUT_REFUSAL_CODES)
+    refuses here: a verifier that verifies the export admits the request.
+
+    Fails closed: any other refusal of the probe, or a mapping the probe cannot be run on (not a contract v3 mapping),
+    means fill's answer is unknown, and the request is refused as an unverifiable original (GENERATION_SOURCE_REFUSAL),
+    never admitted on a guess."""
+    from documents import DocumentError, fill_template
+    from .security import private_path
+    fields = version.fields
+    if not is_v3_fields(fields):
+        return GENERATION_SOURCE_REFUSAL
+    key = LAYOUT_PROBE_KEY
+    while key in {f.get('key') for f in fields}:
+        key += '-'
+    try:
+        fill_template(private_path(version.template.original_path), fields, {key: 'x'}, None)
+    except DocumentError as exc:
+        return GENERATION_LAYOUT_REFUSAL if exc.code in LAYOUT_REFUSAL_CODES else GENERATION_SOURCE_REFUSAL
+    except (OSError, ValueError, ValidationError):
+        return GENERATION_SOURCE_REFUSAL
+    return ''
+
+
+def _source_refusal(version):
+    """(refusal, fresh inspection) — what the ORIGINAL says, from one inspection in the sandbox."""
     from documents import DocumentError, inspect_template
-    from documents.word_v3 import FLOATING_INITIALS_REFUSAL
     from . import destination_roles
     if not is_v3_version(version):
-        return '', ''
-    if FLOATING_INITIALS_REFUSAL in version.template.warnings:
-        return GENERATION_EXPORT_REFUSAL, ''
+        return '', {}
+    if export_refusal(version.template):
+        return GENERATION_EXPORT_REFUSAL, {}
+    from documents.word_v3 import FLOATING_INITIALS_REFUSAL
     from .security import private_path
     try:
         result = inspect_template(private_path(version.template.original_path), engine=CONTRACT)
         destination_roles.report(version)
     except (DocumentError, OSError, ValueError, ValidationError):
-        return GENERATION_SOURCE_REFUSAL, ''
+        return GENERATION_SOURCE_REFUSAL, {}
     if result.get('sha256') != version.template.sha256 or result.get('contract') != CONTRACT:
-        return GENERATION_SOURCE_REFUSAL, ''
+        return GENERATION_SOURCE_REFUSAL, {}
     if FLOATING_INITIALS_REFUSAL in result.get('warnings', []):
-        return GENERATION_EXPORT_REFUSAL, ''
-    return '', GENERATION_LAYOUT_REFUSAL if result.get('layout_pending') else ''
+        return GENERATION_EXPORT_REFUSAL, {}
+    return '', result
 
 
 def too_many_fields(count):

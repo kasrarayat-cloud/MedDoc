@@ -284,6 +284,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     # before every batch part and at adoption, after money was spent, where a verifier outage discarded paid parts
     # (refutation L1:F1). It is measured before anything is held, and raised only for a request that would take a NEW
     # hold — after each route's own replay answer, so a re-posted admitted request is still answered as that request.
+    # It is fill's own answer (v3_mapping.export_needs_verifier: the export path, probed), never the inspection's count,
+    # which also counts tab-column rows fill withdraws and exports without any verifier (refutation FV:F1).
     if kind=='generation' and generation_batch.needed(encounter.template_version.fields, encounter.notes,
                                                       config or generation.configuration(encounter.template_version.fields)):
         admission=v3_mapping.admission_refusals(e.template_version)
