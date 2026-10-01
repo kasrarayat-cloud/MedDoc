@@ -6608,6 +6608,9 @@ def _role_reading(package):
                 and area.destination["state"] == STATE_UNCERTAIN:
             # an option field the destination state holds (a signer's consent choice): its boxes are an uncertain place
             for pid, start, end in places:
+                # (an option word or line is read as an insertion point; the role covers the character it marks)
+                if start is not None and end is not None and end <= start:
+                    end = start + 1
                 roles.append(_role(ROLE_UNCERTAIN, "consent_choice", pid, start, end, UNCERTAIN_REASON))
         elif area.kind in SIGNING_KINDS:
             state = area_destination(area)
@@ -6878,13 +6881,17 @@ STATE_RANK = {STATE_ORDINARY: 0, STATE_UNCERTAIN: 1, STATE_PROTECTED: 2}
 ORDINARY_EVIDENCE = frozenset({"sequence_option", "attributive", "sequence_sibling", "measure_unit", "measure_head",
                                "signature_state", "scientific_signature", "signed_document", "document_signed_by",
                                "document_signed", "count_question", "time_question", "initialled_state"})
-SIGNING_TOKEN = re.compile(r"sign|initial|consent|agree|assent|authori[sz]", re.I)
+SIGNING_TOKEN = re.compile(r"sign|initial|consent|agree|assent|authori[sz]|allow|permi", re.I)
 #: A first-person consent declaration ('I have been asked to give consent for my child to participate in this study:',
 #: 'I agree to take part'): the consent WORDING the signer signs, never an answer place - unlike a factual consent
 #: question ('Consent obtained?', 'Consent form signed: Yes/No'), which is ordinary.
 CONSENT_DECLARATION = re.compile(r"^(?:i|we)\s+(?:(?:hereby|do|also|fully|freely|voluntarily|have\s+been\s+asked\s+to|"
                                  r"am\s+asked\s+to|would\s+like\s+to|wish\s+to|want\s+to)\s+)*(?:(?:give|provide|grant)\s+"
-                                 r"(?:my\s+|our\s+)?(?:informed\s+)?consent|consent|agree|assent|authori[sz]e)\b", re.I)
+                                 r"(?:my\s+|our\s+)?(?:informed\s+)?consent|consent|agree|assent|authori[sz]e)\b"
+                                 # the same decision asked of the signer: 'Will you allow your samples to be stored?'
+                                 r"|^(?:will|do|would|can|may)\s+(?:you|we)\s+(?:\w+\s+){0,2}?(?:agree|consent|assent|authori[sz]e|"
+                                 r"give\s+(?:your\s+|our\s+)?(?:permission|consent)|(?:allow|permit)\s+(?:\S+\s+){1,4}?to\s+be|"
+                                 r"(?:allow|permit)\s+(?:us|them|the\s+\w+(?:\s+\w+)?)\s+to)\b", re.I)
 _DW = r"[^\W\d_]"
 _PERSON = (r"(?:patient|pt|witness|nurse|staff\s+nurse|charge\s+nurse|nurse\s+in\s+charge|rn|rgn|rmn|en|hca|hcsw|"
            r"nursing|staff|doctor|dr|consultant|registrar|spr|sho|fy1|fy2|f1|f2|ct1|ct2|st\d|resident|intern|attending|"

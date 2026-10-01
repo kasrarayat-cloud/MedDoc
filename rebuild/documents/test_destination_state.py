@@ -566,6 +566,17 @@ class ConsentChoices(unittest.TestCase):
         fields, rep = report(lines('Consent obtained?  ☐ Yes  ☐ No'))
         self.assertTrue(generated(fields[0], rep))
 
+    def test_printed_yes_no_words_under_a_consent_sentence_and_a_consent_question_asked_of_the_signer(self):
+        for question in ('I agree that my samples and related health information may be kept in a biobank.',
+                         'Will you allow your samples to be stored for future research?',
+                         'Do you agree to be contacted about future studies?'):
+            with self.subTest(question=question):
+                fields, rep = report(lines(question, '\t YES\t\tNO', heading='Optional studies'))
+                choice = next(f for f in fields if f['kind'] == 'choice')
+                self.assertIn(choice['key'], rep['held'])
+        for label in ('Do you allow pets at home?', 'Did the patient consent?', 'Can you allow time for the test?'):
+            self.assertEqual(w.destination_state(label)['state'], 'ordinary', label)
+
 
 class LegacyEngineRoles(unittest.TestCase):
     """The legacy 'roles' operation reads the label cell's printed words (paragraphs and line breaks as spaces), its
