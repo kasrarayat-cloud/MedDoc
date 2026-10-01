@@ -13,9 +13,10 @@ class ReleaseIntegrityContract(TestCase):
             context = cursor.fetchall()
         report = integrity_contract.assess(rows,context,len(integrity_contract.GUARDS))
         self.assertTrue(report['passed'],report)
-        # 92 + 0033's ten redaction guards (one new function, quillmd_redaction_guard): the contract grows with them.
-        self.assertEqual(report['found'],102)
-        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),24)
+        # 92 + 0033's ten redaction guards (quillmd_redaction_guard) + 0034's five coding-ledger guards (quillmd_coding_guard):
+        # the contract grows with them.
+        self.assertEqual(report['found'],107)
+        self.assertEqual(len(integrity_contract.FUNCTION_SHA256),25)
 
     def test_batch_guards_and_composed_preservation_body_fail_closed_when_changed(self):
         def read():

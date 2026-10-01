@@ -560,6 +560,12 @@ class CodeSuggestion(Entity):
     evidence=models.TextField()
     accepted_by=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     accepted_at=models.DateTimeField(null=True)
+    # The identity of the release the code came from (its imported file's sha256), recorded with the suggestion and checked
+    # by the database against that release (0034); '' only on rows written before it. Releases and codes are append-only.
+    release_sha256=models.CharField(max_length=64,blank=True,default='',db_default='')
+    # A changed notes save never deletes an accepted code: it keeps the acceptance and marks it for the clinician to accept
+    # again or withdraw (0034's guard refuses deleting an accepted code). Finalization freezes every row (the same guard).
+    review_required=models.BooleanField(default=False,db_default=False)
     @property
     def system(self): return self.terminology.release.system
     @property

@@ -2,6 +2,7 @@
 from datetime import date
 from decimal import Decimal
 
+from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -39,6 +40,10 @@ class ReconciliationInputValidation(PolicyFixture, TestCase):
 class StoredCptDisplayGate(PolicyFixture, TestCase):
     def setUp(self):
         super().setUp()
+        # The environment licence gates below are exercised with the product-use lock in code lifted by synthetic rights
+        # (core.coding.CPT_PRODUCT_USE_RIGHTS is None in this release; core.tests.test_coding_ledger proves the lock).
+        rights = patch('core.coding.CPT_PRODUCT_USE_RIGHTS', {'synthetic': 'product-use rights for tests only'})
+        rights.start(); self.addCleanup(rights.stop)
         self.client.force_login(self.user)
         self.encounter.service_date = date(2026, 9, 20)
         self.encounter.notes = 'Synthetic procedure code 99999 explicitly documented.'

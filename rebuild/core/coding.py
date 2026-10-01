@@ -8,10 +8,16 @@ from django.utils import timezone
 from .models import Code,CodeSet,CodeSuggestion
 from .security import audit
 
-Suggestions=namedtuple('Suggestions','count covered versions omitted',defaults=(0,))
+Suggestions=namedtuple('Suggestions','count covered versions omitted unmatched cpt_withheld',defaults=(0,0,0))
 
-def cpt_licensed():
-    """A CPT release is usable only while the licence itself is current.
+#: ⚠️ THE CPT LOCK IS CODE, NOT CONFIGURATION. The right to use CPT content in THIS product (the licence holder, the
+#: agreement and its scope) is a reviewed release decision, recorded here by a code change. While it is None, CPT content
+#: and every CPT function stay disabled in every data, AI and payment mode, whatever CPT_LICENSE_ID/CPT_LICENSE_EXPIRY say:
+#: no CPT code is imported, suggested, displayed, accepted or exported. The environment licence stays a second, dated gate.
+CPT_PRODUCT_USE_RIGHTS=None
+
+def cpt_license_current():
+    """The environment's CPT licence is configured and current (the second gate; never sufficient on its own).
 
     Deliberately judged against TODAY, not against the encounter's date of service: the
     licence governs whether this product may display the content now, which is a different
@@ -21,6 +27,10 @@ def cpt_licensed():
     try:expiry=date.fromisoformat(settings.CPT_LICENSE_EXPIRY)
     except ValueError:return False
     return expiry>=timezone.localdate()
+
+def cpt_licensed():
+    """A CPT release is usable only with recorded product-use rights AND a current environment licence."""
+    return CPT_PRODUCT_USE_RIGHTS is not None and cpt_license_current()
 
 def applicable_releases(encounter):
     """The releases in effect on the encounter's date of service or discharge.
@@ -38,6 +48,10 @@ def applicable_releases(encounter):
 #: A code as the notes document it: an ICD-10-CM code (a letter, two characters, and up to four after a dot) or a CPT code
 #: (five digits, or four and F, T or U), read from the upper-cased notes.
 TOKEN=re.compile(r'\b(?:[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?|[0-9]{5}|[0-9]{4}[FTU])\b')
+#: An ICD-10-CM code written without its dot ('R079' for R07.9, 'S72001A' for S72.001A): a letter, a digit, then two to
+#: five more characters. Read as the dotted code it names; never suggested unless that code is in the release in effect.
+DOTLESS=re.compile(r'\b[A-Z][0-9][0-9A-Z]{2,5}\b')
+ICD_SHAPE=re.compile(r'[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?')
 RUN=re.compile(r'[\w.]+')
 SHORTEST_CODE,LONGEST_CODE=3,8      # 'R00' .. 'A00.0000'; every TOKEN match is 3 to 8 characters
 ASCII_UPPER='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
@@ -49,7 +63,7 @@ ASCII_ALNUM='0123456789'+ASCII_UPPER
 #: most 100 evidence lines of at most 50,000 characters.
 MAX_SUGGESTIONS=100
 
-Plan=namedtuple('Plan','notes releases found')
+Plan=namedtuple('Plan','notes releases found unmatched cpt_withheld',defaults=(0,0))
 
 def evidence_lines(notes,wanted):
     """For each code in `wanted`, the first line of `notes` on which it stands whole, as (the order the codes were first
@@ -86,12 +100,24 @@ def evidence_lines(notes,wanted):
 def plan(encounter):
     """Which suggestions the notes support, read without writing: `suggest` records them under the encounter's lock."""
     releases=list(applicable_releases(encounter))
+    upper=encounter.notes.upper()
     # No diagnosis inference: recommend only codes explicitly documented in notes.
-    tokens=set(TOKEN.findall(encounter.notes.upper()))
-    codes=list(Code.objects.filter(code__in=tokens,release__in=releases).select_related('release'))
-    evidence=evidence_lines(encounter.notes,{code.code for code in codes})
-    documented=sorted((code for code in codes if code.code in evidence),key=lambda code:evidence[code.code][0])
-    return Plan(encounter.notes,releases,[(code,evidence[code.code][1]) for code in documented])
+    tokens=set(TOKEN.findall(upper))
+    # A dotless ICD-10-CM code is read as the dotted code it names, never dropped silently (inventory 7A, coding).
+    dotless={token[:3]+'.'+token[3:]:token for token in DOTLESS.findall(upper)}
+    locked=not cpt_licensed()
+    codes=[code for code in Code.objects.filter(code__in=tokens|set(dotless),release__in=releases).select_related('release')
+           if code.release.system=='ICD-10-CM' or not locked]
+    written={code.code:(code.code if code.code in tokens else dotless[code.code]) for code in codes}
+    evidence=evidence_lines(encounter.notes,set(written.values()))
+    documented=sorted((code for code in codes if written[code.code] in evidence),key=lambda code:evidence[written[code.code]][0])
+    # What the notes write as a code but no applicable release holds, counted and said rather than dropped silently.
+    known={code.code for code in codes}
+    shaped={token for token in tokens if ICD_SHAPE.fullmatch(token) and any(c.isdigit() for c in token)}|set(dotless)
+    unmatched=len({token for token in shaped if token not in known and token not in dotless.values()}
+                  |{dotted for dotted in dotless if dotted not in known and dotless[dotted] not in known})
+    cpt_withheld=len({token for token in tokens if token[0].isdigit()}) if locked else 0
+    return Plan(encounter.notes,releases,[(code,evidence[written[code.code]][1]) for code in documented],unmatched,cpt_withheld)
 
 def suggest(encounter,user,planned=None):
     """Records a plan's new suggestions and audits them. The caller holds the encounter's row lock and has checked that the
@@ -100,7 +126,8 @@ def suggest(encounter,user,planned=None):
     planned=planned or plan(encounter)
     recorded=set(CodeSuggestion.objects.filter(encounter=encounter).values_list('terminology_id',flat=True))
     candidates=[(code,evidence) for code,evidence in planned.found if code.pk not in recorded]
-    new=[CodeSuggestion(encounter=encounter,terminology=code,evidence=evidence,explanation=f'Code explicitly documented in source notes; validated against {code.release.system} {code.release.version}, the release in effect for the {encounter.service_date.isoformat()} date of service. Clinician must confirm context and billing suitability.')
+    # Each suggestion carries its release's identity (the imported file's sha256), checked by the database (0034).
+    new=[CodeSuggestion(encounter=encounter,terminology=code,evidence=evidence,release_sha256=code.release.sha256,explanation=f'Code explicitly documented in source notes; validated against {code.release.system} {code.release.version}, the release in effect for the {encounter.service_date.isoformat()} date of service. Clinician must confirm context and billing suitability.')
          for code,evidence in candidates[:max(0,MAX_SUGGESTIONS-len(recorded))]]
     CodeSuggestion.objects.bulk_create(new,batch_size=200)
     omitted=len(candidates)-len(new)
@@ -109,5 +136,7 @@ def suggest(encounter,user,planned=None):
     # 'did anything happen' — a licensed CPT release can answer while no ICD release does.
     covered=any(r.system=='ICD-10-CM' for r in planned.releases)
     audit(user,'coding.suggest',encounter.pk,department=encounter.department,count=len(new),
-          service_date=encounter.service_date.isoformat(),releases=versions,icd_covered=covered,not_suggested_over_limit=omitted)
-    return Suggestions(len(new),covered,versions,omitted)
+          service_date=encounter.service_date.isoformat(),releases=versions,icd_covered=covered,not_suggested_over_limit=omitted,
+          release_sha256=sorted(r.sha256 for r in planned.releases),not_in_release=planned.unmatched,
+          cpt_withheld=planned.cpt_withheld)
+    return Suggestions(len(new),covered,versions,omitted,planned.unmatched,planned.cpt_withheld)

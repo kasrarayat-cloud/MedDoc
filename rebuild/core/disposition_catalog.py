@@ -453,3 +453,7 @@ COLUMNS.update({'RedactionRequest': [['content_sha256', 'CharField'], ['created_
                                        ['department_id', 'UUIDField'], ['entry_sha256', 'CharField'],
                                        ['files', 'JSONField'], ['id', 'UUIDField'], ['journal_entry', 'JSONField'],
                                        ['request_id', 'UUIDField'], ['target_id', 'UUIDField']]})
+
+# CODING LEDGER CATALOG: exact additive 0034 shape. A code suggestion carries its release identity and a re-review mark;
+# no relationship changes.
+COLUMNS['CodeSuggestion'] = sorted(COLUMNS['CodeSuggestion'] + [['release_sha256', 'CharField'], ['review_required', 'BooleanField']])

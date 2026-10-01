@@ -93,6 +93,8 @@ FUNCTION_SHA256 = {
     'quillmd_restore_absent_hold': '19ba238b0a2ed70262a2a1f03e10186f324db8a5d6c5b87f7284086e740b420a',
     # 0033: redaction requests and tombstones, a redacted document's emptiness, and no new work for it.
     'quillmd_redaction_guard': 'd9a3c1b7b20fb360ad968d13baeb4cdb3032af85d66115b68abf95495f67c8ec',
+    # 0034: the coding ledger: frozen finalized codes, immutable suggestion identity, accepted codes never deleted.
+    'quillmd_coding_guard': '28d3e14e2b8f4e21f60c4674951625e62866c242948b0ce6fcaf8ba6d8e1db71',
 }
 
 GUARDS = (
@@ -198,4 +200,9 @@ GUARDS = (
     ('core_job', 'job_redaction', 'quillmd_redaction_guard', 7),
     ('core_generationbatch', 'batch_redaction', 'quillmd_redaction_guard', 7),
     ('core_codesuggestion', 'code_redaction', 'quillmd_redaction_guard', 7),
+    ('core_codeset', 'terminology_release_append_only', 'quillmd_append_only', 27),
+    ('core_codeset', 'terminology_release_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_code', 'terminology_code_append_only', 'quillmd_append_only', 27),
+    ('core_code', 'terminology_code_no_truncate', 'quillmd_preservation_no_truncate', 34),
+    ('core_codesuggestion', 'code_ledger', 'quillmd_coding_guard', 31),
 )

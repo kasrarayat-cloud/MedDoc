@@ -947,7 +947,7 @@ def encounter_detail(request,pk):
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
     from . import wm_narrative
-    return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter_status_label':encounter_label(e),'wm_narrative':is_wm and wm_narrative.enabled(e.template_version.fields),'notes_save_clears':notes_save_clears(e),'notes_save_marks':notes_save_marks(e),'encounter':e,'pending_job':batch_jobs.pending(e),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or is_v3 or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'v3_template':is_v3,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':quote_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'generation_quote_error':generation_quote_error,'batch_constraint_error':batch_constraint_error,
@@ -974,8 +974,13 @@ def same_text(posted,stored):
 def notes_save_clears(e):
     """What a changed notes save would clear, as the page's warning names it ('' when nothing): the same parts, from the
     same counts, that the save audits and then states — so the warning names only what would be cleared (refutation round
-    4, R4-7), and it and the saved message cannot disagree."""
-    return listed(cleared_parts(review_state_counts(e)))
+    4, R4-7), and it and the saved message cannot disagree. Accepted codes are not cleared (notes_save_marks)."""
+    return listed(cleared_parts(review_state_counts(e,codes=False)))
+
+def notes_save_marks(e):
+    """The accepted codes a changed notes save would keep and mark for re-review, as the page names them ('' when none)."""
+    count=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count()
+    return f'{count} accepted code{"" if count==1 else "s"}' if count else ''
 
 ANSWER_STATES=('answers_accepted_suggestion','answers_left_blank','answers_edited_not_accepted','answers_reviewed_unedited',
                'answers_unreviewed_unedited')
@@ -1490,6 +1495,11 @@ def finalize(request,pk):
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
             if batch_jobs.pending(e):raise ValidationError('Resolve pending jobs before finalizing.')
+            # The coding ledger freezes at finalization (0034): an acceptance the notes have since changed under is
+            # confirmed or withdrawn first, never frozen as it stands.
+            if CodeSuggestion.objects.filter(encounter=e,review_required=True).exists():
+                raise ValidationError('An accepted code is marked for re-review because the notes changed after it was accepted. '
+                                      'Accept it again or withdraw it on the Coding tab. Nothing was finalized.')
             is_v3=v3_mapping.is_v3_version(e.template_version)
             # A v3 signature or initials area holds no answer (it is signed by hand on the printed form), so there is
             # nothing in it to review; every other field still needs the clinician's review.
@@ -1865,6 +1875,12 @@ def coding(request,pk):
     from .coding import MAX_SUGGESTIONS
     over=(f' {result.omitted} further documented code{" was" if result.omitted==1 else "s were"} not suggested: a document holds '
           f'at most {MAX_SUGGESTIONS} code suggestions.' if result.omitted else '')
+    unmatched=(f' {result.unmatched} entr{"y" if result.unmatched==1 else "ies"} in the notes written like a diagnosis code '
+               f'{"is" if result.unmatched==1 else "are"} not a code in that release and {"was" if result.unmatched==1 else "were"} '
+               'not suggested; check the code and its dot.' if result.unmatched else '')
+    withheld=(f' {result.cpt_withheld} entr{"y" if result.cpt_withheld==1 else "ies"} written like a CPT code {"was" if result.cpt_withheld==1 else "were"} '
+              'not looked up: CPT content is not licensed for use in this product.' if result.cpt_withheld else '')
+    over+=unmatched+withheld
     if result.covered:
         messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service.{over} Diagnosis inference is not enabled. CPT requires a licensed current feed.')
     elif result.versions:
@@ -1901,7 +1917,7 @@ def accept_code(request,pk,code_pk):
     if posted!=str(e.revision):
         return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
                                           'was accepted. Reopen it to see the current notes and codes.',409)
-    if item.accepted_by_id:
+    if item.accepted_by_id and not item.review_required:
         # ⚠️ AN ACCEPTANCE BELONGS TO WHOEVER MADE IT. Accepting does not renumber the revision, so a page opened before
         # clinician A accepted still posts the current revision, and B's Accept from it re-stamped the code as B's, with a
         # second coding.accept (refutation round 4, R4-6). Refused, not answered as a no-op: B is told the acceptance is
@@ -1909,11 +1925,37 @@ def accept_code(request,pk,code_pk):
         when=timezone.localtime(item.accepted_at).strftime('%Y-%m-%d %H:%M %Z') if item.accepted_at else 'an unrecorded time'
         return document_refusal(request,e,f'This code was already accepted by {item.accepted_by.email}, at {when}. '
                                           'Nothing was accepted. Reopen the document to see its current codes.',409)
-    if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
-    if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
+    withdraw=' Withdraw this acceptance instead.' if item.review_required else ''
+    if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.'+withdraw)
+    if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.'+withdraw)
     if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied
-    item.accepted_by=request.user;item.accepted_at=timezone.now();item.save(update_fields=['accepted_by','accepted_at'])
-    audit(request.user,'coding.accept',item.pk,department=e.department,code=item.code,release=item.terminology.release.version)
+    release=item.terminology.release
+    if item.release_sha256 not in ('',release.sha256):raise ValidationError('This code no longer names its release; generate new coding suggestions.')
+    previous=item.accepted_by_id
+    item.accepted_by=request.user;item.accepted_at=timezone.now();item.review_required=False
+    item.save(update_fields=['accepted_by','accepted_at','review_required'])
+    audit(request.user,'coding.reaccept' if previous else 'coding.accept',item.pk,department=e.department,code=item.code,
+          release=release.version,release_sha256=release.sha256,**({'previously_accepted_by':str(previous)} if previous else {}))
+    return redirect('/encounters/'+str(pk)+'/?tab=coding')
+
+@require_POST
+@transaction.atomic
+def withdraw_code(request,pk,code_pk):
+    """A clinician's explicit withdrawal of an accepted code on an unfinalized document: the acceptance is cleared, then
+    the suggestion removed (0034 never lets an accepted code be deleted directly). Audited; finalized codes are frozen."""
+    e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
+    membership(request.user,e.department,roles=['owner','clinician'])
+    if e.status=='finalized':return document_refusal(request,e,FINALIZED_CODES+' Nothing was withdrawn.',409)
+    if request.POST.get('revision')!=str(e.revision):
+        return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Nothing '
+                                          'was withdrawn. Reopen it to see the current notes and codes.',409)
+    item=CodeSuggestion.objects.select_for_update().filter(pk=code_pk,encounter=e,accepted_by__isnull=False).first()
+    if item is None:return document_refusal(request,e,'This accepted code is unavailable. Nothing was withdrawn.',409)
+    previous,release=item.accepted_by_id,item.terminology.release
+    CodeSuggestion.objects.filter(pk=item.pk).update(accepted_by=None,accepted_at=None)
+    CodeSuggestion.objects.filter(pk=item.pk).delete()
+    audit(request.user,'coding.withdraw',item.pk,department=e.department,code=item.code,release=release.version,
+          release_sha256=release.sha256,previously_accepted_by=str(previous),review_required=item.review_required)
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 def billing(request):
@@ -2274,20 +2316,31 @@ def encounter_notes(request,pk):
     # CRLF, which is the same text), so every evidence offset stays valid. A reviewed transcript is always a change.
     if transcript_job is None and same_text(notes,e.notes):
         messages.info(request,'Notes unchanged — nothing was cleared.');return redirect('encounter_detail',pk=pk)
-    cleared=review_state_counts(e)
+    # ⚠️ A CHANGED SAVE NEVER DELETES AN ACCEPTED CODE (0034 refuses it): the acceptance is kept and marked for the
+    # clinician to accept again or withdraw; finalizing waits for that. Suggestions nobody accepted are cleared as before.
+    cleared=review_state_counts(e,codes=False)
+    marked=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).count()
     e.notes=notes;e.answers={};e.revision+=1;e.status='draft';wm_review.invalidate_review(e);e.save(update_fields=['notes','answers','revision','status','template_review'])
-    CodeSuggestion.objects.filter(encounter=e).update(accepted_by=None,accepted_at=None)
-    CodeSuggestion.objects.filter(encounter=e).delete()
-    audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department)
-    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared)
+    invalidate_codes(e)
+    audit(request.user,'coding.invalidated_by_source_edit',e.pk,department=e.department,kept_for_review=marked)
+    audit(request.user,'encounter.notes_saved',e.pk,department=e.department,revision=e.revision,cleared=cleared,
+          codes_marked_for_review=marked)
     if transcript_job:
         audit(request.user,'transcription.applied',transcript_job.pk,department=e.department,revision=e.revision,
               mode=request.POST['transcript_mode'],raw_sha256=hashlib.sha256(raw_transcript.encode()).hexdigest(),
               corrected_sha256=hashlib.sha256(corrected.encode()).hexdigest(),corrected=corrected.replace('\r\n','\n')!=raw_transcript.replace('\r\n','\n'))
     # (said plainly to whoever saved: any member's changed save clears a clinician's review — refutation round 2 — and
     # exactly what it cleared, read from the counts just audited — refutation round 3, F2)
-    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+'Generate and review a new answer draft.')
+    messages.success(request,'Notes saved. '+cleared_sentence(cleared)+marked_sentence(marked)+'Generate and review a new answer draft.')
     return redirect('encounter_detail',pk=pk)
+
+def invalidate_codes(e):
+    """After the notes changed: suggestions nobody accepted are removed; accepted codes are kept and marked for re-review."""
+    CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=True).delete()
+    return CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False,review_required=False).update(review_required=True)
+
+def marked_sentence(count):
+    return f'Kept and marked for re-review: {count} accepted code{"" if count==1 else "s"}. ' if count else ''
 
 def review_transcript(job):
     """Read only the bounded, hash-bound retained result for a reviewed transcript."""

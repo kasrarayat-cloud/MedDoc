@@ -799,8 +799,11 @@ def run_one():
                 text=result+note
                 if len(e.notes)+len(text)+2>NOTE_LIMIT: raise NotAdoptedByUser(OVERFLOW_ERROR)
                 e.notes+='\n\n'+text; e.answers={}; e.status='draft'; e.revision+=1
-                CodeSuggestion.objects.filter(encounter=e).delete()
-                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision)
+                # Accepted codes are kept and marked for re-review, never deleted (0034); the rest are cleared as before.
+                CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=True).delete()
+                marked=CodeSuggestion.objects.filter(encounter=e,accepted_by__isnull=False).update(review_required=True)
+                audit(job.user,'coding.invalidated_by_transcription',e.pk,department=e.department,revision=e.revision,
+                      kept_for_review=marked)
             if not (job.kind=='transcription' and job.config.get('transcript_review_required')):
                 # A generation's statement proposals only pre-select the page; the first save replaces them with decisions.
                 e.template_review=review if job.kind=='generation' else {}

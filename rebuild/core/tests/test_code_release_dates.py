@@ -274,6 +274,8 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
         self.assertFalse(shipped, 'the shipped lookahead must not match M25 inside M25.532')
         self.assertTrue(broken, 'the broken lookahead does match it — this is the discriminating case')
 
+    # The product-use lock in code is lifted with synthetic rights: this tests the message for a licensed CPT release.
+    @patch('core.coding.CPT_PRODUCT_USE_RIGHTS', {'synthetic': 'product-use rights for tests only'})
     @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
     def test_a_date_only_a_licensed_cpt_release_covers_is_not_reported_as_nothing_recorded(self):
         """A message that denies a suggestion sitting on the same page is worse than no message."""
