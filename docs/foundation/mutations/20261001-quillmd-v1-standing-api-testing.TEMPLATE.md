@@ -12,7 +12,9 @@ lead completes it, in this order, and commits the result under that name BEFORE 
    the model — a price is never written for a request the application cannot build.
 4. Check `max_output_tokens_per_request` and `request_deadline_seconds` against the profiles that command prints:
    every profile's output limit and client timeout must be at most these bounds, or the runner refuses the stage.
-5. Delete this numbered preamble, keep everything below it, commit, and land it through a PR before any send.
+5. Delete everything above the `# Declaration` heading, keep everything below it, check that no `<FILL` is left,
+   and commit it (`git commit -F`) on the branch the runner runs from — and push it — before any request, including
+   the free preflight: the runner refuses a declaration that is not tracked, committed and unmodified.
 
 # Declaration — V1 standing synthetic API testing on claude-sonnet-5-5, October 1, 2026
 
