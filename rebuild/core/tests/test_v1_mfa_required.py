@@ -6,6 +6,7 @@ from base64 import b32encode
 from urllib.parse import parse_qs, urlsplit
 
 from django.test import Client, TestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.oath import totp
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -23,6 +24,7 @@ def code(device):
 
 @override_settings(ADMIN_SITE=False, QUILLMD_PREVIEW_AUTH_ENABLED=False, STORAGES=STORAGES)
 class MfaFixture(TestCase):
+    client_class = SurfaceClient
     def setUp(self):
         self.clinician = User.objects.create_user(username='mfa-clinician', email='mfa-clinician@synthetic.invalid',
                                                   password=PASSWORD, verified_at=timezone.now())
@@ -41,7 +43,7 @@ class DefaultOffIsUnchanged(MfaFixture):
         self.enrolled()
         self.assertRedirects(self.sign_in(self.client), '/', fetch_redirect_response=False)
         self.assertEqual(self.client.get('/').status_code, 200)
-        self.assertContains(Client().get('/login/'), 'Authenticator code (administrators)')
+        self.assertContains(SurfaceClient().get('/login/'), 'Authenticator code (administrators)')
 
 
 @override_settings(QUILLMD_MFA_REQUIRED_ALL=True)
@@ -79,8 +81,8 @@ class EverySignInNeedsAnAuthenticator(MfaFixture):
         TOTPDevice.objects.filter(pk=device.pk).update(throttling_failure_count=0, throttling_failure_timestamp=None)
         self.assertRedirects(self.sign_in(self.client, code(device)), '/', fetch_redirect_response=False)
         self.assertEqual(self.client.get('/').status_code, 200)
-        self.assertContains(Client().get('/login/'), 'Authenticator code')
-        self.assertNotContains(Client().get('/login/'), 'Authenticator code (administrators)')
+        self.assertContains(SurfaceClient().get('/login/'), 'Authenticator code')
+        self.assertNotContains(SurfaceClient().get('/login/'), 'Authenticator code (administrators)')
 
     def test_a_session_opened_before_the_switch_is_sent_to_verify(self):
         self.client.force_login(self.clinician)
@@ -94,7 +96,7 @@ class StaffResetMfa(MfaFixture):
         self.admin = User.objects.create_user(username='mfa-admin', email='mfa-admin@synthetic.invalid',
                                               verified_at=timezone.now(), is_staff=True)
         self.admin_device = TOTPDevice.objects.create(user=self.admin, name='Admin authenticator', confirmed=True)
-        self.console = Client()
+        self.console = SurfaceClient()
         self.console.force_login(self.admin)
         session = self.console.session
         session['otp_device_id'] = self.admin_device.persistent_id
@@ -106,7 +108,7 @@ class StaffResetMfa(MfaFixture):
 
     def test_reset_removes_devices_signs_out_and_forces_enrolment(self):
         device = self.enrolled()
-        live = Client()
+        live = SurfaceClient()
         self.assertRedirects(self.sign_in(live, code(device)), '/', fetch_redirect_response=False)
         self.assertEqual(live.get('/').status_code, 200)
         self.assertContains(self.console.get(f'/console/accounts/{self.clinician.pk}/detail/'), 'Reset MFA')
@@ -121,7 +123,7 @@ class StaffResetMfa(MfaFixture):
         self.assertTrue(event.details['sessions_invalidated'])
         self.assertIn('identity confirmed', event.details['reason'])
         # Next sign-in: password, then enrolment of a new authenticator.
-        self.assertRedirects(self.sign_in(Client()), '/mfa/', fetch_redirect_response=False)
+        self.assertRedirects(self.sign_in(SurfaceClient()), '/mfa/', fetch_redirect_response=False)
 
     def test_reset_refuses_administrators_missing_reasons_and_non_staff(self):
         self.enrolled()
@@ -130,7 +132,7 @@ class StaffResetMfa(MfaFixture):
         self.assertEqual(self.reset(self.clinician, {'reason': 'too short', 'confirm': 'on'}).status_code, 400)
         self.assertEqual(self.reset(self.clinician, {'reason': self.reason['reason']}).status_code, 400)
         self.assertTrue(TOTPDevice.objects.filter(user=self.clinician).exists())
-        other = Client()
+        other = SurfaceClient()
         other.force_login(self.clinician)
         self.assertEqual(other.post(f'/console/accounts/{self.clinician.pk}/mfa-reset/', self.reason).status_code, 404)
         self.assertFalse(AuditEvent.objects.filter(action='admin.mfa_reset').exists())

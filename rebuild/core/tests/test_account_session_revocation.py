@@ -10,6 +10,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.apps import apps
 from django.db import close_old_connections, connection, connections
 from django.test import Client, TestCase, TransactionTestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -23,6 +24,7 @@ from core.models import AuditEvent, User
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
 })
 class AccountSessionRevocation(TestCase):
+    client_class = SurfaceClient
     password = 'Synthetic-session-preserved-password-29471!'
 
     def setUp(self):
@@ -37,7 +39,7 @@ class AccountSessionRevocation(TestCase):
         session = self.client.session
         session['otp_device_id'] = self.device.persistent_id
         session.save()
-        self.old_browser = Client()
+        self.old_browser = SurfaceClient()
         self.old_browser.force_login(self.user)
         self.assertEqual(self.old_browser.get('/api/patients/').status_code, 200)
 
@@ -56,7 +58,7 @@ class AccountSessionRevocation(TestCase):
         self.assertEqual(self.old_browser.get('/api/patients/').status_code, 302)
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password(self.password))
-        fresh_browser = Client()
+        fresh_browser = SurfaceClient()
         response = fresh_browser.post('/login/', {'email': self.user.email, 'password': self.password})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(fresh_browser.get('/api/patients/').status_code, 200)
@@ -74,7 +76,7 @@ class AccountSessionRevocation(TestCase):
     def test_session_created_from_stale_user_after_suspension_cannot_revive(self):
         stale_user = User.objects.get(pk=self.user.pk)
         self.access(False)
-        late_browser = Client()
+        late_browser = SurfaceClient()
         late_browser.force_login(stale_user)
         self.access(True)
         self.assertEqual(late_browser.get('/api/patients/').status_code, 302)
@@ -92,7 +94,7 @@ class AccountSessionRevocation(TestCase):
         self.access(False)
         self.access(True)
         self.user.refresh_from_db()
-        second_browser = Client()
+        second_browser = SurfaceClient()
         second_browser.force_login(self.user)
         self.assertEqual(second_browser.get('/api/patients/').status_code, 200)
         self.access(False)
@@ -108,7 +110,7 @@ class AccountSessionRevocation(TestCase):
         self.access(False)
         self.access(True)
         self.user.refresh_from_db()
-        current_browser = Client()
+        current_browser = SurfaceClient()
         current_browser.force_login(self.user)
         with override_settings(SECRET_KEY='synthetic-rotated-secret-for-positive-control',
                                SECRET_KEY_FALLBACKS=[old_secret]):
@@ -119,14 +121,14 @@ class AccountSessionRevocation(TestCase):
         url = f'/recovery/confirm/{urlsafe_base64_encode(force_bytes(self.user.pk))}/{raw}/'
         self.access(False)
         self.access(True)
-        browser = Client()
+        browser = SurfaceClient()
         response = browser.get(url)
         self.assertContains(response, 'Recovery link unavailable')
 
     def test_suspension_revokes_already_open_recovery_flow(self):
         raw = default_token_generator.make_token(self.user)
         url = f'/recovery/confirm/{urlsafe_base64_encode(force_bytes(self.user.pk))}/{raw}/'
-        browser = Client()
+        browser = SurfaceClient()
         clean_url = browser.get(url)['Location']
         self.access(False)
         self.access(True)
@@ -141,7 +143,7 @@ class AccountSessionRevocation(TestCase):
     def test_reactivated_user_can_request_and_use_fresh_recovery_link(self):
         self.access(False)
         self.access(True)
-        browser = Client()
+        browser = SurfaceClient()
         with patch('core.recovery.deliver_account_email') as delivery:
             self.assertEqual(browser.post('/recovery/', {'email': self.user.email}).status_code, 200)
         delivery.assert_called_once()
@@ -173,12 +175,13 @@ class AccountSessionRevocation(TestCase):
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
 })
 class ConcurrentAccountSuspension(TransactionTestCase):
+    client_class = SurfaceClient
     password = AccountSessionRevocation.password
     setUp = AccountSessionRevocation.setUp
 
     def test_two_concurrent_suspensions_serialize_one_transition_and_revoke_cookie(self):
         self.assertEqual(connection.vendor, 'postgresql')
-        browsers = [Client(), Client()]
+        browsers = [SurfaceClient(), SurfaceClient()]
         for browser in browsers:
             browser.force_login(self.admin)
             session = browser.session

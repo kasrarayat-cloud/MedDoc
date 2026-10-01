@@ -13,8 +13,11 @@ class AccessMiddleware:
                 # Restore only the page location. Never replay an expired form submission.
                 return redirect_to_login(path if request.method == 'GET' else '/', '/login/')
             if not request.user.verified_at: return HttpResponseForbidden('Verify your email before accessing the application.')
-            admin_surface=settings.ADMIN_SITE or path.startswith('/console/')
-            if admin_surface and not request.user.is_staff: return HttpResponseNotFound()
+            # The console exists on the administration surface only. On the doctor host it answers 404 to every
+            # account, administrators included and before the MFA redirect, exactly as a route that does not exist:
+            # an administrator's session there is outside the admin host's operator allowlist (inventory 7A, F1).
+            if path.startswith('/console/') and not settings.ADMIN_SITE: return HttpResponseNotFound()
+            if settings.ADMIN_SITE and not request.user.is_staff: return HttpResponseNotFound()
             if (request.user.is_staff or settings.QUILLMD_MFA_REQUIRED_ALL) and path not in ('/mfa/','/logout/') and not request.user.is_verified(): return redirect('mfa_setup')
         response=self.get_response(request)
         # media-src blob: lets the doctor play back a browser recording before sending it; without it the

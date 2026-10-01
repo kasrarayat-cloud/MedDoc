@@ -13,6 +13,7 @@ from django.core.exceptions import PermissionDenied,ValidationError
 from django.conf import settings
 from django.db import DatabaseError,connection,connections,transaction
 from django.test import Client,TestCase,TransactionTestCase,override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -27,6 +28,7 @@ ISOLATED=dict(ADMIN_SITE=False,QUILLMD_PREVIEW_AUTH_ENABLED=False,
                         'staticfiles':{'BACKEND':'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 
 class Fixture(SyntheticFixture):
+    client_class = SurfaceClient
     def setup_records(self):
         self.scope=self.make_scope('hold');self.other=self.make_scope('unheld')
         self.encounter=self.scope[5]
@@ -205,7 +207,7 @@ class Preservation(Fixture,TestCase):
             self.assertIn(response.status_code,[302,404]);self.assertFalse(RetentionHold.objects.exists())
 
     def test_real_html_forms_require_csrf_confirmation_and_show_preservation_state(self):
-        self.client=Client(enforce_csrf_checks=True);self.login_admin()
+        self.client=SurfaceClient(enforce_csrf_checks=True);self.login_admin()
         with override_settings(ADMIN_SITE=True):
             page=self.client.get('/console/retention/')
             self.assertEqual(page.status_code,200);self.assertContains(page,'Preservation holds')

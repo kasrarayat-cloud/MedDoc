@@ -18,6 +18,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import connection, connections, DatabaseError, transaction
 from django.http import Http404
 from django.test import TestCase, TransactionTestCase, RequestFactory, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -29,6 +30,7 @@ DURABLE = 'This document has a durable disposition instruction and is unavailabl
 
 
 class ExecutionFixture(Fixture):
+    client_class = SurfaceClient
     def setup_execution(self):
         self.setup_records()
         self.journal_temp = tempfile.TemporaryDirectory(); self.addCleanup(self.journal_temp.cleanup)

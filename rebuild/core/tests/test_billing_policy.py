@@ -14,6 +14,7 @@ from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.oath import totp
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -66,6 +67,7 @@ class DiscountConfiguration(SimpleTestCase):
 
 
 class PolicyFixture(SyntheticFixture):
+    client_class = SurfaceClient
     def setUp(self):
         self.directory=tempfile.TemporaryDirectory();self.addCleanup(self.directory.cleanup)
         override=override_settings(MEDIA_ROOT=Path(self.directory.name));override.enable();self.addCleanup(override.disable)

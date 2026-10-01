@@ -31,6 +31,7 @@ from django.core.exceptions import ValidationError
 from django.db import OperationalError, connection
 from django.db.backends.postgresql.base import DatabaseWrapper
 from django.test import Client, TransactionTestCase, override_settings
+from core.tests.surfaces import SurfaceClient
 from django.utils import timezone
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -121,7 +122,7 @@ class Console:
                                          email=f'resolver-{time.monotonic_ns()}@synthetic.invalid',
                                          verified_at=timezone.now(), is_staff=True)
         device = TOTPDevice.objects.create(user=admin, name='Synthetic authenticator', confirmed=True)
-        client = Client()
+        client = SurfaceClient()
         client.force_login(admin)
         session = client.session
         session['otp_device_id'] = device.persistent_id
