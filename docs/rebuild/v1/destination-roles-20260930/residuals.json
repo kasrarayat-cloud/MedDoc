@@ -1,0 +1,1169 @@
+{
+ "slice": "fix/v1-roles-salvage 8951fdec (b2 repair round of 258650f2)",
+ "source": "/opt/meddoc-pro/rebuild/.runtime/v1-product-20260930/b/primary-workflow-result.json result[0] r2 and r3 (findings + verdicts, every lens) + the b2 refutation round of 258650f2 (L1:R1-01..05, L2:R2-01, L3:F1)",
+ "rule": "every CONFIRMED round-2/3 finding with regression_vs_candidate false is a residual (carried from impl/residuals.json, 28); this round adds its declared costs and the regressions it could not restore under 'no new wording reader, no new release'",
+ "measured_on": "8951fdec (worktree and git-archive copy repair/trees/repair); 43fcf214 = /opt/meddoc-pro/.worktrees/v1-release-integration (read-only)",
+ "count_carried": 28,
+ "count_new": 9,
+ "residuals": [
+  {
+   "id": "L1:RR1-01",
+   "round": "round 2 (against a32243eb)",
+   "severity": "HIGH",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3 form: heading 'Consultant review', paragraph 'Signed by the consultant:', bordered 1x1 box containing (B8) '______________________________' | (B9) 'Signature, date: ______' | (B12) 'Dr ______________________ (consultant)' | (B13) '______________________    Date: ______'; then 'Plan: ______'. Walk: upload, v3_confirm, generate (fixture AI) with notes 'Answer: Dr Somebody Else' / 'Signature, date: 30/09/2026', save, finalize.",
+   "what_leaks": "Ordinary engine areas inside a signing box ('Signed by the consultant:' + box) are answerable: the box line, 'Signature, date', 'Dr ____ (consultant)' and the signature line's dates are generated and exported.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6116-6119 (inside = every engine_places pid under the cell -> role['except']), :6112 (cell in engine_places), touches() except arm :5976",
+   "at_salvage": {
+    "structure": {
+     "engine_fields": [
+      "Answer (text)",
+      "Signature, date (date)",
+      "Dr (text)",
+      "Date (date)",
+      "Date (date)",
+      "Plan (long_text)"
+     ],
+     "roles": [
+      "question_box_signing"
+     ],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Consultant review",
+      "Signed by the consultant:",
+      "A0",
+      "Signature, date: 2026-09-30",
+      "Dr A2 (consultant)",
+      "2026-09-30    Date: 2026-09-30",
+      "Plan: A5"
+     ]
+    }
+   }
+  },
+  {
+   "id": "L1:RR1-02",
+   "round": "round 2 (against a32243eb)",
+   "severity": "HIGH",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "legacy + v3",
+   "input": "Legacy rows 'Signature, date', 'Signature - date', 'Signature, date/time', 'Print name, sign and date', 'Patient to sign and date' (notes 'Label: value'); v3 line/box 'Signature, date: ______'.",
+   "what_leaks": "A signature+date place joined by a comma, dash or 'X to sign and date' reads as a date (v3) / no role (legacy): the name and date are generated into the signing place.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:1291-1298 (_JOIN, SIGNATURE_DATE_PAIR arm 2 anchored ^), :1888 (kind_for date exclusion), :6263 (signing_place DATE_LABEL release)",
+   "at_salvage": {
+    "label_walk": {
+     "Signature, date": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     },
+     "Signature - date": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     },
+     "Signature, date/time": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     },
+     "Print name, sign and date": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     },
+     "Patient to sign and date": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     }
+    }
+   },
+   "b2_repair_note": "b2 repair: widened by the pair narrowing - an initials pair must close the label and a 'signed' pair must open it (B2-N4)."
+  },
+  {
+   "id": "L1:RR1-03",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "legacy (+ v3 log-table column)",
+   "input": "Legacy rows 'Initial 1', 'Initial 2', 'Initial x2' + 'Plan' with notes 'Initial 1: JE'; v3 log table 'Drug | Dose | Initial 1 | Initial 2' filled [['Morphine','5 mg','JE','AB']].",
+   "what_leaks": "'Initial 1' / 'Initial 2' / 'Initial x2' (two nurses' initials) are generated on legacy; a v3 log-table column headed 'Initial 1' gets no signing_column role and fills.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6241 (INITIALS_PLACE lookahead requires end/punctuation/act word), :6244; legacy_role_kind :6272; signing column :6154-6155",
+   "at_salvage": {
+    "label_walk": {
+     "Initial 1": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind initials)"
+     },
+     "Initial 2": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind initials)"
+     },
+     "Initial x2": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind initials)"
+     }
+    },
+    "v3_log_table": "not re-run; signing_place(\"Initial 1\") == \"\" on this tree, the reader the column role uses (word_v3.py _role_reading, signing_column)"
+   },
+   "b2_repair_note": "b2 repair: the v3 half is subsumed by L1:F7 below - a log table column carries no role at all now (the signing_column role was dropped, L1:R1-03). The legacy rows half is unchanged."
+  },
+  {
+   "id": "L1:RR1-04",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "legacy (+ v3 text-kind variants)",
+   "input": "Legacy rows 'Initial on each page', 'Initial against each entry', 'Sign in box', 'To be signed', 'Signed consultant', 'Signed patient', 'Consultant signed', 'Registrar signed' (+ 'Plan'), notes 'Label: value'.",
+   "what_leaks": "Signing-place labels the fail-closed reader still releases ('Initial on each page', 'Sign in box', 'To be signed', 'Signed consultant', 'Consultant signed', ...) are generated and exported on legacy.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6231-6241 (_ACT_WORDS closed class lacks in/on/against/at/within; SIGNED_PLACE arm 1 anchored ^ and lookahead without role nouns)",
+   "at_salvage": {
+    "label_walk": {
+     "Initial on each page": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind initials)"
+     },
+     "Initial against each entry": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind initials)"
+     },
+     "Sign in box": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "To be signed": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind signature)"
+     },
+     "Signed consultant": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind signature)"
+     },
+     "Signed patient": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind signature)"
+     },
+     "Consultant signed": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind signature)"
+     },
+     "Registrar signed": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind signature)"
+     },
+     "Initial in box": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind initials)"
+     },
+     "Sign on the line": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Please sign in the box": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Must be signed": {
+      "legacy": "GENERATED",
+      "v3": "missing (kind signature)"
+     }
+    }
+   },
+   "b2_repair_note": "b2 repair: unchanged reader; the legacy path additionally releases what the kind rule reads as text (B2-N3)."
+  },
+  {
+   "id": "L1:RR1-05",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "legacy (+ v3, see R3 L1:F3)",
+   "input": "Legacy 2-col table, label cell 'Consultant' + w:br + 'signature' (or two paragraphs), or 'Nurse' + w:br + 'initials'; notes 'Consultantsignature: Dr Somebody Else'.",
+   "what_leaks": "A label cell wrapped by a w:br or a second paragraph is joined with no separator ('Consultantsignature', 'Nurseinitials', 'SignatureDate'): no identity, no role, generated and exported.",
+   "cause_as_reported": "rebuild/documents/engine.py:328 (''.join(left.xpath('.//w:t/text()'))); rebuild/documents/word_v3.py:6237 (SIGNATURE_PLACE \\bsignatures?\\b), :6241",
+   "at_salvage": {
+    "legacy_two_paragraph": {
+     "Consultant / signature": {
+      "inspected_label": "Consultantsignature",
+      "role": "",
+      "status": "supported",
+      "text": "Dr Somebody Else"
+     },
+     "Consultant <br> signature": {
+      "inspected_label": "Consultantsignature",
+      "role": "",
+      "status": "supported",
+      "text": "Dr Somebody Else"
+     },
+     "Nurse / initials": {
+      "inspected_label": "Nurseinitials",
+      "role": "",
+      "status": "supported",
+      "text": "Dr Somebody Else"
+     },
+     "Signature / Date": {
+      "inspected_label": "SignatureDate",
+      "role": "",
+      "status": "supported",
+      "text": "Dr Somebody Else"
+     }
+    }
+   }
+  },
+  {
+   "id": "L1:RR1-06",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3: (a) 'Consultant signature:' / '' / '____________________'; (b) '____________________' / 'Consultant signature' (caption under line); (c) 'Consultant signature:' / '____________________ (use black ink)'; (d) 'Consultant signature:' / '____________________    Date: ______'; (e) 'Signed by the consultant:' / 'Dr ______________________'.",
+   "what_leaks": "The engine's ordinary field on a signing line stays answerable for common caption layouts (empty paragraph between, caption under the line, guidance after the line, a date on the line, 'Dr ____').",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6089-6097 (signing_line: only el.getnext() and _writing_line), :6024-6027 (_writing_line)",
+   "at_salvage": {
+    "structure": {
+     "RR1-06a caption, empty paragraph, line": {
+      "engine_fields": [
+       "Consultant signature (signature)",
+       "Answer (text)",
+       "Plan (long_text)"
+      ],
+      "roles": [
+       "signing_area",
+       "signing_caption"
+      ],
+      "violations": {},
+      "fill_every_answerable_field": [
+       "Clinic record",
+       "Consultant signature:",
+       "A1",
+       "Plan: A2"
+      ]
+     },
+     "RR1-06b line then caption below": {
+      "engine_fields": [
+       "Clinic record (text)",
+       "Plan (long_text)"
+      ],
+      "roles": [],
+      "violations": {},
+      "fill_every_answerable_field": [
+       "Clinic record",
+       "A0",
+       "Consultant signature",
+       "Plan: A1"
+      ]
+     },
+     "RR1-06c caption, line with guidance": {
+      "engine_fields": [
+       "Consultant signature (signature)",
+       "(use black ink) (text)",
+       "Plan (long_text)"
+      ],
+      "roles": [
+       "signing_area"
+      ],
+      "violations": {},
+      "fill_every_answerable_field": [
+       "Clinic record",
+       "Consultant signature:",
+       "A1 (use black ink)",
+       "Plan: A2"
+      ]
+     },
+     "RR1-06d caption, line and date": {
+      "engine_fields": [
+       "Consultant signature (signature)",
+       "Date (date)",
+       "Date (date)",
+       "Plan (long_text)"
+      ],
+      "roles": [
+       "signing_area"
+      ],
+      "violations": {},
+      "fill_every_answerable_field": [
+       "Clinic record",
+       "Consultant signature:",
+       "2026-09-30    Date: 2026-09-30",
+       "Plan: A3"
+      ]
+     },
+     "RR1-06e signed by, Dr line": {
+      "engine_fields": [
+       "Signed by the consultant (signature)",
+       "Dr (text)",
+       "Plan (long_text)"
+      ],
+      "roles": [
+       "signing_area"
+      ],
+      "violations": {},
+      "fill_every_answerable_field": [
+       "Clinic record",
+       "Signed by the consultant:",
+       "Dr A1",
+       "Plan: A2"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "L1:RR1-07",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3 (manual add)",
+   "input": "'Signed by the consultant:' + empty bordered 1x1 box where (a) question and box sit in a layout table cell (box nested), (b) a body-level w:bookmarkStart sits between question and box, (c) the question paragraph is wrapped in a block w:sdt, (d) 3 empty paragraphs precede the box. v3_add long_text 'Consultant review' at the box cell, confirm, generate with notes 'Consultant review: Reviewed by Dr Somebody Else'.",
+   "what_leaks": "A clinician's manual long_text in a signing box is located and filled when the question and box sit in a layout cell, a bookmark or block sdt intervenes, or empty paragraphs precede the box.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6103 (for table in index.roots: nested tables never read), :4808 (loop stops at any non-w:p sibling: bookmarkStart, block sdt), :4815-4816 (more than 2 empty paragraphs)",
+   "at_salvage": {
+    "locate": {
+     "RR1-07a manual long_text in the signing box": "LOCATED; fill WROTE",
+     "RR1-07b manual long_text in the signing box": "LOCATED; fill WROTE",
+     "RR1-07c manual long_text in the signing box": "LOCATED; fill WROTE",
+     "RR1-07d manual long_text in the signing box": "LOCATED; fill WROTE"
+    }
+   }
+  },
+  {
+   "id": "L1:RR1-08",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3 table: row0 'Drug' | 'Dose' | 'Administered by' (merged over 2 columns); row1 '' | '' | 'Initials' | 'Time'; 2 empty rows. table_rows answer [['Morphine','5 mg','JE','10:00']].",
+   "what_leaks": "A two-level header ('Administered by' over 'Initials | Time') hides the initials column: fill writes into it.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6154-6155 (option_text(detector.column_header(table, col, min(rows)))), :1657-1672",
+   "at_salvage": {
+    "structure": {
+     "engine_fields": [
+      "Drug (text)",
+      "Dose (text)",
+      "Clinic record (table_rows)",
+      "Plan (long_text)"
+     ],
+     "roles": [],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Clinic record",
+      "Drug",
+      "Dose",
+      "Administered by",
+      "A0",
+      "A1",
+      "Initials",
+      "Time",
+      "A2",
+      "A2",
+      "A2",
+      "A2"
+     ]
+    }
+   },
+   "b2_repair_note": "b2 repair: moot as stated - no log-table column is a role any more (L1:R1-03); the whole class is residual B2-N2 (L1:F7)."
+  },
+  {
+   "id": "L1:RR1-09",
+   "round": "round 2 (against a32243eb)",
+   "severity": "LOW",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3 (manual path)",
+   "input": "v3 lines 'Patient signed: ______', 'Consultant signed: ______', 'Reviewed and signed: ______', 'To be signed: ______', 'Initial 1: ______', 'Initial in box: ______', 'Initial on each page: ______'; locate text at b/p[1].",
+   "what_leaks": "A kind-rule signing area whose label the reader releases ('Patient signed', 'To be signed', 'Initial 1', 'Initial on each page') is not a role: a clinician's text field there is located and then generated/filled.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6079-6082",
+   "at_salvage": {
+    "locate": {
+     "RR1-09 manual text on Patient signed": "LOCATED; fill WROTE",
+     "RR1-09 manual text on Consultant signed": "LOCATED; fill WROTE",
+     "RR1-09 manual text on Reviewed and signed": "LOCATED; fill WROTE",
+     "RR1-09 manual text on To be signed": "LOCATED; fill WROTE",
+     "RR1-09 manual text on Initial 1": "LOCATED; fill WROTE",
+     "RR1-09 manual text on Initial in box": "LOCATED; fill WROTE",
+     "RR1-09 manual text on Initial on each page": "LOCATED; fill WROTE"
+    }
+   }
+  },
+  {
+   "id": "L1:RR1-11",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3 lines 'Sign below: ______', 'Sign and print name: ______', 'Sign & stamp: ______'.",
+   "what_leaks": "A v3 area typed text by the kind rule is never checked against signing_place: 'Sign and print name', 'Sign & stamp' are generated on v3 while legacy holds them; 'Sign below' is asked and fillable.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6066 (only area.kind in SIGNING_KINDS enters the role branch), :1882-1892 (kind_for without 'sign below/print/stamp')",
+   "at_salvage": {
+    "label_walk": {
+     "Sign below": {
+      "legacy": "missing",
+      "v3": "conflict (kind text)"
+     },
+     "Sign and print name": {
+      "legacy": "missing",
+      "v3": "GENERATED (kind text)"
+     },
+     "Sign & stamp": {
+      "legacy": "missing",
+      "v3": "GENERATED (kind text)"
+     }
+    },
+    "structure": {
+     "engine_fields": [
+      "Sign below (text)",
+      "Plan (long_text)"
+     ],
+     "roles": [],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Clinic record",
+      "Sign below: A0",
+      "Plan: A1"
+     ]
+    }
+   },
+   "b2_repair_note": "b2 repair: now also on the legacy default path - legacy_role_kind is the v3 rule (kind rule AND signing_place), so 'Sign below', 'Sign and print name', 'Sign & stamp' are generated on legacy as on v3 and on 43fcf214 (B2-N3)."
+  },
+  {
+   "id": "L2:RR3-01",
+   "round": "round 2 (against a32243eb)",
+   "severity": "HIGH",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "legacy + v3",
+   "input": "v3: lines('Signature, date: ______________', 'Plan: ______'); also 'Signature - date: ...' and 'Patient signature, date: ...'. Notes: '<label>: Dr Example 30/09/2026\\nPlan: Rest.' Then confirm, generate (fixture), save, finalize. Legacy: legacy_rows('Signature, date' | 'Signed by (name, date)' | 'Electronically signed by (name, date)', 'Plan') with the same walk.",
+   "what_leaks": "Signature and date as one place joined by a comma, dash or 'with' ('Signature, date', 'Signed by (name, date)'): v3 date field / legacy no role; name and date generated and exported; 'Signed by (name, date)' also escapes identity.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:1291 (_JOIN), :1888 (kind_for SIGNATURE and not DATE_LABEL), :6263 (signing_place DATE_LABEL release)",
+   "at_salvage": {
+    "label_walk": {
+     "Signature, date": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     },
+     "Patient signature, date": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     },
+     "Signed by (name, date)": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     },
+     "Electronically signed by (name, date)": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     },
+     "Signature with date": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind date)"
+     }
+    }
+   }
+  },
+  {
+   "id": "L2:RR3-02",
+   "round": "round 2 (against a32243eb)",
+   "severity": "HIGH",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "legacy + v3",
+   "input": "Legacy: legacy_rows(L, 'Plan') for L in 'Sign', 'Please sign', 'Given by (sign)', 'Countersignature', 'Initialled by'. v3: lines('L: ______________', 'Plan: ______') for 'Sign', 'Please sign', 'Countersignature', 'Nurse sign'. Notes: 'L: Dr Example\\nPlan: Rest.' Then generate, save, finalize.",
+   "what_leaks": "'Sign', 'Please sign', 'Given by (sign)', 'Countersignature', 'Initialled by', 'Nurse sign' are neither roles (legacy) nor signature kind (v3): generated and exported.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:1284 (v3 SIGNATURE), :6234-6241 (SIGNATURE_PLACE / SIGNED_PLACE / INITIALS_PLACE), :6254 signing_place",
+   "at_salvage": {
+    "label_walk": {
+     "Sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Please sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Given by (sign)": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Countersignature": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Initialled by": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Nurse sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     }
+    }
+   }
+  },
+  {
+   "id": "L2:RR3-04",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "identity created by a model (over-hold, not a text leak)",
+   "path": "v3 model path",
+   "input": "lines('Reviewed by: ______    Consultant signature: ______', 'Plan: ______'). Model replace of v3_1 'Reviewed by' (text) with label 'signature', quoted from the same paragraph at [35,44), kind text, run through mapping_jobs (mocked send). Notes: 'Reviewed by: Dr Other Person'. Then v3_save with label_v3_1='Reviewed by'.",
+   "what_leaks": "A model relabel can turn an ordinary field INTO a finalizer-identity field ('Reviewed by' -> 'signature'): generation stops answering, finalization demands the finalizer's name, and the clinician cannot rename it back.",
+   "cause_as_reported": "rebuild/core/mapping_assistance.py:279 (signature_label(source) instead of the target label); lock-in at rebuild/core/views.py:602",
+   "at_salvage": {
+    "salvage": "not re-run; mapping_assistance SIGNING_REASON still tests signature_label(source) (the joined slot text), unchanged here; the 4e6b6e8a fix is not ported"
+   }
+  },
+  {
+   "id": "L2:RR3-05",
+   "round": "round 2 (against a32243eb)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "legacy",
+   "input": "legacy_rows('Signed by (doctor responsible for patient)', 'Plan') and legacy_rows(\"Signature (patient's consultant)\", 'Plan'). Generate 'Plan: Rest.', type 'Dr Somebody Else' into the signer row, then finalize as 'Synthetic Alpha Clinician'. Also clinician_identity('Signed by (name, date)').",
+   "what_leaks": "'Signed by (doctor responsible for patient)' / \"Signature (patient's consultant)\": NOT_THE_CLINICIAN is searched across the whole label, so the finalizer's own signer line is not identity; a typed other clinician's name finalizes and exports.",
+   "cause_as_reported": "rebuild/core/tab_review.py:59 (NOT_THE_CLINICIAN.search over the whole label), :62 (DATE_QUESTION on the parenthetical)",
+   "at_salvage": {
+    "label_walk": {
+     "Signed by (doctor responsible for patient)": {
+      "legacy": "missing",
+      "v3": "missing (kind signature)"
+     },
+     "Signature (patient's consultant)": {
+      "legacy": "missing",
+      "v3": "missing (kind signature)"
+     }
+    },
+    "salvage": "not generated here (role reader and another_signers_line hold it), but identity is still off: a TYPED other name exports, as on a32243eb; signature_label is unchanged"
+   },
+   "b2_repair_note": "b2 repair: unchanged - 'patient' was already in 43fcf214's NOT_THE_CLINICIAN; participant/mother/father/donor are no longer in it (L1:R1-01 restored 43fcf214's list), so those four words are identity-safe exactly as on 43fcf214."
+  },
+  {
+   "id": "L2:RR3-06",
+   "round": "round 2 (against a32243eb)",
+   "severity": "LOW",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "question unasked (not a text leak)",
+   "path": "v3 model path",
+   "input": "lines('Pulse findings (radial): ______', 'Plan: ______'). Model replace of v3_1 (long_text, span [25,31)) quoting '(' at [15,16), then ')' at [22,23).",
+   "what_leaks": "A punctuation-only relabel ('(' or ')') is adopted: the question is effectively unasked.",
+   "cause_as_reported": "rebuild/core/mapping_assistance.py:276",
+   "at_salvage": {
+    "salvage": "not re-run; LABEL_SHAPE / clean_label unchanged"
+   }
+  },
+  {
+   "id": "L2:RR3-07",
+   "round": "round 2 (against a32243eb)",
+   "severity": "LOW",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "over-hold (not a leak)",
+   "path": "v3 model path",
+   "input": "The same 'Hospital number: <sdt>    Weight: ______ kg' form. Proposal: Weight replaced with 'Weight', Hospital number marked uncertain.",
+   "what_leaks": "A valid relabel beside an inline control is held as D3 (collides() compares a span with a control by paragraph) when the neighbour is uncertain.",
+   "cause_as_reported": "rebuild/core/mapping_assistance.py:310-314 (collides), :105-116 (overlaps fall-through), :345 (D3)",
+   "at_salvage": {
+    "salvage": "not re-run; collides() unchanged (model_overlaps is V1 only)"
+   }
+  },
+  {
+   "id": "L2:RR3-08",
+   "round": "round 2 (against a32243eb)",
+   "severity": "LOW",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "test gap (not a leak)",
+   "path": "v3 model path",
+   "input": "Private copy of a32243eb at rerefute-3/mut, patched by probes/mutate.py. Mutant application asserted and the restore checked by sha256. Suites: core.tests.test_destination_roles.ModelProposalsRound1, .ModelProposals, core.tests.test_mapping_assistance, core.tests.test_mapping_wire (54 tests).",
+   "what_leaks": "No test asserts DISMISSED_REASON; LABEL_SHAPE's question_key arm is untested (mutants MG and MF survive the focused suites).",
+   "cause_as_reported": "rebuild/core/tests/test_destination_roles.py:862; rebuild/core/mapping_assistance.py:317-322 (dismissal block), :276",
+   "at_salvage": {
+    "salvage": "unchanged; not addressed in this slice"
+   }
+  },
+  {
+   "id": "L1:F1",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "HIGH",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3 + legacy",
+   "input": "v3: paragraphs 'Clinic record' (heading) / '______________________<tab><tab>______________________' / 'Patient signature<tab><tab><tab>Date' / 'Plan: ______'; notes 'Clinic record: Dr Somebody Else'. Legacy: 2-col row whose label cell holds the paragraphs 'Signature' and 'Date', notes 'Signature Date: Dr Somebody Else 30/09/2026'. The same release happens for 'Signed<tab>Date', 'Name<tab>Signature<tab>Date', 'Signature<tab>Time', 'Consultant signature<tab>Date signed', and 'Consultant signature<tab>Date: ' over a line.",
+   "what_leaks": "Two captions side by side under a line ('Patient signature<tab><tab><tab>Date'): the line above has no role and is generated; legacy 'Signature'/'Date' two-paragraph label is joined 'SignatureDate' and generated.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6250 (caption rule gated on signing_place(whole paragraph)); :6437-6442 DATE_QUESTION branch 3; :6535 release; rebuild/documents/engine.py:212 label_text (joins paragraphs, then :6535 releases)",
+   "at_salvage": {
+    "structure": {
+     "engine_fields": [
+      "Clinic record (text)",
+      "Plan (long_text)"
+     ],
+     "roles": [],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Clinic record",
+      "A0",
+      "Patient signatureDate",
+      "Plan: A1"
+     ]
+    },
+    "legacy_two_paragraph": {
+     "inspected_label": "SignatureDate",
+     "role": "",
+     "status": "supported",
+     "text": "Dr Somebody Else"
+    },
+    "note": "the finding names 4e6b6e8a's caption rule; on this tree the shape has no role at all (as on 43fcf214)"
+   }
+  },
+  {
+   "id": "L1:F2",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "HIGH",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3: 'Please complete in block capitals.' / '______________________' / 'Signature of clinician' / '______________________' / 'Name and grade' / 'Plan: ______'; notes 'Please complete in block capitals.: Dr Somebody Else'. Also 'I consent to this procedure.' / line / 'Patient signature' / line / 'Witness signature', and 'I confirm the above information is correct.' / line / 'Patient signature' / line / 'Print name'.",
+   "what_leaks": "A declaration or instruction paragraph above the first line, captions under the lines: the engine labels the signature line with the declaration text and generation fills it.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6255-6256 (governed-above excluded when plain_caption(neighbour above))",
+   "at_salvage": {
+    "structure": {
+     "engine_fields": [
+      "Please complete in block capitals. (text)",
+      "Signature of clinician (signature)",
+      "Plan (long_text)"
+     ],
+     "roles": [
+      "signing_area"
+     ],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Clinic record",
+      "Please complete in block capitals.",
+      "A0",
+      "Signature of clinician",
+      "______________________",
+      "Name and grade",
+      "Plan: A2"
+     ]
+    }
+   }
+  },
+  {
+   "id": "L1:F3",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "HIGH",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3 2-column table: label cell with the paragraphs 'Consultant' and 'signature', empty answer cell, row 'Plan'; notes 'Consultantsignature: Dr Somebody Else'. v3 log table 'Drug | Dose | Time | <cell with the paragraphs Nurse / initials>' over 3 empty rows. The same happens for 'Patient'/'signature' and 'Nurse'/'sign'.",
+   "what_leaks": "v3 text_of joins paragraphs with no separator: a label cell or log-table header wrapped onto two paragraphs ('Consultant'/'signature', 'Nurse'/'initials') is ordinary: generated / filled.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:275 text_of (no separator between w:p); :1573 Detector.cell_text; :6303-6308 signing-column header via option_text(column_header)",
+   "at_salvage": {
+    "structure": {
+     "R3-L1F3 two-paragraph label cell": {
+      "engine_fields": [
+       "Consultantsignature (text)",
+       "Plan (long_text)",
+       "Plan (long_text)"
+      ],
+      "roles": [],
+      "violations": {},
+      "fill_every_answerable_field": [
+       "Clinic record",
+       "Consultant",
+       "signature",
+       "A0",
+       "Plan",
+       "A1",
+       "Plan: A2"
+      ]
+     },
+     "R3-L1F3 two-paragraph initials header": {
+      "engine_fields": [
+       "Clinic record (table_rows)",
+       "Plan (long_text)"
+      ],
+      "roles": [],
+      "violations": {},
+      "fill_every_answerable_field": [
+       "Clinic record",
+       "Drug",
+       "Dose",
+       "Time",
+       "Nurse",
+       "initials",
+       "A0",
+       "A0",
+       "A0",
+       "A0",
+       "Plan: A1"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "L1:F4",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "HIGH",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "legacy + v3",
+   "input": "Legacy 2-col rows '<label> | ' + 'Plan | '; notes '<label>: Dr Somebody Else'. Labels: 'Print name and sign', 'Name and sign', 'Countersign', 'Witness to sign' (value 'John Witness'), 'Nurse 2 sign', 'Patient signs here', 'Consultant sign-off', 'Time out signed by'. v3 lines '<label>: ______________' / 'Plan: ______'. v3 log table header 'Countersign', 'Witness to sign', 'Print name and sign' or 'Nurse 2 sign' over empty rows.",
+   "what_leaks": "'Print name and sign', 'Name and sign', 'Countersign', 'Witness to sign', 'Nurse 2 sign', 'Patient signs here', 'Consultant sign-off', 'Read and sign', ... are released: generated and exported.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6470-6496 _sign_is_place (closing 'sign' needs _SIGNER.fullmatch(before[-1])); :6433 _SIGNER; rebuild/documents/source_policy.py:11 ROLE_PERSONS 'witnesses?'; word_v3.py:6425 _SIGNED_WORD (no bare 'countersign', no 'signs'); :6437 DATE_QUESTION branch 1 ('Time out signed by')",
+   "at_salvage": {
+    "label_walk": {
+     "Print name and sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Name and sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Countersign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Witness to sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Nurse 2 sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Patient signs here": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Consultant sign-off": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Time out signed by": {
+      "legacy": "missing",
+      "v3": "missing (kind signature)"
+     },
+     "Read and sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Stamp and sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Nurse's sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Witness sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Co-sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "Sign name below": {
+      "legacy": "GENERATED",
+      "v3": "conflict (kind text)"
+     },
+     "Dr sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     },
+     "RN sign": {
+      "legacy": "GENERATED",
+      "v3": "GENERATED (kind text)"
+     }
+    }
+   }
+  },
+  {
+   "id": "L1:F5",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3: paragraph 'Consultant signature: ' + inline w:sdt (w:text, showingPlcHdr, alias 'Answer' or 'Text1' or 'Clinician'), then 'Plan: ______'. Also '______________________' / 'Patient signature (' + [sdt alias 'Name'] + ')', and '______________________' / 'Patient signature<tab><tab>' + [date sdt alias 'Date'].",
+   "what_leaks": "A plain-text content control beside a signing caption takes its alias/tag as label ('Answer', 'Text1'): an ordinary answer on the signature line.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:2245 (label = alias or tag or printed); :6252 (caption rule skipped when any non-signing field is in the caption paragraph)",
+   "at_salvage": {
+    "structure": {
+     "engine_fields": [
+      "Answer (text)",
+      "Plan (long_text)"
+     ],
+     "roles": [],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Clinic record",
+      "Consultant signature: A0",
+      "Plan: A1"
+     ]
+    }
+   }
+  },
+  {
+   "id": "L1:F6",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3: 'Please provide your countersignature' (also 'Countersignature?', 'Signatures?', 'Please provide signatures below') followed by a bordered 1x1 empty table, then 'Plan: ______'.",
+   "what_leaks": "'Please provide your countersignature' / 'Signatures?' + box: question_box_signing's '\\bsignature\\b' misses them; the box is a long_text answer and is filled.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6216 ('if cell.id in engine_places: continue'); :4815 question_box_signing; :5074 long_text box mapping",
+   "at_salvage": {
+    "structure": {
+     "engine_fields": [
+      "Please provide your countersignature (long_text)",
+      "Plan (long_text)"
+     ],
+     "roles": [],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Clinic record",
+      "Please provide your countersignature",
+      "A0",
+      "Plan: A1"
+     ]
+    }
+   }
+  },
+  {
+   "id": "L1:F7",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3: 'Signatures' followed by a bordered 1x1 box containing 'Patient: ______________' and 'Parent/guardian: ______________' (also 'Consultant:' / 'Registrar:'), then 'Plan: ______'.",
+   "what_leaks": "Person captions inside a signatures box ('Patient: ____', 'Parent/guardian: ____') are ordinary questions and are filled.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6229-6240 (exemption = captioned answerable area)",
+   "at_salvage": {
+    "structure": {
+     "engine_fields": [
+      "Patient (text)",
+      "Parent/guardian (text)",
+      "Plan (long_text)"
+     ],
+     "roles": [],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Clinic record",
+      "Signatures",
+      "Patient: A0",
+      "Parent/guardian: A1",
+      "Plan: A2"
+     ]
+    }
+   }
+  },
+  {
+   "id": "L1:F8",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3",
+   "input": "v3: 'Consultant signature' / 'Use black ink.' (or '(use black ink)') / '______________________' / 'Plan: ______'; notes 'Use black ink.: Dr Somebody Else'.",
+   "what_leaks": "Guidance between the caption and its writing line ('Use black ink.'): the engine labels the line with the guidance and generates it.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6255 (governed only if the nearest printed block below is itself a writing place); _block_neighbour :6043",
+   "at_salvage": {
+    "structure": {
+     "engine_fields": [
+      "Use black ink. (text)",
+      "Plan (long_text)"
+     ],
+     "roles": [],
+     "violations": {},
+     "fill_every_answerable_field": [
+      "Clinic record",
+      "Consultant signature",
+      "Use black ink.",
+      "A0",
+      "Plan: A1"
+     ]
+    }
+   }
+  },
+  {
+   "id": "L1:F9",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "LOW",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "leak",
+   "path": "v3 (manual add)",
+   "input": "v3: 'Clinic record' / empty paragraph with w:pBdr bottom / 'Consultant signature' / 'Plan: ______'; manual text field at b/p[1]. Also 'Consultant signature' / '＿＿＿＿＿＿＿＿＿＿＿' (or '‗‗‗‗‗‗‗‗') with a manual add at b/p[2].",
+   "what_leaks": "A signature rule drawn as a bordered empty paragraph above its caption, or printed with fullwidth/double low lines: a manual text add there is located and filled.",
+   "cause_as_reported": "rebuild/documents/word_v3.py:6090-6093 _writing_line (text-only); :6254-6256",
+   "at_salvage": {
+    "locate": {
+     "R3-L1F9 manual text on a bordered line above a caption": "LOCATED; fill WROTE",
+     "R3-L1F9 manual text on a fullwidth line": "LOCATED; fill WROTE"
+    }
+   }
+  },
+  {
+   "id": "L3:F3-01",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "MEDIUM",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "gate inconsistency (nothing wrong exported at 4e6b6e8a)",
+   "path": "legacy (stored templates)",
+   "input": "Legacy two-column form with the label cell 'Consultant'<w:br/>'signature' (and 'Nurse'<w:br/>'initials'; also the second-paragraph variant). The first mapping version is stored exactly as the candidate's inspect_template(engine='legacy') returns it for the same bytes (out/inspect-cand.json: label 'Consultantsignature'/'Nurseinitials', structure identical to HEAD's). This is what every legacy template uploaded before this branch holds. Notes: 'Consultantsignature: Dr Somebody Else\\nPlan: Rest.' Walk at HEAD: generate, save with every row reviewed, then finalize (probe f3/test_stored_legacy.py, out/stored-legacy.json).",
+   "what_leaks": "At 4e6b6e8a the stored first-version label ('Consultantsignature') and a fresh inspection ('Consultant signature') disagree: generation and save let the signing row through, only finalize refuses.",
+   "cause_as_reported": "rebuild/core/destination_roles.py:86-92 (legacy_roles, fresh=False: reads the FIRST stored version's label) used by generation (core/jobs.py:708 -> destination_roles.generation_fields -> held(fresh=False) at destination_roles.py:118) and review save (core/views.py:1130); only finalize reads fresh (core/views.py:1555). The label change is in rebuild/documents/engine.py:212/:340 (label_text).",
+   "at_salvage": {
+    "salvage": "the 4e6b6e8a label_text change is not ported, so first-version and fresh labels agree here ('Consultantsignature') - and the row is the RR1-05 leak instead (generated, exported)",
+    "legacy_two_paragraph": {
+     "inspected_label": "Consultantsignature",
+     "role": "",
+     "status": "supported",
+     "text": "Dr Somebody Else"
+    }
+   }
+  },
+  {
+   "id": "L3:F3-03",
+   "round": "round 3 (against 4e6b6e8a)",
+   "severity": "LOW",
+   "verdict": "CONFIRMED",
+   "regression_vs_candidate": false,
+   "class": "test gap",
+   "path": "v3 model path",
+   "input": "Mutant A (out/mutants-applied.txt: expected 1 / measured 1, marker present, sha256 285fa84639a1 -> 9b6ce27f29c8). It keeps only the identity arm: `if clinician_identity({'label':label}):raise ValidationError(SIGNING_LABEL)`. I ran every test module on the proposal path: core.tests.test_destination_roles, test_mapping_assistance, test_mapping_outcome_unknown and test_mapping_wire (92 tests). Behaviour probe f3/test_relabel_arms.py: 'Reviewed by: ______ (consultant signature)' / '(initials)' / '(countersignature)' / '(please sign)', relabelling 'Reviewed by' to the quoted words.",
+   "what_leaks": "The identity-only relabel arm mutant survives: the signing_place arm of 4e6b6e8a's RR3-04 fix has no test.",
+   "cause_as_reported": "rebuild/core/mapping_assistance.py:295; guard test rebuild/core/tests/test_destination_roles.py:1045-1057 (test_rr3_04 quotes only 'signature')",
+   "at_salvage": {
+    "salvage": "not applicable: 4e6b6e8a's RR3-04 fix is not ported; RR3-04 stands as its own residual"
+   }
+  }
+ ],
+ "b2_repair_residuals": [
+  {
+   "id": "B2-N1",
+   "from": "L1:R1-01 / L2:R2-01 / L3:F1 repair (NOT_THE_CLINICIAN back to 43fcf214)",
+   "regression_vs_candidate": false,
+   "class": "false refusal (usefulness), pre-existing on 43fcf214 (design matrix L04, LEAVE)",
+   "path": "legacy + v3 (identity)",
+   "input": "legacy row or v3 line 'Signature (participant)', 'Signature (mother)', 'Signature (father)', 'Signature (donor)', 'Signature (participant, dd/mm/yyyy)', 'Signed (mother, DOB)'",
+   "what": "identity row again: never generated; a typed value must equal the finalizer's own name (typed 'John Example' -> finalize refused 'The reviewed signature must match your signed-in clinician name'); 'Leave blank - reviewed' refused (the row may stay unanswered and finalize); the label cannot be renamed away. 43fcf214 identical.",
+   "why_not_fixed": "telling the signer from a person merely named in the label needs a new wording reader (the refuted widening searched the whole label)",
+   "measured": "core.tests.test_destination_roles.RepairLegacyIdentity.test_rr1_10_* and test_tab_form_policy (8951fdec)"
+  },
+  {
+   "id": "B2-N2",
+   "from": "L1:R1-03 repair (signing_column role dropped) - re-declares round-1 L1:F7",
+   "regression_vs_candidate": false,
+   "class": "leak of clinician-typed text (pre-existing on 43fcf214)",
+   "path": "v3 (table_rows)",
+   "input": "v3 log table 'Drug | Dose | Nurse initials' (also a 'Signature' column, 'Initial 1 | Initial 2', a two-level 'Administered by' over 'Initials | Time')",
+   "what": "the clinician's typed row text in the initials/signature column is saved, filled and exported (e.g. 'JE'); table_rows is never generated, so no model or notes text reaches it",
+   "why_not_fixed": "a column read as signing by its printed header refused ordinary clinical columns ('Visit type (initial/follow-up)', 'Dose (initial)', 'Initial' under 'Troponin (ng/L)'); separating them needs wording",
+   "measured": "documents.test_destination_roles.SigningColumns.test_l1f7_declared_residual_*, core V3Round1.test_l1f7_declared_residual_*"
+  },
+  {
+   "id": "B2-N3",
+   "from": "L1:R1-04 / PC05 repair (legacy_role_kind = kind rule AND signing_place)",
+   "regression_vs_candidate": false,
+   "class": "leak (pre-existing on 43fcf214; same as v3 L1:RR1-11; design matrix L02 LEAVE)",
+   "path": "legacy",
+   "input": "legacy rows / u-tab lines: Please sign and return, Sign & stamp, Sign and print name, Sign below, Sign each page, Sign overleaf, Sign the declaration, Sign to confirm, Signatures",
+   "what": "generated from 'Label: value' notes and exported (258650f2 held them; 43fcf214 generated them; v3 types them text and generates them on every tree)",
+   "why_not_fixed": "the engine's kind rule reads them as text; holding them on legacy alone needed signing_place's wider wording, which also held 'Tinel sign both wrists' and 'Sign and symptom review' (PC05)",
+   "measured": "out/battery-compare.json (declared_cost, residual_inputs groups), out/reader-delta.json legacy_role_released_vs_258650f2"
+  },
+  {
+   "id": "B2-N4",
+   "from": "L1:R1-04 / L1:R1-05 repair (date-pair arms narrowed)",
+   "regression_vs_candidate": false,
+   "class": "leak (pre-existing on 43fcf214: the same kinds as 43fcf214)",
+   "path": "v3 + legacy",
+   "input": "Consultant signed and date, Date and initials of nurse, Doctor signed and date, Initials and date of administration, Nurse initials and date checked, Patient signed and dated, Witness signed and dated",
+   "what": "v3 kind date (as on 43fcf214) instead of signature/initials, so generation writes a date there; on legacy no role, generated. 'Patient signed and dated' / 'Witness signed and dated' stay kind signature on v3 (never generated) but are no role, and are generated on legacy.",
+   "why_not_fixed": "the pair arms read 'Date of referral / initial contact' and 'Care plan signed and date of next review' as signing places; the narrowing (a 'signed' pair opens the label, an initials pair closes it) is the least that restores 43fcf214 for the refuted class",
+   "measured": "out/reader-delta.json v3_kind_changed_vs_258650f2 and v3_area_role_released_vs_258650f2"
+  },
+  {
+   "id": "B2-N5",
+   "from": "L1:R1-04 remainder",
+   "regression_vs_candidate": true,
+   "restored": false,
+   "class": "over-hold (usefulness), regression vs 43fcf214 NOT restorable under this round (no new wording reader, no new release)",
+   "path": "legacy",
+   "input": "legacy rows/u-tab lines 'Initial and ongoing management', 'Visit type (initial/follow-up)', 'Troponin initial', 'Initial (baseline) weight', 'Troponin — Initial (ng/L)', 'Gene expression signature', 'Signed on admission' (and, declared since a32243eb, 'Dose (initial)', 'Troponin (initial)', 'Lactate (initial)', 'Initial / repeat', 'Patient initials', bare 'Initial', 'Signed off by consultant', 'Consent form signed by patient', 'Drug chart signed by prescriber', 'Patient signature obtained', 'Witness signature obtained')",
+   "what": "never generated ('Signed or initialled by hand on the printed form...'); the clinician's typed value saves, finalizes and exports. 43fcf214 generated each from 'Label: value' notes.",
+   "why_not_fixed": "the kind rule types each signature/initials and signing_place names each a place; the same wording prints a real place ('Nurse (initial)', 'Initial and date', 'Initials', 'Signed on behalf of', 'Patient signature'); RF16 requires 'Initials' held; restoring needs a release arm in signing_place, which this round forbids",
+   "measured": "out/battery-compare.json r1_04 / labels_all groups; out/walk-repair.legacy.json keys R104|*"
+  },
+  {
+   "id": "B2-N6",
+   "from": "L1:R1-05 remainder",
+   "regression_vs_candidate": true,
+   "restored": false,
+   "class": "false refusal (usefulness), regression vs 43fcf214 NOT restorable under this round",
+   "path": "v3",
+   "input": "v3 line 'Initial and ongoing management: ______' or 'Visit type (initial/follow-up): ______': v3_save remove_<key>, then v3_add at b/p[1] kind long_text/text",
+   "what": "add refused 400 'This place is a signing, initials or consent area of the original form... Nothing was added.'; typed text in the engine's initials field is refused at save. 43fcf214: add 302 and the field generated and exported. Generation of the unreplaced field is 'missing' on both trees (kind initials).",
+   "why_not_fixed": "RF04 requires the same remove-then-add refused at 'Initials: ______'; only wording separates the two",
+   "measured": "out/walk-repair.v3.json keys R105|Initial and ongoing management, R105|Visit type (initial/follow-up)"
+  },
+  {
+   "id": "B2-N7",
+   "from": "L1:R1-04 R104b remainder",
+   "regression_vs_candidate": true,
+   "restored": false,
+   "class": "false refusal of a pre-upgrade draft",
+   "path": "legacy",
+   "input": "a draft generated by 43fcf214 holding 'supported' text for a B2-N5 label ('Initial and ongoing management', 'Visit type (initial/follow-up)'), saved unchanged",
+   "what": "save 400 'These answers were generated from the notes ... Clear each one and save; you may then type your own entry.' (43fcf214: 302). Restored for every label B2-N5 does not list.",
+   "why_not_fixed": "same as B2-N5",
+   "measured": "out/walk-repair.legacy.json key R104b|predraft"
+  },
+  {
+   "id": "B2-N8",
+   "from": "L2:R2-01 / L3:F1 caveats",
+   "regression_vs_candidate": false,
+   "class": "leak (pre-existing on 43fcf214)",
+   "path": "v3 + legacy (rename) and v3 (remove + add)",
+   "input": "'Signature (patient, dd/mm/yyyy): ______' renamed 'Patient' (v3_save label_<key>) or on legacy; and remove + v3_add of a Date field 'DOB' / 'Participant' at b/p[1] of any of these lines",
+   "what": "the renamed or re-added field is generated and exported ('John Example 30/09/2026'); 43fcf214 generates the patient's line even unrenamed. The participant/mother/father lines can no longer be renamed (identity, as on 43fcf214), but remove + add a date field exports on both trees (R202). A later model relabel of a clinician-renamed field (origin None) is not blocked by code reading; NOT MEASURED.",
+   "why_not_fixed": "the unrenamed patient line is held (hold beyond 43fcf214); holding the renamed or re-added field needs another-signer detection on the original for a manual/renamed field - not attempted in this bounded round",
+   "measured": "out/walk-repair.v3.json keys R201|Signature (patient, dd/mm/yyyy) -> Patient, R202|*"
+  },
+  {
+   "id": "B2-N9",
+   "from": "L1:R1-02 repair (identity reads the printed label only where it is a signing place)",
+   "regression_vs_candidate": true,
+   "restored": "partly (declared edge)",
+   "class": "edge of the restoration",
+   "path": "legacy (Word/PDF)",
+   "input": "a legacy printed label the role reader over-reads (e.g. 'Gene expression signature', 'Initial (baseline) weight') renamed to 'Signature'",
+   "what": "not an identity row after the rename (the printed label decides because it is a role place); 43fcf214 read the mapped label and made it identity. The row is still never generated and generated text is refused (role hold); only the finalizer-name check on typed text differs.",
+   "why_not_fixed": "reading the mapped label there would reopen L05 ('Participant's signature' renamed 'Signature' becoming the finalizer's)",
+   "measured": "by code (core/destination_roles.py printed + legacy_reason); not walked"
+  }
+ ],
+ "not_residuals_regressions_vs_candidate": [
+  {
+   "id": "L1:RR1-10",
+   "round": "r2",
+   "why": "fixed in this slice (hold direction)"
+  },
+  {
+   "id": "L2:RR3-03",
+   "round": "r2",
+   "why": "fixed in this slice (one overlap rule)"
+  },
+  {
+   "id": "L2:F1",
+   "round": "r3",
+   "why": "regression introduced by 4e6b6e8a, which this slice does not port"
+  },
+  {
+   "id": "L2:F2",
+   "round": "r3",
+   "why": "regression introduced by 4e6b6e8a, which this slice does not port"
+  },
+  {
+   "id": "L2:F3",
+   "round": "r3",
+   "why": "regression introduced by 4e6b6e8a, which this slice does not port"
+  },
+  {
+   "id": "L2:F4",
+   "round": "r3",
+   "why": "regression introduced by 4e6b6e8a, which this slice does not port"
+  },
+  {
+   "id": "L2:F5",
+   "round": "r3",
+   "why": "regression introduced by 4e6b6e8a, which this slice does not port"
+  },
+  {
+   "id": "L2:F6",
+   "round": "r3",
+   "why": "regression introduced by 4e6b6e8a, which this slice does not port"
+  },
+  {
+   "id": "L2:F7",
+   "round": "r3",
+   "why": "regression introduced by 4e6b6e8a, which this slice does not port"
+  },
+  {
+   "id": "L3:F3-02",
+   "round": "r3",
+   "why": "regression introduced by 4e6b6e8a, which this slice does not port"
+  },
+  {
+   "id": "L1:R1-01",
+   "round": "b2",
+   "why": "restored (NOT_THE_CLINICIAN is 43fcf214 list)"
+  },
+  {
+   "id": "L1:R1-02",
+   "round": "b2",
+   "why": "restored (identity reads the mapped label where the printed label is no signing place); edge B2-N9"
+  },
+  {
+   "id": "L1:R1-03",
+   "round": "b2",
+   "why": "restored (log-table column role dropped); cost B2-N2"
+  },
+  {
+   "id": "L1:R1-04",
+   "round": "b2",
+   "why": "restored for 8 of 13 measured labels + PC05; remainder B2-N5, B2-N7"
+  },
+  {
+   "id": "L1:R1-05",
+   "round": "b2",
+   "why": "restored for the 4 date-pair labels and Consent form signed and dated; remainder B2-N6"
+  },
+  {
+   "id": "L2:R2-01",
+   "round": "b2",
+   "why": "restored (rename refused as on 43fcf214); caveat B2-N8"
+  },
+  {
+   "id": "L3:F1",
+   "round": "b2",
+   "why": "same defect as L2:R2-01, restored"
+  }
+ ]
+}
