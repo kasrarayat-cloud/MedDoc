@@ -267,7 +267,9 @@ browser regression in CI. Installed release unchanged: `dedac162`. Model-assiste
   adjustment restates the earlier accounting window). **Retention:** holds survive restore through the journal and
   admission; disposal of clinical content, redaction tombstones and backup reconciliation remain (they also need
   counsel's schedule).
-- Campaign unchanged: $0.112104 of $40.00, 23 attempts, 0 open; the mapping remainder (9 sends) is admissible after a
-  diagnosis and reopen; the notes stage needs a new allowance (`sonnet5-campaign/stage-accounting-20260930.md`).
+- Campaign: $0.130880 of $40.00, 24 attempts, 0 open. The mapping stage was reopened once; its first remainder send
+  (attempt 24, $0.018776) returned a proposal leaving 11 of 35 slots unclassified and the whole-response rule refused it
+  (failed-2; repaired by holding omitted IDs for review). It is not reopened again: the runner's repair check watches
+  no mapping module. The notes stage needs a new allowance (`sonnet5-campaign/stage-accounting-20260930.md`).
 
 No gate is closed by this entry. No merge to `main`, deployment, payment, purchase or vendor contact occurred.
