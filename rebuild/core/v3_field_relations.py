@@ -384,13 +384,19 @@ def sole_independent(reading, unit, chosen, label):
     note itself, for a unit `sole_released` would make the patient's (`v3_actors._sole_reading`: each line's topic
     classes, operator reach, words and unknown words). The unit is NOT released when the note holds:
       - a word that is neither a known noun, a known operator nor a known neutral word, anywhere (an unknown word may
-        deny, end or correct: 'She is not anticoagulated.', 'She was misheard.') - fail closed;
-      - a correction or a pointer to another line, anywhere ('The previous line is incorrect.', 'Sorry, ...');
-      - another line about the same topic class that denies, ends, restricts, conditions or doubts it ('She takes no
-        medicines.', 'The patient used to smoke.', 'The patient is allergic to latex only.', 'Plan: switch to apixaban.')
-        - an assessment's doubt included, in whatever word ('Assessment: diarrhea unlikely.' beside 'She has
-        diarrhoea.', round 5 R2); a doubt about another class only shares no class ('Assessment is a probable medial
-        meniscus tear.' beside 'He has knee pain.'), and an exclusion is a denial (`v3_actors.SOLE_EXCLUSION`);
+        deny, end or correct: 'She is not anticoagulated.', 'She was misheard.'), and a number standing for a noun it
+        does not name ('She has twenty a day.', 'She takes one every morning.': refutation round 6, L1:F4) - fail
+        closed;
+      - a correction or a pointer to another line, anywhere ('The previous line is incorrect.', 'Sorry, ...'), and an
+        unlabelled line naming no topic of its own, fragment or clause ('Worse at night.', 'She feels better.'): it may
+        be about any answer (`v3_actors._sole_reading` 'global');
+      - another line that denies, ends, restricts, conditions or doubts a topic class bearing on the answer's own, in
+        either direction (`v3_actors.sole_bears_on`; refutation round 6, L1:F3) ('She takes no medicines.', 'The
+        patient used to smoke.', 'The patient is allergic to latex only.', 'Plan: switch to apixaban.', 'She is on no
+        treatment.' beside 'She takes warfarin.', 'She denies any blood pressure problem.' beside 'She has
+        hypertension.') - an assessment's doubt included, in whatever word ('Assessment: diarrhea unlikely.' beside
+        'She has diarrhoea.', round 5 R2; 'Assessment is a probable medial meniscus tear.' beside 'He has knee pain.'),
+        and an exclusion is a denial (`v3_actors.SOLE_EXCLUSION`);
       - another line naming the same word with a contraindication ('She is allergic to amitriptyline.');
       - another line about the same topic that is neither the presenting line nor written as ANOTHER printed question's
         answer ('She has twenty cigarettes a day.' beside 'She is a nonsmoker.': the answer may be contradicted or
@@ -452,14 +458,17 @@ def sole_independent(reading, unit, chosen, label):
         # The model's 'independent' for that line is not believed: nothing in the note shows it apart.
         if bears and (theirs['classes'] & bears or (denies and theirs['descriptive'] and bears & SOLE_CLINICAL)):
             return False
-        # (round 5, R2) an assessment's doubt is set apart only where it names no condition-like term at all - and a
-        # doubt naming no topic at all reaches every line ('global', above) - so a doubt about the answer's own topic
-        # class holds it, whatever word it uses ('She has diarrhoea.' beside 'Assessment: diarrhea unlikely.',
-        # 'She has a temperature.' beside 'Assessment: fever unlikely.'); one about another class only ('He has knee
-        # pain.' beside 'Assessment is a probable medial meniscus tear.') shares no class and does not reach it.
+        # (round 5, R2; refutation round 6, L1:F3) a line that denies, ends, restricts or doubts something holds every
+        # answer whose topic class BEARS on its own, in either direction (`v3_actors.sole_bears_on`), not only one
+        # sharing its class: 'treatment', 'problem', 'blood pressure problem' name no class of 'She takes warfarin.' or
+        # 'She has hypertension.', yet 'She is on no treatment.' and 'She denies any blood pressure problem.' may deny
+        # them. So an assessment's doubt naming a condition-like term holds every clinical answer, whatever word it
+        # uses ('She has diarrhoea.' beside 'Assessment: diarrhea unlikely.', 'He has knee pain.' beside 'Assessment
+        # is a probable medial meniscus tear.') - and a doubt naming no topic at all reaches every line ('global').
         if 'key' in theirs['reach'] and shared_key:
             return False
-        if 'class' in theirs['reach'] and shared_class:
+        if 'class' in theirs['reach'] and (shared_class or mine['classes'] & sole_bears_on(theirs['classes'])
+                                           or theirs['classes'] & sole_bears_on(mine['classes'])):
             return False
         if owner is not None and owner == label:
             return False

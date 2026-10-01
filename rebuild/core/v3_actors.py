@@ -1074,12 +1074,21 @@ def _sole_reading(doc, root, *, value_start, colon, age, opener, explicit):
     # A line that names no topic of its own but negates, ends, restricts, doubts, contrasts or sides something ('Not in
     # the morning.', 'Worse at night instead.', 'Bilateral.', 'Left side.', 'The right knee is also swollen.', 'None.')
     # qualifies a line it does not name: it may change any answer of the note (self-refutation round 2, 2026-10-01).
-    # So does an unlabelled fragment naming no topic, whatever its words ('Worse at night.', 'Last week.', 'Every
-    # day.', 'Severe.': round 3); a labelled value is its label's, and the presenting line is the note's anchor.
-    clause = root.pos_ in ('VERB', 'AUX') and any(c.dep_ in ('nsubj', 'nsubjpass', 'expl', 'csubj', 'csubjpass')
-                                                  for c in root.children)
-    if not classes and (reach & {'class', 'key'} or sides or not (clause or colon or age or opener)):
+    # So does an unlabelled line naming no topic, whatever its words: a fragment ('Worse at night.', 'Last week.',
+    # 'Every day.', 'Severe.': round 3) and - refutation round 6, L1:F4 - a whole clause ('She has twenty a day.',
+    # 'She feels better.'): nothing in it shows what it is about. A labelled value is its label's, and the presenting
+    # line is the note's anchor.
+    if not classes and (reach & {'class', 'key'} or sides or not (colon or age or opener)):
         reach.add('global')
+    # (refutation round 6, L1:F4) A number standing for a noun it does not name ('She has twenty a day.', 'She takes
+    # one every morning.', 'She has two every morning with her inhaler.'): what it counts is elided, so the line may be
+    # about any answer whatever else it names - its topic is UNKNOWN, fail closed. A number counting its own noun ('20
+    # mg', 'twenty cigarettes': the parser's 'nummod'), a date or year ('in 2019') and an age ('30-year-old') name what
+    # they count.
+    if any(t.idx >= label_end and (t.pos_ == 'NUM' or t.like_num) and t.dep_ not in ('nummod', 'quantmod', 'compound')
+           and not _DATE_LIKE.fullmatch(t.text) and not any(low <= t.idx < high for low, high in ages)
+           for t in tokens):
+        unknown = True
     return {'nouns_ok': nouns_ok, 'genders': frozenset(genders), 'bad_pronoun': bad_pronoun, 'fronted': fronted,
             'classes': frozenset(classes), 'reach': frozenset(reach), 'unknown': unknown, 'descriptive': descriptive,
             'doubt_only': doubts == {True},
@@ -1248,110 +1257,13 @@ def _unread(note_unread=True, quote=''):
             'topic_denial_keys': frozenset(), 'surface_keys': frozenset(), 'intention': True, 'sole': None}
 
 
-# ─── 2026-10-01, ROUND 5 (D30): THREE READINGS FOR THE DEFAULT PATH'S OWN HOLDS, EACH POSITIVE AND CLOSED ────────────
-#: A statement's OWN present time frame ('during this reporting period', 'today', 'at present'): it says when it holds, so
-#: an earlier paragraph's past event does not set its frame ('The patient was seen in A&E yesterday.' / blank line /
-#: 'Examination is normal.' stays held: no frame of its own). Only a deictic present - never an anaphoric 'that visit',
-#: 'the admission' or a frame in the past. (`generation.v3_added_causes` rule (b).)
-OWN_FRAME = re.compile(r'(?<![^\W_])(?:(?:during|in|over|throughout|within|for|at)\s+this\s+(?:current\s+)?'
-                       r'(?:reporting\s+|review\s+)?(?:period|visit|appointment|consultation|admission|review|report|'
-                       r'quarter|month|week|year|session)|today|at\s+present)(?![^\W_])', re.I)
-#: The verbs of a PLAIN statement (`_plain`): routine giving, taking, recording and providing, which deny, end, change,
-#: restrict or qualify nothing ('The prescribed medication is administered by residence staff and each administered dose
-#: is recorded.', 'The patient has taken every prescribed dose.'). 'be' and 'have' only as auxiliaries. A verb missing
-#: here only HOLDS.
-PLAIN_VERBS = frozenset(('take', 'administer', 'record', 'document', 'receive', 'give', 'prescribe', 'attend', 'use',
-                         'monitor', 'supervise', 'store', 'provide', 'report'))
-PLAIN_DETERMINERS = frozenset(('the', 'a', 'an', 'each', 'every', 'this'))
-PLAIN_ADPOSITIONS = frozenset(('by', 'of', 'at', 'in', 'with', 'during', 'for'))
-#: Every word of every vocabulary by which a statement may change another (an operator of the single-patient reading, a
-#: denial, an ending, an intention, a word of past time, a word setting something apart): never in a plain statement.
-_CHANGE_WORDS = None
-#: Nouns that name a setting, read with `SOLE_NOUNS` as a subject positively naming no person (`_thing_subject`).
-SETTING_NOUNS = frozenset(('residence', 'accommodation', 'housing', 'placement', 'hostel', 'flat', 'house', 'home'))
-
-
-def _change_words():
-    global _CHANGE_WORDS
-    if _CHANGE_WORDS is None:
-        _CHANGE_WORDS = (frozenset().union(*SOLE_OPERATORS.values()) | SOLE_UNCERTAIN | SOLE_NEGATION | CESSATION_VERBS
-                         | FUTURE_MODALS | INTENTION_WORDS | PENDING_PHRASES | PAST_TIME_WORDS | FORMER_WORDS
-                         | QUANTIFIED_DENIALS | QUANTIFIED_DENIAL_WORDS | SET_APART_WORDS | OTHER_PATIENT_WORDS
-                         | SOLE_TIME_WORDS | frozenset(SOLE_SIDES) | GENERIC_WORDS)
-    return _CHANGE_WORDS
-
-
-def _plain_participle(text):
-    """'prescribed', 'administered', 'recorded': a participle of a `PLAIN_VERBS` verb the tagger read as an adjective."""
-    return text.endswith('ed') and bool({text[:-1], text[:-2]} & PLAIN_VERBS)
-
-
-def _plain(doc, kind, other):
-    """(round 5, D30) A PLAIN statement: an explicit-patient or thing sentence whose every word is positively one that
-    changes nothing - a determiner of `PLAIN_DETERMINERS`, a preposition of `PLAIN_ADPOSITIONS`, 'and', 'be' or 'have'
-    as an auxiliary, a verb (or its participle) of `PLAIN_VERBS`, a noun naming no person and no time, and the words of
-    its own present frame (`OWN_FRAME`). No number, pronoun, adverb, other adjective, negation, modal or word of any
-    vocabulary by which a statement changes another. A word missing from these lists only HOLDS."""
-    if kind not in ('patient', 'thing') or other:
-        return False
-    frames = [m.span() for m in OWN_FRAME.finditer(doc.text)]
-    change = _change_words()
-    for t in doc:
-        if t.is_space or (t.is_punct and t.text in ('.', ',')):
-            continue
-        if any(low <= t.idx < high for low, high in frames):
-            continue
-        text, lemma = _fold(t.text), _lemma(t)
-        if {text, lemma} & change or t.dep_ == 'neg' or t.tag_ == 'MD':
-            return False
-        if t.pos_ == 'AUX':
-            ok = lemma in ('be', 'have') and t.dep_ in ('aux', 'auxpass')
-        elif t.pos_ == 'VERB':
-            ok = lemma in PLAIN_VERBS
-        elif t.pos_ == 'ADJ':
-            ok = _plain_participle(text)
-        elif t.pos_ == 'DET':
-            ok = text in PLAIN_DETERMINERS
-        elif t.pos_ == 'ADP':
-            ok = text in PLAIN_ADPOSITIONS
-        elif t.pos_ == 'CCONJ':
-            ok = text == 'and'
-        elif t.pos_ == 'NOUN':
-            ok = not (names_person(t) or other_patient(t)) and t.is_alpha
-        else:
-            ok = False                      # a number, pronoun, adverb, particle, name, symbol or other punctuation
-        if not ok:
-            return False
-    return True
-
-
-def _patient_object(root):
-    """(round 5, D30) The explicit patient as the direct object of the main verb ('The clinical supervisor saw the patient
-    at the community clinic on 20 September 2026.'): 'the' or 'this patient', nothing else said of the noun."""
-    return root.pos_ == 'VERB' and any(
-        c.dep_ == 'dobj' and _lemma(c) == 'patient' and _fold(c.text) == 'patient'
-        and any(x.dep_ == 'det' and _fold(x.text) in ('the', 'this') for x in c.children)
-        and not any(x.dep_ in ('compound', 'amod', 'poss', 'appos', 'nummod', 'relcl', 'acl', 'conj') for x in c.children)
-        for c in root.children)
-
-
-def _thing_subject(main):
-    """(round 5, D30) A main subject positively naming no person: a lexicon noun (`SOLE_NOUNS`, but none that can stand
-    for a person or a group) or a setting (`SETTING_NOUNS`), with a determiner, no possessor, apposition or clause, no
-    person anywhere in its phrase, and not a capitalized word in the middle of a sentence ('The current supported
-    residence provides ...')."""
-    if main is None or main.dep_ not in ('nsubj', 'nsubjpass') or main.pos_ != 'NOUN':
-        return False
-    lemma, text = _lemma(main), _fold(main.text)
-    if not ({lemma, text} & ((SOLE_NOUNS - SOLE_RESTRICTED - SOLE_COLLECTIVE) | SETTING_NOUNS)):
-        return False
-    if not any(c.dep_ == 'det' and _fold(c.text) in PLAIN_DETERMINERS for c in main.children):
-        return False
-    if any(c.dep_ in ('poss', 'appos', 'relcl', 'acl') for c in main.children):
-        return False
-    if main.text[:1].isupper() and main.i > main.sent.start:
-        return False
-    return not any(names_person(t) or names_carer(t) or _lemma(t) == 'patient' for t in main.subtree)
+# (refutation round 6, 2026-10-01) round 5's three readings for the default path's own holds (D30) are withdrawn with the
+# releases they fed, and the default path is the base's again: a line's own present frame (OWN_FRAME: an earlier past
+# event may fall inside 'this admission' / 'this reporting period'), a PLAIN pair of lines (`_plain`: any noun passed -
+# 'The warfarin is recorded for discontinuation.'), and the parser's syntax-only completeness for a thing subject or the
+# patient as object (`_thing_subject`, `_patient_object`: 'The warfarin belongs to the dog.', 'The physiotherapy ended
+# last year.' as a plan, 'The apixaban replaces the warfarin.' were adopted). Each was the meaning of a line, which only
+# a reader of meaning could supply.
 
 
 def read(units, groups, *, colon, parsed, subjects, explicit, ages, openers=frozenset()):
@@ -1537,8 +1449,6 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages, openers=froz
                   # 2026-10-01: the single-patient scope's reading of this unit (`sole_patient`), relation path only
                   'sole': _sole_reading(doc, root, value_start=value_start, colon=bool(colon.get(uid)),
                                         age=age, opener=opener, explicit=uid in explicit)}
-        patient_object = _patient_object(root)                                   # (round 5, D30)
-        thing_subject = kind == 'thing' and not other and _thing_subject(main)
         info[uid] = {**floors, 'readable': True, 'kind': kind, 'other': other, 'mentions_other': mentions_other,
                      'content': frozenset(content), 'core': frozenset(core), 'nominal': frozenset(nominal),
                      'keys': keys(content | nominal), 'core_keys': keys(core),
@@ -1548,14 +1458,6 @@ def read(units, groups, *, colon, parsed, subjects, explicit, ages, openers=froz
                      'standalone': (kind in ('patient', 'labelled', 'label_is', 'thing', 'other') and not connective
                                     and not points_back),
                      'patient_past': kind == 'patient' and _past(root),
-                     # (round 5, D30) read only by the default path's own holds (`generation.v3_added_causes`) and its
-                     # syntax-only completeness (`generation.v3_complete_statement`); each is positive and closed
-                     'plain': _plain(doc, kind, other) and not dependent,
-                     'own_frame': bool(OWN_FRAME.search(unit['quote'])),
-                     'patient_object': patient_object, 'thing_subject': thing_subject,
-                     # the pinned parser's whole-clause check (`v3_syntax._complete`, no actor span) on THIS parse, read
-                     # only for those two (`generation.v3_preceding_reading` 'syntax_only'): no second parse
-                     'clause_complete': bool((patient_object or thing_subject) and v3_syntax._complete(doc, None)),
                      'bounded': tuple(token.idx for token in words if token.dep_ in ('mark', 'advmod')
                                       and _fold(token.text) in BOUNDING_MARKERS and token.head.dep_ == 'advcl')}
     # The patient's gender is the NOTE's, read before any unit is resolved (X2: a cue after the pronoun counts too).

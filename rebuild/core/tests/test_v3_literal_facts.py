@@ -115,9 +115,4 @@ class OrdinaryLiteralFacts(SimpleTestCase):
         with patch('core.v3_syntax._parser', return_value=None): self.assert_status(target, quote, quote, 'conflict')
         old = {'status': 'supported', 'text': quote, 'reviewed': True,
                'evidence': [{'quote': quote, 'start': 0, 'end': len(quote)}]}
-        with patch('core.v3_syntax._parser', return_value=None):
-            self.assertEqual(g.governed_decisions(quote, [target], {target['key']: old}), [target['label']])
-        # (round 5, D30) with the pinned parser, the default reading's own syntax-only completeness (a whole clause
-        # whose subject positively names no person, `generation.v3_preceding_reading` 'syntax_only') completes it with no
-        # ordinary record: the clause is whole, and nothing in it is read as the patient's
-        self.assertEqual(g.governed_decisions(quote, [target], {target['key']: old}), [])
+        self.assertEqual(g.governed_decisions(quote, [target], {target['key']: old}), [target['label']])

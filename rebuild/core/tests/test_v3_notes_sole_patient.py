@@ -69,11 +69,20 @@ class SinglePatientRelease(Floors, SimpleTestCase):
 
     def test_the_freezes_answers_are_filled(self):
         fields = clinic_form()
-        self.assert_filled(N01, fields, {
-            'v3_4': ['She takes ibuprofen as needed.'], 'v3_6': ['She is a nonsmoker.'],
-            'v3_9': ['Plan is to start amitriptyline 10 mg at night.', 'She will follow up in six weeks.']},
-            {'v3_4': 'She takes ibuprofen as needed.', 'v3_6': 'No',
-             'v3_9': 'to start amitriptyline 10 mg at night.\nShe will follow up in six weeks.'}, choices=NO)
+        # (refutation round 6, L1:F4) N01 has two lines naming no topic of their own ('Neurological examination is
+        # normal.', 'She will follow up in six weeks.'): nothing in them shows what they are about, so either may change
+        # any answer and nothing in N01 is released - as on the base
+        for key, picks, choices in (('v3_4', ['She takes ibuprofen as needed.'], None),
+                                    ('v3_6', ['She is a nonsmoker.'], NO),
+                                    ('v3_9', ['Plan is to start amitriptyline 10 mg at night.',
+                                              'She will follow up in six weeks.'], None)):
+            with self.subTest(key=key):
+                self.assert_held(N01, fields, {key: picks}, key, choices=choices)
+        # without them the smoking answer is released; the medication answer stays held beside the history's symptom
+        # denial and 'No known drug allergies.' (round 6, L1:F3: a denial of a class bearing on the answer's)
+        without = N01.replace(' Neurological examination is normal.', '').replace(' She will follow up in six weeks.', '')
+        self.assert_filled(without, fields, {'v3_6': ['She is a nonsmoker.']}, {'v3_6': 'No'}, choices=NO)
+        self.assert_held(without, fields, {'v3_4': ['She takes ibuprofen as needed.']}, 'v3_4')
         # (round 5, R1) the history's symptom denial is held: two other lines name a symptom ('headaches'), and only
         # meaning says a headache is not the visual change, nausea or weakness it denies - fail closed, as the base
         self.assert_held(N01, fields, {'v3_2': ['The headaches started two months ago and are worse in the morning.',
@@ -89,16 +98,22 @@ class SinglePatientRelease(Floors, SimpleTestCase):
         # intransitive habit ('She smokes.') is whole on its own
         bare = 'She attends weekly.'
         self.assert_held(N03.replace('She attends the clinic every week.', bare), order_form(), {'v3_2': [bare]}, 'v3_2')
+        # (refutation round 6, L1:F3) the examination beside the assessment's doubt naming a condition-like term ('a
+        # probable medial meniscus tear') is held, as the round-5 R2 rule asked: the doubt's class bears on a finding
         exam ='On examination there is a small effusion and medial joint line tenderness.'
-        self.assert_filled(N04, fields, {'v3_7': [exam]}, {'v3_7': exam})
+        self.assert_held(N04, fields, {'v3_7': [exam]}, 'v3_7')
+        self.assert_filled(N04.replace(' Assessment is a probable medial meniscus tear.', ''), fields, {'v3_7': [exam]},
+                           {'v3_7': exam})
         prodrome = 'The patient sees zigzag lines before the headache begins.'
         self.assert_filled(N02, repeated_other(), {'v3_2': [prodrome]}, {'v3_2': prodrome})
 
     def test_the_presenting_opener_with_an_article(self):
         notes = 'A ' + N04
-        self.assert_filled(notes, clinic_form(), {'v3_7': ['On examination there is a small effusion and medial joint '
-                                                           'line tenderness.']},
-                           {'v3_7': 'On examination there is a small effusion and medial joint line tenderness.'})
+        exam = 'On examination there is a small effusion and medial joint line tenderness.'
+        # (refutation round 6, L1:F3) held beside the assessment's doubt (`test_the_freezes_answers_are_filled`)
+        self.assert_held(notes, clinic_form(), {'v3_7': [exam]}, 'v3_7')
+        self.assert_filled(notes.replace(' Assessment is a probable medial meniscus tear.', ''), clinic_form(),
+                           {'v3_7': [exam]}, {'v3_7': exam})
         # (round 5, R2) the complaint ('knee pain ... after a fall', an injury) beside the assessment's doubt about an
         # injury ('a probable medial meniscus tear') is held: the doubt names a condition-like term of its class
         self.assert_held(notes, clinic_form(), {'v3_1': ['A ' + N04.split('. ')[0] + '.']}, 'v3_1')
@@ -189,7 +204,9 @@ class SinglePatientRefusals(Floors, SimpleTestCase):
         for notes, pick, key, choices, text in (
                 (OPENER + ' She takes warfarin.', 'She takes warfarin.', 'v3_4', None, 'She takes warfarin.'),
                 (OPENER + ' She is on warfarin.', 'She is on warfarin.', 'v3_4', None, 'She is on warfarin.'),
-                (OPENER + ' She has asthma. She takes no medicines.', 'She has asthma.', 'v3_3', None, 'She has asthma.'),
+                # (refutation round 6, L1:F3: 'She has asthma.' beside 'She takes no medicines.' is held both ways, as
+                # round 5 R1 holds the denial beside a condition - `AnotherLineDenyingABearingClass`)
+                (OPENER + ' She has asthma. She is a nonsmoker.', 'She has asthma.', 'v3_3', None, 'She has asthma.'),
                 (OPENER + ' She is a nonsmoker. She takes no medicines.', 'She is a nonsmoker.', 'v3_6', NO, 'No'),
                 (OPENER + ' She smokes.', 'She smokes.', 'v3_6', YES, 'Yes'),
                 (OPENER + ' She is allergic to penicillin.', 'She is allergic to penicillin.', 'v3_5', None,
@@ -227,12 +244,18 @@ class SinglePatientRefusals(Floors, SimpleTestCase):
                 (OPENER + ' She takes warfarin. Asthma is uncertain.', 'She takes warfarin.', 'v3_4'),
                 (OPENER + ' She takes warfarin. The asthma is uncertain.', 'She takes warfarin.', 'v3_4'),
                 # a line continuing another ('And ...') inherits its subject: it is not whole on its own
-                (OPENER + ' She has asthma. And takes warfarin.', 'And takes warfarin.', 'v3_4')):
+                (OPENER + ' She has asthma. And takes warfarin.', 'And takes warfarin.', 'v3_4'),
+                # (refutation round 6, L1:F4) a complete line naming no topic of its own may be about any answer
+                (OPENER + ' ' + hpi + ' She will follow up in six weeks.', hpi, 'v3_2'),
+                (OPENER + ' ' + effusion + ' She will follow up in six weeks.', effusion, 'v3_7'),
+                (OPENER + ' She is allergic to penicillin. She will follow up in six weeks.',
+                 'She is allergic to penicillin.', 'v3_5'),
+                (OPENER + ' She has asthma. She will follow up in six weeks.', 'She has asthma.', 'v3_3')):
             with self.subTest(notes=notes):
                 self.assert_held(notes, fields, {key: [pick]}, key)
         # controls: the same answers beside a complete line about something else (another finding beside the
-        # examination is the examination's own unplaced topic, held by design)
-        follow = ' She will follow up in six weeks.'
+        # examination is the examination's own unplaced topic, held by design) - a topic bearing on none of them
+        follow = ' She is a nonsmoker.'
         for notes, pick, key in ((OPENER + ' ' + hpi + follow, hpi, 'v3_2'),
                                  (OPENER + ' ' + effusion + follow, effusion, 'v3_7'),
                                  (OPENER + ' She is allergic to penicillin.' + follow, 'She is allergic to penicillin.',
@@ -598,13 +621,11 @@ class AssessmentNamingTheAnswer(RoundFour, SimpleTestCase):
             ([W45, 'She has asthma.', 'Assessment: lung disease ruled out.'], 'She has asthma.', 'v3_3', None)))
 
     def test_an_assessment_about_something_else_does_not(self):
-        # (round 5, R2) 'about something else' is another topic CLASS: a doubt naming a condition-like term of the
-        # answer's own class holds it ('Assessment: probable eczema.' beside 'She has asthma.', both conditions)
+        # (round 5, R2; refutation round 6, L1:F3) 'about something else' is a topic class bearing on neither: a doubt
+        # naming a condition-like term holds every clinical answer ('Assessment: probable eczema.' or 'probable knee
+        # sprain' beside 'She has asthma.', `AnotherLineDenyingABearingClass`), and is apart from a smoking answer
         self.filled_everywhere((
-            ([W45, 'She has asthma.', 'Assessment: probable knee sprain.'], 'She has asthma.', 'v3_3', None,
-             'She has asthma.'),
-            ([W45, 'She takes warfarin.', 'Assessment: no asthma.'], 'She takes warfarin.', 'v3_4', None,
-             'She takes warfarin.')))
+            ([W45, 'She is a nonsmoker.', 'Assessment: probable asthma.'], 'She is a nonsmoker.', 'v3_6', NO, 'No'),))
         self.held_everywhere((
             ([W45, 'She has asthma.', 'Assessment: probable eczema.'], 'She has asthma.', 'v3_3', None),))
 
@@ -807,6 +828,110 @@ class BareNamedSubject(RoundFour, SimpleTestCase):
             ([W45, 'Assessment is asthma.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None,
              'She takes warfarin.')))
 
+
+
+@override_settings(**RELATIONS)
+class AnotherLineDenyingABearingClass(RoundFour, SimpleTestCase):
+    """Refutation round 6, L1:F3: a POSITIVE answer ('She takes warfarin.', 'She has hypertension.') is held by another
+    line that denies, ends or doubts a topic class bearing on its own in either direction (`v3_actors.sole_bears_on`):
+    'treatment', 'problem', 'blood pressure problem' share no class with the answer, so the class-sharing rule alone let
+    the model's 'independent' stand. And, as the original R2 asked, an assessment's doubt naming a condition-like term
+    holds a clinical answer whatever its class ('He has knee pain.' beside 'Assessment is a probable medial meniscus
+    tear.')."""
+
+    def test_a_denial_of_a_class_bearing_on_the_answer_holds_it(self):
+        self.held_everywhere((
+            ([OPENER, 'She takes warfarin.', 'She is on no treatment.'], 'She takes warfarin.', 'v3_4', None),
+            ([OPENER, 'She has hypertension.', 'She denies any blood pressure problem.'], 'She has hypertension.',
+             'v3_3', None),
+            ([OPENER, 'She has hypertension.', 'Assessment: blood pressure problem unlikely.'], 'She has hypertension.',
+             'v3_3', None),
+            ([OPENER, 'She has insomnia.', 'She denies any sleep problem.'], 'She has insomnia.', 'v3_3', None),
+            ([OPENER, 'She has depression.', 'She denies any mood problem.'], 'She has depression.', 'v3_3', None),
+            ([OPENER, 'She will start amitriptyline 10 mg at night.', 'She needs no treatment.'],
+             'She will start amitriptyline 10 mg at night.', 'v3_9', None),
+            ([OPENER, 'She takes insulin.', 'Her diabetes needs no treatment.'], 'She takes insulin.', 'v3_4', None),
+            ([OPENER, 'She takes warfarin.', 'She has stopped all treatment.'], 'She takes warfarin.', 'v3_4', None),
+            # the denial before the answer
+            ([OPENER, 'She is on no treatment.', 'She takes warfarin.'], 'She takes warfarin.', 'v3_4', None),
+            # a condition beside a medication denial: round 5 R1 holds the denial, so the pair is held both ways
+            ([OPENER, 'She has asthma.', 'She takes no medicines.'], 'She has asthma.', 'v3_3', None),
+            # each direction of the bearing: a clinical denial bears on a medication answer, and a symptom answer bears
+            # on a medication denial
+            ([OPENER, 'She takes warfarin.', 'She denies any bleeding.'], 'She takes warfarin.', 'v3_4', None),
+            ([OPENER, 'She has a cough.', 'She takes no medicines.'], 'She has a cough.', 'v3_2', None),
+            # a doubt naming a condition-like term of another clinical class
+            (['A 45-year-old man presents with knee pain.', 'He has knee pain.',
+              'Assessment is a probable medial meniscus tear.'], 'He has knee pain.', 'v3_2', None),
+            ([W45, 'She has asthma.', 'Assessment: probable knee sprain.'], 'She has asthma.', 'v3_3', None),
+            ([W45, 'She takes warfarin.', 'Assessment: no asthma.'], 'She takes warfarin.', 'v3_4', None)))
+
+    def test_a_denial_of_a_class_bearing_on_neither_does_not(self):
+        self.filled_everywhere((
+            ([W45, 'She is a nonsmoker.', 'Assessment: probable asthma.'], 'She is a nonsmoker.', 'v3_6', NO, 'No'),
+            ([W45, 'She takes warfarin.', 'She is a nonsmoker.'], 'She takes warfarin.', 'v3_4', None,
+             'She takes warfarin.')))
+
+
+@override_settings(**RELATIONS)
+class ALineWhoseReferentIsElided(RoundFour, SimpleTestCase):
+    """Refutation round 6, L1:F4: a line that names no topic of its own ('She has twenty a day.', 'She takes one every
+    morning.') or counts something it does not name ('twenty', '20', 'one' standing for a noun) may be about any answer
+    of the note: it is not positively apart from any, whatever the model calls it."""
+
+    def test_an_elided_referent_holds_every_answer(self):
+        self.held_everywhere((
+            ([OPENER, 'She is a nonsmoker.', 'She has twenty a day.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She is a nonsmoker.', 'She has 20 a day.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She does not smoke.', 'She has twenty a day.'], 'She does not smoke.', 'v3_6', NO),
+            ([OPENER, 'She takes no medicines.', 'She takes one every morning.'], 'She takes no medicines.', 'v3_4',
+             None),
+            # a number standing for a noun beside a topic of another class
+            ([OPENER, 'She is a nonsmoker.', 'She has twenty a day despite her asthma.'], 'She is a nonsmoker.', 'v3_6',
+             NO),
+            ([OPENER, 'She is a nonsmoker.', 'She has two every morning with her inhaler.'], 'She is a nonsmoker.',
+             'v3_6', NO),
+            ([OPENER, 'She is a nonsmoker.', 'She has twenty a day for asthma.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She is a nonsmoker.', 'She has twenty a day with headaches.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She is a nonsmoker.', 'She has asthma and twenty a day.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She is a nonsmoker.', 'She has 20 daily with a cough.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She is a nonsmoker.', 'She has had twenty a day for years.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She takes no medicines.', 'She takes two for headaches.'], 'She takes no medicines.', 'v3_4',
+             None),
+            ([OPENER, 'She takes no medicines.', 'She takes one at night for the headaches.'], 'She takes no medicines.',
+             'v3_4', None),
+            ([OPENER, 'She takes warfarin.', 'She has two.'], 'She takes warfarin.', 'v3_4', None),
+            # a clause naming no topic at all
+            ([OPENER, 'She takes no medicines.', 'She takes daily.'], 'She takes no medicines.', 'v3_4', None),
+            ([OPENER, 'She is a nonsmoker.', 'She does now.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She has a headache.', 'She feels better.'], 'She has a headache.', 'v3_2', None)))
+
+    def test_a_number_counting_its_own_noun_does_not(self):
+        self.filled_everywhere((
+            ([OPENER, 'She is a nonsmoker.', 'She takes warfarin 5 mg daily.'], 'She is a nonsmoker.', 'v3_6', NO, 'No'),
+            ([OPENER, 'She is a nonsmoker.', 'She takes salbutamol daily.'], 'She is a nonsmoker.', 'v3_6', NO, 'No'),
+            ([OPENER, 'She takes warfarin 5 mg daily.'], 'She takes warfarin 5 mg daily.', 'v3_4', None,
+             'She takes warfarin 5 mg daily.')))
+
+
+@override_settings(**RELATIONS)
+class EachEarlierGuardStillHolds(RoundFour, SimpleTestCase):
+    """Refutation round 6: the rows that pinned earlier guards are now also held by round 6's broader holds (a line
+    naming no topic, a bearing class), so each guard gets a row where it is the only hold: uncertainty outside an
+    assessment (round 4), a side in a labelled value naming no topic (self-refutation round 2), a word that may
+    describe what a clinical denial denies (round 5, R1), and a non-reflexive object pronoun ('She sees her ...':
+    somebody else)."""
+
+    def test_each_guard_alone(self):
+        self.held_everywhere((
+            ([OPENER, 'She is a nonsmoker.', 'The asthma is uncertain.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She is a nonsmoker.', 'The cough is possibly asthma.'], 'She is a nonsmoker.', 'v3_6', NO),
+            ([OPENER, 'She has knee pain.', 'Examination: left side.'], 'She has knee pain.', 'v3_2', None),
+            ([OPENER, 'She is a nonsmoker.', 'Examination: left side.'], 'She is a nonsmoker.', 'v3_6', NO),
+            (['A 45-year-old woman presents for attendance.', 'The knee is swollen at the clinic.',
+              'There is no swelling.'], 'There is no swelling.', 'v3_7', None),
+            ([OPENER, 'She sees her for cough.'], 'She sees her for cough.', 'v3_2', None),
+            ([OPENER, 'She has asthma.', 'She sees her for cough.'], 'She has asthma.', 'v3_3', None)))
 
 ON55 = dict(LIVE, AI_MODEL=g.SONNET_5_5, V3_HISTORY_CONTEXT=False, V3_FIELD_RELATIONS=False, V3_FIELD_RELATIONS_SWITCH=None,
             V3_GENERATION_BATCHES=False)
