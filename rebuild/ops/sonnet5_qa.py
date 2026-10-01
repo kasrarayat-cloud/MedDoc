@@ -37,6 +37,11 @@ Commands (from the candidate checkout's rebuild/):
   reopen --stage <id> --diagnosis <path>
                            reopens a FAILED stage after offline repair (provider_campaign.Campaign.reopen); nothing is sent
 Exit status: 0 PASS (or a clean plan/status/recover/reopen), 3 FAIL (stage_failed written), 2 REFUSED (nothing sent).
+
+CLOSED 2026-10-01. The historical campaign (24 attempts, $0.130880 calculated, 0 open) stays readable — `plan` and
+`status` — and `run`, `reopen` and `recover` refuse on its root (HISTORICAL_ROOT) before anything is read or written:
+the standing authority quillmd-v1-private-api-testing-standing-20260930 funds only its own campaign
+(ops/standing_qa.py), which reuses this door (`preconditions(expect=…)`, `run_model_check(expect=…, deadline=…)`).
 """
 import argparse
 import copy
@@ -117,6 +122,13 @@ STAGE_RUNNER_FILES = ('rebuild/ops/sonnet5_stages.py',
 WATCHED_FILES = tuple('rebuild/' + name for name in ENGINE_FILES) + STAGE_RUNNER_FILES
 EXIT = {'PASS': 0, 'FAIL': 3, 'REFUSED': 2}
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+#: The historical campaign's root (pc.LIVE_ROOT, spelled out so a patched LIVE_ROOT never moves it). Its ledger — 24
+#: attempts, $0.130880 calculated exposure, 0 open on 2026-10-01 — stays READABLE (`plan`, `status`) and is CLOSED for
+#: new sends: the standing authority quillmd-v1-private-api-testing-standing-20260930 funds only its own campaign
+#: (ops/standing_qa.py), never this one, and this campaign's attempts, failures and verdicts are historical facts.
+HISTORICAL_ROOT = Path('/opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign')
+#: The commands that would write to a ledger or send: refused on the historical root before anything is read.
+WRITING_COMMANDS = ('run', 'reopen', 'recover')
 
 require = pc.require
 Refused = pc.Refused
@@ -146,6 +158,16 @@ def build_form():
             entry.external_attr = 0o600 << 16
             archive.writestr(entry, source.read(info.filename))
     return fixed.getvalue()
+
+
+def require_not_historical(root):
+    """Refuses any write to, or send from, the historical campaign's root (HISTORICAL_ROOT), before anything is read."""
+    root = Path(os.path.abspath(str(root)))
+    historical = Path(os.path.abspath(str(HISTORICAL_ROOT)))
+    require(root != historical and historical not in root.parents and root not in historical.parents,
+            'The historical campaign quillmd-v1-sonnet5-staged-40 is closed for new sends: its ledger stays readable '
+            '(plan, status) and is never written again. The standing authority '
+            'quillmd-v1-private-api-testing-standing-20260930 funds only its own campaign (ops/standing_qa.py).')
 
 
 def env_file_present(rebuild=REBUILD):
@@ -191,12 +213,21 @@ def settle_open_stages(campaign):
 
 # ── preconditions ────────────────────────────────────────────────────────────────────────────────────────────────
 
+#: What this campaign's preconditions expect of the application: the served model and the generation profile's name.
+#: Another runner that reuses this door (ops/standing_qa.py) passes its own `expect`; `generation_profile` None then
+#: means the profile is bound by its pricing version (which hashes the whole profile) and by that runner's own
+#: per-request bounds instead of by a name.
+EXPECT = {'model': EXPECTED_MODEL, 'generation_profile': 'claude-sonnet-5-v1'}
+
+
 def preconditions(declaration, stage, root, *, database_prefix=DATABASE_PREFIX, rebuild=REBUILD, environ=None,
-                  ledger=None):
-    """Asserted before any enqueue. Returns what was checked, for the provenance manifest."""
+                  ledger=None, expect=None):
+    """Asserted before any enqueue. Returns what was checked, for the provenance manifest. `expect`: EXPECT (this
+    campaign's model and profile) unless another runner passes its own."""
     from django.conf import settings
     from django.db import connection
     from core import generation
+    expect = EXPECT if expect is None else expect
     environ = os.environ if environ is None else environ
     require(not env_file_present(rebuild), 'The candidate checkout has a rebuild/.env; the campaign never runs beside one.')
     database = connection.settings_dict
@@ -211,7 +242,7 @@ def preconditions(declaration, stage, root, *, database_prefix=DATABASE_PREFIX, 
     require(settings.SYNTHETIC_ONLY is True and settings.QUILLMD_DATA_MODE == 'synthetic', 'Synthetic-only mode is required.')
     require(settings.AI_MODE == 'live', 'The QA process must be in live AI mode.')
     require(settings.AI_PROVIDER == declaration.provider == 'anthropic', 'The provider must be anthropic.')
-    require(settings.AI_MODEL == declaration.model == EXPECTED_MODEL, f'The model must be {EXPECTED_MODEL}.')
+    require(settings.AI_MODEL == declaration.model == expect['model'], f'The model must be {expect["model"]}.')
     require((settings.AI_INPUT_RATE, settings.AI_OUTPUT_RATE, settings.AI_CACHED_RATE)
             == (declaration.rates.input, declaration.rates.output, declaration.rates.cached),
             'The configured rates are not the declared rates.')
@@ -223,8 +254,11 @@ def preconditions(declaration, stage, root, *, database_prefix=DATABASE_PREFIX, 
     config = generation.configuration()
     require(config['pricing_version'] == declaration.pricing_version(stage),
             f'The application prices {config["pricing_version"]}, not the declared {stage} version.')
-    require(config['request_profile'].get('profile') == 'claude-sonnet-5-v1' and 'invalid' not in config['request_profile'],
-            'The request profile is not the Sonnet 5 generation profile.')
+    require('invalid' not in config['request_profile']
+            and (expect['generation_profile'] is None
+                 or config['request_profile'].get('profile') == expect['generation_profile']),
+            'The request profile is not the Sonnet 5 generation profile.' if expect is EXPECT
+            else 'The application has no valid generation request profile for the declared model.')
     key = pc.load_credential(declaration.credential_file, declaration)
     require(pc.constant_time_equal(key, environ.get('ANTHROPIC_API_KEY', '')),
             'The request process does not carry the declared credential.')
@@ -683,16 +717,18 @@ def write_manifest(evidence, attempt, context):
 
 # ── the model check ──────────────────────────────────────────────────────────────────────────────────────────────
 
-def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PREFIX, environ=None, rebuild=REBUILD):
+def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PREFIX, environ=None, rebuild=REBUILD,
+                    expect=None, deadline=None):
     """ONE model_check attempt, end to end. Returns {'verdict': 'PASS'|'FAIL', …}; raises Refused when it stops before any
-    attempt was written (nothing was sent)."""
+    attempt was written (nothing was sent). `expect` (preconditions) and `deadline` (seconds the one send may take before
+    its outcome is unknown; None: no deadline, as this campaign ran) are for another runner reusing this door."""
     from core import generation
     from core.models import Encounter, Job, Reservation
     declaration, ledger, root = campaign.declaration, campaign.ledger, campaign.root
     ledger.acquire()
     settled = settle_open_stages(campaign)
     checked = preconditions(declaration, STAGE, root, database_prefix=database_prefix, rebuild=rebuild, environ=environ,
-                            ledger=ledger)
+                            ledger=ledger, expect=expect)
     # (the fixed case never changes; a run refuses before anything if it did)
     form = build_form()
     require(sha256(form) == FORM_SHA256 and sha256(NOTES) == NOTES_SHA256, 'The fixed case did not build to its hashes.')
@@ -773,7 +809,7 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
     base = {'stage': STAGE, 'attempt': number, 'recovered_before_start': settled, 'stale_jobs_cancelled': stale}
     try:
         return _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, form, maximum, secret,
-                               provenance, checked, base)
+                               provenance, checked, base, deadline=deadline)
     except BaseException as error:
         # ⚠️ AFTER THE ATTEMPT IS WRITTEN NOTHING ESCAPES AS "REFUSED, NOTHING SENT". Whatever failed — the runner's own
         # code, the database, a signal — the attempt gets an outcome (unknown unless already recorded), the stage is
@@ -787,17 +823,29 @@ def run_model_check(campaign, *, secret, provenance, database_prefix=DATABASE_PR
 
 
 def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, form, maximum, secret, provenance, checked,
-                    base):
+                    base, deadline=None):
     """The ONE request (the real worker function), its outcome, the stop conditions, the review, finalization, the
-    export, the billing audit and the decision."""
+    export, the billing audit and the decision. `deadline`: seconds the send may take (the stage runner's Deadline); when
+    it passes, the outcome is unknown, the stage fails and nothing is re-sent. None: no deadline (this campaign's runs)."""
     from core.jobs import run_one
     from core.management.commands.audit_billing import audit_report
     from core.models import AuditEvent, Job, ProviderReceipt, Reservation, Usage
     declaration, ledger, number = campaign.declaration, campaign.ledger, attempt['number']
     receipts_before = ProviderReceipt.objects.count()
     pc.CURRENT_ATTEMPT.update(number=number, evidence_dir=str(evidence), secret=secret)
+    fired = None
     try:
-        worked = run_one()
+        if deadline is None:
+            worked = run_one()
+        else:
+            stages = stages_module()
+            timer = stages.Deadline(deadline)
+            try:
+                with timer:
+                    worked = run_one()
+            except stages.SendDeadline:
+                worked = None
+            fired = timer.fired
     finally:
         pc.CURRENT_ATTEMPT.clear()
     job.refresh_from_db()
@@ -834,6 +882,8 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
                               'charged_cost': str(usage_row.charged_cost) if usage_row else None,
                               'reservations': sorted(r.state for r in Reservation.objects.filter(job=job))},
                'recorded_at': pc.now()}
+    if deadline is not None:
+        outcome['deadline'] = fired
     outcome['exposure'] = format(pc.exposure(attempt, outcome, rates), 'f')
     ledger.write_outcome(number, outcome)                                    # AFTER, whatever happened
     encounter.refresh_from_db()
@@ -842,6 +892,8 @@ def _send_and_judge(campaign, world, attempt, evidence, encounter, job, fields, 
                                                     'status': encounter.status, 'revision': encounter.revision})
 
     reasons = []
+    if fired is not None:
+        reasons.append(fired + '; the outcome is unknown and it is never re-sent')
     if cls != 'completed' or job.state != 'succeeded':
         reasons.append(f'the attempt ended {cls} with the job {job.state} ({outcome["error_class"] or "no error class"}), '
                        'not a succeeded generation')
@@ -1102,6 +1154,7 @@ def inner():
     signal.signal(signal.SIGINT, _interrupted)
     context = json.loads(os.environ['SONNET5_QA_CONTEXT'])
     root = Path(context['root'])
+    require_not_historical(root)
     stage = context['stage']
     declaration = pc.declared(context['declaration'])       # (re-verified by the process that spends)
     amendment = context.get('amendment')
@@ -1262,6 +1315,8 @@ def main(argv=None):
         parser.add_argument('--diagnosis')
         parser.add_argument('--amendment')
         args = parser.parse_args(argv)
+        if args.command in WRITING_COMMANDS:
+            require_not_historical(LIVE_ROOT)
         require(args.amendment is None or args.command in ('plan', 'run'), 'Only plan and run take --amendment.')
         if args.command == 'plan':
             if args.stage in (None, STAGE):
