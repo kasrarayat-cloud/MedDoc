@@ -48,6 +48,16 @@ never a large number. Every NON-monetary control stays, each stated so a reader 
   preflight             `preflight` makes ONE free request, GET https://api.anthropic.com/v1/models/<declared model>, and
                         records the returned id and display information. It is MODEL ACCESS evidence, not generation proof;
                         `run` requires one whose returned id is the declared model.
+  transcription         a declared `transcription` stage (ops/standing_qa_transcription.py): Deepgram nova-3-medical with
+                        mip_opt_out=true at the declared per-minute rate, on synthetic speech only — the runner's own
+                        allowlist (TRANSCRIPTION_AUDIO: sha256-pinned recordings, each 'synthesized speech, not a human
+                        microphone recording') narrowed to the declared inputs. Each recording is two sends: its transcription
+                        (one QA-worker job; the reviewed transcript then saved as the notes through the real view) and the
+                        generation on that encounter (review, finalization, authenticated export). The Deepgram key is read
+                        from `transcription_credential_file` by the same file rules as the Anthropic key, only for a
+                        transcription run, and reaches only that run's request process, whose environment holds it only
+                        around the transcription send's one request; a transport guard admits only that request (POST
+                        https://api.deepgram.com/v1/listen with exactly the declared parameters), captured first.
 
 The historical campaign quillmd-v1-sonnet5-staged-40 (its declaration, ledger, limits, attempts 1-24, failures and
 verdicts) is untouched: its runner (ops/sonnet5_qa.py) still reads it (plan, status), refuses every write to its root
@@ -58,8 +68,11 @@ Commands (from the candidate checkout; `run` and `preflight` only through the ru
 `pricing` takes `--declaration docs/foundation/mutations/<YYYYMMDD>-quillmd-v1-standing-api-testing[-<n>].md` for a
 later campaign, whose id fixes its root and QA database — default: the first campaign's declaration):
   pricing --model M --input R --output R --cached R --thinking T --effort E [--inference-geo G]
+          [--deepgram-rate-per-minute D]
                      the pricing version the APPLICATION computes for each pricing key under those settings, and each
-                     request profile (no credential, network or database) — what the lead writes into the declaration
+                     request profile (no credential, network or database) — what the lead writes into the declaration;
+                     with D, also the `transcription` version (D is hashed into it) and each allowlisted recording's
+                     transcription maximum
   plan [--stage S] [--price]
                      the plan definitions (send ids, inputs and their sha256), what each stage has already attempted and
                      what is left; --price: each send's maximum from the application (needs the declaration)
@@ -72,7 +85,9 @@ later campaign, whose id fixes its root and QA database — default: the first c
                      reopens a failed stage after an offline, committed diagnosis and repair; nothing is sent
 Exit status: 0 PASS (or a clean plan/status/pricing/recover/reopen, or a preflight that matched; a run that made its
 sends with no stop, whether or not its stage is now decided — the result's `decision` says), 3 FAIL, 2 REFUSED, 4 HALTED
-(the Stop file appeared during a run: the remaining sends were not made, the stage stays open).
+(the Stop file appeared during a run: the remaining sends were not made, the stage stays open — including when it
+appeared after the loop's own check, inside a send before its attempt was written: that refusal is a halt, never a
+failure, and the send's queued job is cancelled through the product).
 """
 import argparse
 import dataclasses
@@ -162,34 +177,44 @@ MAX_DEADLINE_SECONDS = 600
 
 # ── the stages (plan definitions) ────────────────────────────────────────────────────────────────────────────────
 
-#: Which stage runner a stage uses ('model_check': sonnet5_qa.run_model_check; the others: sonnet5_stages.Run).
+#: Which stage runner a stage uses ('model_check': sonnet5_qa.run_model_check; transcription:
+#: standing_qa_transcription.TranscriptionRun; the others: sonnet5_stages.Run).
 STAGE_KIND = {'model_check': 'model_check', 'mapping': 'mapping', 'notes_comparison': 'ordinary_notes',
-              'd30_d31_structure': 'ordinary_notes'}
+              'd30_d31_structure': 'ordinary_notes', 'transcription': 'transcription'}
 #: The pricing keys each stage's sends are priced under (every one must be declared for a declared stage).
 STAGE_PRICING = {'model_check': ('model_check',), 'mapping': ('mapping',),
                  'notes_comparison': ('ordinary_notes', 'ordinary_notes_field_relations'),
-                 'd30_d31_structure': ('ordinary_notes', 'ordinary_notes_field_relations')}
+                 'd30_d31_structure': ('ordinary_notes', 'ordinary_notes_field_relations'),
+                 'transcription': ('transcription',)}
 _ALL_OFF = {'QUILLMD_WM_NARRATIVE': '0', 'QUILLMD_V3_HISTORY_CONTEXT': '0', 'QUILLMD_V3_GENERATION_BATCHES': '0',
             'QUILLMD_V3_FIELD_RELATIONS': '0', 'QUILLMD_MAPPING_ASSISTANCE': '0', 'QUILLMD_MAPPING_ASSISTANCE_LIVE': '0',
             'QUILLMD_LAYOUT_SOCKET': '', 'QUILLMD_LAYOUT_SERVICE_UID': ''}
 #: The request process's contract flags per stage — EXACTLY these (check_configuration). Field relations is switched on
-#: only around the field-relations sends (the frozen app-path steps' PATH_FLAGS), never for the process.
+#: only around the field-relations sends (the frozen app-path steps' PATH_FLAGS), never for the process. The
+#: transcription stage runs the notes stage's v3 engine with every contract flag off, Deepgram's Model Improvement
+#: opt-out ON and smart formatting off; its declared per-minute rate is added by stage_flags.
 STAGE_FLAGS = {'model_check': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'legacy'},
                'mapping': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_MAPPING_ASSISTANCE': '1',
                            'QUILLMD_MAPPING_ASSISTANCE_LIVE': '1'},
                'notes_comparison': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
-               'd30_d31_structure': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'}}
-#: The flags the pricing versions are computed under, per pricing key.
+               'd30_d31_structure': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3'},
+               'transcription': {**_ALL_OFF, 'QUILLMD_WORD_ENGINE': 'v3', 'QUILLMD_DEEPGRAM_MIP_OPT_OUT': 'true',
+                                 'QUILLMD_DEEPGRAM_SMART_FORMAT': 'false'}}
+#: The flags the pricing versions are computed under, per pricing key (`transcription` also under the declared
+#: per-minute rate: the application hashes the voice rate into every pricing version).
 PRICING_FLAGS = {'model_check': STAGE_FLAGS['model_check'], 'mapping': STAGE_FLAGS['mapping'],
                  'ordinary_notes': STAGE_FLAGS['notes_comparison'],
-                 'ordinary_notes_field_relations': {**STAGE_FLAGS['notes_comparison'], 'QUILLMD_V3_FIELD_RELATIONS': '1'}}
+                 'ordinary_notes_field_relations': {**STAGE_FLAGS['notes_comparison'], 'QUILLMD_V3_FIELD_RELATIONS': '1'},
+                 'transcription': STAGE_FLAGS['transcription']}
 #: How each flag is read back from Django settings (name, type).
 FLAG_SETTINGS = {'QUILLMD_WM_NARRATIVE': ('WM_NARRATIVE', bool), 'QUILLMD_V3_HISTORY_CONTEXT': ('V3_HISTORY_CONTEXT', bool),
                  'QUILLMD_V3_GENERATION_BATCHES': ('V3_GENERATION_BATCHES', bool),
                  'QUILLMD_V3_FIELD_RELATIONS': ('V3_FIELD_RELATIONS', bool),
                  'QUILLMD_MAPPING_ASSISTANCE': ('QUILLMD_MAPPING_ASSISTANCE', bool),
                  'QUILLMD_MAPPING_ASSISTANCE_LIVE': ('QUILLMD_MAPPING_ASSISTANCE_LIVE', bool),
-                 'QUILLMD_WORD_ENGINE': ('QUILLMD_WORD_ENGINE', str), 'QUILLMD_LAYOUT_SOCKET': ('QUILLMD_LAYOUT_SOCKET', str)}
+                 'QUILLMD_WORD_ENGINE': ('QUILLMD_WORD_ENGINE', str), 'QUILLMD_LAYOUT_SOCKET': ('QUILLMD_LAYOUT_SOCKET', str),
+                 'QUILLMD_DEEPGRAM_MIP_OPT_OUT': ('QUILLMD_DEEPGRAM_MIP_OPT_OUT', str),
+                 'QUILLMD_DEEPGRAM_SMART_FORMAT': ('QUILLMD_DEEPGRAM_SMART_FORMAT', str)}
 MODEL_CHECK_SEND = 'model_check:fixed-case'
 #: The 14 frozen notes cases with a default send (cases.json), each sent on BOTH requests.
 NOTES_COMPARISON_CASES = 14
@@ -201,21 +226,99 @@ D30_D31_NOT_ESTABLISHED = (
     'controls and question boxes; the 12-fact ordinary case; the long answer) and none of their wording — a frozen set '
     'with its sha256s and a wording check against the development ground truth (diagnostics/CHECK.md W1: no shared '
     'normalized window of 25+ characters) — then a declaration naming this stage and its send count.')
-#: What the runner can and cannot send: the transport guard admits only the Messages URL (and the preflight only its
-#: one models URL); there is no transcription stage.
-TRANSCRIPTION = (
-    'not available: neither this runner nor the historical one has a transcription stage. Transcription is the '
-    'product\'s Deepgram path (core/audio.py, jobs of kind transcription); the request capture and the transport guard '
-    'admit only https://api.anthropic.com/v1/messages, so a transcription request would be refused before any '
-    'connection. A transcription stage needs its own capture and guard for the Deepgram endpoint, a declared Deepgram '
-    'credential file and route, and the authorised synthetic audio named by sha256.')
+# ── transcription: the provider, the synthetic speech it may hear, and the form the transcript is generated on ──────
+
+#: The product's transcription request (core/jobs.py submit_transcription: DEEPGRAM_MODEL, the listen endpoint).
+TRANSCRIPTION_PROVIDER = 'deepgram'
+DEEPGRAM_MODEL = 'nova-3-medical'
+DEEPGRAM_URL = 'https://api.deepgram.com/v1/listen'
+#: What every allowlisted recording is, said wherever it is used (plan, run record, attempt, evidence).
+AUDIO_LABEL = 'synthesized speech, not a human microphone recording'
+#: The longest allowlisted recording the runner reads (the product's own upload bound is 15 MB).
+AUDIO_READ_LIMIT = 16 * 1024 * 1024
+#: The frozen synthetic notes form (diagnostics/notes cases.json, built by its frozen generator and checked against its
+#: sha256) every transcript is generated on: a general clinical intake (chief complaint, history, examination,
+#: assessment, plan …) that fits any of the allowlisted scripts.
+TRANSCRIPTION_FORM = 'r1-11'
+#: A declared rate: USD per audio minute, positive, at most ten decimals.
+TRANSCRIPTION_RATE = re.compile(r'(?:0|[1-9][0-9]{0,2})\.[0-9]{1,10}|[1-9][0-9]{0,2}')
+
+
+@dataclasses.dataclass(frozen=True)
+class SyntheticAudio:
+    """One allowlisted recording: synthesized speech of a synthetic script, pinned by sha256 and size."""
+    id: str
+    path: str
+    sha256: str
+    bytes: int
+    source: str
+    label: str = AUDIO_LABEL
+
+    def record(self):
+        return {'id': self.id, 'sha256': self.sha256, 'bytes': self.bytes, 'label': self.label, 'source': self.source,
+                'path': self.path}
+
+
+#: THE runner's synthetic-audio allowlist — the only recordings a transcription send may carry. Each is machine speech
+#: of a synthetic script written for this project, never a human microphone recording; each is read only after its
+#: bytes hash to the sha256 here (read_audio), and a declaration may only narrow this list (its `transcription_input`
+#: lines name entries by id AND sha256).
+TRANSCRIPTION_AUDIO = (
+    SyntheticAudio('soap-ankle-speech', '/opt/meddoc-pro/rebuild/.runtime/soap-verification-20260920/speech-unpadded.wav',
+                   '3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7', 1918674,
+                   'machine speech of the synthetic SOAP scenario script (soap-verification-20260920/speech-script.txt; '
+                   'scenario.json: "Machine speech of the exact synthetic scenario; not a human clinician recording")'),
+    SyntheticAudio('colonoscopy-speech', '/opt/meddoc-pro/rebuild/.runtime/typed-voice-20260921/synthetic-colonoscopy.wav',
+                   'dfd22dfd4facec937dabd3fbaddd4670807fa5b018d86a4df9f425eb9f83e97c', 2639158,
+                   'local espeak-ng synthesis of a synthetic colonoscopy script (typed-voice-20260921/'
+                   'audio-provenance.json: "local espeak-ng synthesis; not natural human dictation")'))
+AUDIO_BY_ID = {audio.id: audio for audio in TRANSCRIPTION_AUDIO}
+#: The two sends of one recording: its transcription, and the generation on the encounter its transcript became.
+TRANSCRIPTION_PATHS = ('transcription', 'transcription_generation')
+
+
+def audio_entry(audio_id):
+    require(audio_id in AUDIO_BY_ID, f'{audio_id!r} is not a recording on the runner\'s synthetic-audio allowlist.')
+    return AUDIO_BY_ID[audio_id]
+
+
+def read_audio(entry):
+    """The allowlisted recording's bytes, read whole (a regular file, never a link, never an environment file) and
+    refused unless they are exactly the pinned size and sha256 — whatever now sits at the path."""
+    require(isinstance(entry, SyntheticAudio) and AUDIO_BY_ID.get(entry.id) == entry,
+            'Only an entry of the runner\'s synthetic-audio allowlist is read.')
+    data = _read_bounded(entry.path, limit=AUDIO_READ_LIMIT)
+    require(len(data) == entry.bytes and hashlib.sha256(data).hexdigest() == entry.sha256,
+            f'The recording at {entry.path} is not the allowlisted synthetic speech {entry.id} (its sha256 differs); '
+            'nothing is sent.')
+    return data
+
+
+def transcription_maximum(seconds, rate):
+    """The most a recording measured at `seconds` can cost at the provider at `rate` USD/minute: the product's own
+    quote formula (core.jobs.transcription_quote: seconds x 1.02 + 2 s, no discount), before the 1.5x charge."""
+    billed = Decimal(str(seconds)) * Decimal('1.02') + Decimal('2')
+    return (billed * Decimal(str(rate)) / 60).quantize(Decimal('0.0000000001'))
+
+
+def transcription_module():
+    """ops/standing_qa_transcription.py (the Django-bound transcription worker and the Deepgram guard)."""
+    try:
+        from . import standing_qa_transcription
+    except ImportError:
+        import standing_qa_transcription
+    return standing_qa_transcription
+
+
 #: The files a reopening must show were repaired (A2): the historical set and the mapping, relations and Word modules
-#: it lacked (a mapping-only repair could not pass A2 honestly there), and this runner.
+#: it lacked (a mapping-only repair could not pass A2 honestly there), the product's recording reader and submission
+#: preparation, and this runner.
 WATCHED_FILES = tuple(dict.fromkeys(sq.WATCHED_FILES + (
-    'rebuild/ops/standing_qa.py', 'rebuild/core/mapping_assistance.py', 'rebuild/core/mapping_wire.py',
-    'rebuild/core/mapping_jobs.py', 'rebuild/core/destination_roles.py', 'rebuild/core/v3_mapping.py',
-    'rebuild/core/v3_field_relations.py', 'rebuild/core/v3_literal_facts.py', 'rebuild/core/v3_destination.py',
-    'rebuild/core/generation_batch.py', 'rebuild/core/tab_review.py', 'rebuild/documents/word_v3.py')))
+    'rebuild/ops/standing_qa.py', 'rebuild/ops/standing_qa_transcription.py', 'rebuild/core/mapping_assistance.py',
+    'rebuild/core/mapping_wire.py', 'rebuild/core/mapping_jobs.py', 'rebuild/core/destination_roles.py',
+    'rebuild/core/v3_mapping.py', 'rebuild/core/v3_field_relations.py', 'rebuild/core/v3_literal_facts.py',
+    'rebuild/core/v3_destination.py', 'rebuild/core/generation_batch.py', 'rebuild/core/tab_review.py',
+    'rebuild/documents/word_v3.py', 'rebuild/core/audio.py', 'rebuild/core/media.py')))
 
 
 def watched_hashes(repository=None):
@@ -338,6 +441,7 @@ class StandingDeclaration:
     qa_database_password_file: str
     restricted_inputs_ledger: str
     restricted_inputs_ledger_sha256: str
+    transcription: object = None    # TranscriptionTerms when a transcription stage is declared, else None
 
     # (read by provider_campaign code written for the historical declaration)
     total_limit = None
@@ -369,6 +473,87 @@ class StandingDeclaration:
         return {'model': self.model, 'generation_profile': None,
                 'max_output_tokens': limits.max_output_tokens_per_request,
                 'timeout_seconds': limits.request_deadline_seconds}
+
+
+@dataclasses.dataclass(frozen=True)
+class TranscriptionTerms:
+    """The declared transcription request: provider, model, the rate the lead read from the provider's pricing page, the
+    Model Improvement opt-out (always 'true'), smart formatting (the product's default 'false'), the Deepgram credential
+    file, and the allowlisted recordings it sends (ids, in allowlist order)."""
+    provider: str
+    model: str
+    rate_per_minute: str
+    mip_opt_out: str
+    smart_format: str
+    credential_file: str
+    inputs: tuple
+
+    def parameters(self):
+        """The query parameters the one request carries, exactly (core.jobs.deepgram_parameters' shape)."""
+        return {'model': self.model, 'smart_format': self.smart_format, 'mip_opt_out': self.mip_opt_out}
+
+    def record(self):
+        return {'provider': self.provider, 'model': self.model, 'rate_per_minute': self.rate_per_minute,
+                'parameters': self.parameters(), 'inputs': [AUDIO_BY_ID[i].record() for i in self.inputs]}
+
+
+#: The transcription section's one-value lines, each stated exactly once when a transcription stage is declared.
+TRANSCRIPTION_LINES = ('transcription_provider', 'transcription_model', 'transcription_rate_per_minute',
+                       'transcription_mip_opt_out', 'transcription_smart_format', 'transcription_credential_file')
+TRANSCRIPTION_INPUT = re.compile(r'^transcription_input: ([a-z0-9][a-z0-9-]{0,63}) ([0-9a-f]{64})[ \t]*$', re.M)
+
+
+def transcription_terms(text, seen, stages, credential_file):
+    """The declaration's transcription section, verified (pure): None when no transcription stage is declared — and
+    then no transcription line may stand at all — otherwise every TRANSCRIPTION_LINES name exactly once (decorated
+    copies counted), provider deepgram, model nova-3-medical, a positive per-minute rate, mip_opt_out true, smart
+    formatting false, a Deepgram credential file of its own, and one or more `transcription_input: <id> <sha256>`
+    lines, each an allowlisted recording with exactly its pinned sha256, none twice; and the stage's send count is two
+    per recording (its transcription and its generation)."""
+    declared = [stage for stage in stages if stage.id == 'transcription']
+    named = re.findall(r'(?<![A-Za-z0-9_])(transcription_[A-Za-z0-9_]*)[^\w\n]*:', seen, re.I)
+    if not declared:
+        require(not named, 'The declaration states transcription terms (' + ', '.join(sorted(set(named))[:4]) + ') but '
+                           'declares no transcription stage.')
+        return None
+    for name in TRANSCRIPTION_LINES:
+        require(len(re.findall(rf'(?<![A-Za-z0-9_]){name}(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I)) == 1,
+                f'A transcription stage states `{name}:` exactly once.')
+    unknown = sorted({name.lower() for name in named} - set(TRANSCRIPTION_LINES) - {'transcription_input'})
+    require(not unknown, 'The declaration states transcription terms this runner does not know: ' + ', '.join(unknown))
+
+    def one(name, pattern=r'(\S+)'):
+        return pc._one(text, rf'^{name}:[ \t]*{pattern}[ \t]*$', f'{name}:')
+    provider, model = one('transcription_provider'), one('transcription_model')
+    require(provider == TRANSCRIPTION_PROVIDER, f'The transcription provider is {TRANSCRIPTION_PROVIDER}.')
+    require(model == DEEPGRAM_MODEL, f'The transcription model is the product\'s {DEEPGRAM_MODEL}.')
+    rate = one('transcription_rate_per_minute')
+    require(TRANSCRIPTION_RATE.fullmatch(rate) and Decimal(rate) > 0,
+            'transcription_rate_per_minute is the provider\'s positive USD rate per audio minute (at most ten decimals), '
+            'read from its pricing page when the declaration is written.')
+    require(one('transcription_mip_opt_out') == 'true',
+            'transcription_mip_opt_out is `true`: no synthetic recording is offered to the provider\'s model improvement.')
+    require(one('transcription_smart_format') == 'false',
+            'transcription_smart_format is `false`, the product\'s own request.')
+    credential = one('transcription_credential_file', r'(/\S+)')
+    pc.refuse_env_path(credential)
+    require(os.path.abspath(credential) != os.path.abspath(credential_file),
+            'The Deepgram credential is a file of its own, never the Anthropic credential file.')
+    found = TRANSCRIPTION_INPUT.findall(text)
+    require(found and len(re.findall(r'(?<![A-Za-z0-9_])transcription_input(?![A-Za-z0-9_])[^\w\n]*:', seen, re.I))
+            == len(found),
+            'Every recording is named on its own line `transcription_input: <allowlisted id> <its sha256>`.')
+    ids = [audio_id for audio_id, _ in found]
+    require(len(set(ids)) == len(ids), 'The declaration names a recording twice.')
+    for audio_id, digest in found:
+        require(audio_id in AUDIO_BY_ID and AUDIO_BY_ID[audio_id].sha256 == digest,
+                f'{audio_id} {digest[:12]}… is not on the runner\'s synthetic-audio allowlist with that sha256; only '
+                'allowlisted synthetic speech is ever sent for transcription.')
+    require(declared[0].sends == 2 * len(found),
+            f'The transcription stage makes two sends per recording (its transcription and its generation): '
+            f'{2 * len(found)}, not {declared[0].sends}.')
+    return TranscriptionTerms(provider, model, rate, 'true', 'false', credential,
+                              tuple(audio.id for audio in TRANSCRIPTION_AUDIO if audio.id in set(ids)))
 
 
 #: Exactly one authorization line (provider_campaign.AUTHORIZATION_LINE finds every line that reads as one), this form.
@@ -530,6 +715,7 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
     restricted = one('restricted_inputs_ledger', r'(/\S+)')
     for named in (credential_file, password_file, restricted):
         pc.refuse_env_path(named)
+    transcription = transcription_terms(text, seen, stages, credential_file)
     declaration = StandingDeclaration(
         path=str(path), sha256=hashlib.sha256(data).hexdigest(), commit=commit, commit_time=commit_time,
         repository=str(root), campaign=campaign, authority_id=authority_id, authority_record=AUTHORITY_RECORD,
@@ -541,7 +727,8 @@ def declared_standing(path, *, repository=None, uses=('live',), out=None):
         max_sends_per_run=max_sends, max_output_tokens_per_request=max_tokens, request_deadline_seconds=deadline,
         stages=tuple(stages), root=campaign_root, qa_database=database, credential_file=credential_file,
         qa_database_password_file=password_file, restricted_inputs_ledger=restricted,
-        restricted_inputs_ledger_sha256=one('restricted_inputs_ledger_sha256', r'([0-9a-f]{64})'))
+        restricted_inputs_ledger_sha256=one('restricted_inputs_ledger_sha256', r'([0-9a-f]{64})'),
+        transcription=transcription)
     print(f'declaration {relative}: committed {commit_time} in {commit}; sha256 {declaration.sha256}; authority '
           f'{authority_id}; mode {MODE}; monetary ceiling none', file=out)
     return declaration
@@ -588,6 +775,26 @@ def require_door(declaration, environ=None):
     return {'declaration': given, 'commit': commit}
 
 
+#: The one name the Deepgram key ever has in a process environment: the product reads it there (core.jobs.transcribe).
+TRANSCRIPTION_KEY_VARIABLE = 'DEEPGRAM_API_KEY'
+
+
+def load_transcription_credential(declaration, path=None):
+    """The Deepgram key from the declared `transcription_credential_file` ONLY, under the Anthropic key's own file rules
+    (provider_campaign.load_credential), every one checked before a byte is read: an absolute path with no
+    environment-file name and no symbolic link at ANY component, a regular file with one name (no hard link), mode 0600,
+    owned by the account running the runner, one non-empty printable line. A missing file refuses. Returned, never
+    printed, logged, written or put in argv."""
+    terms = declaration.transcription
+    require(terms is not None, 'The declaration declares no transcription stage; no Deepgram credential is read.')
+    path = terms.credential_file if path is None else path
+    require(str(path) == terms.credential_file, 'Only the declared transcription_credential_file is read.')
+    try:
+        return pc.load_credential(str(path))
+    except Refused as refused:
+        raise Refused(f'The Deepgram credential: {refused}') from None
+
+
 # ── restricted and allowed inputs ────────────────────────────────────────────────────────────────────────────────
 
 def restricted_hashes(declaration):
@@ -632,10 +839,15 @@ def _read_bounded(path, limit=8 * 1024 * 1024):
 
 
 def send_inputs(send, inputs):
-    """{'form_sha256', 'notes_sha256'?} of what `send` would put in a provider request: the fixed model-check case, a
-    frozen mapping form, or a frozen notes case — never anything else."""
+    """{'form_sha256', 'notes_sha256'? | 'audio_sha256'?} of what `send` would put in a provider request: the fixed
+    model-check case, a frozen mapping form, a frozen notes case, or an allowlisted synthetic recording and the frozen
+    form its transcript is generated on — never anything else. (A transcript's notes are provider output: their sha256
+    is known only once the transcription send has made them, and its generation attempt records it.)"""
     if send.path == 'model_check':
         return {'form_sha256': sq.FORM_SHA256, 'notes_sha256': sq.NOTES_SHA256}
+    if send.path in TRANSCRIPTION_PATHS:
+        return {'form_sha256': inputs['cases']['forms'][TRANSCRIPTION_FORM]['sha256'],
+                'audio_sha256': audio_entry(send.case).sha256}
     if send.kind == 'mapping' or send.path == 'mapping_encounter':
         return {'form_sha256': inputs['forms_sha256'][f'mapping/{send.form}.docx']}
     case = next(c for c in inputs['cases']['cases'] if c['id'] == send.case)
@@ -646,12 +858,27 @@ def send_inputs(send, inputs):
 
 def standing_plan(stage, inputs=None):
     """The sends of `stage`, in their fixed order (pure; `inputs` = sonnet5_stages.frozen_inputs() for every stage but
-    model_check). Refuses a stage with no established plan (d30_d31_structure) rather than guess one."""
+    model_check — for transcription with `transcription_audio`, the declared recordings (stage_inputs); without it, the
+    whole allowlist, the plan's definition). Refuses a stage with no established plan (d30_d31_structure) rather than
+    guess one."""
     stages = sq.stages_module()
     Send = stages.Send
     if stage == 'model_check':
         return [Send(1, MODEL_CHECK_SEND, 'generation', 'sonnet5-model-check', 'model_check', 'model_check', None,
                      'model_check')]
+    if stage == 'transcription':
+        chosen = (inputs or {}).get('transcription_audio')
+        chosen = [audio.id for audio in TRANSCRIPTION_AUDIO] if chosen is None else list(chosen)
+        require(chosen and all(audio_id in AUDIO_BY_ID for audio_id in chosen) and len(set(chosen)) == len(chosen),
+                'The transcription plan sends allowlisted recordings only, each once.')
+        sends = []
+        for audio in TRANSCRIPTION_AUDIO:                       # (allowlist order, whatever order they were named in)
+            if audio.id in chosen:
+                sends.append(Send(len(sends) + 1, f'transcription:{audio.id}', 'transcription', TRANSCRIPTION_FORM,
+                                  'transcription', 'transcription', audio.id, 'transcription'))
+                sends.append(Send(len(sends) + 1, f'generation:{audio.id}', 'generation', TRANSCRIPTION_FORM,
+                                  'transcription_generation', 'transcription', audio.id, 'transcription'))
+        return sends
     if stage == 'mapping':
         return stages.plan_sends('mapping', inputs)
     if stage == 'notes_comparison':
@@ -688,25 +915,62 @@ def plan_definitions(inputs):
         report[stage] = {'established': True, 'kind': STAGE_KIND[stage], 'pricing_keys': list(STAGE_PRICING[stage]),
                          'flags': STAGE_FLAGS[stage], 'sends': [{**s.record(), 'inputs': send_inputs(s, inputs)}
                                                                 for s in sends], 'count': len(sends)}
-    report['transcription'] = {'established': False, 'statement': TRANSCRIPTION}
+        if stage == 'transcription':
+            report[stage].update(
+                provider=TRANSCRIPTION_PROVIDER, model=DEEPGRAM_MODEL, endpoint='POST ' + DEEPGRAM_URL,
+                parameters={'model': DEEPGRAM_MODEL, 'smart_format': 'false', 'mip_opt_out': 'true'},
+                audio=[audio.record() for audio in TRANSCRIPTION_AUDIO], form=TRANSCRIPTION_FORM,
+                note='Every allowlisted recording is two sends: its transcription (the reviewed transcript then saved as '
+                     'the notes) and the generation on that encounter. A declaration may narrow the recordings, never '
+                     'add one; its per-minute rate is hashed into the transcription pricing version.')
     return report
 
 
+def stage_inputs(stage, declaration):
+    """What standing_plan reads for `stage` under `declaration`: nothing for model_check; the verified frozen
+    diagnostics otherwise, and for transcription also the declared recordings."""
+    if stage == 'model_check':
+        return None
+    inputs = sq.stages_module().frozen_inputs()
+    if stage == 'transcription':
+        require(declaration.transcription is not None, 'The declaration declares no transcription stage.')
+        inputs = {**inputs, 'transcription_audio': declaration.transcription.inputs}
+    return inputs
+
+
+def needs(send):
+    """The id of the send that must be made in the SAME run before `send` can be — a mapping encounter needs its form's
+    proposal (sonnet5_stages.Run.templates), a transcript's generation needs the encounter its transcription send made
+    (standing_qa_transcription.TranscriptionRun.transcribed), both held only in the request process — or None."""
+    if send.path == 'mapping_encounter':
+        return f'mapping:{send.form}'
+    if send.path == 'transcription_generation':
+        return f'transcription:{send.case}'
+    return None
+
+
+#: Why a stranded send is not sent, by its path (the mapping wording is the historical rule's, unchanged).
+STRANDED_WHY = {'mapping_encounter': "needs its form's mapping send in the same run, and that send was already made; it "
+                                     'is not sent',
+                'transcription_generation': "needs its recording's transcription send in the same run, and that send "
+                                            'was already made; it is not sent'}
+
+
 def stranded(remaining):
-    """The encounters in `remaining` whose form's mapping send is not in it — it was made in an earlier run. An
-    encounter needs its form's proposal in the same process (sonnet5_stages.Run.templates), so it can never be sent in
-    this campaign, and a stage with one left can never pass here."""
+    """The sends in `remaining` whose prerequisite send (needs) is not in it — it was made in an earlier run. Each needs
+    what that send made in the same process, so it can never be sent in this campaign, and a stage with one left can
+    never pass here."""
     ids = {send.id for send in remaining}
-    return [send for send in remaining if send.path == 'mapping_encounter' and f'mapping:{send.form}' not in ids]
+    return [send for send in remaining if needs(send) is not None and needs(send) not in ids]
 
 
 def require_none_stranded(stage, remaining):
     """The historical rule (sonnet5_stages.pending_sends, f5fe720f): a remainder holding an encounter whose form's mapping
-    send was already made is refused WHOLE, before anything is written — the encounter is not sent, and nothing else is.
-    Refutation R1-F2/R2-F1: setting such an encounter aside as `not_exercised` let the stage PASS with it never sent."""
+    send was already made — or a transcript generation whose recording's transcription send was — is refused WHOLE,
+    before anything is written: it is not sent, and nothing else is. Refutation R1-F2/R2-F1: setting such a send aside
+    as `not_exercised` let the stage PASS with it never sent."""
     found = stranded(remaining)
-    require(not found, '; '.join(f'{send.id} needs its form\'s mapping send in the same run, and that send was already '
-                                 'made; it is not sent' for send in found)
+    require(not found, '; '.join(f'{send.id} {STRANDED_WHY[send.path]}' for send in found)
             + ('.' if stage is None else
                f'. Stage {stage} cannot pass in this campaign: its remainder is not sent (a later campaign, a new '
                'declaration <YYYYMMDD>-quillmd-v1-standing-api-testing-<n>.md, measures the stage again).'))
@@ -714,18 +978,15 @@ def require_none_stranded(stage, remaining):
 
 
 def select_batch(remaining, cap):
-    """The next sends of a run: in plan order, at most `cap`; a mapping form's send and the encounter that needs its
-    proposal in the same process are selected together or not at all. A remainder with a stranded encounter is refused
-    (require_none_stranded) — it is never set aside."""
+    """The next sends of a run: in plan order, at most `cap`; a send and the send that needs it in the same process (a
+    mapping form and its encounter, a recording's transcription and its generation) are selected together or not at
+    all. A remainder with a stranded send is refused (require_none_stranded) — it is never set aside."""
     require_none_stranded(None, remaining)
-    by_id = {send.id: send for send in remaining}
     chosen = set()
     for send in remaining:
-        if send.path == 'mapping_encounter':
-            continue                                    # (selected with its form's mapping send)
-        group = [send.id]
-        if send.kind == 'mapping' and f'generation:{send.form}' in by_id:
-            group.append(f'generation:{send.form}')
+        if needs(send) is not None:
+            continue                                    # (selected with the send it needs)
+        group = [send.id] + [other.id for other in remaining if needs(other) == send.id]
         if len(chosen) + len(group) > cap:
             break                                       # (the next run starts with this send, or this pair)
         chosen.update(group)
@@ -736,6 +997,23 @@ def select_batch(remaining, cap):
 # ── the ledger, the runs and admission ───────────────────────────────────────────────────────────────────────────
 
 RUN_FILE = re.compile(r'(\d{4})-(run|closed)\.json')
+
+
+class StopFileHalt(Refused):
+    """The operator's Stop file refused something (StandingCampaign.require_not_stopped, and nothing else raises it). Met
+    by a send BEFORE its attempt was written — anywhere: the loop's own check, a preview admission, the admission or
+    the attempt record — it halts the run (L1:R1-F4 / L2:R2-F2: a Stop file appearing after the loop's check used to
+    fail the stage)."""
+
+
+def stopped_by_halt(error):
+    """Whether `error` is the Stop file's refusal, or the job refusal raised while handling it: sonnet5_stages.Run.
+    refuse_job cancels the queued job and raises StageStop INSIDE the `except Refused` that caught the admission's
+    refusal, so the halt is exactly that StageStop's implicit context. Decided by exception TYPE, one link deep, never
+    by message text: a stop with any other cause — even while a Stop file exists — stays a stop."""
+    if isinstance(error, StopFileHalt):
+        return True
+    return isinstance(error, sq.stages_module().StageStop) and isinstance(error.__context__, StopFileHalt)
 
 
 class Runs:
@@ -834,6 +1112,17 @@ class StandingLedger(pc.Ledger):
                 'The attempt\'s form is not one of the synthetic inputs its run allows.')
         require(form not in set(run['restricted_inputs']),
                 'The attempt\'s form is a development original marked "no provider upload"; it is never sent.')
+        if attempt['stage'] == 'transcription' or 'audio_sha256' in attempt:
+            # (a recording is the runner's allowlisted synthetic speech for THIS send, one its run allows, and never a
+            # restricted original — whatever the worker or a run record says)
+            audio = attempt.get('audio_sha256')
+            entry = AUDIO_BY_ID.get((send or {}).get('case'))
+            require((send or {}).get('path') in TRANSCRIPTION_PATHS and entry is not None and audio == entry.sha256,
+                    'The attempt\'s recording is not the allowlisted synthetic speech its send names; only allowlisted '
+                    'synthetic speech is ever sent for transcription.')
+            require(audio in run['allowed_inputs'], 'The attempt\'s recording is not one its run allows.')
+            require(audio not in set(run['restricted_inputs']),
+                    'The attempt\'s recording is marked "no provider upload"; it is never sent.')
         attempt.update(mode=MODE, monetary_ceiling=None, run=run['run'], run_id=run['run_id'],
                        attempt_id=f'{declaration.campaign}/{run["run_id"]}/attempt-{attempt["number"]:03d}',
                        send_key=send_key, engine_files=watched_hashes())
@@ -869,7 +1158,10 @@ class StandingCampaign(pc.Campaign):
         return self.root / STOP_NAME
 
     def require_not_stopped(self):
-        require(not os.path.lexists(self.stop_file()), f'The Stop file {self.stop_file()} exists; nothing is sent.')
+        """The operator's Stop file refuses with StopFileHalt — a HALT wherever it is met during a run, never a failure
+        (stopped_by_halt); a campaign stop refuses with a plain Refused."""
+        if os.path.lexists(self.stop_file()):
+            raise StopFileHalt(f'The Stop file {self.stop_file()} exists; nothing is sent.')
         require(self.ledger.campaign_stop() is None, 'The campaign is stopped (campaign-stop.json).')
 
     def rows(self):
@@ -880,6 +1172,17 @@ class StandingCampaign(pc.Campaign):
                     and isinstance(attempt.get('send_key'), str),
                     f'Attempt {attempt.get("number")} is not a standing campaign attempt (mode, run, identity).')
         return rows
+
+    def totals(self, stage=None):
+        """The historical totals, with a transcription send costed by its own measure (attempt_exposure). Accounting
+        only: there is no money limit to compare it with."""
+        every = self.rows()
+        rates = self.pinned_terms(every).rates
+        rows = [(a, o) for a, o in every if stage is None or a['stage'] == stage]
+        return {'attempts': len(rows), 'exposure': sum((attempt_exposure(a, o, rates) for a, o in rows), Decimal(0)),
+                'open': sum(1 for _, o in rows if o is None),
+                'unknown': sum(1 for a, o in rows if o is None or o.get('class') != 'completed'
+                               or known_attempt_cost(a, o, rates) is None)}
 
     def pinned_limits(self, attempt):
         require('limits' in attempt, f'Attempt {attempt.get("number")} records no limits; the limits in force cannot be '
@@ -924,6 +1227,35 @@ class StandingCampaign(pc.Campaign):
         in_run = sum(1 for a, _ in rows if a.get('run') == run['run'])
         require(in_run + 1 <= run['max_sends'], f'Run {run["run_id"]} has made all {run["max_sends"]} sends it may make.')
         return maximum * pc.GEO_MARGIN
+
+
+def known_attempt_cost(attempt, outcome, rates):
+    """provider_campaign.known_cost, except for a transcription send, which has no tokens: its outcome's
+    `provider_cost` (the response's duration at the declared per-minute rate), or None when it is not known."""
+    if (attempt.get('send') or {}).get('path') != 'transcription':
+        return pc.known_cost(attempt, outcome, rates)
+    value = (outcome or {}).get('provider_cost')
+    try:
+        cost = pc.money(value)
+    except Refused:
+        return None
+    return cost if cost >= 0 else None
+
+
+def attempt_exposure(attempt, outcome, rates):
+    """provider_campaign.exposure, with a transcription send's known cost read by known_attempt_cost (the same rules:
+    completed and known — that cost; not_sent — zero; otherwise the maximum x 1.1, or the known cost if higher)."""
+    if (attempt.get('send') or {}).get('path') != 'transcription':
+        return pc.exposure(attempt, outcome, rates)
+    bound = pc.attempt_bound(attempt['maximum_cost'])
+    if outcome is None:
+        return bound
+    if outcome.get('class') == 'not_sent':
+        return Decimal(0)
+    known = known_attempt_cost(attempt, outcome, rates)
+    if outcome.get('class') == 'completed' and known is not None:
+        return known
+    return max(bound, known) if known is not None else bound
 
 
 def settle(campaign):
@@ -1016,7 +1348,20 @@ def settings_snapshot(stage):
             'rates': {'input': settings.AI_INPUT_RATE, 'output': settings.AI_OUTPUT_RATE, 'cached': settings.AI_CACHED_RATE},
             'thinking': settings.AI_THINKING, 'effort': settings.AI_EFFORT, 'inference_geo': settings.AI_INFERENCE_GEO,
             'settings': {name: getattr(settings, name) for name, _ in FLAG_SETTINGS.values()},
+            'voice_rates': {'minute': os.environ.get('QUILLMD_DEEPGRAM_RATE_PER_MINUTE', ''),
+                            'second': os.environ.get('QUILLMD_DEEPGRAM_RATE_PER_SECOND', '')},
             'request_profile': config['request_profile'], 'pricing_version': config['pricing_version']}
+
+
+def stage_flags(stage, declaration):
+    """The request process's settings for `stage`: STAGE_FLAGS, and for transcription the declared per-minute rate (and
+    no per-second rate) — which overrides the historical PRICE_SETTINGS rate in request_environment."""
+    flags = dict(STAGE_FLAGS[stage])
+    if stage == 'transcription':
+        require(declaration.transcription is not None, 'The declaration declares no transcription stage.')
+        flags.update(QUILLMD_DEEPGRAM_RATE_PER_MINUTE=declaration.transcription.rate_per_minute,
+                     QUILLMD_DEEPGRAM_RATE_PER_SECOND='')
+    return flags
 
 
 def expected_settings(stage):
@@ -1073,6 +1418,13 @@ def check_configuration(snapshot, declaration, stage, root, *, rebuild=REBUILD, 
     key = STAGE_PRICING[stage][0]
     if snapshot.get('pricing_version') != declaration.pricing_version(key):
         problems.append(f'the application prices {snapshot.get("pricing_version")}, not the declared {key} version')
+    if stage == 'transcription':
+        terms = declaration.transcription
+        if terms is None:
+            problems.append('the declaration declares no transcription terms')
+        elif snapshot.get('voice_rates') != {'minute': terms.rate_per_minute, 'second': ''}:
+            problems.append(f'the transcription rate is not the declared {terms.rate_per_minute} USD per minute (and no '
+                            'per-second rate)')
     return problems
 
 
@@ -1198,15 +1550,22 @@ def run_preflight(campaign, *, secret, transport=None):
 def begin_run(campaign, stage, sends, inputs, cap, provenance):
     """Opens a run for `sends` (already selected): its allowed inputs, and the restricted originals, recorded first."""
     restricted = restricted_hashes(campaign.declaration)
-    allowed = sorted({send_inputs(send, inputs)['form_sha256'] for send in sends})
+    allowed = sorted({digest for send in sends for name, digest in send_inputs(send, inputs).items()
+                      if name in ('form_sha256', 'audio_sha256')})
     clash = sorted(set(allowed) & restricted)
     require(not clash, 'A planned input is a development original marked "no provider upload": ' + ', '.join(clash))
+    extra = {}
+    if stage == 'transcription':
+        terms = campaign.declaration.transcription
+        require(terms is not None and all(send.case in terms.inputs for send in sends),
+                'A transcription run sends only the recordings its declaration names.')
+        extra['audio'] = [audio_entry(audio_id).record() for audio_id in dict.fromkeys(send.case for send in sends)]
     return campaign.runs.begin(campaign.ledger, {
         'campaign': campaign.declaration.campaign, 'authority_id': campaign.declaration.authority_id, 'stage': stage,
         'sends': [send.id for send in sends], 'max_sends': cap, 'allowed_inputs': allowed,
         'restricted_inputs': sorted(restricted), 'monetary_ceiling': None,
         'declaration': {'sha256': campaign.declaration.sha256, 'commit': campaign.declaration.commit},
-        'runner_commit': provenance.get('runner_commit')})
+        'runner_commit': provenance.get('runner_commit'), **extra})
 
 
 def run_model_check(campaign, *, secret, provenance, environ=None, rebuild=REBUILD, database_prefix=sq.DATABASE_PREFIX):
@@ -1230,6 +1589,16 @@ def run_model_check(campaign, *, secret, provenance, environ=None, rebuild=REBUI
                                     database_prefix=database_prefix, expect=declaration.expect(limits),
                                     deadline=limits.request_deadline_seconds)
     except Refused as refused:
+        if stopped_by_halt(refused):
+            # (the Stop file met inside the model check before its attempt was written — its preview admission, its
+            # admission or its attempt record: a halt, as in a stage run; a job it had queued is cancelled)
+            halted = (f'the Stop file {campaign.stop_file()} appeared during {MODEL_CHECK_SEND}, before its attempt was '
+                      'written; it was not made')
+            jobs = cancel_queued(None)
+            campaign.runs.close(ledger, run['run'], {'closed_as': 'halted', 'sends': [], 'not_sent': [MODEL_CHECK_SEND],
+                                                     'reasons': [], 'halted': halted, 'halt_jobs': jobs})
+            return {'stage': 'model_check', 'run': run['run_id'], 'verdict': 'HALTED', 'decision': 'halted',
+                    'reasons': [], 'halted': halted, 'halt_jobs': jobs, 'settled_before_start': settled}
         campaign.runs.close(ledger, run['run'], {'closed_as': 'refused_before_attempt', 'reason': str(refused),
                                                  'sends': []})
         raise
@@ -1296,27 +1665,50 @@ def price_sends(stage, sends, inputs, state_dir, declaration, limits=None):
     return priced
 
 
+def cancel_queued(world):
+    """Every queued job, cancelled through the product (sonnet5_qa.cancel_stale_jobs: its hold released, it never ran,
+    so nothing was sent). Used when a send halted before its attempt was written: a job it had already queued — the
+    refusal at the attempt record sits outside the per-send code that cancels — is not left queued. (`world` is passed
+    through; the cancellation is the product's own, by each job's requester.) Returns what it did, or why it could not
+    (the next run's own cancellation then covers it)."""
+    try:
+        return {'cancelled': sq.cancel_stale_jobs(world)}
+    except Exception as error:                                  # (recorded, never raised: the halt stands either way)
+        return {'error': f'{type(error).__name__}: {error}'[:300]}
+
+
 def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=None, rebuild=REBUILD,
-              database_prefix=sq.DATABASE_PREFIX):
-    """One bounded run of a mapping or notes stage, through the historical per-send machinery (sonnet5_stages.Run: the
-    real views and worker, admission per send, the attempt before the one request, the outcome, the contract checks, the
-    frozen graders, the export read-back, the billing audit, the leak scan). Only sends with no attempt in this campaign
-    are planned; at most min(max_sends, max_sends_per_run). A remainder holding an encounter whose form's mapping send was
-    made in an earlier run (a halt between the two, or a stop before the encounter's attempt) is refused whole before
-    anything is written (require_none_stranded: the historical rule) — the stage can never pass in this campaign. The
-    stage is decided failed on any stop, passed when every planned send is made and none ever stopped it; otherwise the
-    run closes and the stage stays open."""
+              database_prefix=sq.DATABASE_PREFIX, transcription_secret=None):
+    """One bounded run of a mapping, notes or transcription stage, through the historical per-send machinery
+    (sonnet5_stages.Run, or for transcription its subclass standing_qa_transcription.TranscriptionRun: the real views and
+    worker, admission per send, the attempt before the one request, the outcome, the contract checks, the frozen graders,
+    the export read-back, the billing audit, the leak scan). Only sends with no attempt in this campaign are planned; at
+    most min(max_sends, max_sends_per_run). A remainder holding a send whose prerequisite send was made in an earlier run
+    (a mapping encounter, a transcript's generation — after a halt between the two, or a stop before its attempt) is
+    refused whole before anything is written (require_none_stranded: the historical rule) — the stage can never pass in
+    this campaign. The stage is decided failed on any stop, passed when every planned send is made and none ever stopped
+    it; otherwise the run closes and the stage stays open. The operator's Stop file met by a send before its attempt
+    was written (stopped_by_halt) halts the run like the loop's own check does: no failure, its queued job cancelled.
+    `transcription_secret`: the Deepgram key — given to a transcription run, and only to one."""
     stages = sq.stages_module()
     declaration, ledger, root = campaign.declaration, campaign.ledger, campaign.root
     require(stage in STAGE_KIND and stage != 'model_check', f'No stage run for {stage!r} here.')
     kind = STAGE_KIND[stage]
+    transcribing = stage == 'transcription'
+    require(transcribing == (transcription_secret is not None),
+            'The Deepgram credential reaches a transcription run only, and a transcription run needs it.')
     ledger.acquire()
     settled = settle(campaign)
     require_preflight(campaign)
     limits = campaign.limits()
-    checked = stages.stage_preconditions(declaration, kind, root, database_prefix=database_prefix, rebuild=rebuild,
-                                         environ=environ, ledger=ledger, expect=declaration.expect(limits))
-    inputs = stages.frozen_inputs()
+    if transcribing:
+        checked = transcription_module().preconditions(
+            campaign, transcription_secret=transcription_secret, database_prefix=database_prefix, rebuild=rebuild,
+            environ=environ, expect=declaration.expect(limits))
+    else:
+        checked = stages.stage_preconditions(declaration, kind, root, database_prefix=database_prefix, rebuild=rebuild,
+                                             environ=environ, ledger=ledger, expect=declaration.expect(limits))
+    inputs = stage_inputs(stage, declaration)
     plan = standing_plan(stage, inputs)
     _, in_force = campaign.stage_open(stage)
     require(len(plan) == in_force.max_requests, f'{stage} declares {in_force.max_requests} sends; its plan has '
@@ -1330,23 +1722,30 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
     selected = select_batch(remaining, cap)
     run = begin_run(campaign, stage, selected, inputs, cap, provenance)
     try:
-        forms = stages.build_forms(root / 'forms' / stage, kind, inputs)
+        forms = stages.build_forms(root / 'forms' / stage, 'ordinary_notes' if transcribing else kind, inputs)
         restricted = set(run['restricted_inputs'])
         for name, data in forms.items():
             require(hashlib.sha256(data).hexdigest() not in restricted,
                     f'The form {name} is a development original marked "no provider upload".')
         world = stages.seed_account(root)
         stale = sq.cancel_stale_jobs(world)
-        worker = stages.Run(campaign, stage, secret=secret, provenance=provenance, inputs=inputs, forms=forms,
-                            world=world, checked=checked, deadline=limits.request_deadline_seconds)
-        scratch = pc.private_directory(root / 'tmp' / f'price-{stage}-{run["run_id"]}')
-        worker.planned = {key: value['maximum_cost'] for key, value in price_sends(
-            stage, selected, inputs, scratch, declaration, limits).items()}
+        if transcribing:
+            tr = transcription_module()
+            worker = tr.TranscriptionRun(campaign, stage, secret=secret, transcription_secret=transcription_secret,
+                                         provenance=provenance, inputs=inputs, forms=forms, world=world, checked=checked,
+                                         deadline=limits.request_deadline_seconds)
+            worker.planned = tr.planned_maxima(selected, declaration)
+        else:
+            worker = stages.Run(campaign, stage, secret=secret, provenance=provenance, inputs=inputs, forms=forms,
+                                world=world, checked=checked, deadline=limits.request_deadline_seconds)
+            scratch = pc.private_directory(root / 'tmp' / f'price-{stage}-{run["run_id"]}')
+            worker.planned = {key: value['maximum_cost'] for key, value in price_sends(
+                stage, selected, inputs, scratch, declaration, limits).items()}
     except Refused as refused:
         campaign.runs.close(ledger, run['run'], {'closed_as': 'refused_before_attempt', 'reason': str(refused),
                                                  'sends': []})
         raise
-    reasons, not_sent, halted = [], [], None
+    reasons, not_sent, halted, halt_jobs = [], [], None, None
     for send in selected:
         if worker.stopped or halted:
             not_sent.append(send.id)
@@ -1359,6 +1758,15 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
         try:
             done = worker.run_send(send)
         except (stages.StageStop, Refused) as stop:
+            if stopped_by_halt(stop):
+                # (L1:R1-F4 / L2:R2-F2: the Stop file appeared AFTER the check above and was met inside this send — at its
+                # preview admission, its admission or its attempt record — so nothing was sent for it. The same halt as
+                # the check above, never a failure; a job it had queued is cancelled through the product.)
+                halted = (f'the Stop file {campaign.stop_file()} appeared during {send.id}, before its attempt was '
+                          'written; it and the remaining sends were not made')
+                not_sent.append(send.id)
+                halt_jobs = cancel_queued(world)
+                continue
             worker.stopped = {'send': send.id, 'before_attempt': True, 'reason': str(stop)}
             reasons.append(f'{send.id}: stopped before its attempt was written (nothing sent): {stop}')
             not_sent.append(send.id)
@@ -1369,8 +1777,20 @@ def run_stage(campaign, stage, *, secret, provenance, max_sends=None, environ=No
         if stops:
             worker.stopped = {'send': send.id, 'attempt': record.get('attempt'), 'findings': record.get('findings')}
             reasons.append(f'{send.id}: ' + '; '.join(f['why'] for f in record.get('findings') or []))
-    return decide_run(campaign, stage, run, plan, worker, reasons, not_sent,
-                      {'settled_before_start': settled, 'stale_jobs_cancelled': stale}, halted=halted)
+    base = {'settled_before_start': settled, 'stale_jobs_cancelled': stale}
+    if halt_jobs is not None:
+        base['halt_jobs'] = halt_jobs
+    return decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base, halted=halted)
+
+
+def run_secrets(campaign, worker):
+    """[(key, its credential file)] every leak scan of a run searches for: the Anthropic key, and in a transcription run
+    the Deepgram key too (by value: it has no fixed shape)."""
+    found = [(worker.secret, campaign.declaration.credential_file)]
+    deepgram = getattr(worker, 'transcription_secret', None)
+    if deepgram:
+        found.append((deepgram, campaign.declaration.transcription.credential_file))
+    return found
 
 
 def decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base, *, halted=None):
@@ -1383,10 +1803,12 @@ def decide_run(campaign, stage, run, plan, worker, reasons, not_sent, base, *, h
     ledger = campaign.ledger
     attempts = [row.get('attempt') for row in worker.sends if row.get('attempt')]
     earlier = earlier_stops(campaign, stage, attempts)
-    try:
-        late = pc.leaked(campaign.root, worker.secret, exclude=(campaign.declaration.credential_file,))
-    except pc.Refused as refused:
-        late = [str(refused)]
+    late = []
+    for key, credential in run_secrets(campaign, worker):
+        try:
+            late += pc.leaked(campaign.root, key, exclude=(credential,))
+        except pc.Refused as refused:
+            late.append(str(refused))
     if late:
         ledger.write_stop({'reason': 'the evidence could not be scanned, or carries the credential, at the run\'s close',
                            'detail': late})
@@ -1477,9 +1899,16 @@ def plan_report(stage=None, *, root=None, declaration_path=None, repository=None
         declaration = declared_standing(path, repository=repository, uses=('live', 'test'))
         campaign = StandingCampaign(declaration, root)
         for name, entry in definitions.items():
-            if not entry.get('established') or name == 'transcription':
+            if not entry.get('established'):
                 continue
-            sends = standing_plan(name, inputs)
+            if name == 'transcription':
+                if declaration.transcription is None:
+                    entry['declared'] = False                # (defined, not declared: nothing of it can be sent)
+                    continue
+                sends = standing_plan(name, {**inputs, 'transcription_audio': declaration.transcription.inputs})
+                entry['declared_terms'] = declaration.transcription.record()
+            else:
+                sends = standing_plan(name, inputs)
             left = remaining_sends(campaign, name, sends)
             entry['remaining'] = [send.id for send in left]
             entry['stranded'] = [send.id for send in stranded(left)]         # (never sent here: the stage cannot pass)
@@ -1519,34 +1948,70 @@ def _offline_django(environ):
     dbbase.BaseDatabaseWrapper.ensure_connection = no_database
 
 
-def pricing(model, rates, thinking, effort, inference_geo='', *, out=None):
+def pricing(model, rates, thinking, effort, inference_geo='', *, transcription_rate=None, out=None):
     """The pricing version the APPLICATION computes for every pricing key, and each request profile, under the named
     settings (PRICING_FLAGS per key; sonnet5_qa.PRICE_SETTINGS). Refuses a key whose profile the application does not
-    have (an invalid profile is never priced). What the lead writes into the declaration's pricing_version lines."""
+    have (an invalid profile is never priced). What the lead writes into the declaration's pricing_version lines.
+    `transcription_rate` (USD per audio minute, the provider's price when the declaration is written): also the
+    `transcription` version — computed with that rate as the application's QUILLMD_DEEPGRAM_RATE_PER_MINUTE, which every
+    pricing version hashes — and, per allowlisted recording, its measured length and transcription maximum (each
+    recording read only after its sha256 matches; one that cannot be read is reported, not priced)."""
     out = sys.stdout if out is None else out
+    if transcription_rate is not None:
+        require(TRANSCRIPTION_RATE.fullmatch(str(transcription_rate)) and Decimal(transcription_rate) > 0,
+                '--deepgram-rate-per-minute is a positive USD rate per audio minute (at most ten decimals).')
     probe = SimpleDeclaration(model, pc.Rates(*rates), thinking, effort, inference_geo)
     with tempfile.TemporaryDirectory(prefix='standing-pricing-') as scratch:
         _offline_django(application_environment(probe, scratch, STAGE_FLAGS['model_check']))
         from django.test.utils import override_settings
-        from core import generation, mapping_assistance
-        versions, profiles = {}, {}
+        from core import audio as app_audio, generation, jobs as app_jobs, mapping_assistance
+        versions, profiles, previews = {}, {}, {}
         for key, flags in PRICING_FLAGS.items():
-            with override_settings(**expected_settings_from_flags(flags)):
-                config = generation.configuration()
-                profile = config['request_profile']
-                require('invalid' not in profile, f'{key}: the application has no valid request profile for {model}: '
-                                                  f'{profile.get("invalid")}')
-                if key == 'mapping':
-                    try:
-                        profiles['mapping_request'] = mapping_assistance.request_profile(config)
-                    except Exception as error:
-                        raise Refused(f'mapping: the application refuses a mapping request profile for {model} '
-                                      f'({type(error).__name__}: {error})') from None
-                versions[key], profiles[key] = config['pricing_version'], profile
+            if key == 'transcription' and transcription_rate is None:
+                continue
+            saved = os.environ.get('QUILLMD_DEEPGRAM_RATE_PER_MINUTE')
+            if key == 'transcription':
+                os.environ['QUILLMD_DEEPGRAM_RATE_PER_MINUTE'] = str(transcription_rate)
+            try:
+                with override_settings(**expected_settings_from_flags(flags)):
+                    config = generation.configuration()
+                    profile = config['request_profile']
+                    require('invalid' not in profile, f'{key}: the application has no valid request profile for '
+                                                      f'{model}: {profile.get("invalid")}')
+                    if key == 'mapping':
+                        try:
+                            profiles['mapping_request'] = mapping_assistance.request_profile(config)
+                        except Exception as error:
+                            raise Refused(f'mapping: the application refuses a mapping request profile for {model} '
+                                          f'({type(error).__name__}: {error})') from None
+                    if key == 'transcription':
+                        for entry in TRANSCRIPTION_AUDIO:
+                            try:
+                                seconds = app_audio.measure_bounds(read_audio(entry)).measured
+                                quote = app_jobs.transcription_quote(seconds, config)
+                                previews[entry.id] = {
+                                    'sha256': entry.sha256, 'label': entry.label, 'measured_seconds': str(seconds),
+                                    'maximum_cost': format(transcription_maximum(seconds, transcription_rate), 'f'),
+                                    'charge_limit': quote['charge_limit'], 'standard_limit': quote['standard_limit'],
+                                    'within_standard': quote['within_standard']}
+                            except Exception as error:
+                                previews[entry.id] = {'sha256': entry.sha256, 'unpriced': f'{type(error).__name__}: '
+                                                                                          f'{error}'[:300]}
+                    versions[key], profiles[key] = config['pricing_version'], profile
+            finally:
+                if saved is None:
+                    os.environ.pop('QUILLMD_DEEPGRAM_RATE_PER_MINUTE', None)
+                else:
+                    os.environ['QUILLMD_DEEPGRAM_RATE_PER_MINUTE'] = saved
     report = {'model': model, 'rates': probe.rates.as_dict(), 'thinking': thinking, 'effort': effort,
               'inference_geo': inference_geo or 'unset', 'price_settings': sq.PRICE_SETTINGS,
               'pricing_versions': versions, 'request_profiles': profiles,
               'declaration_lines': [f'pricing_version {key}: {value}' for key, value in sorted(versions.items())]}
+    if transcription_rate is not None:
+        report['transcription'] = {'provider': TRANSCRIPTION_PROVIDER, 'model': DEEPGRAM_MODEL,
+                                   'rate_per_minute': str(transcription_rate), 'flags': STAGE_FLAGS['transcription'],
+                                   'recordings': previews,
+                                   'declaration_line': f'transcription_rate_per_minute: {transcription_rate}'}
     print(json.dumps(report, indent=1), file=out)
     return report
 
@@ -1583,9 +2048,11 @@ def ensure_database(password, name):
             connection.execute(sql.SQL('CREATE DATABASE {}').format(sql.Identifier(name)))
 
 
-def request_environment(key, declaration, root, password, context, flags, door):
+def request_environment(key, declaration, root, password, context, flags, door, transcription_key=None):
     """The complete environment of the request process (nothing inherited): the declared settings, the stage's flags, the
-    campaign's own QA database and state, and the door's two variables (so the request process re-checks the door)."""
+    campaign's own QA database and state, and the door's two variables (so the request process re-checks the door).
+    `transcription_key`: the Deepgram key, for a transcription run's request process only (outer passes it for no other
+    command or stage); the request process takes it out of its environment before anything else (inner)."""
     extra = {'DJANGO_SETTINGS_MODULE': 'quillmd.settings', 'QUILLMD_SECRET_KEY': secrets.token_urlsafe(48),
              'QUILLMD_DB_NAME': declaration.qa_database, 'QUILLMD_DB_USER': QA_SERVER['user'],
              'QUILLMD_DB_PASSWORD': password, 'QUILLMD_DB_HOST': QA_SERVER['host'], 'QUILLMD_DB_PORT': QA_SERVER['port'],
@@ -1593,6 +2060,9 @@ def request_environment(key, declaration, root, password, context, flags, door):
              'QUILLMD_HTTPS': '0', 'QUILLMD_EMAIL_MODE': 'file', 'HOME': str(root / 'home'), 'TMPDIR': str(root / 'tmp'),
              **sq.PRICE_SETTINGS, **flags, CONTEXT_VARIABLE: json.dumps(context),
              'RULED_MUTATION_DECLARATION': door['declaration'], 'RULED_MUTATION_DECL_COMMIT': door['commit']}
+    if transcription_key is not None:
+        require(isinstance(transcription_key, str) and transcription_key, 'The Deepgram credential is empty.')
+        extra[TRANSCRIPTION_KEY_VARIABLE] = transcription_key
     return pc.scrubbed_environment(key, declaration, extra, config_parent=str(root / 'tmp'))
 
 
@@ -1616,6 +2086,10 @@ def outer(command, stage=None, max_sends=None, path=None):
         pc.private_directory(root / name)
     require(not os.path.lexists(root / STOP_NAME), f'The Stop file {root / STOP_NAME} exists; nothing is sent.')
     key = pc.load_credential(declaration.credential_file, declaration)
+    # (the Deepgram key: read for a transcription run ONLY, by the same file rules, before anything is sent — a missing,
+    # linked, wrongly owned or wrongly permissioned file refuses here, before the database or the request process)
+    transcribing = command == 'run' and stage == 'transcription'
+    transcription_key = load_transcription_credential(declaration) if transcribing else None
     password = ''
     if command == 'run':
         password = pc.read_private(declaration.qa_database_password_file).decode().strip()
@@ -1623,7 +2097,8 @@ def outer(command, stage=None, max_sends=None, path=None):
     context = {'command': command, 'root': str(root), 'declaration': str(path), 'stage': stage,
                'max_sends': max_sends, 'runner_commit': identity['commit']}
     env = request_environment(key, declaration, root, password, context,
-                              STAGE_FLAGS[stage] if command == 'run' else STAGE_FLAGS['model_check'], door)
+                              stage_flags(stage, declaration) if command == 'run' else STAGE_FLAGS['model_check'], door,
+                              transcription_key=transcription_key)
     if command == 'run':
         ensure_database(password, declaration.qa_database)
     os.chdir(REBUILD)
@@ -1635,9 +2110,13 @@ def _interrupted(signum, frame):
 
 
 def inner():
-    """The request process. Before anything else — before the declaration is read and long before django.setup() — it
-    refuses unless QUILLMD_ENV_MANAGED is exactly '1' and rebuild/.env does not exist; then it re-verifies the
-    declaration, the door, the Stop file, the scrubbed environment and the credential itself."""
+    """The request process. Before anything else it takes the Deepgram key (if it was handed one) OUT of its own
+    environment, into memory; then — before the declaration is read and long before django.setup() — it refuses unless
+    QUILLMD_ENV_MANAGED is exactly '1' and rebuild/.env does not exist; then it re-verifies the declaration, the door,
+    the Stop file, the scrubbed environment and each credential itself. The Deepgram key is accepted only by a
+    transcription run (for anything else its presence refuses), must equal the declared file's, and is put back into the
+    environment only around the transcription send's one request (standing_qa_transcription.TranscriptionRun)."""
+    transcription_key = os.environ.pop(TRANSCRIPTION_KEY_VARIABLE, None)
     require(os.environ.get('QUILLMD_ENV_MANAGED') == '1',
             'The request process runs only with QUILLMD_ENV_MANAGED=1: settings must never load a .env file.')
     require(not sq.env_file_present(REBUILD), 'The checkout has a rebuild/.env; the request process never starts beside '
@@ -1646,6 +2125,9 @@ def inner():
     signal.signal(signal.SIGTERM, _interrupted)
     signal.signal(signal.SIGINT, _interrupted)
     context = json.loads(os.environ[CONTEXT_VARIABLE])
+    transcribing = context.get('command') == 'run' and context.get('stage') == 'transcription'
+    require(transcribing or transcription_key is None,
+            'The Deepgram credential reached a request process that is not a transcription run; nothing is sent.')
     declaration = declared_standing(context['declaration'])
     require_live(declaration)
     require_door(declaration)
@@ -1658,6 +2140,10 @@ def inner():
     key = os.environ['ANTHROPIC_API_KEY']
     require(pc.constant_time_equal(key, pc.load_credential(declaration.credential_file, declaration)),
             'The request process does not carry the declared credential.')
+    if transcribing:
+        require(transcription_key and pc.constant_time_equal(transcription_key,
+                                                             load_transcription_credential(declaration)),
+                'The request process does not carry the declared Deepgram credential.')
     provenance = {'runner_commit': context['runner_commit']}
     try:
         if context['command'] == 'preflight':
@@ -1679,17 +2165,23 @@ def inner():
             call_command('migrate', interactive=False, verbosity=0)
             pc.install_request_capture()
             pc.install_transport_guard()
+            if transcribing:
+                transcription_module().install_transcription_guard()
             pc.REQUEST_BOUNDS.update(model=declaration.model,
                                      max_tokens=campaign.limits().max_output_tokens_per_request)
             if stage == 'model_check':
                 result = run_model_check(campaign, secret=key, provenance=provenance)
             else:
-                result = run_stage(campaign, stage, secret=key, provenance=provenance, max_sends=context['max_sends'])
+                result = run_stage(campaign, stage, secret=key, provenance=provenance, max_sends=context['max_sends'],
+                                   transcription_secret=transcription_key if transcribing else None)
             code = EXIT[result['verdict']]
     finally:
         os.environ.pop('ANTHROPIC_API_KEY', None)
+        os.environ.pop(TRANSCRIPTION_KEY_VARIABLE, None)
     text = json.dumps(result, indent=1, default=str)
-    require(key not in text and not pc.KEY_SHAPE.search(text.encode()), 'The result carried a key-shaped value; withheld.')
+    require(key not in text and not pc.KEY_SHAPE.search(text.encode())
+            and not (transcription_key and transcription_key in text),
+            'The result carried a key-shaped value; withheld.')
     print(text)
     return code
 
@@ -1718,8 +2210,7 @@ def reopen(stage, diagnosis, root=None, declaration_path=None, *, repository=Non
     def remainder():
         # (the historical reopening's rule, sonnet5_qa.reopen -> pending_sends: a remainder the stage runner would refuse
         # — nothing left, or a stranded encounter — is refused here, before the reopening is written)
-        inputs = sq.stages_module().frozen_inputs() if stage != 'model_check' else None
-        left = remaining_sends(campaign, stage, standing_plan(stage, inputs))
+        left = remaining_sends(campaign, stage, standing_plan(stage, stage_inputs(stage, declaration)))
         require(left, f'Stage {stage} has no send left that was never made; a reopening would send nothing.')
         return [send.id for send in require_none_stranded(stage, left)]
     campaign.ledger.acquire()
@@ -1749,13 +2240,15 @@ def main(argv=None):
         parser.add_argument('--thinking')
         parser.add_argument('--effort')
         parser.add_argument('--inference-geo', default='')
+        parser.add_argument('--deepgram-rate-per-minute')
         parser.add_argument('--declaration')
         args = parser.parse_args(argv)
         path = declaration_path(args.declaration)
         if args.command == 'pricing':
             require(all((args.model, args.input, args.output, args.cached, args.thinking, args.effort)),
                     'pricing needs --model --input --output --cached --thinking --effort.')
-            pricing(args.model, (args.input, args.output, args.cached), args.thinking, args.effort, args.inference_geo)
+            pricing(args.model, (args.input, args.output, args.cached), args.thinking, args.effort, args.inference_geo,
+                    transcription_rate=args.deepgram_rate_per_minute)
             return 0
         if args.command == 'plan':
             report = plan_report(args.stage, declaration_path=path)
@@ -1794,6 +2287,16 @@ def priced_plan(stage=None, path=None):
         from django.test.utils import override_settings
         report = {}
         for name in names:
+            if name == 'transcription':
+                planned = transcription_module().planned_maxima(standing_plan(name, stage_inputs(name, declaration)),
+                                                                declaration)
+                report[name] = {send_id: ({'maximum_cost': format(value, 'f'), 'bound': format(pc.attempt_bound(value),
+                                                                                                  'f')}
+                                          if value is not None else
+                                          {'maximum_cost': None, 'note': 'the generation on a transcript is priced by '
+                                                                         'the application once the transcript exists'})
+                                for send_id, value in planned.items()}
+                continue
             with override_settings(**expected_settings(name)):
                 priced = price_sends(name, standing_plan(name, inputs), inputs, Path(scratch) / name, declaration)
             report[name] = {send_id: {k: (format(v, 'f') if isinstance(v, Decimal) else v) for k, v in row.items()}

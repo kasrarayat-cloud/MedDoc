@@ -1757,11 +1757,15 @@ def _leaked(root, key, exclude):
 UNSAFE_FINDINGS = frozenset(('adopted_without_source_support', 'wrong_destination', 'wrong_side', 'wrong_denial',
                              'contradiction_adopted', 'protected_area_answered', 'credential_leak',
                              'harmful_change_unreviewed'))
-#: A broken request contract or money path: each STOPS the stage.
+#: A broken request contract or money path: each STOPS the stage. The last three are the standing runner's transcription
+#: stage's (ops/standing_qa_transcription.py): the request sent is not the declared one or not the submission the product
+#: prepared; the transcript is empty, its coverage incomplete or unknown, or not the provider's; the reviewed transcript
+#: could not be saved, unedited, as the notes.
 CONTRACT_FINDINGS = frozenset(('wrong_served_model', 'stop_reason_not_end_turn', 'reconciliation', 'uncertain_outcome',
                                'output_over_70_percent', 'metered_us_while_unset', 'settlement_mismatch', 'audit_failure',
                                'validator_failure', 'more_than_one_request', 'request_not_captured',
-                               'export_verification_failed', 'response_not_captured'))
+                               'export_verification_failed', 'response_not_captured',
+                               'transcription_contract', 'transcript_unusable', 'transcript_not_applied'))
 #: What happened to each field (or, for mapping, each expected area, control or false field) of a case: USEFULNESS,
 #: recorded per item. Held, missing, over-held and refused answers are the product declining to guess — measured, never
 #: a stop ('held_unadjudicated': a hold of an UNLISTED model selection on a field that may be supported — the frozen

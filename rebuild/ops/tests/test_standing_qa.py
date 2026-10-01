@@ -42,8 +42,23 @@ What each group proves, stated so a reader can see how it would fail:
     D30/D31-structure and transcription not established; the declared send counts equal the plans; flags agree with the
     historical runner's.
   · PRICING — the pricing command reproduces the historical declaration's versions for claude-sonnet-5 (positive
-    control) and refuses claude-sonnet-5-5 while the application has no profile for it.
-No socket is opened (network_guard); the provider is an in-process MockTransport.
+    control) and refuses claude-sonnet-5-5 while the application has no profile for it; with a Deepgram rate it adds
+    the transcription version (equal to the notes version at the historical rate, different at any other).
+  · TRANSCRIPTION (T4b) — the declaration's transcription section (every term once and fixed, allowlisted recordings
+    with their pinned sha256, two sends per recording, no section without its stage nor stage without its section);
+    the Deepgram key file under the Anthropic key's rules (missing, linked file or directory, hard link, wrong mode or
+    owner, two lines, empty, a directory: each refused) and read by outer() for a transcription run only, before the
+    database or the exec; its key in the request environment of a transcription run only, never in argv or the
+    context, and refused by inner() anywhere else; the transport guard (exactly the declared request, captured before
+    it leaves without its credential, the response retained; any other URL, parameter, key, header, body or a second
+    request refused before the network); the last door (only this send's allowlisted recording, allowed by its run,
+    never restricted; never twice); the real run_stage for transcription (each recording then its generation, the
+    key only for a transcription run, a halt between the two strands the generation and refuses every later run, a
+    retained copy of the Deepgram key stops the campaign); the transcript judge (source support, protected fields).
+  · STOP RACE (L1:R1-F4 / L2:R2-F2) — the Stop file met inside a send before its attempt record (preview admission,
+    admission, attempt record; and in the model check) halts the run and cancels its queued job; any other refusal,
+    even with a Stop file present, and a campaign stop still fail; the halt is read from the refusal's type.
+No socket is opened (network_guard); the providers are in-process stand-ins.
 """
 import dataclasses
 import hashlib
@@ -73,6 +88,8 @@ RECORD = REPOSITORY / st.AUTHORITY_RECORD
 HISTORICAL_DECLARATION = REPOSITORY / 'docs' / 'foundation' / 'mutations' / '20260928-quillmd-v1-sonnet5-staged-campaign.md'
 HISTORICAL_DECLARATION_SHA256 = '76bfb6af8dea0d7184be00e7ca9d30f3c1bbc99f62057b1002f3d3643efb5d15'
 SYNTHETIC_KEY = 'sk-ant-api03-SYNTHETIC-STANDING-OFFLINE-KEY-222222222222222222222222222222222-CCCCCCCC'
+#: A synthetic Deepgram key: 40 printable characters, the declared credential's shape (no real key is ever used here).
+DEEPGRAM_KEY = 'dg0SYNTHETIC0standing0offline0key0444444'
 GIT = ['git', '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', '-c', 'user.name=Synthetic Test',
        '-c', 'user.email=synthetic@test.invalid']
 DECLARATION_NAME = '20261001-quillmd-v1-standing-api-testing.md'
@@ -143,12 +160,15 @@ def fill_template(values, use, where):
     return out
 
 
-FIXTURE_VALUES = ['3', '15', '0.30', 'disabled', 'medium'] + ['configured-v1:' + c * 64 for c in 'abcd']
+FIXTURE_VALUES = (['3', '15', '0.30', 'disabled', 'medium'] + ['configured-v1:' + c * 64 for c in 'abcd']
+                  + ['0.0077', 'configured-v1:' + 'e' * 64])
 FIXTURE_WHERE = {
     'root: /opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261001': 'root: /nonexistent/standing-qa-test-root',
     'qa_database: quillmd_qa_standing_20261001': 'qa_database: quillmd_qa_v2_auth_fixture',
     'credential_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/credential/anthropic-api-key':
         'credential_file: /nonexistent/standing-qa-test-root/credential/anthropic-api-key',
+    'transcription_credential_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/credential/deepgram-api-key':
+        'transcription_credential_file: /nonexistent/standing-qa-test-root/credential/deepgram-api-key',
     'qa_database_password_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/qa-db/password':
         'qa_database_password_file: /nonexistent/standing-qa-test-root/qa-db/password',
     'restricted_inputs_ledger: /opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/'
@@ -261,12 +281,18 @@ class AuthorityAndDeclarationTests(Base):
         self.assertEqual(dict(d.pricing_versions), {'model_check': 'configured-v1:' + 'a' * 64,
                                                     'mapping': 'configured-v1:' + 'b' * 64,
                                                     'ordinary_notes': 'configured-v1:' + 'c' * 64,
-                                                    'ordinary_notes_field_relations': 'configured-v1:' + 'd' * 64})
+                                                    'ordinary_notes_field_relations': 'configured-v1:' + 'd' * 64,
+                                                    'transcription': 'configured-v1:' + 'e' * 64})
         self.assertEqual((d.concurrency, d.automatic_retries, d.max_sends_per_run, d.max_output_tokens_per_request,
                           d.request_deadline_seconds), (1, 'none', 10, 20000, 180))
         self.assertEqual([(s.id, s.sends, s.requires, s.limit) for s in d.stages],
                          [('model_check', 1, None, None), ('mapping', 10, 'model_check', None),
-                          ('notes_comparison', 28, 'model_check', None)])
+                          ('notes_comparison', 28, 'model_check', None), ('transcription', 4, 'model_check', None)])
+        self.assertEqual(d.transcription, st.TranscriptionTerms(
+            'deepgram', 'nova-3-medical', '0.0077', 'true', 'false',
+            '/nonexistent/standing-qa-test-root/credential/deepgram-api-key', ('soap-ankle-speech', 'colonoscopy-speech')))
+        self.assertEqual(d.transcription.parameters(), {'model': 'nova-3-medical', 'smart_format': 'false',
+                                                        'mip_opt_out': 'true'})
         self.assertEqual(d.owner_words, json.loads(RECORD.read_text())['owner_words'])
         self.assertIn(d.commit, out.getvalue())
         self.assertIn('monetary ceiling none', out.getvalue())
@@ -276,8 +302,7 @@ class AuthorityAndDeclarationTests(Base):
             parse(self, st.TEMPLATE.read_text(encoding='utf-8'))
 
     def test_the_template_filled_for_live_use_parses_and_names_the_live_places(self):
-        values = ['3', '15', '0.30', 'disabled', 'medium'] + ['configured-v1:' + c * 64 for c in 'abcd']
-        d = parse(self, fill_template(values, 'live', {}), uses=('live',))
+        d = parse(self, fill_template(FIXTURE_VALUES, 'live', {}), uses=('live',))
         st.require_live(d)
         self.assertEqual((d.root, d.qa_database), (str(st.LIVE_ROOT), st.DATABASE_NAME))
         self.assertEqual(d.credential_file, str(sq.HISTORICAL_ROOT / 'credential' / 'anthropic-api-key'))
@@ -367,7 +392,7 @@ class AuthorityAndDeclarationTests(Base):
                  ('automatic_retries: none', 'automatic_retries: 2', 'never re-sent'),
                  ('max_output_tokens_per_request: 20000', 'max_output_tokens_per_request: 64000', 'at most 21333'),
                  ('request_deadline_seconds: 180', 'request_deadline_seconds: 900', 'at most 600'),
-                 ('stage: notes_comparison sends 28', 'stage: transcription sends 28', 'No standing plan'),
+                 ('stage: notes_comparison sends 28', 'stage: dictation sends 28', 'No standing plan'),
                  ('stage: mapping sends 10 requires model_check_passed', 'stage: mapping sends 10 requires none\n'
                   'stage: mapping sends 10 requires none', 'twice')]
         for old, new, why in cases:
@@ -768,39 +793,51 @@ class RunsAndReconciliationTests(Base):
 # ── stage runs (the real run_stage, offline) ─────────────────────────────────────────────────────────────────────
 
 class FakeWorker:
-    """Stands in for sonnet5_stages.Run in the request process, in Run.run_send's order: the preview admit on the planned
-    maximum, the pre-attempt work (upload, queue, price: hook `pre_attempt`), admit, write_attempt, the ONE request in
-    flight (hook `in_flight`), the outcome, a clean per-send record. Like the real worker it keeps a mapping form's
-    proposal for that form's encounter only inside its own process (Run.templates): an encounter whose form was not
-    mapped by this worker is not made (Run.encounter_send returns None)."""
+    """Stands in for sonnet5_stages.Run (and standing_qa_transcription.TranscriptionRun) in the request process, in
+    Run.run_send's order: the preview admit on the planned maximum (hook `start` just before it), the pre-attempt work
+    (upload, queue, price: hook `pre_attempt`), admit — whose refusal is turned into a StageStop raised while handling
+    it, exactly as sonnet5_stages.Run.refuse_job does after cancelling the queued job — then (hook `before_write`)
+    write_attempt, the ONE request in flight (hook `in_flight`), the outcome, a clean per-send record. Like the real
+    worker it keeps what a send made for the send that needs it (Run.templates, TranscriptionRun.transcribed) only
+    inside its own process: a send whose prerequisite was not made by this worker is not made (returns None)."""
     hooks = {}
+    refused_jobs = []
 
-    def __init__(self, campaign, stage, *, secret, provenance, inputs, forms, world, checked, deadline):
+    def __init__(self, campaign, stage, *, secret, provenance, inputs, forms, world, checked, deadline,
+                 transcription_secret=None):
         self.campaign, self.stage, self.secret, self.provenance, self.inputs = campaign, stage, secret, provenance, inputs
         self.ledger = campaign.ledger
-        self.sends, self.veto_evidence, self.stopped, self.planned, self.templates = [], [], None, {}, {}
+        self.sends, self.veto_evidence, self.stopped, self.planned, self.made = [], [], None, {}, set()
+        if transcription_secret is not None:
+            self.transcription_secret = transcription_secret
 
     def run_send(self, send):
         commit = self.provenance.get('runner_commit')
+        FakeWorker.hooks.get('start', lambda send: None)(send)
         if self.planned.get(send.id) is not None:
             self.campaign.admit(self.stage, self.planned[send.id], runner_commit=commit)
-        if send.path == 'mapping_encounter' and send.form not in self.templates:
+        if st.needs(send) is not None and st.needs(send) not in self.made:
             return None
         FakeWorker.hooks.get('pre_attempt', lambda send: None)(send)
         maximum = Decimal('0.10')
-        bound = self.campaign.admit(self.stage, maximum, runner_commit=commit)
+        try:
+            bound = self.campaign.admit(self.stage, maximum, runner_commit=commit)
+        except pc.Refused as refused:
+            FakeWorker.refused_jobs.append(send.id)          # (the job queued for this send, cancelled unsent)
+            raise sq.stages_module().StageStop(str(refused) + '; the job was cancelled unsent')
+        FakeWorker.hooks.get('before_write', lambda send: None)(send)
         d, number = self.campaign.declaration, len(self.ledger.rows()) + 1
+        inputs = {k: v for k, v in st.send_inputs(send, self.inputs).items() if k in ('form_sha256', 'audio_sha256')}
         self.ledger.write_attempt({
             'number': number, 'campaign': d.campaign, 'authority_id': d.authority_id, 'stage': self.stage,
             'send': send.record(), 'maximum_cost': format(maximum, 'f'), 'exposure_bound': format(bound, 'f'),
-            'rates': d.rates.as_dict(), 'form_sha256': st.send_inputs(send, self.inputs)['form_sha256'],
+            'rates': d.rates.as_dict(), **inputs,
             'limits': self.campaign.limits().record(), 'terms': self.campaign.pinned_terms().record(),
             'runner_commit': commit, 'started_at': pc.now()})
         FakeWorker.hooks.get('in_flight', lambda send: None)(send)
         self.ledger.write_outcome(number, {'class': 'completed', 'usage': {
             'input_tokens': 1000, 'output_tokens': 200, 'inference_geo': 'global'}})
-        if send.kind == 'mapping':
-            self.templates[send.form] = 'proposal'
+        self.made.add(send.id)
         record = {'send': send.record(), 'attempt': number, 'class': 'completed', 'findings': [],
                   'verdict': {'unsafe': []}, 'stops_stage': False, 'recorded_as': None}
         self.sends.append(record)
@@ -820,11 +857,15 @@ class StageRunTests(Base):
 
     def setUp(self):
         stages = sq.stages_module()
-        FakeWorker.hooks = {}
+        FakeWorker.hooks, FakeWorker.refused_jobs, self.cancellations = {}, [], []
+
+        def cancel_stale_jobs(world):
+            self.cancellations.append(world)
+            return []
         for stand_in in (patch.object(stages, 'stage_preconditions', lambda *a, **k: {'stand_in': True}),
                          patch.object(stages, 'build_forms', lambda *a, **k: {}),
                          patch.object(stages, 'seed_account', lambda root: object()),
-                         patch.object(sq, 'cancel_stale_jobs', lambda world: []),
+                         patch.object(sq, 'cancel_stale_jobs', cancel_stale_jobs),
                          patch.object(stages, 'Run', FakeWorker),
                          patch.object(st, 'price_sends', lambda stage, sends, *a, **k: {
                              s.id: {'maximum_cost': Decimal('0.10')} for s in sends})):
@@ -957,6 +998,8 @@ def snapshot(declaration, root, stage='model_check', **changes):
               'model': declaration.model, 'rates': declaration.rates.as_dict(), 'thinking': declaration.thinking,
               'effort': declaration.effort, 'inference_geo': declaration.inference_geo,
               'settings': st.expected_settings(stage),
+              'voice_rates': {'minute': declaration.transcription.rate_per_minute if stage == 'transcription'
+                              else sq.PRICE_SETTINGS['QUILLMD_DEEPGRAM_RATE_PER_MINUTE'], 'second': ''},
               'request_profile': {'profile': 'synthetic-5-5-v1', 'max_output_tokens': 8000, 'timeout_seconds': 120},
               'pricing_version': declaration.pricing_version(st.STAGE_PRICING[stage][0])}
     for key, value in changes.items():
@@ -978,8 +1021,29 @@ class ConfigurationTests(Base):
                                       rebuild=self.worktree if rebuild is None else rebuild)
 
     def test_the_eligible_configuration_passes_for_every_stage(self):
-        for stage in ('model_check', 'mapping', 'notes_comparison'):
+        for stage in ('model_check', 'mapping', 'notes_comparison', 'transcription'):
             self.assertEqual(self.problems(stage), [], stage)
+
+    def test_a_transcription_process_without_the_declared_request_is_a_problem(self):
+        cases = [{'voice_rates': {'minute': '0.0043', 'second': ''}},          # (the historical rate, not the declared)
+                 {'voice_rates': {'minute': '0.0077', 'second': '0.0002'}},
+                 {'voice_rates': {'minute': '', 'second': ''}},
+                 {'settings': {'QUILLMD_DEEPGRAM_MIP_OPT_OUT': None}},              # (synthetic default: not sent at all)
+                 {'settings': {'QUILLMD_DEEPGRAM_MIP_OPT_OUT': 'false'}},
+                 {'settings': {'QUILLMD_DEEPGRAM_SMART_FORMAT': 'true'}},
+                 {'settings': {'QUILLMD_WORD_ENGINE': 'legacy'}},
+                 {'pricing_version': self.d.pricing_version('ordinary_notes')}]
+        for change in cases:
+            with self.subTest(change=change):
+                self.assertTrue(self.problems('transcription', **change))
+        without = dataclasses.replace(self.d, transcription=None)
+        self.assertIn('the declaration declares no transcription terms', st.check_configuration(
+            snapshot(self.d, self.root, 'transcription'), without, 'transcription', self.root, rebuild=self.worktree))
+        flags = st.stage_flags('transcription', self.d)
+        self.assertEqual((flags['QUILLMD_DEEPGRAM_RATE_PER_MINUTE'], flags['QUILLMD_DEEPGRAM_RATE_PER_SECOND'],
+                          flags['QUILLMD_DEEPGRAM_MIP_OPT_OUT'], flags['QUILLMD_DEEPGRAM_SMART_FORMAT'],
+                          flags['QUILLMD_WORD_ENGINE']), ('0.0077', '', 'true', 'false', 'v3'))
+        self.assertNotIn('QUILLMD_DEEPGRAM_RATE_PER_MINUTE', st.stage_flags('notes_comparison', self.d))
 
     def test_a_contract_flag_other_than_the_stages_is_a_problem(self):
         cases = [('model_check', {'V3_FIELD_RELATIONS': True}), ('model_check', {'WM_NARRATIVE': True}),
@@ -1088,6 +1152,9 @@ class ProcessTests(Base):
         self.key = secret_dir / 'anthropic-api-key'
         self.key.write_text(SYNTHETIC_KEY + '\n')
         os.chmod(self.key, 0o600)
+        self.deepgram = secret_dir / 'deepgram-api-key'
+        self.deepgram.write_text(DEEPGRAM_KEY + '\n')
+        os.chmod(self.deepgram, 0o600)
         password = secret_dir / 'password'
         password.write_text('synthetic-qa-password\n')
         os.chmod(password, 0o600)
@@ -1095,6 +1162,8 @@ class ProcessTests(Base):
         where = {'root: /opt/meddoc-pro/rebuild/.runtime/v1-standing-api-testing-20261001': f'root: {self.live_root}',
                  'credential_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/credential/anthropic-api-key':
                      f'credential_file: {self.key}',
+                 'transcription_credential_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/credential/'
+                 'deepgram-api-key': f'transcription_credential_file: {self.deepgram}',
                  'qa_database_password_file: /opt/meddoc-pro/rebuild/.runtime/v1-sonnet5-campaign/qa-db/password':
                      f'qa_database_password_file: {password}',
                  'restricted_inputs_ledger: /opt/meddoc-pro/rebuild/.runtime/v1-word-corpus/custodian-20260927/metadata/'
@@ -1183,6 +1252,8 @@ class ProcessTests(Base):
         env = captured['env']
         self.assertEqual(captured['argv'][-1], '_inner')
         self.assertEqual(env['ANTHROPIC_API_KEY'], SYNTHETIC_KEY)
+        self.assertNotIn(st.TRANSCRIPTION_KEY_VARIABLE, env)                     # (not a transcription run)
+        self.assertFalse([value for value in env.values() if DEEPGRAM_KEY in value])
         self.assertFalse([name for name in env if pc.forbidden_name(name)])
         self.assertNotIn('ANTHROPIC_BASE_URL', env)
         self.assertNotIn('ANTHROPIC_AUTH_TOKEN', env)
@@ -1219,6 +1290,92 @@ class ProcessTests(Base):
         with self.assertRaisesRegex(pc.Refused, 'Stop file'):
             self.inner(env)
         self.assertEqual(len(calls), 1)
+
+
+    # ── the Deepgram key: read for a transcription run only, by the Anthropic key's rules, before anything is sent ──
+    def outer_run(self, stage, **patches):
+        """outer('run', stage) with the database and the exec stood in; returns what execve was handed."""
+        captured = {}
+
+        def execve(path, argv, env):
+            captured.update(path=path, argv=argv, env=env)
+            raise SystemExit('execve captured')
+        with patch.dict(os.environ, self.door), patch.object(os, 'execve', execve), patch.object(os, 'chdir'), \
+                patch.object(st, 'ensure_database', lambda password, name: None), redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                st.outer('run', stage)
+        return captured
+
+    def test_outer_hands_the_deepgram_key_to_a_transcription_runs_environment_only(self):
+        captured = self.outer_run('transcription')
+        env, argv = captured['env'], captured['argv']
+        self.assertEqual(env[st.TRANSCRIPTION_KEY_VARIABLE], DEEPGRAM_KEY)            # (the run that needs it has it)
+        self.assertEqual(argv, [sys.executable, '-B', str(st.RUNNER), '_inner'])
+        self.assertFalse([part for part in argv if DEEPGRAM_KEY in part or SYNTHETIC_KEY in part])
+        self.assertNotIn(DEEPGRAM_KEY, env[st.CONTEXT_VARIABLE])
+        self.assertEqual([name for name, value in env.items() if DEEPGRAM_KEY in value], [st.TRANSCRIPTION_KEY_VARIABLE])
+        self.assertEqual((env['QUILLMD_DEEPGRAM_RATE_PER_MINUTE'], env['QUILLMD_DEEPGRAM_RATE_PER_SECOND'],
+                          env['QUILLMD_DEEPGRAM_MIP_OPT_OUT'], env['QUILLMD_DEEPGRAM_SMART_FORMAT']),
+                         ('0.0077', '', 'true', 'false'))
+        self.assertFalse([name for name in env if pc.forbidden_name(name)])
+
+        def forbidden(*args, **kwargs):
+            raise AssertionError('the Deepgram credential was read for a run that is not a transcription run')
+        with patch.object(st, 'load_transcription_credential', forbidden):
+            for stage in ('notes_comparison', 'mapping', 'model_check'):
+                with self.subTest(stage=stage):
+                    env = self.outer_run(stage)['env']
+                    self.assertNotIn(st.TRANSCRIPTION_KEY_VARIABLE, env)
+                    self.assertFalse([value for value in env.values() if DEEPGRAM_KEY in value])
+                    self.assertEqual(env['QUILLMD_DEEPGRAM_RATE_PER_MINUTE'], '0.0043')
+            preflight = self.outer({**self.door})['env']
+            self.assertNotIn(st.TRANSCRIPTION_KEY_VARIABLE, preflight)
+
+    def test_a_bad_deepgram_key_file_refuses_a_transcription_run_before_anything_is_sent(self):
+        good = self.deepgram.read_bytes()
+
+        def forbidden(*args, **kwargs):
+            raise AssertionError('the run went past the Deepgram credential')
+        cases = {'missing': lambda: self.deepgram.unlink(),
+                 'mode 0644': lambda: os.chmod(self.deepgram, 0o644),
+                 'mode 0640': lambda: os.chmod(self.deepgram, 0o640),
+                 'mode 0400': lambda: os.chmod(self.deepgram, 0o400),
+                 'symbolic link': lambda: (self.deepgram.rename(self.deepgram.with_name('real-key')),
+                                           self.deepgram.symlink_to(self.deepgram.with_name('real-key'))),
+                 'hard link': lambda: os.link(self.deepgram, self.deepgram.with_name('second-name')),
+                 'two lines': lambda: self.deepgram.write_text(DEEPGRAM_KEY + '\n' + DEEPGRAM_KEY + '\n'),
+                 'empty': lambda: self.deepgram.write_text('')}
+        why = {'missing': 'does not exist', 'mode 0644': 'mode 0600', 'mode 0640': 'mode 0600', 'mode 0400': 'mode 0600',
+               'symbolic link': 'symbolic link', 'hard link': 'another name', 'two lines': 'one non-empty line',
+               'empty': 'one line'}
+        for name, damage in cases.items():
+            with self.subTest(damage=name):
+                for leftover in ('real-key', 'second-name'):
+                    if os.path.lexists(self.deepgram.with_name(leftover)):
+                        os.unlink(self.deepgram.with_name(leftover))
+                if os.path.lexists(self.deepgram):
+                    os.unlink(self.deepgram)
+                self.deepgram.write_bytes(good)
+                os.chmod(self.deepgram, 0o600)
+                damage()
+                with patch.dict(os.environ, self.door), patch.object(os, 'execve', forbidden), \
+                        patch.object(st, 'ensure_database', forbidden), patch.object(pc, 'read_private', forbidden), \
+                        redirect_stderr(io.StringIO()):
+                    with self.assertRaisesRegex(pc.Refused, f'The Deepgram credential: .*{why[name]}'):
+                        st.outer('run', 'transcription')
+
+    def test_inner_refuses_a_deepgram_key_outside_a_transcription_run(self):
+        import httpx
+        env = self.outer({**self.door})['env']                                 # (the preflight's own environment)
+        calls = []
+
+        def models(request):
+            calls.append(request)
+            return httpx.Response(200, json={'id': 'claude-sonnet-5-5'})
+        with patch.object(httpx, 'HTTPTransport', lambda: httpx.MockTransport(models)), \
+                self.assertRaisesRegex(pc.Refused, 'not a transcription run'):
+            self.inner({**env, st.TRANSCRIPTION_KEY_VARIABLE: DEEPGRAM_KEY})
+        self.assertEqual(calls, [])                                             # (nothing was sent)
 
 
 # ── the preflight ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1477,14 +1634,34 @@ class PlanTests(Base):
             case = next(c for c in self.inputs['cases']['cases'] if c['id'] == send['case'])
             self.assertEqual(send['inputs']['notes_sha256'], hashlib.sha256(case['notes'].encode()).hexdigest())
 
-    def test_d30_d31_structure_and_transcription_are_not_established(self):
+    def test_d30_d31_structure_is_not_established(self):
         self.assertFalse(self.definitions['d30_d31_structure']['established'])
         self.assertIn('no provider upload', self.definitions['d30_d31_structure']['statement'])
-        self.assertFalse(self.definitions['transcription']['established'])
-        self.assertIn('neither this runner nor the historical one has a transcription stage',
-                      self.definitions['transcription']['statement'])
         with self.assertRaisesRegex(pc.Refused, 'not established'):
             st.standing_plan('d30_d31_structure', self.inputs)
+
+    def test_the_transcription_plan_is_two_sends_per_allowlisted_recording(self):
+        entry = self.definitions['transcription']
+        self.assertTrue(entry['established'])
+        self.assertEqual([s['id'] for s in entry['sends']],
+                         ['transcription:soap-ankle-speech', 'generation:soap-ankle-speech',
+                          'transcription:colonoscopy-speech', 'generation:colonoscopy-speech'])
+        self.assertEqual([s['path'] for s in entry['sends']], ['transcription', 'transcription_generation'] * 2)
+        self.assertEqual({s['pricing_key'] for s in entry['sends']}, {'transcription'})
+        form = self.inputs['cases']['forms']['r1-11']['sha256']
+        for send in entry['sends']:
+            self.assertEqual(send['inputs'], {'form_sha256': form, 'audio_sha256': st.AUDIO_BY_ID[send['case']].sha256})
+        self.assertEqual(entry['parameters'], {'model': 'nova-3-medical', 'smart_format': 'false', 'mip_opt_out': 'true'})
+        self.assertEqual({a['label'] for a in entry['audio']}, {'synthesized speech, not a human microphone recording'})
+        self.assertEqual([(a['id'], a['sha256']) for a in entry['audio']],
+                         [('soap-ankle-speech', '3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7'),
+                          ('colonoscopy-speech', 'dfd22dfd4facec937dabd3fbaddd4670807fa5b018d86a4df9f425eb9f83e97c')])
+        self.assertEqual(entry['flags']['QUILLMD_DEEPGRAM_MIP_OPT_OUT'], 'true')
+        narrowed = st.standing_plan('transcription', {**self.inputs, 'transcription_audio': ('colonoscopy-speech',)})
+        self.assertEqual([s.id for s in narrowed], ['transcription:colonoscopy-speech', 'generation:colonoscopy-speech'])
+        for chosen in (('other-speech',), ('soap-ankle-speech', 'soap-ankle-speech'), ()):
+            with self.subTest(chosen=chosen), self.assertRaisesRegex(pc.Refused, 'allowlisted recordings only'):
+                st.standing_plan('transcription', {**self.inputs, 'transcription_audio': chosen})
 
     def test_the_declared_send_counts_and_pricing_keys_are_the_plans(self):
         d = parse(self)
@@ -1508,10 +1685,10 @@ class PlanTests(Base):
 # ── the pricing command ──────────────────────────────────────────────────────────────────────────────────────────
 
 class PricingCommandTests(unittest.TestCase):
-    def pricing(self, model, rates):
+    def pricing(self, model, rates, *extra):
         return subprocess.run([sys.executable, '-B', str(REBUILD / 'ops' / 'standing_qa.py'), 'pricing', '--model', model,
                                '--input', rates[0], '--output', rates[1], '--cached', rates[2], '--thinking', 'disabled',
-                               '--effort', 'medium'], capture_output=True, text=True, timeout=300, cwd=str(REBUILD),
+                               '--effort', 'medium', *extra], capture_output=True, text=True, timeout=300, cwd=str(REBUILD),
                               env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'HOME': str(scratch(self)),
                                    'PYTHONDONTWRITEBYTECODE': '1'})
 
@@ -1530,11 +1707,723 @@ class PricingCommandTests(unittest.TestCase):
         self.assertEqual(report['pricing_versions']['ordinary_notes_field_relations'], amended)
         self.assertEqual(report['request_profiles']['mapping_request']['max_output_tokens'], 20000)
 
+    def test_the_transcription_version_is_computed_under_the_declared_rate_and_no_other(self):
+        historical = self.pricing('claude-sonnet-5', ('2', '10', '0.20'), '--deepgram-rate-per-minute', '0.0043')
+        self.assertEqual(historical.returncode, 0, historical.stderr)
+        same = json.loads(historical.stdout)
+        # (positive control: at the historical rate the transcription settings price exactly as the notes stage —
+        # mip_opt_out and smart formatting are not part of the price)
+        self.assertEqual(same['pricing_versions']['transcription'], same['pricing_versions']['ordinary_notes'])
+        declared = self.pricing('claude-sonnet-5', ('2', '10', '0.20'), '--deepgram-rate-per-minute', '0.0077')
+        self.assertEqual(declared.returncode, 0, declared.stderr)
+        other = json.loads(declared.stdout)
+        self.assertNotEqual(other['pricing_versions']['transcription'], same['pricing_versions']['transcription'])
+        self.assertEqual({k: v for k, v in other['pricing_versions'].items() if k != 'transcription'},
+                         {k: v for k, v in same['pricing_versions'].items() if k != 'transcription'})
+        self.assertIn('pricing_version transcription: ' + other['pricing_versions']['transcription'],
+                      other['declaration_lines'])
+        self.assertEqual((other['transcription']['rate_per_minute'], other['transcription']['declaration_line']),
+                         ('0.0077', 'transcription_rate_per_minute: 0.0077'))
+        for entry in st.TRANSCRIPTION_AUDIO:
+            preview = other['transcription']['recordings'][entry.id]
+            if 'unpriced' in preview:
+                self.assertFalse(os.path.exists(entry.path), preview)          # (only a recording not on this host)
+                continue
+            self.assertEqual(Decimal(preview['maximum_cost']),
+                             st.transcription_maximum(Decimal(preview['measured_seconds']), '0.0077'))
+            self.assertTrue(preview['within_standard'])
+        without = json.loads(self.pricing('claude-sonnet-5', ('2', '10', '0.20')).stdout)
+        self.assertNotIn('transcription', without['pricing_versions'])
+        for rate in ('0', '-0.0077', 'abc', '0.00000000001'):
+            with self.subTest(rate=rate):
+                refused = self.pricing('claude-sonnet-5', ('2', '10', '0.20'), f'--deepgram-rate-per-minute={rate}')
+                self.assertEqual(refused.returncode, 2, refused.stdout)
+                self.assertIn('positive USD rate', refused.stderr)
+
     def test_it_refuses_a_model_the_application_has_no_profile_for(self):
         done = self.pricing('claude-sonnet-5-5', ('3', '15', '0.30'))
         self.assertEqual(done.returncode, 2, done.stdout)
         self.assertIn('no valid request profile for claude-sonnet-5-5', done.stderr)
         self.assertEqual(done.stdout, '')
+
+
+
+# ── the transcription stage (T4b) ────────────────────────────────────────────────────────────────────────────────
+
+class TranscriptionDeclarationTests(Base):
+    """The declaration's transcription section: every term stated once and fixed (deepgram, nova-3-medical, a positive
+    per-minute rate, mip_opt_out true, smart formatting false, a credential file of its own), recordings only from the
+    runner's allowlist with their pinned sha256, two sends per recording; no transcription line without the stage and no
+    stage without its section."""
+
+    def test_every_transcription_term_is_required_and_fixed(self):
+        cases = [
+            ('transcription_provider: deepgram', 'transcription_provider: openai', 'provider is deepgram'),
+            ('transcription_model: nova-3-medical', 'transcription_model: nova-2', 'nova-3-medical'),
+            ('transcription_rate_per_minute: 0.0077', 'transcription_rate_per_minute: 0', 'positive USD rate'),
+            ('transcription_rate_per_minute: 0.0077', 'transcription_rate_per_minute: 0.0000', 'positive USD rate'),
+            ('transcription_rate_per_minute: 0.0077', 'transcription_rate_per_minute: -0.0077', 'positive USD rate'),
+            ('transcription_rate_per_minute: 0.0077', 'transcription_rate_per_minute: 0.00000000001', 'positive USD rate'),
+            ('transcription_rate_per_minute: 0.0077', 'transcription_rate_per_minute: 7.7e-3', 'positive USD rate'),
+            ('transcription_mip_opt_out: true', 'transcription_mip_opt_out: false', 'mip_opt_out is `true`'),
+            ('transcription_smart_format: false', 'transcription_smart_format: true', 'smart_format is `false`'),
+            ('transcription_model: nova-3-medical\n', '', 'transcription_model:` exactly once'),
+            ('transcription_model: nova-3-medical\n', 'transcription_model: nova-3-medical\n'
+                                                     '- transcription_model: nova-3-medical\n',
+             'transcription_model:` exactly once'),
+            ('transcription_smart_format: false\n', 'transcription_smart_format: false\ntranscription_language: en\n',
+             'does not know: transcription_language'),
+            ('transcription_credential_file: /nonexistent/standing-qa-test-root/credential/deepgram-api-key',
+             'transcription_credential_file: /nonexistent/standing-qa-test-root/credential/anthropic-api-key',
+             'never the Anthropic credential file'),
+            ('transcription_credential_file: /nonexistent/standing-qa-test-root/credential/deepgram-api-key',
+             'transcription_credential_file: /nonexistent/standing-qa-test-root/.env/deepgram-api-key',
+             'environment file'),
+            ('pricing_version transcription: configured-v1:' + 'e' * 64 + '\n', '',
+             'no declared pricing version for transcription')]
+        for old, new, why in cases:
+            with self.subTest(new=new[:70]), self.assertRaisesRegex(pc.Refused, why):
+                parse(self, edited(old, new))
+
+    def test_only_allowlisted_recordings_with_their_pinned_sha256_are_named(self):
+        soap = 'transcription_input: soap-ankle-speech 3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7'
+        colon = 'transcription_input: colonoscopy-speech dfd22dfd4facec937dabd3fbaddd4670807fa5b018d86a4df9f425eb9f83e97c'
+        cases = [(soap, 'transcription_input: human-dictation ' + '1' * 64, 'not on the runner\'s synthetic-audio'),
+                 (soap, 'transcription_input: soap-ankle-speech ' + '1' * 64, 'not on the runner\'s synthetic-audio'),
+                 (soap, colon.replace('colonoscopy-speech', 'soap-ankle-speech'), 'not on the runner\'s synthetic-audio'),
+                 (colon, soap, 'names a recording twice'),
+                 (soap + '\n', '', 'two sends per recording'),
+                 (soap, '* ' + soap, 'its own line'),
+                 (soap + '\n' + colon + '\n', '', 'its own line')]
+        for old, new, why in cases:
+            with self.subTest(new=new[:70]), self.assertRaisesRegex(pc.Refused, why):
+                parse(self, edited(old, new))
+        narrowed = edited(soap + '\n', '', edited('stage: transcription sends 4', 'stage: transcription sends 2'))
+        d = parse(self, narrowed)
+        self.assertEqual(d.transcription.inputs, ('colonoscopy-speech',))
+        reordered = edited(soap + '\n' + colon, colon + '\n' + soap)
+        self.assertEqual(parse(self, reordered).transcription.inputs, ('soap-ankle-speech', 'colonoscopy-speech'))
+
+    def test_a_transcription_section_needs_its_stage_and_the_stage_its_section(self):
+        with self.assertRaisesRegex(pc.Refused, 'declares no transcription stage'):
+            parse(self, edited('stage: transcription sends 4 requires model_check_passed\n', ''))
+        text = fixture_text()
+        start, end = text.index('## Transcription, fixed before any send'), text.index('## Bounds')
+        without = (text[:start] + text[end:]).replace('stage: transcription sends 4 requires model_check_passed\n', '')
+        without = re.sub(r'^transcription_(credential_file|input): .*\n', '', without, flags=re.M)
+        d = parse(self, without)
+        self.assertIsNone(d.transcription)
+        self.assertNotIn('transcription', [s.id for s in d.stages])
+        stage_back = without.replace('stage: notes_comparison sends 28 requires model_check_passed\n',
+                                     'stage: notes_comparison sends 28 requires model_check_passed\n'
+                                     'stage: transcription sends 4 requires model_check_passed\n')
+        with self.assertRaisesRegex(pc.Refused, 'no declared pricing version for transcription'):
+            parse(self, stage_back)
+        relations = 'pricing_version ordinary_notes_field_relations: configured-v1:' + 'd' * 64 + '\n'
+        with self.assertRaisesRegex(pc.Refused, 'transcription_provider:` exactly once'):
+            parse(self, stage_back.replace(relations, relations + 'pricing_version transcription: configured-v1:'
+                                                                  + 'e' * 64 + '\n'))
+        with self.assertRaisesRegex(pc.Refused, 'declares no transcription stage'):
+            st.load_transcription_credential(d)
+        with self.assertRaisesRegex(pc.Refused, 'declares no transcription stage'):
+            st.stage_inputs('transcription', d)
+
+
+class TranscriptionCredentialTests(Base):
+    """The Deepgram key is read from the declared file only, by provider_campaign.load_credential's rules — every one
+    checked before a byte is read — and each bad condition refuses."""
+
+    def setUp(self):
+        self.folder = scratch(self) / 'credential'
+        self.folder.mkdir(mode=0o700)
+        self.key = self.folder / 'deepgram-api-key'
+        self.key.write_text(DEEPGRAM_KEY + '\n')
+        os.chmod(self.key, 0o600)
+        d = parse(self)
+        self.d = dataclasses.replace(d, transcription=dataclasses.replace(d.transcription,
+                                                                          credential_file=str(self.key)))
+
+    def test_the_declared_file_with_the_right_shape_is_read(self):
+        self.assertEqual(st.load_transcription_credential(self.d), DEEPGRAM_KEY)
+
+    def test_each_bad_condition_refuses(self):
+        with self.assertRaisesRegex(pc.Refused, 'Only the declared transcription_credential_file'):
+            st.load_transcription_credential(self.d, str(self.folder / 'other'))
+        os.chmod(self.key, 0o644)
+        with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*mode 0600'):
+            st.load_transcription_credential(self.d)
+        os.chmod(self.key, 0o600)
+        with patch.object(os, 'getuid', lambda: os.geteuid() + 1), \
+                self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*owned by the account'):
+            st.load_transcription_credential(self.d)
+        os.link(self.key, self.folder / 'second-name')
+        with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*another name'):
+            st.load_transcription_credential(self.d)
+        os.unlink(self.folder / 'second-name')
+        real = self.folder / 'real-key'
+        self.key.rename(real)
+        self.key.symlink_to(real)
+        with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*symbolic link'):
+            st.load_transcription_credential(self.d)
+        os.unlink(self.key)
+        with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*does not exist'):
+            st.load_transcription_credential(self.d)
+        linked = scratch(self) / 'linked-folder'
+        linked.symlink_to(self.folder)                                     # (a link at a DIRECTORY component)
+        real.rename(self.key)
+        through = dataclasses.replace(self.d, transcription=dataclasses.replace(
+            self.d.transcription, credential_file=str(linked / 'deepgram-api-key')))
+        with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*symbolic link'):
+            st.load_transcription_credential(through)
+        self.key.write_text(DEEPGRAM_KEY + ' trailing\n')
+        with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*one non-empty line'):
+            st.load_transcription_credential(self.d)
+        self.key.unlink()
+        self.key.mkdir(mode=0o700)
+        with self.assertRaisesRegex(pc.Refused, 'The Deepgram credential: .*not a regular file'):
+            st.load_transcription_credential(self.d)
+
+
+class TranscriptionGuardTests(unittest.TestCase):
+    """The transport guard of a transcription send (standing_qa_transcription.install_transcription_guard, on the
+    campaign's own guard): exactly ONE request — POST https://api.deepgram.com/v1/listen, exactly the declared
+    parameters and key — recorded without its credential and with its exact body BEFORE it leaves, its response retained
+    as received; anything else refused before the network; outside a transcription attempt, the campaign guard."""
+    PARAMETERS = {'model': 'nova-3-medical', 'smart_format': 'false', 'mip_opt_out': 'true'}
+
+    def setUp(self):
+        import httpx
+        self.tr = st.transcription_module()
+        self.root = scratch(self)
+        self.evidence = self.root / 'evidence' / '001'
+        self.evidence.mkdir(parents=True, mode=0o700)
+        self.seen = []
+
+        def network(transport, request):
+            self.seen.append({'url': str(request.url), 'authorization': request.headers.get('authorization'),
+                              'body': request.content})
+            return httpx.Response(200, headers={'dg-request-id': 'synthetic-dg-request', 'content-type':
+                                                'application/json'},
+                                  json={'metadata': {'request_id': 'synthetic-dg-request', 'duration': 43.5},
+                                        'results': {'channels': [{'alternatives': [{'transcript': 'synthetic words'}]}]}})
+        pc.install_transport_guard()
+        self.addCleanup(pc.uninstall_transport_guard)
+        self.tr.install_transcription_guard(network=network)
+        self.addCleanup(self.tr.uninstall_transcription_guard)
+        self.addCleanup(pc.CURRENT_ATTEMPT.clear)
+        self.addCleanup(pc.SENT.clear)
+        pc.SENT.clear()
+        self.body = b'RIFF' + bytes(4096)
+
+    def attempt(self, number=1, transcription=True, **changes):
+        pc.CURRENT_ATTEMPT.clear()
+        pc.CURRENT_ATTEMPT.update(number=number, evidence_dir=str(self.evidence), secret=SYNTHETIC_KEY)
+        if transcription:
+            pc.CURRENT_ATTEMPT['transcription'] = {'parameters': dict(self.PARAMETERS), 'secret': DEEPGRAM_KEY, **changes}
+
+    def post(self, url=st.DEEPGRAM_URL, params=None, headers=None, content=None, method='POST'):
+        import httpx
+        headers = {'Authorization': f'Token {DEEPGRAM_KEY}', 'Content-Type': 'application/octet-stream'} \
+            if headers is None else headers
+        with httpx.Client() as client:
+            return client.request(method, url, params=self.PARAMETERS if params is None else params, headers=headers,
+                                  content=self.body if content is None else content, timeout=5)
+
+    def test_the_declared_request_is_recorded_before_it_leaves_and_its_response_retained(self):
+        self.attempt()
+        response = self.post()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(self.seen), 1)
+        self.assertEqual(self.seen[0]['authorization'], f'Token {DEEPGRAM_KEY}')     # (the request carried the key)
+        request = json.loads((self.evidence / 'request.json').read_text())
+        self.assertEqual((request['method'], request['params']), ('POST', self.PARAMETERS))
+        self.assertEqual(request['url'].split('?')[0], st.DEEPGRAM_URL)
+        self.assertNotIn('authorization', request['headers'])
+        self.assertEqual(request['removed_headers'], ['authorization'])
+        self.assertEqual((request['body_sha256'], request['body_bytes']),
+                         (hashlib.sha256(self.body).hexdigest(), len(self.body)))
+        self.assertEqual((self.evidence / 'request.body').read_bytes(), self.body)
+        received = pc.received_response(self.evidence)
+        self.assertEqual((received['status_code'], received['body_json']['metadata']['request_id']),
+                         (200, 'synthetic-dg-request'))
+        self.assertEqual(pc.leaked(self.root, DEEPGRAM_KEY), [])                     # (no key anywhere retained)
+        self.assertEqual(pc.leaked(self.root, SYNTHETIC_KEY), [])
+        with self.assertRaisesRegex(pc.Refused, 'second send'):
+            self.post()
+        self.assertEqual(len(self.seen), 1)
+
+    def test_anything_but_the_declared_request_is_refused_before_it_leaves(self):
+        cases = {'smart formatting on': dict(params={**self.PARAMETERS, 'smart_format': 'true'}),
+                 'no opt-out': dict(params={'model': 'nova-3-medical', 'smart_format': 'false'}),
+                 'opt-out false': dict(params={**self.PARAMETERS, 'mip_opt_out': 'false'}),
+                 'another model': dict(params={**self.PARAMETERS, 'model': 'nova-3'}),
+                 'an extra parameter': dict(params={**self.PARAMETERS, 'callback': 'https://example.invalid/'}),
+                 'a repeated parameter': dict(params=list(self.PARAMETERS.items()) + [('model', 'nova-3-medical')]),
+                 'another host': dict(url='https://api.deepgram.com.example.invalid/v1/listen'),
+                 'another path': dict(url='https://api.deepgram.com/v1/listen/extra'),
+                 'plain http': dict(url='http://api.deepgram.com/v1/listen'),
+                 'another port': dict(url='https://api.deepgram.com:8443/v1/listen'),
+                 'the Messages URL': dict(url='https://api.anthropic.com/v1/messages'),
+                 'GET': dict(method='GET'),
+                 'another key': dict(headers={'Authorization': 'Token another-key-0000000000000000000000000000',
+                                              'Content-Type': 'application/octet-stream'}),
+                 'no key': dict(headers={'Content-Type': 'application/octet-stream'}),
+                 'a second credential header': dict(headers={'Authorization': f'Token {DEEPGRAM_KEY}',
+                                                             'x-api-key': SYNTHETIC_KEY,
+                                                             'Content-Type': 'application/octet-stream'}),
+                 'another content type': dict(headers={'Authorization': f'Token {DEEPGRAM_KEY}',
+                                                       'Content-Type': 'application/json'}),
+                 'an empty body': dict(content=b'')}
+        for name, change in cases.items():
+            with self.subTest(case=name):
+                pc.SENT.clear()
+                self.attempt()
+                with self.assertRaises(pc.Refused):
+                    self.post(**change)
+                self.assertEqual(self.seen, [])
+                self.assertFalse((self.evidence / 'request.json').exists())
+
+    def test_outside_a_transcription_attempt_the_campaign_guard_refuses_deepgram(self):
+        self.attempt(transcription=False)
+        with self.assertRaisesRegex(pc.Refused, 'refused at the transport'):
+            self.post()
+        pc.CURRENT_ATTEMPT.clear()
+        with self.assertRaisesRegex(pc.Refused, 'outside an attempt'):
+            self.post()
+        self.assertEqual(self.seen, [])
+
+    def test_the_guard_sits_on_the_campaign_guard_and_comes_off_cleanly(self):
+        import httpx
+        self.tr.uninstall_transcription_guard()
+        self.assertTrue(getattr(httpx.HTTPTransport.handle_request, '_campaign_guard', False))
+        self.assertFalse(getattr(httpx.HTTPTransport.handle_request, '_transcription_guard', False))
+        pc.uninstall_transport_guard()
+        with self.assertRaisesRegex(pc.Refused, 'campaign\'s transport guard'):
+            self.tr.install_transcription_guard()
+
+
+def transcription_inputs(audio=('soap-ankle-speech', 'colonoscopy-speech')):
+    return {**sq.stages_module().frozen_inputs(), 'transcription_audio': tuple(audio)}
+
+
+class TranscriptionLedgerTests(Base):
+    """At the last door before a send (StandingLedger.write_attempt) and before a run opens (begin_run): only the
+    allowlisted recording of THIS send, allowed by its run and never restricted, is ever attempted; a send is
+    attempted once; and read_audio gives only the pinned bytes."""
+
+    def open_run(self, campaign, audio=('soap-ankle-speech',)):
+        inputs = transcription_inputs(audio)
+        sends = st.standing_plan('transcription', inputs)
+        return st.begin_run(campaign, 'transcription', sends, inputs, len(sends), {'runner_commit': RUNNER_COMMIT}), \
+            sends, inputs
+
+    def transcription_attempt(self, campaign, planned, inputs, **changes):
+        d = campaign.declaration
+        record = {'number': len(campaign.ledger.rows()) + 1, 'campaign': d.campaign, 'authority_id': d.authority_id,
+                  'stage': 'transcription', 'send': planned.record(), 'maximum_cost': '0.010000',
+                  'rates': d.rates.as_dict(), **{k: v for k, v in st.send_inputs(planned, inputs).items()},
+                  'limits': campaign.limits().record(), 'terms': campaign.pinned_terms().record(),
+                  'runner_commit': RUNNER_COMMIT, 'started_at': pc.now()}
+        record.update(changes)
+        return record
+
+    def test_an_allowlisted_recording_is_admitted_and_recorded(self):
+        campaign = self.campaign()
+        self.pass_model_check(campaign)
+        run, sends, inputs = self.open_run(campaign)
+        self.assertEqual(run['audio'], [st.AUDIO_BY_ID['soap-ankle-speech'].record()])
+        self.assertIn(st.AUDIO_BY_ID['soap-ankle-speech'].sha256, run['allowed_inputs'])
+        self.assertEqual(campaign.admit('transcription', '0.01', runner_commit=RUNNER_COMMIT), Decimal('0.011'))
+        written = self.transcription_attempt(campaign, sends[0], inputs)
+        campaign.ledger.write_attempt(written)
+        attempt, _ = campaign.ledger.rows()[-1]
+        self.assertEqual((attempt['send_key'], attempt['audio_sha256'], attempt['run_id']),
+                         ('transcription:transcription:soap-ankle-speech', st.AUDIO_BY_ID['soap-ankle-speech'].sha256,
+                          run['run_id']))
+        self.assertIsNone(attempt['monetary_ceiling'])
+
+    def test_a_recording_that_is_not_this_sends_allowlisted_speech_is_refused_at_the_last_door(self):
+        campaign = self.campaign()
+        run, sends, inputs = self.open_run(campaign)
+        colon = st.AUDIO_BY_ID['colonoscopy-speech'].sha256
+        cases = [{'audio_sha256': 'a' * 64}, {'audio_sha256': colon}, {'audio_sha256': None},
+                 {'send': {**sends[0].record(), 'case': 'human-dictation'}},
+                 {'send': {**sends[0].record(), 'path': 'default'}}]
+        for change in cases:
+            with self.subTest(change=str(change)[:80]), self.assertRaisesRegex(pc.Refused, 'allowlisted synthetic speech'):
+                campaign.ledger.write_attempt(self.transcription_attempt(campaign, sends[0], inputs, **change))
+        missing = self.transcription_attempt(campaign, sends[0], inputs)
+        del missing['audio_sha256']
+        with self.assertRaisesRegex(pc.Refused, 'allowlisted synthetic speech'):
+            campaign.ledger.write_attempt(missing)
+        notes = self.notes_attempt(campaign, st.standing_plan('notes_comparison', inputs)[0], inputs,
+                                   {'audio_sha256': colon})
+        with self.assertRaisesRegex(pc.Refused, 'another campaign, authority or stage|allowlisted synthetic speech'):
+            campaign.ledger.write_attempt(notes)
+        self.assertEqual(campaign.ledger.rows(), [])
+
+    def test_a_restricted_recording_never_opens_a_run(self):
+        campaign = self.campaign(restricted=(st.AUDIO_BY_ID['soap-ankle-speech'].sha256,))
+        with self.assertRaisesRegex(pc.Refused, 'no provider upload'):
+            self.open_run(campaign)
+        self.assertEqual(campaign.runs.listing(), [])
+        other = self.campaign(restricted=(st.AUDIO_BY_ID['soap-ankle-speech'].sha256,))
+        run, sends, inputs = self.open_run(other, audio=('colonoscopy-speech',))
+        forged = self.transcription_attempt(other, sends[0], inputs)
+        with patch.dict(st.AUDIO_BY_ID, {'colonoscopy-speech': dataclasses.replace(
+                st.AUDIO_BY_ID['colonoscopy-speech'], sha256=st.AUDIO_BY_ID['soap-ankle-speech'].sha256)}):
+            forged['audio_sha256'] = st.AUDIO_BY_ID['soap-ankle-speech'].sha256
+            with self.assertRaises(pc.Refused):
+                other.ledger.write_attempt(forged)
+
+    def test_a_send_is_never_attempted_twice(self):
+        campaign = self.campaign()
+        run, sends, inputs = self.open_run(campaign)
+        campaign.ledger.write_attempt(self.transcription_attempt(campaign, sends[0], inputs))
+        campaign.ledger.write_outcome(1, {'class': 'completed', 'provider_cost': '0.0055'})
+        with self.assertRaisesRegex(pc.Refused, 'already has an attempt'):
+            campaign.ledger.write_attempt(self.transcription_attempt(campaign, sends[0], inputs))
+        self.assertEqual([s.id for s in st.remaining_sends(campaign, 'transcription', sends)],
+                         ['generation:soap-ankle-speech'])
+        totals = campaign.totals('transcription')                         # (costed by its duration, never tokens)
+        self.assertEqual((totals['exposure'], totals['unknown']), (Decimal('0.0055'), 0))
+
+    def test_read_audio_gives_only_the_pinned_bytes(self):
+        folder = scratch(self)
+        path = folder / 'synthetic.wav'
+        data = b'RIFF' + bytes(range(256)) * 8
+        path.write_bytes(data)
+        entry = st.SyntheticAudio('synthetic-test-speech', str(path), hashlib.sha256(data).hexdigest(), len(data),
+                                  'test bytes')
+        with self.assertRaisesRegex(pc.Refused, 'Only an entry'):
+            st.read_audio(entry)                                           # (not on the allowlist)
+        with patch.dict(st.AUDIO_BY_ID, {entry.id: entry}):
+            self.assertEqual(st.read_audio(entry), data)
+            path.write_bytes(data[:-1] + b'\x01')
+            with self.assertRaisesRegex(pc.Refused, 'is not the allowlisted synthetic speech'):
+                st.read_audio(entry)
+            path.unlink()
+            (folder / 'elsewhere.wav').write_bytes(data)
+            path.symlink_to(folder / 'elsewhere.wav')
+            with self.assertRaisesRegex(pc.Refused, 'cannot be opened'):
+                st.read_audio(entry)
+        with self.assertRaisesRegex(pc.Refused, 'not a recording on the runner'):
+            st.audio_entry('human-dictation')
+
+    def test_the_allowlisted_recordings_on_this_host_are_the_pinned_bytes(self):
+        for entry in st.TRANSCRIPTION_AUDIO:
+            with self.subTest(entry=entry.id):
+                if not os.path.exists(entry.path):
+                    self.skipTest(f'{entry.path} is not on this host')
+                self.assertEqual(hashlib.sha256(st.read_audio(entry)).hexdigest(), entry.sha256)
+
+
+class StopRaceTests(Base):
+    """L1:R1-F4 / L2:R2-F2: the operator's Stop file appearing AFTER run_stage's loop check, inside a send before its
+    attempt is written — at its preview admission, its admission (which the real worker turns into a StageStop after
+    cancelling the job) or its attempt record — HALTS the run (exit 4, the stage open, a job it had queued cancelled),
+    exactly like the loop's own check; the next run resumes. Attribution is by the refusal's TYPE: any other refusal,
+    even while a Stop file exists, and a campaign stop still fail the stage."""
+    setUp = StageRunTests.setUp
+    prepared = StageRunTests.prepared
+    run_mapping = StageRunTests.run_mapping
+    attempted = StageRunTests.attempted
+    SEND = 'mapping:f2-leave-checkboxes'
+
+    def race(self, campaign, hook, extra=None):
+        def appear(send):
+            if send.id == self.SEND:
+                campaign.stop_file().write_text('')
+                if extra is not None:
+                    extra(send)
+        FakeWorker.hooks = {hook: appear}
+        try:
+            return self.run_mapping(campaign)
+        finally:
+            FakeWorker.hooks = {}
+
+    def assert_halted_then_resumes(self, campaign, result):
+        plan = [s.id for s in st.standing_plan('mapping', sq.stages_module().frozen_inputs())]
+        at = plan.index(self.SEND)
+        self.assertEqual((result['decision'], result['verdict'], result['reasons']), ('halted', 'HALTED', []))
+        self.assertEqual(st.EXIT[result['verdict']], 4)
+        self.assertEqual(result['summary']['not_sent'], plan[at:])
+        self.assertIn('before its attempt was written', result['summary']['halted'])
+        self.assertEqual(result['summary']['halt_jobs'], {'cancelled': []})
+        self.assertEqual(len(self.cancellations), 2)                        # (the run's start, then the halt)
+        self.assertEqual(self.attempted(campaign), plan[:at])
+        self.assertEqual(campaign.ledger.stage_state('mapping')['state'], 'open')          # (not failed)
+        self.assertEqual(campaign.runs.listing()[-1][1]['closed_as'], 'halted')
+        with self.assertRaisesRegex(pc.Refused, 'Stop file'):
+            self.run_mapping(campaign)                                       # (while it stands, nothing runs)
+        campaign.stop_file().unlink()                                        # (the operator lifts the halt)
+        resumed = self.run_mapping(campaign)
+        self.assertEqual((resumed['decision'], resumed['verdict']), ('passed', 'PASS'), resumed['reasons'])
+        self.assertEqual(sorted(self.attempted(campaign)), sorted(plan))
+
+    def test_met_at_the_preview_admission_it_halts(self):
+        campaign = self.prepared()
+        self.assert_halted_then_resumes(campaign, self.race(campaign, 'start'))
+        self.assertEqual(FakeWorker.refused_jobs, [])
+
+    def test_met_at_the_admission_it_halts_and_the_queued_job_is_cancelled(self):
+        campaign = self.prepared()
+        result = self.race(campaign, 'pre_attempt')
+        self.assertEqual(FakeWorker.refused_jobs, [self.SEND])               # (refuse_job's StageStop carried the halt)
+        self.assert_halted_then_resumes(campaign, result)
+
+    def test_met_at_the_attempt_record_it_halts_and_the_queued_job_is_cancelled(self):
+        campaign = self.prepared()
+        result = self.race(campaign, 'before_write')
+        self.assertEqual(FakeWorker.refused_jobs, [])                        # (the worker's own cancel never ran ...)
+        self.assertEqual(len(self.cancellations), 2)                         # (... so the halt cancelled what was queued)
+        self.assert_halted_then_resumes(campaign, result)
+
+    def test_any_other_refusal_still_fails_the_stage_even_with_a_stop_file(self):
+        campaign = self.prepared()
+
+        def other(send):
+            raise pc.Refused('The area decisions were refused (500). The Stop file exists; nothing is sent.')
+        result = self.race(campaign, 'pre_attempt', extra=other)
+        self.assertEqual((result['decision'], result['verdict']), ('failed', 'FAIL'))
+        self.assertEqual(campaign.ledger.stage_state('mapping')['state'], 'failed')
+        self.assertNotIn('halt_jobs', result['summary'])
+
+    def test_a_campaign_stop_inside_a_send_still_fails_the_stage(self):
+        campaign = self.prepared()
+
+        def stop(send):
+            if send.id == self.SEND:
+                campaign.ledger.write_stop({'reason': 'synthetic campaign stop'})
+        FakeWorker.hooks = {'pre_attempt': stop}
+        result = self.run_mapping(campaign)
+        FakeWorker.hooks = {}
+        self.assertEqual((result['decision'], result['verdict']), ('failed', 'FAIL'))
+        self.assertIn('campaign is stopped', '; '.join(result['reasons']))
+
+    def test_the_model_check_halts_too_and_any_other_refusal_still_refuses(self):
+        campaign = self.campaign()
+        folder = campaign.root / 'preflight' / '001'
+        folder.mkdir(parents=True)
+        (folder / 'result.json').write_text(json.dumps({'matches_declared': True, 'campaign': campaign.declaration.campaign,
+                                                         'model_returned': campaign.declaration.model}))
+
+        def appears(inside, **kwargs):
+            inside.stop_file().write_text('')         # (after run_model_check's own checks, before the attempt record)
+            inside.require_not_stopped()
+        with patch.object(sq, 'run_model_check', appears):
+            result = st.run_model_check(campaign, secret=SYNTHETIC_KEY, provenance={'runner_commit': RUNNER_COMMIT})
+        self.assertEqual((result['verdict'], result['decision'], result['reasons']), ('HALTED', 'halted', []))
+        self.assertEqual(st.EXIT[result['verdict']], 4)
+        self.assertEqual(result['halt_jobs'], {'cancelled': []})
+        self.assertEqual(campaign.runs.listing()[-1][1]['closed_as'], 'halted')
+        self.assertEqual(campaign.ledger.stage_state('model_check')['state'], 'open')
+        campaign.stop_file().unlink()
+
+        def other(inside, **kwargs):
+            raise pc.Refused('The page offers no Generate form.')
+        with patch.object(sq, 'run_model_check', other), self.assertRaisesRegex(pc.Refused, 'no Generate form'):
+            st.run_model_check(campaign, secret=SYNTHETIC_KEY, provenance={'runner_commit': RUNNER_COMMIT})
+        self.assertEqual(campaign.runs.listing()[-1][1]['closed_as'], 'refused_before_attempt')
+        self.assertEqual(len(self.cancellations), 1)                         # (only the halt cancelled anything)
+
+    def test_the_halt_is_read_from_the_refusals_type_one_link_deep(self):
+        stages = sq.stages_module()
+        self.assertTrue(st.stopped_by_halt(st.StopFileHalt('x')))
+        try:
+            try:
+                raise st.StopFileHalt('The Stop file exists')
+            except pc.Refused:
+                raise stages.StageStop('refused; the job was cancelled unsent')
+        except stages.StageStop as stop:
+            self.assertTrue(st.stopped_by_halt(stop))
+        try:
+            try:
+                raise pc.Refused('The Stop file /x/STOP exists; nothing is sent.')       # (the words, not the type)
+            except pc.Refused:
+                raise stages.StageStop('refused')
+        except stages.StageStop as stop:
+            self.assertFalse(st.stopped_by_halt(stop))
+        try:
+            try:
+                try:
+                    raise st.StopFileHalt('The Stop file exists')
+                except pc.Refused:
+                    raise pc.Refused('something else went wrong while handling it')
+            except pc.Refused:
+                raise stages.StageStop('refused')
+        except stages.StageStop as stop:
+            self.assertFalse(st.stopped_by_halt(stop))                       # (two links: not this send's halt)
+        self.assertFalse(st.stopped_by_halt(pc.Refused('The Stop file exists; nothing is sent.')))
+
+
+class TranscriptionStageRunTests(Base):
+    """The REAL run_stage for the transcription stage — its credential rule, plan, pairing, runs, admission, ledger,
+    halts and decision — with the Django-bound helpers and the per-send worker stood in (FakeWorker)."""
+    prepared = StageRunTests.prepared
+
+    def setUp(self):
+        StageRunTests.setUp(self)
+        tr = st.transcription_module()
+        for stand_in in (patch.object(tr, 'preconditions', lambda campaign, **k: {'stand_in': True}),
+                         patch.object(tr, 'planned_maxima', lambda sends, d: {s.id: Decimal('0.01') for s in sends}),
+                         patch.object(tr, 'TranscriptionRun', FakeWorker)):
+            stand_in.start()
+            self.addCleanup(stand_in.stop)
+
+    def run_transcription(self, campaign, **kwargs):
+        kwargs.setdefault('transcription_secret', DEEPGRAM_KEY)
+        return st.run_stage(campaign, 'transcription', secret=SYNTHETIC_KEY, provenance={'runner_commit': RUNNER_COMMIT},
+                            **kwargs)
+
+    def attempted(self, campaign):
+        return [a['send']['id'] for a, _ in campaign.ledger.rows() if a['stage'] == 'transcription']
+
+    def test_each_recording_is_transcribed_then_generated_on_and_the_stage_passes(self):
+        campaign = self.prepared()
+        result = self.run_transcription(campaign)
+        self.assertEqual((result['decision'], result['verdict']), ('passed', 'PASS'), result['reasons'])
+        self.assertEqual(self.attempted(campaign), ['transcription:soap-ankle-speech', 'generation:soap-ankle-speech',
+                                                    'transcription:colonoscopy-speech', 'generation:colonoscopy-speech'])
+        opened = campaign.runs.listing()[-1][0]
+        self.assertEqual([a['id'] for a in opened['audio']], ['soap-ankle-speech', 'colonoscopy-speech'])
+        self.assertEqual({a['label'] for a in opened['audio']}, {st.AUDIO_LABEL})
+        for attempt, _ in campaign.ledger.rows()[1:]:
+            self.assertEqual(attempt['audio_sha256'], st.AUDIO_BY_ID[attempt['send']['case']].sha256)
+        with self.assertRaisesRegex(pc.Refused, 'already passed'):
+            self.run_transcription(campaign)                                 # (never twice)
+
+    def test_the_deepgram_key_reaches_a_transcription_run_only(self):
+        campaign = self.prepared()
+        with self.assertRaisesRegex(pc.Refused, 'transcription run only'):
+            self.run_transcription(campaign, transcription_secret=None)
+        with self.assertRaisesRegex(pc.Refused, 'transcription run only'):
+            st.run_stage(campaign, 'mapping', secret=SYNTHETIC_KEY, provenance={'runner_commit': RUNNER_COMMIT},
+                         transcription_secret=DEEPGRAM_KEY)
+        self.assertEqual(len(campaign.runs.listing()), 1)                    # (only the model check's run)
+
+    def test_a_halt_between_a_transcription_and_its_generation_refuses_every_later_run(self):
+        campaign = self.prepared()
+
+        def in_flight(send):
+            if send.id == 'transcription:soap-ankle-speech':
+                campaign.stop_file().write_text('')
+        FakeWorker.hooks = {'in_flight': in_flight}
+        first = self.run_transcription(campaign)
+        FakeWorker.hooks = {}
+        campaign.stop_file().unlink()
+        self.assertEqual((first['decision'], first['summary']['not_sent']),
+                         ('halted', ['generation:soap-ankle-speech', 'transcription:colonoscopy-speech',
+                                     'generation:colonoscopy-speech']))
+        for _ in range(2):
+            with self.assertRaises(pc.Refused) as caught:
+                self.run_transcription(campaign)
+            self.assertIn("generation:soap-ankle-speech needs its recording's transcription send in the same run, and "
+                          'that send was already made; it is not sent', str(caught.exception))
+            self.assertIn('Stage transcription cannot pass in this campaign', str(caught.exception))
+        self.assertEqual(self.attempted(campaign), ['transcription:soap-ankle-speech'])
+        self.assertNotEqual(campaign.ledger.stage_state('transcription')['state'], 'passed')
+
+    def test_a_stop_file_met_before_a_transcription_attempt_halts_and_the_run_resumes(self):
+        campaign = self.prepared()
+
+        def appear(send):
+            if send.id == 'transcription:colonoscopy-speech':
+                campaign.stop_file().write_text('')
+        FakeWorker.hooks = {'pre_attempt': appear}
+        first = self.run_transcription(campaign)
+        FakeWorker.hooks = {}
+        self.assertEqual((first['decision'], first['verdict'], first['reasons']), ('halted', 'HALTED', []))
+        self.assertEqual(campaign.ledger.stage_state('transcription')['state'], 'open')
+        campaign.stop_file().unlink()
+        resumed = self.run_transcription(campaign)
+        self.assertEqual((resumed['decision'], resumed['verdict']), ('passed', 'PASS'), resumed['reasons'])
+
+    def test_a_retained_copy_of_the_deepgram_key_stops_the_campaign_at_the_runs_close(self):
+        campaign = self.prepared()
+
+        def in_flight(send):
+            if send.id == 'transcription:soap-ankle-speech':
+                folder = pc.private_directory(campaign.root / 'evidence' / 'stray')
+                (folder / 'note.txt').write_text('synthetic stray ' + DEEPGRAM_KEY)
+        FakeWorker.hooks = {'in_flight': in_flight}
+        result = self.run_transcription(campaign)
+        FakeWorker.hooks = {}
+        self.assertEqual((result['decision'], result['verdict']), ('failed', 'FAIL'))
+        self.assertIn('the final leak scan did not come back clean', result['reasons'])
+        self.assertIsNotNone(campaign.ledger.campaign_stop())
+
+
+
+class TranscriptJudgeTests(unittest.TestCase):
+    """What a transcript's generation is judged by (pure): every ADOPTED answer must cite the saved notes at its own
+    offsets and say nothing its citations do not; a signature or initials field is never answered."""
+    NOTES = 'indication screening colonoscopy for a synthetic patient findings no polyps were seen'
+
+    def answer(self, text, start, end, quote=None):
+        return {'status': 'supported', 'text': text,
+                'evidence': [{'start': start, 'end': end, 'quote': self.NOTES[start:end] if quote is None else quote}]}
+
+    def test_source_support(self):
+        tr = st.transcription_module()
+        whole = len(self.NOTES)
+        self.assertEqual(tr.source_support_problems(self.answer('screening colonoscopy', 0, whole), self.NOTES), [])
+        self.assertEqual(tr.source_support_problems(self.answer('screening   colonoscopy\n', 0, whole), self.NOTES), [])
+        cases = [({'status': 'supported', 'text': 'screening colonoscopy', 'evidence': []}, 'cites no source'),
+                 (self.answer('screening colonoscopy', 0, whole, quote='screening colonoscopy'), 'at its offsets'),
+                 (self.answer('screening colonoscopy', 0, 10), 'in none of its citations'),
+                 (self.answer('a polyp was removed', 0, whole), 'in none of its citations'),
+                 (self.answer('', 0, whole), 'is empty'),
+                 ({'status': 'supported', 'text': 'x', 'evidence': [{'start': '0', 'end': 5, 'quote': 'indic'}]},
+                  'at its offsets'),
+                 ({'status': 'supported', 'text': 'x', 'evidence': 'indication'}, 'cites no source')]
+        for answer, why in cases:
+            with self.subTest(answer=str(answer)[:70]):
+                self.assertTrue(any(why in p for p in tr.source_support_problems(answer, self.NOTES)),
+                                tr.source_support_problems(answer, self.NOTES))
+
+    def test_an_unsupported_or_protected_adoption_stops_the_stage(self):
+        from types import SimpleNamespace
+        tr = st.transcription_module()
+        evidence = scratch(self)
+        fields = [{'key': 'v3_1', 'label': 'Chief complaint', 'kind': 'text'},
+                  {'key': 'v3_2', 'label': 'Clinician signature', 'kind': 'signature'},
+                  {'key': 'v3_3', 'label': 'Plan', 'kind': 'long_text'}]
+        version = SimpleNamespace(fields=fields)
+        answers = {'v3_1': self.answer('a polyp was removed', 0, len(self.NOTES)),
+                   'v3_2': self.answer('synthetic patient', 0, len(self.NOTES)),
+                   'v3_3': {'status': 'missing', 'text': '', 'evidence': []}}
+        (evidence / 'answers-adopted.json').write_text(json.dumps({'answers': answers}))
+        outcomes = {key: {'status': value['status'], 'text': value['text']} for key, value in answers.items()}
+        fields_out, findings, details = tr.TranscriptionRun.judge_transcript(self.NOTES)(
+            None, version, outcomes, b'', b'', raw={}, reviewed={}, evidence=evidence)
+        self.assertEqual(fields_out, {'v3_1': 'adopted', 'v3_2': 'adopted', 'v3_3': 'missing'})
+        codes = sorted(f['code'] for f in findings)
+        self.assertEqual(codes, ['adopted_without_source_support', 'protected_area_answered'])
+        verdict = pc.classify_case(fields_out, codes)
+        self.assertEqual((verdict['verdict'], verdict['stops_stage']), ('unsafe', True))
+        self.assertEqual(details['source_support']['v3_2']['problems'], [])
+        answers['v3_1'] = self.answer('screening colonoscopy', 0, len(self.NOTES))
+        del answers['v3_2']
+        (evidence / 'answers-adopted.json').unlink()
+        (evidence / 'answers-adopted.json').write_text(json.dumps({'answers': answers}))
+        fields_out, findings, _ = tr.TranscriptionRun.judge_transcript(self.NOTES)(
+            None, version, {k: {'status': v['status']} for k, v in answers.items()}, b'', b'', raw={}, reviewed={},
+            evidence=evidence)
+        self.assertEqual((findings, pc.classify_case(fields_out, [])['stops_stage']), ([], False))
+
+    def test_the_page_offers_the_transcript_as_a_browser_would_submit_it(self):
+        from types import SimpleNamespace
+        tr = st.transcription_module()
+        job = SimpleNamespace(pk='1f6c0c9e-0000-4000-8000-000000000001')
+        page = ('<form method="post" action="/encounters/x/notes/" data-transcript-form><input type="hidden" '
+                f'name="transcript_job" value="{job.pk}"><textarea id="t" name="corrected_transcript" rows="8">\n'
+                'left &amp; right ankle &lt;synthetic&gt;</textarea></form>')
+        self.assertEqual(tr.transcript_shown(page, job), 'left & right ankle <synthetic>')
+        self.assertIsNone(tr.transcript_shown(page.replace(str(job.pk), 'another-job'), job))
+        self.assertIsNone(tr.transcript_shown('<p>no review</p>', job))
+        self.assertEqual(tr.provider_transcript({'results': {'channels': [{'alternatives': [{'transcript': 'w'}]}]}}), 'w')
+        self.assertIsNone(tr.provider_transcript({'results': {'channels': []}}))
 
 
 if __name__ == '__main__':
