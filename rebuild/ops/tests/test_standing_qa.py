@@ -1049,6 +1049,17 @@ class ConfigurationTests(Base):
                           flags['QUILLMD_WORD_ENGINE']), ('0.0077', '', 'true', 'false', 'v3'))
         self.assertNotIn('QUILLMD_DEEPGRAM_RATE_PER_MINUTE', st.stage_flags('notes_comparison', self.d))
 
+    def test_the_configuration_check_demands_the_declared_smart_formatting(self):
+        on = parse(self, edited('transcription_smart_format: false', 'transcription_smart_format: true'))
+        def problems(declaration, value):
+            return st.check_configuration(snapshot(declaration, self.root, 'transcription',
+                                                   settings={'QUILLMD_DEEPGRAM_SMART_FORMAT': value}),
+                                          declaration, 'transcription', self.root, rebuild=self.worktree)
+        self.assertEqual(problems(on, 'true'), [])
+        self.assertTrue(problems(on, 'false'))
+        self.assertEqual(problems(self.d, 'false'), [])
+        self.assertTrue(problems(self.d, 'true'))
+
     def test_a_contract_flag_other_than_the_stages_is_a_problem(self):
         cases = [('model_check', {'V3_FIELD_RELATIONS': True}), ('model_check', {'WM_NARRATIVE': True}),
                  ('model_check', {'QUILLMD_MAPPING_ASSISTANCE': True}), ('model_check', {'QUILLMD_WORD_ENGINE': 'v3'}),
@@ -1811,7 +1822,7 @@ class PricingCommandTests(unittest.TestCase):
 
 class TranscriptionDeclarationTests(Base):
     """The declaration's transcription section: every term stated once and fixed (deepgram, nova-3-medical, a positive
-    per-minute rate, mip_opt_out true, smart formatting false, a credential file of its own), recordings only from the
+    per-minute rate, mip_opt_out true, smart formatting true or false, a credential file of its own), recordings only from the
     runner's allowlist with their pinned sha256, two sends per recording; no transcription line without the stage and no
     stage without its section."""
 
@@ -1825,7 +1836,8 @@ class TranscriptionDeclarationTests(Base):
             ('transcription_rate_per_minute: 0.0077', 'transcription_rate_per_minute: 0.00000000001', 'positive USD rate'),
             ('transcription_rate_per_minute: 0.0077', 'transcription_rate_per_minute: 7.7e-3', 'positive USD rate'),
             ('transcription_mip_opt_out: true', 'transcription_mip_opt_out: false', 'mip_opt_out is `true`'),
-            ('transcription_smart_format: false', 'transcription_smart_format: true', 'smart_format is `false`'),
+            ('transcription_smart_format: false', 'transcription_smart_format: yes', 'smart_format is `true` or `false`'),
+            ('transcription_smart_format: false', 'transcription_smart_format: True', 'smart_format is `true` or `false`'),
             ('transcription_model: nova-3-medical\n', '', 'transcription_model:` exactly once'),
             ('transcription_model: nova-3-medical\n', 'transcription_model: nova-3-medical\n'
                                                      '- transcription_model: nova-3-medical\n',
@@ -1843,6 +1855,22 @@ class TranscriptionDeclarationTests(Base):
         for old, new, why in cases:
             with self.subTest(new=new[:70]), self.assertRaisesRegex(pc.Refused, why):
                 parse(self, edited(old, new))
+
+    def test_declared_smart_formatting_is_the_one_value_threaded_to_the_request(self):
+        """Standing attempts 33-36: an unformatted transcript is one unpunctuated run-on unit and every answer was held.
+        A declaration may state smart formatting `true` (the product's per-deployment setting); it is then the ONE value
+        the request carries, the process is configured with, and the configuration check demands — and `false` stays."""
+        on = parse(self, edited('transcription_smart_format: false', 'transcription_smart_format: true'))
+        off = parse(self, edited('transcription_smart_format: false', 'transcription_smart_format: false'))
+        self.assertEqual(on.transcription.parameters(), {'model': 'nova-3-medical', 'smart_format': 'true',
+                                                         'mip_opt_out': 'true'})
+        self.assertEqual(off.transcription.parameters()['smart_format'], 'false')
+        self.assertEqual(st.stage_flags('transcription', on)['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'true')
+        self.assertEqual(st.stage_flags('transcription', off)['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'false')
+        self.assertEqual(st.expected_settings('transcription', on)['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'true')
+        self.assertEqual(st.expected_settings('transcription', off)['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'false')
+        self.assertEqual(st.expected_settings('transcription')['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'false')
+        self.assertEqual(st.STAGE_FLAGS['transcription']['QUILLMD_DEEPGRAM_SMART_FORMAT'], 'false')   # (the default)
 
     def test_only_allowlisted_recordings_with_their_pinned_sha256_are_named(self):
         soap = 'transcription_input: soap-ankle-speech 3121862714193bb2f36c09a688dc7b3f293504163014680cae3c610dc21ea2d7'
