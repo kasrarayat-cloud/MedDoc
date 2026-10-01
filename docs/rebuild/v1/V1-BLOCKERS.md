@@ -243,3 +243,31 @@ Installed release unchanged: `dedac162`, Sonnet 4.6, synthetic-only, not restart
   ordinary_notes failed-3 (its remainder cannot pass after two recorded contract stops).
 
 No gate is closed by this entry. No merge to `main`, deployment, payment, purchase or vendor contact occurred.
+
+## 2026-10-01 — implementation and qualification milestone, candidate `v1/release-integration`
+
+Integrated since `43fcf214` (each through refutation, verification and a bounded repair; details in the dated records):
+Word destination roles (`fix/v1-roles-salvage`), hold-only relation floors and question context
+(`fix/v1-notes-floors`), single-worker settlement (`fix/v1-settlement-worker`), journaled retention holds and restore
+admission (`fix/v1-retention-holds`), the npm advisory lockfile fix, the role-reading reuse fix, and the L01 signing-row
+browser regression in CI. Installed release unchanged: `dedac162`. Model-assisted mapping stays off.
+
+- **B-W2 (Word mapping): partly closed.** The default legacy path no longer generates signing, initials or identity
+  rows (L01 reproduced in Playwright on 43fcf214 and green in CI now); the model path can no longer create permission
+  (additions are review items, invalid changes held individually, dependence-graph adoption, request byte-identical).
+  Open: 28 recorded pre-existing engine mislabels of signing places (`destination-roles-20260930/residuals.json`) and
+  the real-form exposure on development forms (5 signing areas fillable, 63 fields in consent text) — clinician review
+  remains the backstop; the declared legacy usefulness cost awaits the owner.
+- **B-G1 (useful ordinary notes): open.** Default path unchanged at 7 of 38 answerable fields (0 incorrect). The
+  field-relations path fills 23 of 38 with correct model relations and its adverse exposure fell from 18 to 2 of 57;
+  it stays off pending live qualification (a new allowance), a production switch and large-form handling.
+- **B-W1 (Word qualification): open, unchanged.** Development strict detection 3 of 33; no unseen cohort opened;
+  `.doc` cap; corpus independence and native Word are external.
+- **Settlement:** the two-worker exposure is closed (lock, settle guard, late receipts held; LOW residual: an in-place
+  adjustment restates the earlier accounting window). **Retention:** holds survive restore through the journal and
+  admission; disposal of clinical content, redaction tombstones and backup reconciliation remain (they also need
+  counsel's schedule).
+- Campaign unchanged: $0.112104 of $40.00, 23 attempts, 0 open; the mapping remainder (9 sends) is admissible after a
+  diagnosis and reopen; the notes stage needs a new allowance (`sonnet5-campaign/stage-accounting-20260930.md`).
+
+No gate is closed by this entry. No merge to `main`, deployment, payment, purchase or vendor contact occurred.
