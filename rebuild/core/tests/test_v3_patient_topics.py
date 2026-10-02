@@ -186,10 +186,7 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
         payload = self.answers_payload({**AUTOMATIC, **manual})
         for label in manual: payload['held_shown_' + self.key(label)] = '1'
         for field in self.version.fields:
-            # The finalizer's own signer row ('Clinician signature', a two-column row: the identity row, EC1) is
-            # never 'Leave blank - reviewed'; reviewed and unanswered, it finalizes empty, as on the legacy engine.
-            if (field['label'] not in case['unchanged_picks'] and field['kind'] not in ('signature', 'initials')
-                    and field.get('answer_policy') != 'clinician_identity'):
+            if field['label'] not in case['unchanged_picks'] and field['kind'] not in ('signature', 'initials'):
                 payload['blank_' + field['key']] = 'on'
         saved = self.client.post(f'/encounters/{self.encounter.pk}/save/', payload)
         self.assertEqual(saved.status_code, 302, saved.content.decode())
@@ -246,7 +243,7 @@ class CompletePatientTopicWorkflow(V3EncounterFixture, TestCase):
             # pass only because some unrelated field is missing/unreviewed.
             payload = self.answers_payload({})
             for field in self.version.fields:
-                if field['kind'] not in ('signature', 'initials') and field.get('answer_policy') != 'clinician_identity':
+                if field['kind'] not in ('signature', 'initials'):
                     payload['blank_' + field['key']] = 'on'
             self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/save/', payload).status_code, 302)
             self.encounter.refresh_from_db()
