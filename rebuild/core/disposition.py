@@ -268,7 +268,10 @@ class RestoreQuarantineMiddleware:
                       '/console/disposition/','/console/restore-preparation/','/console/disposition-execution/'))
     def __init__(self,get_response):self.get_response=get_response
     def __call__(self,request):
-        if quarantined() and request.path not in self.SAFE and not request.path.startswith('/static/'):
+        # On PATH_INFO, the path Django resolves: the full path carries a client SCRIPT_NAME, and SCRIPT_NAME '/login' with
+        # PATH_INFO '/' spelled the safe '/login/' while the dashboard was served (refutation round 2, the R1 sibling).
+        path=request.path_info
+        if quarantined() and path not in self.SAFE and not path.startswith('/static/'):
             from django.http import HttpResponse
             return HttpResponse('Restored target quarantined. Clinical access and processing are unavailable.',status=503)
         return self.get_response(request)

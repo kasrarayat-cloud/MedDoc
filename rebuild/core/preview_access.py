@@ -116,7 +116,7 @@ def flows(store, now):
 
 
 def api_request(request):
-    return (request.path.startswith('/api/') or request.path == '/billing/webhook/'
+    return (request.path_info.startswith('/api/') or request.path_info == '/billing/webhook/'
             or 'application/json' in request.headers.get('Accept', ''))
 
 
@@ -149,9 +149,12 @@ class PreviewAccessMiddleware:
         request.quillmd_preview = True
         if not fingerprint():
             response = error(request, 'Private access configuration needs repair. Please contact your platform operator.', status=503)
-        elif CSS_PATTERN.fullmatch(request.path):
+        # Every gate decision on PATH_INFO, the path Django resolves: the full path carries a client SCRIPT_NAME, and
+        # SCRIPT_NAME '/preview/sign-in' with PATH_INFO '/' was the sign-in page to this gate while the dashboard was
+        # served without a grant (refutation round 2, the R1 sibling).
+        elif CSS_PATTERN.fullmatch(request.path_info):
             response = self.get_response(request)
-        elif request.path in {SIGN_IN, SIGN_OUT}:
+        elif request.path_info in {SIGN_IN, SIGN_OUT}:
             response = self.get_response(request)
         else:
             with preview_store(request) as store:
@@ -175,7 +178,7 @@ class PreviewAccessMiddleware:
                     response = error(request, 'Your private preview access has expired or is missing. Sign in, then reopen the page. Your submission was not repeated.')
             if granted:
                 response = self.get_response(request)
-                if response.status_code == 404 and request.path.startswith('/invite/'):
+                if response.status_code == 404 and request.path_info.startswith('/invite/'):
                     response = render(request, 'preview_error.html', {
                         'heading': 'Invitation link unavailable',
                         'message': 'This invitation may have expired or already been accepted. If you accepted it, sign in to your QuillMD account. Otherwise contact your department owner.',
@@ -262,7 +265,7 @@ def sign_out(request):
 def csrf_failure(request, reason=''):
     if getattr(request, 'quillmd_preview', False):
         continuation = None
-        if request.path == SIGN_IN:
+        if request.path_info == SIGN_IN:
             handle = request.POST.get('flow', '')
             key = request.COOKIES.get(COOKIE, '')
             if FLOW_PATTERN.fullmatch(handle) and re.fullmatch(r'[a-z0-9]{32}', key):
