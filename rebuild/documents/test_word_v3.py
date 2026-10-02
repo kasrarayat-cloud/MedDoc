@@ -2381,3 +2381,17 @@ class RefutationRepairs(unittest.TestCase):
                 for mark in ("1.", "2."):
                     _tab_line(doc, mark)
                 self.assertEqual(self.labels(docx_bytes(doc)), ["FINDINGS — 1", "FINDINGS — 2"])
+
+    def test_declared_residual_ec1_the_finalizers_own_signer_row_stays_hand_signed_on_v3(self):
+        """EC1 withdrawn (refutation of 358cb5b0): on contract v3 the owner colonoscopy form's 'Electronically signed by'
+        line is a Signature area signed by hand, never filled - not even with the finalizer's own name, which the legacy
+        engine accepts there (core.tests.test_destination_roles test_pc14). Declared residual, owner-routed."""
+        info = inspect_template(OWNER_FORM, engine="v3")
+        signer = fields_by_label(info["fields"])["Electronically signed by"]
+        self.assertEqual(signer["kind"], "signature")
+        self.assertNotIn("answer_policy", signer)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(DocumentError) as refused:
+                fill_template(OWNER_FORM, info["fields"], {signer["key"]: "Synthetic Alpha Clinician"},
+                              Path(directory) / "out.docx")
+        self.assertEqual(refused.exception.code, "invalid_answer")
