@@ -80,6 +80,9 @@ def process_v3(workspace, request):
                 fail("Invalid mapping.", "invalid_mapping")
             return {"format": "docx", **word_v3.destination_roles(data, mapping),
                     "adapter": "word-v3", "sandbox": "landlock+seccomp"}
+        if operation == 'places':
+            return {'format': 'docx', 'contract': word_v3.CONTRACT,
+                    'places': word_v3.writing_places(data, request.get('mapping') or [])}
         if operation == "fill":
             mapping, answers = request["mapping"], request["answers"]
             if not is_v3_mapping(mapping):
@@ -699,7 +702,7 @@ def process(workspace, request):
     warnings = []
     if fmt == 'docx' and request.get('operation') == 'inspect':
         return inspect_auto(workspace, preferred=request.get('engine', 'legacy'))
-    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare", "roles")
+    if fmt == "docx" and (request.get("engine") == "v3" and request.get("operation") in ("inspect", "outline", "locate", "assistance_outline", "effective_options", "effective_values", "layout_prepare", "roles", "places")
                           or request.get("operation") == "fill" and is_v3_mapping(request.get("mapping"))):
         return process_v3(workspace, request)
     if request.get("operation") in ("outline", "locate"):
@@ -791,7 +794,7 @@ def inspect_auto(workspace, *, preferred='auto'):
             raise
     try:
         advanced = process_v3(workspace, {'operation': 'inspect'})
-        if not advanced['fields']:
+        if not advanced['fields'] and not advanced.get('coverage_issues') and not advanced.get('layout_pending'):
             fail('No editable answer areas were found. Scanned/image-only forms are unsupported.', 'no_fields')
     except DocumentFailure as exc:
         if legacy is None or preferred == 'v3':
@@ -838,6 +841,14 @@ def inspect_auto(workspace, *, preferred='auto'):
     if selected == 'v3' and advanced.get('coverage_issues'):
         coverage['selected_engine_issues'] = advanced['coverage_issues']
         coverage['block_generation'] = True
+    if selected == 'legacy' and advanced and (advanced.get('coverage_issues') or advanced.get('layout_pending')):
+        # A legacy destination in another cell cannot establish coverage of a
+        # withheld advanced answer area or a still-unverified layout proposal.
+        coverage['advanced_unresolved_areas'] = advanced.get('coverage_issues', [])
+        coverage['advanced_layout_pending'] = advanced.get('layout_pending', 0)
+        coverage['block_generation'] = True
+        result['warnings'].append('Other answer areas need precise advanced mapping or layout review. '
+                                  'This legacy import is incomplete; generation and charging are held.')
     if coverage.get('legacy_omissions') and selected == 'legacy':
         result['warnings'].append('Additional answer destinations need mapping review; this import is incomplete. '
                                   'Use a separately reviewed advanced mapping; no existing document will switch engines.')

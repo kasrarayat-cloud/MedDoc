@@ -259,4 +259,27 @@ class AutoImportWorkflow(V3Fixture,TestCase):
         altered=copy.deepcopy(version.fields)
         altered[0]['locator']['target']['copies']=[{'part':issue['part'],'slot':issue['slot']}]
         version.fields=altered
+        version.import_manifest=import_binding.for_mapping(version.import_manifest,altered)
         self.assertFalse(import_binding.coverage_reviewed(version))
+
+    def test_exact_write_in_exclusions_allow_adjacent_boxes_but_refuse_overlapping_copy(self):
+        doc=Document();doc.add_paragraph('Symptoms (tick all that apply): ☐ Pain ☐ Other: ______ and ______')
+        template,version=self.uploaded(name='Synthetic separate write-in exclusions',data=raw(doc))
+        issues=version.import_manifest['coverage']['selected_engine_issues']
+        self.assertEqual(len(issues),2)
+        self.assertEqual(len(version.fields),1)
+        response=self.client.post(f'/templates/{template.pk}/',dict(action='v3_coverage',mapping_version=version.pk,
+                                          **{'exclude_'+issue['id']:'on' for issue in issues}))
+        self.assertEqual(response.status_code,302,response.content.decode())
+        reviewed=self.latest(template)
+        self.assertTrue(import_binding.coverage_reviewed(reviewed))
+        import_binding.verify(reviewed)
+        # The checkbox glyphs are adjacent to the excluded blanks. A valid
+        # reviewed copy into either blank must nevertheless refuse generation.
+        altered=copy.deepcopy(reviewed.fields)
+        altered.append(dict(key='manual_copy',label='Unmapped copy',kind='text',locator={
+            'part':issues[0]['part'],'slot':issues[0]['slot'],'target':{
+                'type':'span','start':issues[0]['start'],'end':issues[0]['end']}}))
+        reviewed.fields=altered
+        reviewed.import_manifest=import_binding.for_mapping(reviewed.import_manifest,altered)
+        self.assertFalse(import_binding.coverage_reviewed(reviewed))

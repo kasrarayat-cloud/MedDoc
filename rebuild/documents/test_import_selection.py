@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 from zipfile import ZipFile
 from docx import Document
 from docx.oxml import OxmlElement
@@ -119,3 +120,43 @@ class ImportSelection(unittest.TestCase):
         path=self.save(Document())
         with self.assertRaises(DocumentError) as caught:inspect_template(path,engine='auto')
         self.assertEqual(caught.exception.code,'no_fields')
+
+    def test_words_before_boxes_are_known_source_bound_exclusions_before_generation(self):
+        doc=Document();doc.add_paragraph('Gender: Male☐Female☐');doc.add_paragraph('Reason for visit: ____________')
+        result=inspect_template(self.save(doc),engine='auto')
+        self.assertEqual([f['label'] for f in result['fields']],['Reason for visit'])
+        coverage=result['import_manifest']['coverage']
+        self.assertTrue(coverage['block_generation'])
+        self.assertEqual(len(coverage['selected_engine_issues']),1)
+        self.assertEqual(coverage['selected_engine_issues'][0]['slot'],'b/p[0]')
+        self.assertIn('printed before each box',coverage['selected_engine_issues'][0]['detail'])
+
+    def test_separate_checkbox_write_ins_are_never_silently_counted_covered(self):
+        doc=Document();doc.add_paragraph('Symptoms (tick all that apply): ☐ Pain ☐ Other: ______ and ______')
+        result=inspect_template(self.save(doc),engine='auto')
+        coverage=result['import_manifest']['coverage']
+        self.assertTrue(coverage['block_generation'])
+        issues=[i for i in coverage['selected_engine_issues'] if i['code']=='unmapped_checkbox_write_in']
+        self.assertEqual(len(issues),2)
+        self.assertTrue(all(i['start']<i['end'] for i in issues))
+        self.assertFalse(coverage['automatic_complete'])
+
+    def test_unresolved_structural_answers_remain_reviewable_and_held_even_with_zero_fields(self):
+        from .test_question_boxes import TabColumnOwnership
+        from . import word_v3
+        for many in (False,True):
+            path=self.save(TabColumnOwnership().form(many=many))
+            with patch('documents.layout_transport.verify_document',
+                       side_effect=DocumentError('Synthetic renderer unavailable.','layout_unavailable')):
+                imported=inspect_template(path,engine='v3')
+            self.assertEqual(imported['contract'],word_v3.CONTRACT)
+            self.assertEqual(imported['fields'],[])
+            self.assertFalse(imported['import_manifest']['coverage']['automatic_complete'])
+            if many:
+                self.assertTrue(imported['import_manifest']['coverage']['block_generation'])
+                self.assertTrue(imported['import_manifest']['coverage']['selected_engine_issues'])
+            else:
+                self.assertGreater(imported['layout_pending'],0)
+            automatic=inspect_template(path,engine='auto')
+            self.assertEqual(automatic['import_manifest']['engine'],'legacy')
+            self.assertTrue(automatic['import_manifest']['coverage']['block_generation'])

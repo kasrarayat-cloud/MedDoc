@@ -239,6 +239,13 @@ def destination_roles(path, mapping: list, *, engine):
     return _run(path, "roles", mapping, None, engine=engine)
 
 
+def writing_places(path, mapping):
+    """Exact destinations under the already selected v3 processor, inside its sandbox."""
+    if not isinstance(mapping, list) or len(mapping) > 1500:
+        raise DocumentError('Invalid stored writing destinations.', 'invalid_mapping')
+    return _run(path, 'places', mapping, engine='v3')
+
+
 def effective_options(path, mapping: list, answers: dict):
     """Read the constrained controls after their actual writes, inside the sandbox.
 

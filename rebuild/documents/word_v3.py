@@ -1516,9 +1516,10 @@ class Detector:
         self._coded_problem = ""
         self._compute_headings()
 
-    def coverage_issue(self, slot, code, detail):
+    def coverage_issue(self, slot, code, detail, *, start=None, end=None):
         issue = {'part': slot.part, 'slot': slot.path, 'code': code, 'detail': detail}
-        issue['id'] = hashlib.sha256(repr((slot.part, slot.id, code, detail)).encode()).hexdigest()
+        if start is not None:issue.update(start=start,end=end)
+        issue['id'] = hashlib.sha256(repr((slot.part, slot.id, code, detail, start, end)).encode()).hexdigest()
         if not any(prior['id'] == issue['id'] for prior in self.coverage_issues):
             self.coverage_issues.append(issue)
 
@@ -2888,6 +2889,7 @@ class Detector:
                         complete = False;problem = "A marked spacer or unresolved layout boundary separates the source."
             if not complete or len(pending) != len(candidates):
                 self.notes.append("Tab-column options at " + cell.id + ": " + problem + " Printed source: " + source)
+                self.coverage_issue(cell, 'unmapped_answer', self.notes[-1])
                 # ⚠️ A REFUSED SOURCE'S TEXT LINES ARE HELD WITH ITS ROWS (CI 36479289351): claiming only the rows left
                 # the literal header to the text-option rule, which offered the header's words as options and would have
                 # ticked the header line while the row's own boxes stayed empty. A line with its own box or blank is
@@ -3177,6 +3179,7 @@ class Detector:
             if reason:
                 self.notes.append("Coded column sequence at " + cell.id + ": " + reason + " Printed source: "
                                   + " | ".join(self.ptext(p.el)[0] for p in cell.children if p.kind == "p"))
+                self.coverage_issue(cell, 'unmapped_answer', self.notes[-1])
                 # Its text lines are held, as a refused tab-column source's are: no weaker rule re-reads its title or
                 # header as a question of their own words. Its rows go on to the checkbox rule, which notes each one.
                 for paragraph in (s for s in cell.children if s.kind == "p" and self.text_only_line(s)):
@@ -3210,17 +3213,20 @@ class Detector:
                 self.notes.append("Coded checkbox options at " + s.id +
                                   " need their complete printed header and layout; response codes are not option labels. "
                                   "Printed source: " + txt)
+                self.coverage_issue(s, 'unmapped_answer', self.notes[-1])
                 self.claimed.add(id(s.el))
                 continue
             if (any(hyperlink_run(piece.run) for piece, _, _ in glyph_boxes(s.el))
                     or any(hyperlink_control(node) for node in checkbox_nodes(s.el))):
                 self.notes.append("A checkbox inside a fixed hyperlink was kept unchanged. Location: " + s.id)
+                self.coverage_issue(s, 'unmapped_answer', self.notes[-1])
                 self.claimed.add(id(s.el))
                 continue
             if self.region_hidden(box_region(s.el)):
                 # ⚠️ Its boxes cannot all be seen: no question is read from it (round 3 F1).
                 self.notes.append("A line holds a checkbox QuillMD cannot read in place, so it was left for manual "
                                   "mapping: %s" % clean_label(txt)[:60])
+                self.coverage_issue(s, 'unmapped_answer', self.notes[-1])
                 self.claimed.add(id(s.el))
                 continue
             units = self.box_units(s)
@@ -3417,6 +3423,8 @@ class Detector:
                     problem = "The complete label or context exceeds limits; nothing was shortened."
         self.notes.append("Unassigned write-in beside a nested option at " + slot.id + ". " + problem
                           + " Printed text: " + text + " Governing context: " + context)
+        for start, end, _ in spans:
+            self.coverage_issue(slot, 'unmapped_answer', self.notes[-1], start=start, end=end)
 
     def selection_guidance(self):
         """Every one-only or limited-count sentence printed in the form (limit_language: body, table cells, text
@@ -3972,6 +3980,8 @@ class Detector:
                 self.notes.append("Boxes at %s have their words printed before each box %s, so which printed word "
                                   "names which box was left for manual mapping. Printed source: %s"
                                   % (pslot.id, before_boxes, " | ".join(self.ptext(p.el)[0] for p in g["paras"])))
+                for affected in g['paras']:
+                    self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                 for p in g["paras"]:
                     self.claimed.add(id(p.el))
                 continue
@@ -4004,6 +4014,8 @@ class Detector:
                         # (round 3 P2). Refused, with a note, rather than guessed.
                         self.notes.append("Boxes in the '%s' row were left for manual mapping: the row prints another box "
                                           "beside them, so which of the row's options they are is not known." % question[:60])
+                        for affected in g['paras']:
+                            self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                         for p in g["paras"]:
                             self.claimed.add(id(p.el))
                         continue
@@ -4054,6 +4066,8 @@ class Detector:
             if decision.get("problem"):
                 # Never narrowed to one choice, never widened past a limit: the source is left for manual mapping.
                 self.notes.append(decision["problem"])
+                for affected in g['paras']:
+                    self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                 for p in g["paras"]:
                     self.claimed.add(id(p.el))
                 if used_para is not None:
@@ -4087,6 +4101,8 @@ class Detector:
                 if history:
                     if history.get("problem"):
                         self.notes.append(history["problem"] + " Location: " + pslot.id)
+                        for affected in g['paras']:
+                            self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                         for paragraph in g["paras"]:
                             self.claimed.add(id(paragraph.el))
                         continue
@@ -4223,6 +4239,7 @@ class Detector:
                                                         own={id(x.el) for x in [q_slot, opt_slot, *local_slots]})
                             if decision.get("problem"):
                                 self.notes.append(decision["problem"])
+                                self.coverage_issue(opt_slot, 'unmapped_answer', self.notes[-1])
                             else:
                                 if decision["note"]:
                                     self.notes.append(decision["note"])
@@ -4271,6 +4288,8 @@ class Detector:
                                                     own={id(x.el) for x in [q_slot, *opts, *local_slots]})
                         if decision.get("problem"):
                             self.notes.append(decision["problem"])
+                            for affected in opts:
+                                self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                         else:
                             if decision["note"]:
                                 self.notes.append(decision["note"])
@@ -4575,6 +4594,8 @@ class Detector:
                     self.notes.append("Rating grid row '%s' at %s was left for manual mapping: its printed boxes are not "
                                       "one run of headed response columns, so which answers the row offers is not "
                                       "established." % (label[:60], run[0][0].id))
+                    for affected, _ in run:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                 elif any(positive_command(text) for text in [label, *grid_own] + [
                         self.cell_text(x) for c, _ in run for x in self.question_cells(tslot, r, c.info["col"])]):
                     # A grid row reads one answer per row; a several-answers command in the row, over its columns or
@@ -4582,6 +4603,8 @@ class Detector:
                     self.notes.append("Rating grid row '%s' at %s was left for manual mapping: its printed all-that-apply "
                                       "instruction conflicts with the grid's one answer per row; nothing was guessed."
                                       % (label[:60], run[0][0].id))
+                    for affected, _ in run:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                 else:
                     boxes = [{"kind": "cell", "part": c.part, "slot": c.path} for c, _ in run]
                     self.add(Area("choice", label, run[0][0], {"type": "checkboxes", "boxes": boxes},
@@ -4614,6 +4637,8 @@ class Detector:
                                                         where=" at " + opts[0].id, context=self.context_for(opts[0]))
                             if decision.get("problem"):
                                 self.notes.append(decision["problem"])
+                                for affected in opts:
+                                    self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                             else:
                                 if decision["note"]:
                                     self.notes.append(decision["note"])
@@ -4658,6 +4683,8 @@ class Detector:
                     self.notes.append("Checkbox grid at %s was left for manual mapping: boxes in several columns share its "
                                       "rows, and which of them answer one row's question is not established. Column: %s"
                                       % (tslot.id, clean_label(header)[:80]))
+                    for _, affected, _ in labelled:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                     for _, c, _ in labelled:
                         for x in c.el.iter():
                             self.claimed.add(id(x))
@@ -4671,6 +4698,8 @@ class Detector:
                     # The list this table continues was held: its continuation is held with it.
                     self.notes.append("Checkbox list continued at %s was left for manual mapping with the list it "
                                       "continues. Column: %s" % (tslot.id, clean_label(header)[:80]))
+                    for _, affected, _ in labelled:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                     continue
                 if existing is not None:
                     # Its reading was taken over the whole form: every limit printed in this continuation was in its
@@ -4687,6 +4716,8 @@ class Detector:
                                             where=" at " + first.id, context=self.context_for(first))
                 if decision.get("problem"):
                     self.notes.append(decision["problem"])
+                    for _, affected, _ in labelled:
+                        self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                     self._col_lists[(id(tslot), col)] = False
                     continue
                 if decision["kind"] != "multi_choice" and not decision["single"]:
@@ -4694,6 +4725,7 @@ class Detector:
                                       "independent items, and nothing printed says whether one row or several may be "
                                       "marked; one choice would assert an exclusivity the form does not print. Column: %s"
                                       % (first.id, clean_label(header)[:80]))
+                    self.coverage_issue(first, 'unmapped_answer', self.notes[-1])
                     self._col_lists[(id(tslot), col)] = False
                     continue
                 if decision["note"]:
@@ -4742,6 +4774,8 @@ class Detector:
                                                         + [x for r, c, _ in g for x in self.question_cells(tslot, r, c.info["col"])]))
                         if decision.get("problem"):
                             self.notes.append(decision["problem"])
+                            for _, affected, _ in g:
+                                self.coverage_issue(affected, 'unmapped_answer', self.notes[-1])
                             for _, c, _ in g:
                                 for x in c.el.iter():
                                     self.claimed.add(id(x))
@@ -5314,6 +5348,7 @@ class Detector:
                 continue
             self.notes.append("Unassigned answer box at " + cell.id + ". " + reason +
                               (" Printed text: " + raw if raw else ""))
+            self.coverage_issue(cell, 'unmapped_answer', self.notes[-1])
 
     def cell_twips(self, tslot, c) -> float:
         tcpr = c.el.find(q("w:tcPr"))
@@ -5555,6 +5590,8 @@ class Detector:
                     note += " Location: " + slot.id
                 if note not in self.notes:
                     self.notes.append(note)
+                if slot is not None:
+                    self.coverage_issue(slot, 'fixed_link_answer', note, start=start, end=end)
             else:
                 kept.append((start, end, kind))
         return kept
@@ -5703,6 +5740,7 @@ class Detector:
         for n, (s, e, kind) in enumerate(blanks):
             if hyperlink_write(pieces, s, s if kind == "after_label" else e):
                 self.notes.append("An answer insertion inside a fixed hyperlink was left unassigned at " + slot.id)
+                self.coverage_issue(slot, 'unmapped_answer', self.notes[-1])
                 continue
             seg = text[prev_end:s]
             seg = re.split(r"[\x00" + BOX + CHECKED + "]", seg)[-1]
@@ -5825,6 +5863,7 @@ class Detector:
             instruction = self.text(before) if before is not None and before.tag == q("w:p") else ""
             if not INITIALS.search(" ".join((header, label, instruction, self.context_for(c)))):
                 self.notes.append("An unlabelled floating rectangle needs visual review at " + c.id)
+                self.coverage_issue(c, 'unmapped_answer', self.notes[-1])
                 continue
             affected.add(c.parent)
             reason = ("Protected floating initials box: its visual question is unresolved because an anchor can sit "
@@ -5843,6 +5882,7 @@ class Detector:
                     self.protected_regions.add(c.id)
             self.notes.append("Blank cells in the floating-initials table are not assigned text answers; "
                               "check the original for additional areas. Location: " + table.id)
+            self.coverage_issue(table, 'unmapped_answer', self.notes[-1])
         if affected:
             self.floating_initials = True
             self.notes.append(FLOATING_INITIALS_REFUSAL)
@@ -6058,6 +6098,20 @@ def inspect(data: bytes) -> dict:
     detector = Detector(package)
     areas, notes = detector.detect()
     fields = mapped_fields(detector, areas)
+    # A checkbox group's claim must not hide separate writable blanks on its
+    # paragraph (for example two distinct write-ins after the last option).
+    # These are excluded extents, never two inferred fields or option decisions.
+    reader = _PlaceReader(detector.index)
+    writes = [place for field in fields for place in reader.of(field)]
+    for slot in detector.index.slots:
+        if slot.kind != 'p' or not detector.box_units(slot):
+            continue
+        for start, end, _ in detector.blank_spans(*detector.ptext(slot.el)):
+            region = {'place': slot.id, 'start': start, 'end': end}
+            if not any(reader.touches(place, region) for place in writes):
+                detail = 'A separate checkbox write-in has no mapped writer at ' + slot.id + ' offsets ' + str(start) + '-' + str(end) + '. It remains unchanged; review this exact exclusion.'
+                detector.coverage_issue(slot, 'unmapped_checkbox_write_in', detail, start=start, end=end)
+                if detail not in notes:notes.append(detail)
     return {"contract": CONTRACT, "fields": fields, "notes": notes,
             "coverage_issues": detector.coverage_issues,
             "layout_pending": len(detector.layout_candidates)}
@@ -6434,6 +6488,12 @@ def destination_roles(data: bytes, fields=None) -> dict:
     return {"contract": CONTRACT,
             "roles": [{k: v for k, v in r.items() if k != "requires"} for r in roles],
             "violations": role_violations(reader, fields or [], roles), "choices": choices}
+
+
+def writing_places(data, fields):
+    """The stored v3 writer's exact destinations, including glyph offsets and copies."""
+    reader = _PlaceReader(SlotIndex(open_package(data)))
+    return {field['key']: reader.of(field) for field in fields}
 
 
 #: ⚠️ THE ONE READER OF WHETHER A PRINTED LABEL NAMES A SIGNING PLACE (a signature or initials area): the legacy default
