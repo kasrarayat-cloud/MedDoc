@@ -193,3 +193,67 @@ class LateResultAfterRedaction(ssw.Console, HeldSettlementFixture, TransactionTe
         self.assertEqual((job.result_path, job.result_sha256), ('', ''))  # 9ac45e01: FileNotFoundError, reference kept
         self.assertEqual(self.holding_the_quote(), [])
         self.assertTrue(m.AuditEvent.objects.filter(action='provider.output_withheld', target=str(job.pk)).exists())
+
+    def test_R3F4_a_withheld_result_whose_unlink_fails_stays_referenced_and_the_next_sweep_removes_it(self):
+        """The after-check keeps the job's reference when its unlink fails, so every later sweep still finds the file. No
+        test made that unlink fail (refutation R3F-4 of 75d11c09): clearing the reference there left the quoted output on
+        disk, named by no row."""
+        self.journal()
+
+        def redact(job, draft):
+            requested = redaction.request(self.c1, draft.pk, 'c' * 64, uuid.uuid4())
+            redaction.execute(self.c2, requested.pk, self.checkpoint(j.verified()))
+        receipts = str(Path(settings.MEDIA_ROOT).resolve() / 'receipts')
+        real_unlink = Path.unlink
+        def refuse(path, *args, **kwargs):
+            if str(Path(path).resolve()).startswith(receipts):raise PermissionError(13, 'SYNTHETIC EACCES')
+            return real_unlink(path, *args, **kwargs)
+        with patch('core.redaction.withheld', side_effect=self.first_check_misses()), patch.object(Path, 'unlink', refuse), \
+                self.assertLogs('core.jobs', 'ERROR'):
+            job, draft, *_ = self.second_worker_during_the_call('late-unlink-refused', resolve_form=ssw.RELEASE, then=redact)
+        job.refresh_from_db()
+        from core.security import private_path
+        self.assertTrue(job.result_path)                          # kept: the next sweep finds it through the job
+        self.assertTrue(private_path(job.result_path).exists())
+        self.assertEqual(redaction.sweep(draft.pk), 1)
+        self.assertEqual(self.holding_the_quote(), [])
+
+
+from core.tests.test_billing_boundary import adopted_live_result  # noqa: E402
+
+
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES, **LIVE)
+class JournalFaultDuringTheProviderCall(HeldSettlementFixture, TransactionTestCase):
+    """Refutation R3R-T2 of 75d11c09: withheld() read the journal after the provider returned and raised when it could not,
+    so a journal fault during the call parked the job and lost the paid output of a document nobody redacted."""
+
+    def test_R3RT2_an_unreadable_journal_never_discards_a_provider_result(self):
+        import os
+        from core.jobs import enqueue, run_one
+        ck = Ed25519PrivateKey.generate(); writer = Ed25519PrivateKey.generate(); namespace = str(uuid.uuid4())
+        directory = tempfile.TemporaryDirectory(); self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / 'journal.jsonl'
+        with override_settings(DISPOSITION_ENABLED=True, DISPOSITION_NAMESPACE=namespace,
+                               DISPOSITION_CHECKPOINT_KEYS={'checkpoint': ck.public_key().public_bytes_raw().hex()},
+                               DISPOSITION_JOURNAL_KEYS={'writer': writer.public_key().public_bytes_raw().hex()},
+                               DISPOSITION_JOURNAL_KEY_ID='writer', DISPOSITION_JOURNAL_PRIVATE_KEY=writer.private_bytes_raw().hex(),
+                               DISPOSITION_JOURNAL_PATH=str(path)):
+            now = timezone.now()
+            body = {'contract': 'disposition-journal-checkpoint-v1', 'namespace': namespace, 'sequence': 0, 'head_sha256': p.ZERO,
+                    'issued_at': now.isoformat(), 'expires_at': (now + timedelta(days=1)).isoformat()}
+            j.initialize({'key_id': 'checkpoint', 'body': body, 'signature': ck.sign(p.signed_bytes(body)).hex()})
+            draft = self.draft()
+            job = enqueue(draft, self.user)
+            result = adopted_live_result(draft.notes, draft.template_version.fields, 'req_r3rt2')
+            def provider(*args, **kwargs):
+                os.chmod(path, 0o640)                 # the journal becomes unreadable while the provider call is in flight
+                return result
+            with patch('core.jobs.generation.generate', side_effect=provider), self.assertLogs('core.redaction', 'ERROR'):
+                run_one()
+            with self.assertRaises(Exception):
+                j.verified()                           # (the control: the journal really is unreadable)
+            os.chmod(path, 0o600)
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded')       # 75d11c09: 'reconciliation', the output never stored
+        self.assertTrue(job.result_path)
+        self.assertTrue(m.Encounter.objects.get(pk=draft.pk).answers)

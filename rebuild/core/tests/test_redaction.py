@@ -608,3 +608,142 @@ class RoundTwoRepairs(RedactionFixture, TestCase):
         with self.assertRaisesMessage(DatabaseError, 'Only an unfinalized document of its own department can be redacted'):
             with transaction.atomic():
                 self.tombstone_for(row).save(force_insert=True)
+
+
+@override_settings(**ISOLATED)
+class RoundThreeRepairs(RedactionFixture, TestCase):
+    """Refutation round 3 of 75d11c09: the restore lens (R3R-T1, T3, T5, T19) and its false greens (R3F-2, R3F-3, R3F-9)."""
+    def setUp(self): self.setup_journal()
+
+    refusing = RoundTwoRepairs.refusing
+
+    def link(self, relative, target):
+        from django.conf import settings
+        path = settings.MEDIA_ROOT.resolve() / relative
+        if path.exists() or path.is_symlink(): path.unlink()
+        path.parent.mkdir(parents=True, exist_ok=True); path.symlink_to(target)
+        return path
+
+    def test_R3RT1_a_symbolic_link_at_a_redacted_key_is_refused_and_its_target_never_removed(self):
+        """75d11c09: private_path() resolves, so the sweep's symlink check never fired and it unlinked the link's TARGET, a
+        template's original another document still uses, leaving the link."""
+        row, _job, (audio, result) = self.worked_draft()
+        original = private_path(self.scope[4].original_path)
+        link = self.link(audio, original)
+        with self.assertLogs('core.redaction', 'ERROR'):
+            self.redact(row)
+        self.assertTrue(original.exists())                        # 75d11c09: the template's original was unlinked
+        self.assertTrue(link.is_symlink())
+        self.assertFalse(private_path(result).exists())           # the document's own file is removed as before
+        # A link placed at a redacted key afterwards (a restored volume): every later sweep refuses it too.
+        late = self.link(result, original)
+        with self.assertLogs('core.redaction', 'ERROR'):
+            self.assertEqual(redaction.sweep(row.pk), 0)
+        self.assertTrue(original.exists()); self.assertTrue(late.is_symlink())
+
+    def test_R3RT3_a_release_whose_journal_copy_is_pending_holds_back_a_redaction(self):
+        """75d11c09: a hold the journal never took was released and the release's journal copy failed; the redaction went
+        ahead, and the custodian's later retry journaled the hold and its release AFTER the redaction. Every backup taken
+        under the hold then replayed the redaction into a held document and stayed quarantined for good."""
+        row, _job, _files = self.worked_draft()
+        with patch('core.disposition_journal.append_hold', side_effect=ValidationError('SYNTHETIC journal outage')), \
+                self.assertLogs('core.retention', 'ERROR'):
+            hold = self.committed(lambda: self.patient_hold())        # recorded here, not journaled
+        def after_the_backup():
+            with patch('core.disposition_journal.append_release', side_effect=ValidationError('SYNTHETIC journal outage')), \
+                    self.assertLogs('core.retention', 'ERROR'):
+                self.committed(lambda: retention.release_hold(self.second, hold.pk, 'b' * 64))
+            row.refresh_from_db()
+            self.assertEqual(redaction.refusals(row), ['hold_release_not_journaled'])   # 75d11c09: [] and it went ahead
+            with self.assertRaisesMessage(ValidationError, 'hold_release_not_journaled'):
+                redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+            self.committed(lambda: retention.release_hold(self.second, hold.pk, 'b' * 64))   # the exact retry journals it
+            self.assertEqual(redaction.refusals(row), [])
+            self.redact(row)
+        self.older_backup(after_the_backup)                           # this database is the backup taken under the hold
+        self.assertEqual([j.kind(entry) for entry in j.verified()][-3:], ['hold', 'release', 'redaction'])
+        with self.quarantine():
+            with self.captureOnCommitCallbacks(execute=True):
+                x.replay(self.admin, self.fresh())                    # 75d11c09: 'A retention hold applies' for good
+            self.assertEqual(restore_admission.assess(self.instance, self.fresh(), RELEASE)['blockers'], [])
+        self.assertEqual(m.Encounter.objects.get(pk=row.pk).status, 'redacted')
+
+    def test_R3RT5_the_worker_sweeps_bytes_a_failed_unlink_left_on_a_serving_instance(self):
+        """R2D-Q1 stopped leftover bytes from quarantining a serving instance, and with it the only automatic retry there:
+        a redaction applied by replay has no request row for the exact retry, and replay is refused once admitted."""
+        row, _job, (audio, _result) = self.worked_draft()
+        with self.refusing(audio), self.assertLogs('core.redaction', 'ERROR'):
+            self.redact(row)
+        self.assertTrue(private_path(audio).exists())
+        self.assertEqual(redaction.sweep_left(), 1)                    # 75d11c09: no such pass
+        self.assertFalse(private_path(audio).exists())
+        self.assertEqual(redaction.files_left(row.pk), 0)
+        self.assertEqual(redaction.sweep_left(), 0)
+        from django.core.management import call_command
+        with patch('core.management.commands.worker.run_one', return_value=False), \
+                patch('core.management.commands.worker.mark_stale'), \
+                patch('core.management.commands.worker.reap_abandoned_voice_uploads'), \
+                patch('core.management.commands.worker.sweep_left') as swept:
+            call_command('worker', once=True)
+        swept.assert_called_once_with()                               # the worker loop runs it
+
+    def test_R3RT19_an_over_limit_dictation_of_a_redacted_document_is_removed_with_it(self):
+        """Until a doctor approves it, an over-limit upload is referenced only by its quote's audit row: a redaction left it
+        on the volume, uncounted by admission and the exposure ledger, until the reaper removed it 40 minutes later."""
+        from core.security import audit
+        row, _job, _files = self.worked_draft()
+        upload = f'audio/{uuid.uuid4().hex}{"6" * 16}.wav'
+        self.write(upload, b'SYNTHETIC REDACTABLE DICTATION')
+        audit(self.scope[0], 'voice.over_limit_quoted', row.pk, department=row.department, seconds='900',
+              charge_limit='1.00', standard_limit='0.40', path=upload)
+        self.assertIn(upload, redaction.referenced_files(row.pk))
+        self.redact(row)
+        self.assertFalse(private_path(upload).exists())               # 75d11c09: still on the volume, files_left 0
+        self.assertEqual(redaction.unapplied(j.verified()), 0)
+
+    def other_document(self):
+        other_row, other_job, _ = self.worked_draft(self.other)
+        return other_row, other_job
+
+    def test_R3F2_R3F3_each_sharing_record_holds_back_the_redaction_and_keeps_the_bytes(self):
+        """Only a shared Job.input_path and preserved files were tested; each arm of shared_keys is pinned here, through the
+        execution refusal and through the sweep."""
+        def other_job_result(key, other_row, other_job):
+            m.Job.objects.filter(pk=other_job.pk).update(result_path=key)
+        def other_receipt(key, other_row, other_job):
+            job = m.Job.objects.create(encounter=other_row, user=self.other[0], kind='transcription', state='failed',
+                                       request_key=str(uuid.uuid4()), provider='synthetic:fixture', payer='personal')
+            m.ProviderReceipt.objects.create(job=job, provider='synthetic:fixture', actual_cost=Decimal('0.02'), simulated=True,
+                                             result_path=key, result_sha256='f' * 64)   # receipts are append-only
+        def template_original(key, other_row, other_job):
+            m.Template.objects.filter(pk=self.other[4].pk).update(original_path=key)
+        def other_export(key, other_row, other_job):
+            m.Encounter.objects.filter(pk=self.other[5].pk).update(export_path=key, export_sha256='e' * 64)
+        for arm in (other_job_result, other_receipt, template_original, other_export):
+            with self.subTest(arm=arm.__name__), transaction.atomic():
+                row, _job, (_audio, result) = self.worked_draft()
+                other_row, other_job = self.other_document()
+                arm(result, other_row, other_job)
+                self.assertEqual(redaction.refusals(row), ['shared_or_preserved_file'])   # R3F-2/3: refusals []
+                self.assertEqual(redaction.shared_keys([result], row.pk), {result})
+                with self.assertLogs('core.redaction', 'ERROR'):
+                    self.assertEqual(redaction.remove_files([{'storage_key': result, 'sha256': ''}], row.pk), 0)
+                self.assertTrue(private_path(result).exists())                         # the other record's bytes stay
+
+    def test_R3F9_when_sharing_cannot_be_read_nothing_is_removed(self):
+        row, _job, (audio, result) = self.worked_draft()
+        with patch('core.redaction.shared_keys', side_effect=DatabaseError('SYNTHETIC lost connection')), \
+                self.assertLogs('core.redaction', 'ERROR'):
+            self.assertEqual(redaction.remove_files([{'storage_key': audio, 'sha256': ''}], row.pk), 0)
+        self.assertTrue(private_path(audio).exists())
+
+    def test_R3F1_withheld_names_only_the_redacted_document(self):
+        """The journal arm of withheld() is keyed on the redacted document. A mutant matching any journaled redaction
+        discarded every document's provider output once one redaction existed, with every suite green."""
+        row, _job, _files = self.worked_draft()
+        requested = redaction.request(self.admin, row.pk, REASON, uuid.uuid4())
+        with patch('core.redaction.apply', side_effect=DatabaseError('SYNTHETIC lost connection')):
+            with self.assertRaises(DatabaseError): redaction.execute(self.second, requested.pk, self.fresh())
+        self.assertFalse(m.RedactionTombstone.objects.exists())
+        self.assertTrue(redaction.withheld(row.pk))              # journaled only: withheld
+        self.assertFalse(redaction.withheld(self.scope[5].pk))   # another document: never

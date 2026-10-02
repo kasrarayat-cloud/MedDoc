@@ -205,3 +205,17 @@ class ReleaseJournaledAfterReinsertion(RepairFixture, TestCase):
             for _ in range(3):
                 x.replay(self.admin, self.fresh())
         self.assertEqual(m.AuditEvent.objects.filter(action='retention.release_evidence_differs', target=str(hold.pk)).count(), 1)
+
+    def test_R3F5_R3F6_a_release_under_the_journals_id_must_match_it_in_authority_and_custodian(self):
+        """Each half of the R2D-F8a arm: the same custodian with another authority, and the journaled authority recorded by
+        another custodian, both conflict. Only the exact journaled release is consistent (the rows are read, not saved)."""
+        target, hold = self.reinserted()
+        release, entry = self.journal_release(hold)
+        self.stale_marker(hold, release, entry)
+        marker = m.RetentionHoldReplay.objects.get(record_id=release['id'], event='release')
+        third = self.custodian('custodian3')
+        for authority, custodian, consistent in (('c' * 64, self.second, False), ('b' * 64, third, False),
+                                                 ('b' * 64, self.second, True)):
+            with self.subTest(authority=authority[0], custodian=custodian.username):
+                row = m.RetentionHoldRelease(id=release['id'], hold=hold, authority_sha256=authority, created_by=custodian)
+                self.assertEqual(retention.release_marker_consistent(marker, 'target_absent', row, release), consistent)

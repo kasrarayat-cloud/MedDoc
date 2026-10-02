@@ -49,7 +49,10 @@ def tombstone_id(request_id):
 
 
 def referenced_files(encounter_id):
-    """{storage_key: recorded sha256 or ''} for every private file this document's own rows reference."""
+    """{storage_key: recorded sha256 or ''} for every private file this document's own rows reference, and every dictation
+    an over-limit quote stored for it (refutation R3R-T19 of 75d11c09: until a doctor approves it, an over-limit upload is
+    referenced only by its 'voice.over_limit_quoted' audit row, so a redaction left it on the volume, uncounted, until the
+    reaper removed it 40 minutes later)."""
     jobs = m.Job.objects.filter(encounter_id=encounter_id)
     keys = {}
     def add(path, sha=''):
@@ -63,6 +66,9 @@ def referenced_files(encounter_id):
         add(row['result_path'], row['result_sha256'])
     row = m.Encounter.objects.filter(pk=encounter_id).values('export_path', 'export_sha256').first()
     if row: add(row['export_path'], row['export_sha256'])
+    for details in m.AuditEvent.objects.filter(action='voice.over_limit_quoted', target=str(encounter_id)).values_list(
+            'details', flat=True):
+        add(str((details or {}).get('path') or ''))
     return keys
 
 
@@ -99,6 +105,8 @@ def refusals(encounter):
     if m.DispositionTombstone.objects.filter(target_id=encounter.pk).exists(): found.add('disposed_target')
     if retention.active_holds(encounter_id=encounter.pk).exists() or journal_only_holds(encounter.pk):
         found.add('active_hold')
+    if unjournaled_releases(encounter.pk):
+        found.add('hold_release_not_journaled')
     jobs = m.Job.objects.filter(encounter=encounter)
     if (jobs.filter(state__in=ACTIVE_JOB_STATES).exists()
             or m.GenerationBatch.objects.filter(encounter=encounter, state__in=ACTIVE_BATCH_STATES).exists()):
@@ -155,6 +163,20 @@ def journal_only_holds(encounter_id):
     records = journal.journaled_holds()
     scoped = retention.journal_hold_ids(encounter_id=encounter_id)
     return {hold_id for hold_id in scoped if records.get(hold_id, {}).get('release') is None}
+
+
+def unjournaled_releases(encounter_id):
+    """Holds in this document's scope released in THIS database for which the independent journal holds no release (the
+    copy is pending: retention._journal_release_after_commit logs and leaves it for the custodian's exact retry). A
+    restore older than that release keeps the hold active, and a redaction journaled before any release of the hold would
+    then replay into a held document and be refused for good: every recovery point taken under the hold stayed
+    quarantined (refutation R3R-T3 of 75d11c09). So the redaction waits until a release of the hold precedes it in the
+    journal (any journaled release ends the hold at replay, as F8's stale-marker case shows)."""
+    if not retention.journal_configured(): return set()
+    records = journal.journaled_holds()
+    return {str(hold_id) for hold_id in m.RetentionHoldRelease.objects.filter(
+                hold__in=retention.scoped_holds(encounter_id=encounter_id)).values_list('hold_id', flat=True)
+            if not (records.get(str(hold_id)) or {}).get('release')}
 
 
 def require_configured():
@@ -255,21 +277,27 @@ def remove_files(files, target_id):
     keys = [record['storage_key'] for record in files]
     try:
         shared = shared_keys(keys, target_id)
-    except Exception:  # noqa: BLE001 - unknown sharing removes nothing; the retry or the next replay tries again
+    except Exception:  # noqa: BLE001 - unknown sharing removes nothing; the worker's next sweep tries again
         log.error('Whether a redacted file is shared could not be read; nothing was removed.')
         return 0
     removed = 0
+    root = settings.MEDIA_ROOT.resolve()
     for key in keys:
         if key in shared:
             log.error('A redacted file is referenced by another record and was kept.')
             continue
         try:
-            path = private_path(key)
-            if path.is_symlink():raise ValidationError('symbolic link')
-            if not path.exists():continue
-            path.unlink(); removed += 1
+            # ⚠️ THE LINK ITSELF, NOT WHAT IT POINTS TO (refutation R3R-T1 of 75d11c09): private_path() resolves, so a check
+            # of its result never saw a symbolic link, and the sweep unlinked the link's TARGET, another record's file
+            # (a template's original), leaving the link. As retention._cleanup_file does: refuse a link at the key, and a
+            # key whose resolved path is not the key itself (a linked directory on the way).
+            candidate = root / key
+            if candidate.is_symlink() or private_path(key) != candidate:raise ValidationError('symbolic link')
+            if not candidate.exists():continue
+            candidate.unlink(); removed += 1
         except (OSError, ValidationError):
-            log.error('A redacted file was not removed; the exact retry or the next replay removes it.')
+            log.error('A redacted file was not removed; the worker\'s next sweep, the exact retry or the next replay '
+                      'removes it.')
     return removed
 
 
@@ -300,15 +328,42 @@ def withheld(encounter_id):
     """Whether provider output for this document must not be stored: this database has its redaction tombstone, or the
     independent journal holds its redaction (refutation R2D-L1 of 4cfa4301: while a journaled redaction waits for its
     retried commit, a late result wrote the quoted notes to receipts, and the new file changed the content so the exact
-    retry could never commit). The same reading as require_access; an unverifiable journal raises, as it does there."""
+    retry could never commit).
+
+    ⚠️ A JOURNAL THAT CANNOT BE READ NOW DOES NOT DISCARD THE OUTPUT (refutation R3R-T2 of 75d11c09): this runs after the
+    provider returned and its receipt committed, and raising here parked the job and lost the paid output of a document
+    nobody redacted. The database's answer stands and the fault is logged; the output is stored, referenced by its job, so
+    a redaction that commits later still sweeps it. The residual, recorded: a redaction that is ONLY journaled (its commit
+    failed) while the journal is also unreadable lets this output be written; its exact retry then refuses with
+    CONTENT_CHANGED, as before R2D-L1."""
     if not encounter_id:
         return False
     if m.RedactionTombstone.objects.filter(target_id=encounter_id).exists():
         return True
     if getattr(settings, 'DISPOSITION_JOURNAL_PATH', ''):
-        return any(entry['body']['redaction']['target_id'] == str(encounter_id)
-                   for entry in journal.redaction_entries(journal.verified()))
+        try:
+            entries = journal.redaction_entries(journal.verified())
+        except (ValidationError, OSError):
+            logging.getLogger(__name__).error('The independent journal could not be read while storing a provider result; '
+                                              'the database shows no redaction, so the result is stored.')
+            return False
+        return any(entry['body']['redaction']['target_id'] == str(encounter_id) for entry in entries)
     return False
+
+
+def sweep_left():
+    """The automatic retry of a failed removal (refutation R3R-T5 of 75d11c09): the worker runs this every minute. A
+    redaction whose bytes a failed unlink left on a SERVING instance no longer quarantines it (R2D-Q1), and a redaction
+    applied there by replay has no request row for an exact retry, nor a replay once admitted; so every redacted document
+    whose files still have bytes here is swept again. Returns how many files were removed."""
+    removed = 0
+    for target_id in m.RedactionTombstone.objects.values_list('target_id', flat=True):
+        try:
+            if files_left(target_id):
+                removed += sweep(target_id)
+        except Exception:  # noqa: BLE001 - one unreadable record never stops the worker; the next pass tries again
+            logging.getLogger(__name__).error('A redacted document could not be swept; the next pass tries again.')
+    return removed
 
 
 def files_left(target_id, listed=()):
