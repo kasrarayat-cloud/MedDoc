@@ -2715,3 +2715,25 @@ class RoundFive(unittest.TestCase):
         self.assertEqual(detector.withdrawn_areas, [])
         self.assertFalse([n for n in notes if "merged" in n], notes)
         self.assertNotIn("b/tbl[0]/tr[0]/tc[1]", [a.slot.path for a in areas])
+
+    def test_we3m3_a_table_with_one_merge_reads_rows_only_for_that_merge(self):
+        """Only a merge spanning two or more rows is read for its rows (shared_rows), once - never each of a log's
+        cells, which made the pass grow with rows x cells (the answer rows of a table are gathered once too)."""
+        from unittest import mock
+        from . import word_v3 as w
+        doc = Document()
+        doc.add_paragraph("Synthetic observation chart")
+        table = doc.add_table(rows=61, cols=6)
+        for c, text in enumerate(("Date", "Time", "BP", "Pulse", "SpO2", "Initials")):
+            table.cell(0, c).text = text
+        table.cell(1, 5).merge(table.cell(2, 5))
+        data = docx_bytes(doc)
+        calls = []
+        real = w.Detector.shared_rows
+
+        def rows(self, *a, **k):
+            calls.append(a[1].id)
+            return real(self, *a, **k)
+        with mock.patch.object(w.Detector, "shared_rows", rows):
+            w.inspect(data)
+        self.assertEqual(calls, ["word/document.xml#b/tbl[0]/tr[1]/tc[5]"])

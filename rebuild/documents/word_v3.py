@@ -2248,7 +2248,7 @@ class Detector:
                     if node.kind == "tc":
                         held.setdefault(id(node.parent), {}).setdefault(node.info["row"], set()).add(node.id)
                     node = node.parent
-        verdicts = {}
+        verdicts, answer_rows = {}, {}
 
         def shared_cell(slots):
             for slot in slots:
@@ -2257,7 +2257,11 @@ class Detector:
                     if node.kind == "tc" and self.merge_index(node.parent)[0]:
                         head = self.merge_head(node.parent, node)
                         if head.id not in verdicts:
-                            verdicts[head.id] = self.shared_rows(node.parent, head, set(held.get(id(node.parent), {})))
+                            verdicts[head.id] = []
+                            if len(self.merge_rows(node.parent, head)) >= 2:
+                                if id(node.parent) not in answer_rows:
+                                    answer_rows[id(node.parent)] = set(held.get(id(node.parent), {}))
+                                verdicts[head.id] = self.shared_rows(node.parent, head, answer_rows[id(node.parent)])
                         if verdicts[head.id]:
                             return head
                     node = node.parent
