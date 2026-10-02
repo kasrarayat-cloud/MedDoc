@@ -252,7 +252,9 @@ class SupersessionFloor(Worst):
     def test_an_agent_switching_names_nothing_it_ended(self):
         # A person subject of an active supersession is its agent, never its theme: what it ended is unnamed (bare).
         self.assert_cases_held(((WARFARIN, 'The cardiologist switched to apixaban.'),
-                                (WARFARIN, 'We switched to apixaban.')))
+                                (WARFARIN, 'We switched to apixaban.'), (WARFARIN, 'Haematology switched to apixaban.'),
+                                (WARFARIN, 'The endoscopist switched to apixaban.'),
+                                (WARFARIN, 'The pharmacy switched to apixaban.')))
 
     def test_o2_o10_an_old_value_under_the_replacement_and_a_conjunct_own_object(self):
         # (refutation O2) 'to' read as an infinitive marker hangs 'from' under the replacement: still the old value
@@ -470,6 +472,7 @@ class Reading(SimpleTestCase):
                 ('The patient was switched to apixaban from warfarin.', {'warfarin'}, False),
                 ('Warfarin switched to apixaban.', {'warfarin'}, False),
                 ('The cardiologist switched to apixaban.', set(), True),
+                ('Haematology switched to apixaban.', set(), True),
                 ('She was switched to apixaban and the patient was held overnight.', set(), True)):
             with self.subTest(text=text):
                 found, found_bare = self.reading(text)

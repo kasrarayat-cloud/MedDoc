@@ -488,10 +488,21 @@ def _phrase_lemmas(tokens, inside, skip=frozenset()):
             if x.pos_ in CONTENT and x.i in inside and x.i not in skip}
 
 
+#: Word endings and nouns of a clinician, a specialty or a service that can act ('The endoscopist ...', 'Haematology
+#: ...', 'Paediatrics ...', 'The pharmacy ...'). Used only to read an active subject as an AGENT rather than what a
+#: supersession ended, which can only make it name nothing (bare) and HOLD more.
+AGENT_ENDINGS = ('ist', 'ists', 'ian', 'ians', 'ology', 'iatrics', 'aedics', 'edics')
+AGENT_NOUNS = frozenset(('pharmacy', 'service', 'department', 'unit', 'ward', 'practice', 'hospital', 'surgery', 'clinic',
+                         'trust', 'gp', 'mdt', 'outreach'))
+
+
 def _agent(token):
-    """A subject that can only be the AGENT of a supersession: a person, a clinician or a pronoun ('The cardiologist
-    switched to apixaban.', 'We switched to apixaban.')."""
-    return token.pos_ == 'PRON' or names_person(token) or names_carer(token) or this_patient(token)
+    """A subject that may be the AGENT of a supersession rather than what it ended: a person, a clinician, a specialty
+    or a service, the patient, or a pronoun ('The cardiologist switched to apixaban.', 'Haematology switched to
+    apixaban.', 'We switched to apixaban.')."""
+    lemma = _lemma(token)
+    return (token.pos_ == 'PRON' or names_person(token) or names_carer(token) or this_patient(token)
+            or lemma in AGENT_NOUNS or lemma.endswith(AGENT_ENDINGS))
 
 
 def _superseded(t, lem, txt, inside):
