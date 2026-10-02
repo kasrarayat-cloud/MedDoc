@@ -2325,20 +2325,10 @@ class Detector:
             text, pieces = self.ptext(node.el)
             if not text.strip(" \t\x00"):
                 continue
-            if node.id in holders or self.blank_spans(text, pieces) or "\x00" in text \
-                    or any(self.legacy_answer_tab(run) for run in node.el.findall(R)):
+            if node.id in holders or self.blank_spans(text, pieces) or "\x00" in text:
                 return ""
             return clean_label(self.text(node.el)) if self.word_heading(node.el) else ""
         return ""
-
-    @staticmethod
-    def legacy_answer_tab(run) -> bool:
-        """documents.tab_form._answer_tab: a run of exactly one tab, single-underlined."""
-        rpr = run.find(q("w:rPr"))
-        underline = rpr.find(q("w:u")) if rpr is not None else None
-        children = [child for child in run if child.tag != q("w:rPr")]
-        return (underline is not None and (underline.get(q("w:val")) or "single") == "single"
-                and len(children) == 1 and children[0].tag == TAB)
 
     def word_heading(self, p) -> bool:
         """A Word heading: printed text and a heading outline level (0-8), read where Word reads it - the paragraph's

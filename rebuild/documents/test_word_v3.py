@@ -2468,6 +2468,9 @@ class RoundThree(unittest.TestCase):
         fields = w.inspect(data)["fields"]
         sources = {r["source"] for r in w.destination_roles(data, fields)["roles"]}
         self.assertIn("protected_area", sources, sources)
+        # the protected field itself is kept in the mapping (shown as protected), not withdrawn
+        self.assertTrue([f for f in fields if f.get("write_protected") and f["locator"]["slot"].startswith("b/tbl[0]/tr[0]/tc[1]")],
+                        [(f["label"], f["locator"]["slot"], f.get("write_protected")) for f in fields])
 
     # R2F-10 FB ─ a blank-text row ('dd/mm/yyyy') prints no question
     def test_r2f10_fb_a_date_format_row_is_no_second_question(self):
@@ -2655,6 +2658,16 @@ class RoundThree(unittest.TestCase):
             _tab_line(doc, mark)
         labels = self.labels(docx_bytes(doc))
         self.assertFalse([label for label in labels if "—" in label], labels)
+
+    def test_a_paragraph_outline_level_of_body_text_overrides_a_heading_style(self):
+        doc = Document()
+        heading = doc.add_heading("FINDINGS", 2)
+        level = OxmlElement("w:outlineLvl")
+        level.set(qn("w:val"), "9")
+        heading._p.get_or_add_pPr().append(level)
+        for mark in ("1.", "2."):
+            _tab_line(doc, mark)
+        self.assertFalse([label for label in self.labels(docx_bytes(doc)) if "—" in label])
 
     def test_r2f11_fv_a_default_style_with_an_outline_level_makes_no_heading(self):
         doc = Document()
