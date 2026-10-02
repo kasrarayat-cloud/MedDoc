@@ -1388,6 +1388,9 @@ class Area:
     # structure (a drawn initials box) rather than from its label's wording.
     label_slot: object = None
     structural: bool = False
+    # The finalizer's own signer row (identity_rows): a text area carrying the clinician-identity policy, read from the
+    # original at every gate, never generated.
+    identity: bool = False
 
 
 #: A list marker is 1-3 digits, ONE letter or a roman numeral (i..xxx), as 'M.' 'M)' or '(M)' before a space.
@@ -2130,6 +2133,7 @@ class Detector:
         self.qualify_numbered()
         self.qualify_sides()
         self.surface_duplicates()
+        self.identity_rows()
         for a in list(self.areas):
             if a.complete_source and (len(a.label) > MAX_MAPPING_LABEL or len(a.context) > MAX_MAPPING_CONTEXT):
                 self.notes.append("Unassigned answer box at " + a.slot.id +
@@ -2142,6 +2146,141 @@ class Detector:
             a.capacity = self.capacity_for(a)
         self.areas.sort(key=lambda a: (self.index.by_id[a.slot.id].seq if a.slot.id in self.index.by_id else 0, a.order))
         return self.areas, self.notes
+
+    def identity_rows(self):
+        """The finalizer's own signer rows: a signature area the LEGACY engine maps (legacy_printed_label) whose printed
+        label the review contract reads as the finalizing clinician's identity (identity_label) becomes a text area
+        carrying the clinician-identity policy, exactly as the legacy engine reads that row. Never generated (the
+        clinical side's clinician_identity), its only value the finalizer's own name, checked at finalization; its place
+        stays a signing role that takes only that field or a Signature field (_role_reading, role_allows).
+
+        ⚠️ EC1 (engine comparison, the owner colonoscopy form): 'Electronically signed by' was a signature area that
+        could never be completed, where legacy lets the finalizer enter their own name. EXACTLY the rows legacy treats
+        that way, and nothing wider: a shape legacy never maps (an underscore line, a content control, a caption over a
+        writing line), another person's signing line, initials and every role the original prints otherwise stay
+        hand-signed areas. A place under a printed authorship or review requirement is never converted."""
+        for area in self.areas:
+            if area.kind != "signature" or area.structural or area.protection or signing_place(area.label) != "signature":
+                continue
+            printed = self.legacy_printed_label(area)
+            if not printed or not identity_label(printed):
+                continue
+            probe = area_to_field(0, area)
+            source_policy.annotate(self, [probe])
+            if probe.get("answer_policy"):
+                continue
+            area.kind, area.identity = "text", True
+
+    def legacy_printed_label(self, area):
+        """The label the LEGACY engine (documents.engine, documents.tab_form) prints for this area's place when it maps
+        that shape, else None: a two-column question|blank row or a strict label|blank pairs row with no merged or nested
+        cells; a {{placeholder}}; an underlined answer tab after its label on a plain line outside a table; or an
+        underlined-tab line directly under a Word heading."""
+        target, slot = area.target, area.slot
+        if target.get("type") == "cell" and slot.kind == "tc":
+            tr = slot.el.getparent()
+            if tr is None or tr.tag != q("w:tr") or tr.find("./" + q("w:trPr") + "/" + q("w:trHeight")) is not None \
+                    and tr.find("./" + q("w:trPr") + "/" + q("w:trHeight")).get(q("w:hRule")) == "exact":
+                return None
+            cells = [c for c in tr if c.tag == q("w:tc")]
+            if slot.el not in cells or any(c.find(".//" + q(tag)) is not None for c in cells
+                                           for tag in ("w:vMerge", "w:gridSpan", "w:tbl")):
+                return None
+            texts = ["".join(t.text or "" for t in c.iter(T)).strip() for c in cells]
+            at = cells.index(slot.el)
+            occupied = lambda c: bool("".join(t.text or "" for t in c.iter(T)).strip()) or any(
+                c.find(".//" + q(tag)) is not None for tag in ("w:drawing", "w:pict", "w:br", "w:sym", "w:object",
+                                                               "w:fldChar", "w:fldSimple", "w:sdt"))
+            if len(cells) == 2 and at == 1 and texts[0] and not occupied(cells[1]):
+                return texts[0]
+            if len(cells) >= 4 and len(cells) % 2 == 0 and at % 2 == 1 \
+                    and all(texts[i] and len(texts[i]) <= 80 for i in range(0, len(cells), 2)) \
+                    and not any(occupied(cells[i]) for i in range(1, len(cells), 2)):
+                return texts[at - 1]
+            return None
+        if slot.kind != "p":
+            return None
+        if target.get("type") == "span" and target.get("shape") == "token":
+            row = row_of(self.host_cell(slot).el) if self.host_cell(slot) is not None else None
+            height = row.find("./" + q("w:trPr") + "/" + q("w:trHeight")) if row is not None else None
+            if height is not None and height.get(q("w:hRule")) == "exact":
+                return None
+            text = self.ptext(slot.el)[0]
+            match = re.fullmatch(r"\{\{\s*([\w][\w .?:/()\-]{0,119}?)\s*\}\}", text[target["start"]:target["end"]])
+            return match.group(1).strip() if match else None
+        if self.host_cell(slot) is not None:
+            return None
+        return self.legacy_tab_label(area)
+
+    @staticmethod
+    def legacy_answer_tab(run) -> bool:
+        """documents.tab_form._answer_tab: a run of exactly one tab, single-underlined."""
+        rpr = run.find(q("w:rPr"))
+        underline = rpr.find(q("w:u")) if rpr is not None else None
+        children = [child for child in run if child.tag != q("w:rPr")]
+        return (underline is not None and (underline.get(q("w:val")) or "single") == "single"
+                and len(children) == 1 and children[0].tag == TAB)
+
+    def legacy_tab_label(self, area):
+        """The tab contract's label for an underlined-tab area (documents.tab_form.inspect_tabs), or None where that
+        contract would not map the line: the label printed before the area's one answer tab, or - for a line that is
+        only an answer tab - the Word heading printed directly above it."""
+        slot, target = area.slot, area.target
+        p = slot.el
+        if any(child.tag not in (q("w:pPr"), R) for child in p) or p.find("./" + q("w:pPr") + "/" + q("w:framePr")) is not None:
+            return None
+        runs = p.findall(R)
+        if any(child.tag not in (q("w:rPr"), T, TAB) for run in runs for child in run):
+            return None
+        candidates = [i for i, run in enumerate(runs) if self.legacy_answer_tab(run)]
+        if not candidates or "".join(t.text or "" for run in runs[candidates[-1] + 1:] for t in run.iter(T)).strip():
+            return None
+        if target.get("type") == "span" and target.get("shape") in ("utab", "after_label"):
+            # The area writes over exactly one answer tab and no printed word ('Electronically signed by: ' + tab is
+            # one after-label gap on the owner form: the space after the colon and the underlined tab).
+            text, pieces = self.ptext(p)
+            start, end = target["start"], target["end"]
+            if text[start:end].strip():
+                return None
+            hit = [i for i in candidates if any(pc.run is runs[i] and pc.start < end and pc.end > start for pc in pieces)]
+            if len(hit) != 1:
+                return None
+            before = candidates[:candidates.index(hit[0])]
+            label_runs = runs[(before[-1] + 1) if before else 0:hit[0]]
+            label = "".join(t.text or "" for run in label_runs for t in run.iter(T)).strip()
+            if before and (sum(1 for run in label_runs for child in run if child.tag == TAB) != 1 or not label):
+                return None
+            return label if any(ch.isalpha() for ch in label) else None
+        if target.get("type") == "paragraph" and len(candidates) == 1 and area.label_slot is not None:
+            if "".join(t.text or "" for t in p.iter(T)).strip() or area.extra_slots:
+                return None
+            heading = area.label_slot.el
+            if p.getprevious() is not heading or not self.word_heading(heading):
+                return None
+            return self.text(heading).strip() or None
+        return None
+
+    def word_heading(self, p) -> bool:
+        """documents.tab_form._heading: printed text and an outline level or a 'Heading N' style in its ancestry."""
+        if not self.text(p).strip():
+            return False
+        ppr = p.find(q("w:pPr"))
+        level = ppr.find(q("w:outlineLvl")) if ppr is not None else None
+        if level is not None and level.get(q("w:val")) in {str(i) for i in range(9)}:
+            return True
+        style = ppr.find(q("w:pStyle")) if ppr is not None else None
+        name = style.get(q("w:val")) if style is not None else ""
+        if not name and "word/styles.xml" in self.package.names:
+            name = next((s.get(q("w:styleId")) for s in self.package.tree("word/styles.xml").findall(q("w:style"))
+                         if s.get(q("w:type")) == "paragraph" and (s.get(q("w:default")) or "") in ("1", "true")), "")
+        chain, _ = self.question_box_style_chain(name, "paragraph")
+        for s in chain:
+            if re.fullmatch(r"Heading[1-9]", s.get(q("w:styleId")) or "", re.I):
+                return True
+            level = s.find("./" + q("w:pPr") + "/" + q("w:outlineLvl"))
+            if level is not None and level.get(q("w:val")) in {str(i) for i in range(9)}:
+                return True
+        return False
 
     #: A numbered slot's whole printed label: '1.', '2)' or '(3)' (digits only, as the legacy tab contract reads them).
     NUMBERED_SLOT = re.compile(r"(\d{1,3})[.)]|\((\d{1,3})\)")
@@ -5848,6 +5987,8 @@ def area_to_field(n: int, area: Area) -> dict:
     if area.protection:
         field["write_protected"] = True
         field["review_reason"] = area.protection
+    if area.identity:
+        field["answer_policy"] = IDENTITY_POLICY
     if area.source_questions:
         field["source_questions"] = area.source_questions
     return field
@@ -6155,18 +6296,23 @@ def _role_reading(package):
         if area.protection:
             for pid in dict.fromkeys([anchor] + [pid for pid, _, _ in places]):
                 roles.append(_role(ROLE_PROTECTED, "protected_area", pid, None, None, area.protection))
-        elif area.kind in SIGNING_KINDS:
-            if not area.structural and detector.kind_for(area.label) == area.kind and not signing_place(area.label):
+        elif area.kind in SIGNING_KINDS or area.identity:
+            if area.kind in SIGNING_KINDS and not area.structural and detector.kind_for(area.label) == area.kind \
+                    and not signing_place(area.label):
                 # The kind rule's reading of a clinical reading or a checklist state ('Initial GCS', 'Consent form
                 # signed'): never generated, but not a role - the clinician may replace it with the answer it asks.
                 continue
+            # The finalizer's own signer row (Detector.identity_rows) keeps its signing place, which takes only a field
+            # carrying the clinician-identity policy (or a Signature field): its own place only, never its caption.
+            source, requires = ("identity_area", {"answer_policy": IDENTITY_POLICY}) if area.identity \
+                else ("signing_area", None)
             for pid, start, end in places:
                 if start is None:
-                    roles.append(_role(ROLE_SIGNING, "signing_area", pid, None, None, signing))
+                    roles.append(_role(ROLE_SIGNING, source, pid, None, None, signing, requires))
                     line_role(ROLE_SIGNING, "signing_area", index.by_id.get(pid), signing, field["key"])
                     continue
                 low, high = segment(pid, start, end, field["key"])
-                roles.append(_role(ROLE_SIGNING, "signing_area", pid, low, high, signing))
+                roles.append(_role(ROLE_SIGNING, source, pid, low, high, signing, requires))
                 # A caption with no blank of its own ('Consultant signature:') is signed on the writing line under it.
                 pslot = index.by_id.get(pid)
                 if pslot is not None and pslot.kind == "p" and not reader.text(pslot)[0][start:].strip():
@@ -6235,6 +6381,9 @@ def role_allows(field, role) -> bool:
     a policy place also takes a field carrying exactly its printed requirement. Nothing else may touch a role."""
     if field.get("kind") in SIGNING_KINDS or field.get("write_protected"):
         return True
+    if (role.get("requires") or {}).get("answer_policy") == IDENTITY_POLICY:
+        # The finalizer's own signer place: only the text field carrying the clinician-identity policy.
+        return field.get("answer_policy") == IDENTITY_POLICY and field.get("kind") in ("text", "long_text")
     if role["class"] == ROLE_POLICY:
         policy = field.get("answer_policy")
         policy = policy if isinstance(policy, dict) else {}
@@ -6257,8 +6406,9 @@ def role_violations(reader, fields, roles) -> dict:
             hit = next((r for r in near if r["class"] == cls and not role_allows(field, r)
                         and any(reader.touches(place, r) for place in places)), None)
             if hit is not None:
+                identity = (hit.get("requires") or {}).get("answer_policy") == IDENTITY_POLICY
                 out[str(field.get("key"))] = {"class": cls, "source": hit["source"], "place": hit["place"],
-                                              "reason": ROLE_REFUSALS[cls]}
+                                              "reason": IDENTITY_REFUSAL if identity else ROLE_REFUSALS[cls]}
                 break
     return out
 
@@ -6349,6 +6499,50 @@ def legacy_role_kind(label) -> str:
     text = _plain(label)
     kind = Detector.kind_for(None, text)
     return kind if kind in SIGNING_KINDS and signing_place(text) else ""
+
+
+#: ⚠️ THE REVIEW CONTRACT'S READING OF THE FINALIZER'S OWN SIGNER ROW, COPIED CHARACTER FOR CHARACTER from
+#: core.tab_review (TRAILING, _ROLE, SIGNATURE_PATTERNS, NOT_THE_CLINICIAN, QUALIFIER, DATE_QUESTION; signature_label).
+#: This engine runs in the sandboxed parser and cannot import core, so the rule is written twice and the AGREEMENT is
+#: asserted (core.tests.test_destination_roles.IdentityReaderAgreement: identical pattern strings, identical answers on
+#: a battery). Identity_rows reads it on the label the LEGACY engine prints, never on a model's or a clinician's label.
+IDENTITY_POLICY = "clinician_identity"
+IDENTITY_TRAILING = ':：.,;· \t'
+_IDENTITY_ROLE = r"(?:physician|provider|surgeon|clinician|attending|resident|doctor|md|do|np|pa|author)"
+IDENTITY_SIGNATURE_PATTERNS = tuple(re.compile(pattern) for pattern in (
+    r"(?:electronically |digitally |e[- ])?sign(?:ed|ature)(?: by| of)?(?: ?\([^)]*\))?",
+    rf"{_IDENTITY_ROLE}'?s? sign(?:ature|ed)(?: by)?",
+    rf"sign(?:ature|ed)(?: by| of)? (?:the )?{_IDENTITY_ROLE}",
+    r"signature ?/ ?date",
+))
+IDENTITY_NOT_THE_CLINICIAN = re.compile(
+    r'\b(?:patient|witness|guardian|parent|interpreter|relative|family|next of kin|carer)\b')
+IDENTITY_QUALIFIER = re.compile(r'\(([^)]*)\)')
+IDENTITY_DATE_QUESTION = re.compile(r'\b(?:date|dated|time|day)\b')
+IDENTITY_REFUSAL = ("This place is the finalizing clinician's own signer line on the original form. Only its signer field "
+                    "(the finalizing clinician's own name, entered by them and never generated) or a Signature field may "
+                    "sit there.")
+
+
+def identity_label(label) -> bool:
+    """core.tab_review.signature_label: a printed label naming the finalizing clinician's own signature line."""
+    text = re.sub(r'\s+', ' ', str(label or '')).strip().rstrip(IDENTITY_TRAILING).strip().casefold()
+    if IDENTITY_NOT_THE_CLINICIAN.search(text):
+        return False
+    inner = IDENTITY_QUALIFIER.search(text)
+    if inner and IDENTITY_DATE_QUESTION.search(inner.group(1)):
+        return False
+    return any(pattern.fullmatch(text) for pattern in IDENTITY_SIGNATURE_PATTERNS)
+
+
+def identity_policy_at(reader, field, roles) -> bool:
+    """Whether a text field's every write lands on the ORIGINAL's identity signer place (an identity_area role): the
+    policy such a field carries, read afresh from the original - never from the mapping (locate, fill)."""
+    if not isinstance(field, dict) or field.get("kind") not in ("text", "long_text"):
+        return False
+    marked = [r for r in roles if (r.get("requires") or {}).get("answer_policy") == IDENTITY_POLICY]
+    places = reader.of(field)
+    return bool(marked) and bool(places) and all(any(reader.touches(place, r) for r in marked) for place in places)
 
 
 def signing_box_reading(text) -> bool:
@@ -7091,7 +7285,8 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
     # ⚠️ THE ORIGINAL'S DESTINATION ROLES, read before anything is written and never from the mapping: a stored or
     # forged field on a signing, protected or policy place is refused by its span, not by its paragraph.
     original_roles = destination_roles_of(package)
-    role_refusals = role_violations(_PlaceReader(index), fields, original_roles)
+    place_reader = _PlaceReader(index)
+    role_refusals = role_violations(place_reader, fields, original_roles)
     ops = []                                   # (paragraph_or_element, sort_position, callable)
     glyph_writes = {}                          # original source identity -> (paragraph, ordinal, state, part)
     relation_areas = None
@@ -7116,6 +7311,9 @@ def fill(data: bytes, fields: list, answers: dict, *, retained_layout=None) -> b
         if "answer_policy" in field:
             current_policy = {k: v for k, v in field.items() if k != "answer_policy"}
             source_policy.annotate(protected, [current_policy])
+            # The clinician-identity policy too is the ORIGINAL's: only a text field on its signer place carries it.
+            if "answer_policy" not in current_policy and identity_policy_at(place_reader, current_policy, original_roles):
+                current_policy["answer_policy"] = IDENTITY_POLICY
             if current_policy.get("answer_policy") != field["answer_policy"]:
                 fail("The printed authorship or review requirement has changed. Review the mapping again.",
                      "mapping_mismatch")
@@ -8008,7 +8206,12 @@ def locate(data: bytes, targets: list) -> list:
         # ⚠️ A ROLE PLACE TAKES ONLY WHAT IT ALLOWS, whoever chooses it: a clinician's add or a model's proposal on a
         # signing, initials, consent or protected place is refused unless it is a Signature or Initials field.
         roles = destination_roles_of(package) if roles is None else roles
-        refusal = role_violations(_PlaceReader(detector.index), [field], roles).get(field["key"])
+        reader = _PlaceReader(detector.index)
+        # The finalizer's own signer place gives a text field added there the clinician-identity policy, read from the
+        # original exactly as for the engine's own field: removed and added again, it is the identity row again.
+        if "answer_policy" not in field and identity_policy_at(reader, field, roles):
+            field["answer_policy"] = IDENTITY_POLICY
+        refusal = role_violations(reader, [field], roles).get(field["key"])
         if refusal:
             fail(refusal["reason"] + " Nothing was added.", "destination_role")
         out.append(field)

@@ -4470,9 +4470,20 @@ def v3_generation_fields(fields, context_labels=()):
             return fields, context_labels, None
         return ([f for f in fields if not f.get('destination_role')],
                 list(context_labels) + [f['label'] for f in held], None)
-    asked = [f for f in fields if f.get('kind') not in V3_NEVER_GENERATED and not f.get('write_protected')]
-    held = [f['label'] for f in fields if f.get('kind') in V3_NEVER_GENERATED or f.get('write_protected')]
+    asked = [f for f in fields if not v3_never_asked(f)]
+    held = [f['label'] for f in fields if v3_never_asked(f)]
     return asked, list(context_labels) + held, fields
+
+
+def v3_never_asked(field):
+    """A contract v3 field generation never asks about: table rows, signature and initials, a protected or role-held
+    area, and the finalizing clinician's own signer row (core.tab_review.clinician_identity - the engine's
+    clinician-identity policy or a signature label). Its label stays a context label.
+
+    ⚠️ EC1 (engine comparison): the signer row of a form legacy maps is a v3 TEXT field carrying that policy; asked, the
+    provider was sent the signer's question and its answer discarded afterwards - the legacy engine never asks it."""
+    from .tab_review import clinician_identity
+    return field.get('kind') in V3_NEVER_GENERATED or bool(field.get('write_protected')) or clinician_identity(field)
 
 
 class LabelledLines:
@@ -4649,6 +4660,12 @@ def v3_adopted(fields, answers, notes, generated, context_labels=()):
             out[field['key']] = {'text': '', 'status': 'missing', 'evidence': [], 'reviewed': False,
                                  'reason': (field.get('review_reason') or 'Protected signing area; left unchanged.')
                                            if field.get('write_protected') else V3_NOT_GENERATED_REASON[kind]}
+            continue
+        if v3_never_asked(field):
+            # The finalizing clinician's own signer row: never generated, entered and reviewed by them.
+            from .destination_roles import IDENTITY_NOT_GENERATED
+            out[field['key']] = {'text': '', 'status': 'missing', 'evidence': [], 'reviewed': False,
+                                 'reason': IDENTITY_NOT_GENERATED}
             continue
         answer = answers[field['key']]
         count = repeats[question_key(field['label'])]
