@@ -199,6 +199,12 @@ def journal_committed_release(actor,hold_id):
         row=RetentionHoldRelease.objects.filter(hold=hold).first()
         if row is None:raise ValidationError('This preservation instruction has no committed release.')
         release={'id':str(row.pk),'hold_id':str(hold.pk),'authority_sha256':row.authority_sha256,'created_by':str(row.created_by_id)}
+        # ⚠️ AUDITED ONLY WHEN THIS CALL JOURNALS IT (refutation R5F-13 of a0bc4fd8): a second call, or one after the releasing
+        # custodian's exact retry journaled it, appended nothing and still audited a journaling under the caller. The
+        # audit table is append-only, so the record must say who actually wrote the entry.
+        journaled=(journal.journaled_holds().get(str(hold.pk)) or {})
+        if journaled.get('release')==release:
+            return journaled['release_entry']
         entry=journal.append_release(release,hold_record(hold))
         audit(actor,'retention.release_journaled',hold.pk,release=str(row.pk))
     return entry

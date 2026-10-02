@@ -31,7 +31,7 @@ import uuid
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 
 from . import disposition as d, disposition_journal as journal, disposition_policy as p, models as m, retention
 from .security import audit, private_path
@@ -63,11 +63,15 @@ def pending_uploads(encounter_id):
     """The dictations an over-limit quote stored for this document, which no row references until a doctor approves them.
     The audit read is narrowed by the document's department (an indexed column; refutation R4S-4 of b3d8111d: the action and
     target filter alone scanned the whole audit table for every redacted document, every minute)."""
+    return [key for key in (str((details or {}).get('path') or '') for details in quote_events(encounter_id).values_list(
+        'details', flat=True)) if key]
+
+
+def quote_events(encounter_id):
+    """This document's over-limit quote rows, narrowed by its department (a document's department never changes)."""
     department = m.Encounter.objects.filter(pk=encounter_id).values_list('department_id', flat=True).first()
     events = m.AuditEvent.objects.filter(action='voice.over_limit_quoted', target=str(encounter_id))
-    if department:
-        events = events.filter(department_id=department)
-    return [key for key in (str((details or {}).get('path') or '') for details in events.values_list('details', flat=True)) if key]
+    return events.filter(department_id=department) if department else events
 
 
 def own_files(encounter_id):
@@ -190,6 +194,15 @@ def journal_pending_releases(actor, encounter_id):
     lacks is journaled from its own recorded evidence (retention.journal_committed_release), by any active verified
     custodian. Returns how many were journaled."""
     retention.custodian(actor)
+    # ⚠️ AN UNKNOWN DOCUMENT IS REFUSED (refutation R5F-12 of a0bc4fd8): scoped_holds answers an unknown or unparseable id
+    # with EVERY hold (unknown ownership never proves a disposal safe), which is right for a refusal and wrong for choosing
+    # what to act on: a mistyped id journaled every pending release in the database, across organizations.
+    try:
+        known = m.Encounter.objects.filter(pk=encounter_id).exists()
+    except (ValueError, ValidationError):
+        known = False
+    if not known:
+        raise ValidationError('Unknown document.')
     pending = unjournaled_releases(encounter_id)
     for hold_id in sorted(pending):
         retention.journal_committed_release(actor, hold_id)
@@ -261,6 +274,7 @@ def execute(actor, request_id, checkpoint_envelope):
     if blocked:raise ValidationError('Redaction is unavailable: ' + ', '.join(blocked) + '.')
     fingerprint, files = content(encounter)
     if fingerprint != row.content_sha256:raise ValidationError(CONTENT_CHANGED)
+    files = journaled_files(row.pk, encounter.pk, files)
     body = {'id': tombstone_id(row.pk), 'request_id': str(row.pk), 'target_id': str(encounter.pk),
             'department_id': str(encounter.department_id), 'content_sha256': fingerprint, 'reason_sha256': row.reason_sha256,
             'files': files, 'requested_by': str(row.created_by_id), 'requested_at': row.created_at.isoformat(),
@@ -271,6 +285,26 @@ def execute(actor, request_id, checkpoint_envelope):
           files=len(files), code_suggestions=codes)
     transaction.on_commit(lambda: sweep(tombstone.target_id))
     return tombstone
+
+
+def journaled_files(request_id, encounter_id, own):
+    """The file list a redaction journals: the files its fingerprint covers AND every dictation an over-limit quote stored
+    for the document. ⚠️ THE JOURNAL IS THE ONLY RECORD OF A REDACTION'S KEYS OUTSIDE THE CLINICAL BACKUP (refutation R5R-1
+    of a0bc4fd8): R4S-1 took the dictation out of the fingerprint and, with it, out of this list, so a restore pairing a
+    database from before the quote with a volume snapshot from after it (ops/production_restore_check.py) replayed, left the
+    redacted dictation on the volume, admitted it, and dated the exposure as ended; nothing referenced the key again. The
+    dictation stays out of the fingerprint and in this list, whether or not its bytes are still there (the reaper may have
+    removed them live; a restored volume may hold them).
+
+    An exact retry of a redaction already journaled (its commit failed) journals the identical body, so it takes this list
+    from that entry: the reaper may have removed the dictation in between, and its digest now would differ."""
+    for entry in journal.redaction_entries(journal.verified()):
+        body = entry['body']['redaction']
+        if body['request_id'] == str(request_id):
+            return body['files']
+    listed = {record['storage_key'] for record in own}
+    pending = [file_record(key) for key in dict.fromkeys(pending_uploads(encounter_id)) if key not in listed]
+    return sorted(own + pending, key=lambda record: record['storage_key'])
 
 
 def apply(entry):
@@ -363,12 +397,14 @@ def sweep(target_id):
     'redaction.swept' (counts, no path) whenever it differs from the last one recorded: a removal's time is when those bytes
     left this volume (core.exposure.commit_evidence), and the last outcome tells the worker whether to come back
     (sweep_left)."""
+    # Counted BEFORE the files are read: a quote that lands after this count is revisited by the worker, never missed.
+    quotes = quote_events(target_id).count()
     removed, retryable, refused = removal(redacted_files(target_id), target_id)
-    outcome = {'removed': removed, 'retryable': retryable, 'refused': refused}
+    outcome = {'removed': removed, 'retryable': retryable, 'refused': refused, 'quotes': quotes}
     last = latest_outcomes(m.AuditEvent.objects.filter(action='redaction.swept', target=str(target_id))).get(str(target_id))
     # Recorded when bytes were removed, and when what is left changed: a retry that removed nothing and left the same is
     # not, or a failure the worker retries every minute would add an append-only audit row every minute.
-    if removed or any((last or {}).get(key) != outcome[key] for key in ('retryable', 'refused')):
+    if removed or any((last or {}).get(key) != outcome[key] for key in ('retryable', 'refused', 'quotes')):
         audit(None, 'redaction.swept', target_id, **outcome, sequence=((last or {}).get('sequence') or 0) + 1)
     return removed
 
@@ -420,16 +456,29 @@ def sweep_left():
     whose last sweep left a retryable failure, or that was never swept here, is swept again. Returns how many files were
     removed.
 
-    ⚠️ THE STEADY STATE COSTS TWO QUERIES, HOWEVER MANY REDACTIONS EXIST (refutation R4S-4 of b3d8111d: every tombstone's
+    ⚠️ THE STEADY STATE COSTS THREE QUERIES, HOWEVER MANY REDACTIONS EXIST (refutation R4S-4 of b3d8111d: every tombstone's
     files were re-read every minute, about 14 queries each and an audit-table scan among them, 6 s a pass at 100 redactions).
-    A document whose last sweep left nothing retryable is not visited again; one whose bytes were refused for good (a
-    symbolic link, another record's key) is an operator's matter and is not retried, so it is not logged every minute
-    either."""
+    A document whose last sweep left nothing retryable, and saw every over-limit quote its document has, is not visited
+    again; one whose bytes were refused for good (a symbolic link, another record's key) is an operator's matter and is not
+    retried, so it is not logged every minute either."""
+    tombstones = dict(m.RedactionTombstone.objects.values_list('target_id', 'department_id'))
+    if not tombstones:
+        return 0
     last = latest_outcomes(m.AuditEvent.objects.filter(action='redaction.swept'))
+    quoted = {}
+    for target, department, count in m.AuditEvent.objects.filter(
+            action='voice.over_limit_quoted', target__in=[str(target_id) for target_id in tombstones]).order_by().values(
+            'target', 'department_id').annotate(count=Count('pk')).values_list('target', 'department_id', 'count'):
+        quoted[(target, department)] = count
     removed = 0
-    for target_id in m.RedactionTombstone.objects.values_list('target_id', flat=True):
+    for target_id, department in tombstones.items():
         outcome = last.get(str(target_id))
-        if outcome is not None and not (outcome or {}).get('retryable'):
+        # ⚠️ AND ONE WITH A QUOTE ITS LAST SWEEP DID NOT SEE (refutation R5R-2 of a0bc4fd8): views.voice stores the upload,
+        # enqueue refuses over the limit and releases the document's lock, and only then is the quote audited; a redaction
+        # committing in between swept clean, and the dictation then waited 40 minutes for the reaper. Counts, not times:
+        # the quote and the sweep may share a timestamp, and they come from different processes' clocks.
+        unseen = quoted.get((str(target_id), department), 0) != (outcome or {}).get('quotes', 0)
+        if outcome is not None and not (outcome or {}).get('retryable') and not unseen:
             continue
         try:
             removed += sweep(target_id)
