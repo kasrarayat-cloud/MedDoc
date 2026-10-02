@@ -1614,55 +1614,90 @@ class Detector:
         self._grid[key] = kind
         return kind
 
-    def merged_restart(self, tbl_slot, row, col):
-        """The cell a vertical-merge continuation at (row, col) continues: the nearest cell above it in that column that
-        is no continuation itself (as row_label reads a continued label), or None."""
-        rows = self.grid(tbl_slot)
-        for r in sorted((r for r in rows if r < row), reverse=True):
-            head = next((x for x in rows[r] if x.info["col"] == col), None)
-            if head is None or head.info["vmerge"] != "continue":
-                return head
-        return None
+    def merge_head(self, tbl_slot, cell):
+        """The first cell of the vertical merge `cell` belongs to: `cell` itself unless it is a continuation; else the
+        nearest cell above it in its column that is no continuation (a restart, or a plain cell the continuation
+        continues), else the TOPMOST continuation of the run.
 
-    def merged_answer_questions(self, tbl_slot, row, cell) -> list:
-        """For a vertically merged cell, the printed text of each DISTINCT row it spans (its own row and each row it
-        continues into), when there are two or more; else []. A row is what its printed cells LEFT of the merge say (where
-        rule (d) reads a row's question), a continued cell read as its merge's first cell (as row_label reads a continued
-        label); two rows that read through the same cells are one row. A tall answer cell beside ONE question (the
-        continued rows print nothing, or a label merged the same way) is that question's own place.
-
-        ⚠️ FAIL CLOSED (refutations of 8e00df9e and c1cae13d): distinct LAST-label strings counted 'Right eye | Visual
-        acuity' over 'Left eye | Visual acuity' as one question (M2) and option words as none (M3); skipping a continued
-        label gave the cell to the question rule (d) labels it with while counting only the other (WEC2-m-2). Any
-        printed cell left of the merge counts - an option word, a hint, a unit - so a single question beside a hint row
-        is withdrawn too: declared cost (WEC2-m-4, m-7). Recorded, not changed: a side printed to the RIGHT of a merged
-        cell (WEC2-m-6, pre-existing) - counting the right as well withdrew question cells on two dev forms."""
-        if cell.info["vmerge"] != "restart":
-            return []
+        ⚠️ FAIL CLOSED (refutation of be743e94, WEC3-m-2/m-4): a merge with no explicit restart - a continuation under a
+        plain cell, or a run of continuations from the first row - is still ONE merge; Word and the export's readers
+        show it as one cell beside every row it spans."""
+        if cell.info["vmerge"] != "continue":
+            return cell
         rows = self.grid(tbl_slot)
-        spanned = [row]
-        for later in sorted(r for r in rows if r > row):
-            if not any(c.info["col"] == cell.info["col"] and c.info["vmerge"] == "continue" for c in rows[later]):
+        head = cell
+        for r in sorted((r for r in rows if r < cell.info["row"]), reverse=True):
+            above = next((x for x in rows[r] if x.info["col"] == cell.info["col"]), None)
+            if above is None:
+                break
+            head = above
+            if above.info["vmerge"] != "continue":
+                break
+        return head
+
+    def merge_rows(self, tbl_slot, head) -> list:
+        """The rows the vertical merge starting at `head` spans: its own and each following row continuing it."""
+        rows = self.grid(tbl_slot)
+        spanned = [head.info["row"]]
+        for later in sorted(r for r in rows if r > head.info["row"]):
+            if not any(c.info["col"] == head.info["col"] and c.info["vmerge"] == "continue" for c in rows[later]):
                 break
             spanned.append(later)
-        low, high = cell.info["col"], cell.info["col"] + cell.info["span"]
-        seen, printed = [], []
+        return spanned
+
+    @staticmethod
+    def unprinted(text) -> bool:
+        """Nothing printed: empty, or a drawn blank only ('____', '. . .') - never a placeholder or a format hint
+        ('dd/mm/yyyy', 'Click here to enter text.'), which tell the reader what the row is for."""
+        text = text.strip()
+        return not text or (is_blank_text(text) and not PLACEHOLDER_TEXT.match(text))
+
+    def shared_rows(self, tbl_slot, head, answer_rows) -> list:
+        """For the vertical merge starting at `head`, a description of each DISTINCT row it spans that is a question's
+        or an answer's own row, when there are two or more; else []. A row is
+          - what its printed cells LEFT of the merge say (where rule (d) reads a row's question), a continued cell read
+            as its merge's first cell (merge_head); two rows that read through the same cells are one row; or
+          - when it prints nothing at all outside the merge (unprinted), an ANSWER row: a row where another engine
+            area (a field, or a log's table_rows) has a place outside this merge (`answer_rows`) - two entries of a
+            log, or two rows of blank answer cells, beside one merged cell (WEC3-m-1). A row printing only a format
+            hint ('dd/mm/yyyy') under a question is neither: the tall cell stays that question's (R2F-10 FB).
+        A tall answer cell beside ONE question (the continued rows print nothing and answer nothing, or a label merged
+        the same way) is that question's own place.
+
+        ⚠️ FAIL CLOSED (refutations of 8e00df9e, c1cae13d and be743e94): distinct LAST-label strings counted 'Right eye |
+        Visual acuity' over 'Left eye | Visual acuity' as one question (M2) and option words as none (M3); skipping a
+        continued label gave the cell to the question rule (d) labels it with while counting only the other (WEC2-m-2);
+        log rows, which print nothing, counted as no rows (WEC3-m-1). Any printed cell left of the merge counts - an
+        option word, a hint, a unit - so a single question beside a hint row is withdrawn too: declared cost (WEC2-m-4,
+        m-7). Recorded, not changed: a side printed to the RIGHT of a merged cell (WEC2-m-6, pre-existing) - counting the
+        right as well withdrew question cells on two dev forms."""
+        spanned = self.merge_rows(tbl_slot, head)
+        if len(spanned) < 2:
+            return []
+        rows = self.grid(tbl_slot)
+        low = head.info["col"]
+        seen, described = [], []
         for r in spanned:
             sources = []
             for c in sorted(rows[r], key=lambda c: c.info["col"]):
                 if c.info["col"] + c.info["span"] > low:
                     continue
-                source = self.merged_restart(tbl_slot, r, c.info["col"]) if c.info["vmerge"] == "continue" else c
-                if source is None:
-                    continue
+                source = self.merge_head(tbl_slot, c)
                 text = clean_label(self.cell_text(source))
                 if text and not is_blank_text(self.cell_text(source)):
                     sources.append((id(source.el), text))
             identity = frozenset(i for i, _ in sources)
-            if identity and identity not in seen:
+            if identity:
+                description = "'%s'" % " — ".join(text for _, text in sources)[:80]
+            elif r in answer_rows and all(self.unprinted(self.cell_text(c)) for c in rows[r]
+                                          if c.info["vmerge"] != "continue" and c.info["col"] != low):
+                identity, description = ("answers", r), "table row %d (answer cells only)" % (r + 1)
+            else:
+                continue
+            if identity not in seen:
                 seen.append(identity)
-                printed.append(" — ".join(text for _, text in sources))
-        return printed if len(printed) >= 2 else []
+                described.append(description)
+        return described if len(described) >= 2 else []
 
     def header_rows(self, tbl_slot):
         key = ("headers", id(tbl_slot))
@@ -2161,36 +2196,70 @@ class Detector:
         return self.areas, self.notes
 
     def withdraw_shared_merged_answers(self):
-        """EC3, as ONE pass over every rule's areas, with NO exemption: every answer area anywhere inside a vertically
-        merged cell beside two or more printed rows (merged_answer_questions) is withdrawn - mapped for none of them -
-        and the inspection says so once per cell. Signing, initials and protected areas are kept (they never take an
-        answer, and their destination roles depend on them; declared cost: such a role also refuses a field added there
-        by hand) and are never side-qualified from one row. A withdrawn area keeps its extent in the role reading
+        """EC3, as ONE pass over every rule's areas, with NO exemption: every answer area with a place anywhere inside a
+        vertically merged cell beside two or more rows (shared_rows) is withdrawn - mapped for none of them - and the
+        inspection says so once per cell. Signing, initials and protected areas are kept (they never take an answer,
+        and their destination roles depend on them; declared cost: such a role also refuses a field added there by
+        hand) and are never side-qualified from one row. A withdrawn area keeps its extent in the role reading
         (Detector.withdrawn_areas, _role_reading), so no neighbouring signing or protected role grows over it.
+
+        An area's places are its anchor, its extra slots, its boxes, its header/footer COPIES, and - for a log
+        (table_rows) - every cell of its rows and columns. A place inside the merge's continuation is inside the merged
+        cell (WEC3-m-3); a merge with no explicit restart is one merge (merge_head, WEC3-m-2/m-4); a copy in another
+        header part withdraws its area whichever part comes first (R3P-2); a log that writes into a merged cell shared
+        with another answer row is withdrawn whole (WEC3-m-1; declared cost: its rows clear of the merge too).
 
         ⚠️ ROUND 3 (refutation of c1cae13d, WEC2-m-1/R2F-01 HIGH): the 'question printed inside the merged cell'
         exemption was a substring test that kept the first question for any guidance mentioning it ('List current
         medications and allergies.', 'Record separately.'), silently dropping the second. Removed. Declared cost: a
         question printed inside a shared merged cell ('Primary Event (diagnosis): ____', a dev form) is withdrawn too."""
-        verdicts, withdrawn, kept = {}, [], []
-
-        def shared_cell(slot):
-            node = slot
-            while node is not None:
-                if node.kind == "tc" and node.info.get("vmerge") == "restart":
-                    if node.id not in verdicts:
-                        verdicts[node.id] = self.merged_answer_questions(node.parent, node.info["row"], node)
-                    if verdicts[node.id]:
-                        return node
-                node = node.parent
-            return None
+        places, held = {}, {}
         for area in self.areas:
             slots = [area.slot] + list(area.extra_slots)
-            for box in area.target.get("boxes", []):
-                slot = self.index.by_id.get("%s#%s" % (box.get("part"), box.get("slot")))
+            for ref in list(area.target.get("boxes", [])) + list(area.target.get("copies", [])):
+                slot = self.index.by_id.get("%s#%s" % (ref.get("part"), ref.get("slot")))
                 if slot is not None:
                     slots.append(slot)
-            cell = next((hit for slot in slots if (hit := shared_cell(slot)) is not None), None)
+            if area.target.get("type") == "table_rows" and area.slot.kind == "tc":
+                columns = set(area.target.get("columns", []))
+                for r in area.target.get("rows", []):
+                    slots.extend(c for c in self.grid(area.slot.parent).get(r, []) if c.info["col"] in columns)
+            places[id(area)] = slots
+            for slot in slots:
+                node = slot
+                while node is not None:
+                    if node.kind == "tc":
+                        held.setdefault(id(node.parent), {}).setdefault(node.info["row"], set()).add(node.id)
+                    node = node.parent
+        verdicts = {}
+
+        def verdict(cell):
+            table = cell.parent
+            head = self.merge_head(table, cell)
+            if head.id not in verdicts:
+                spanned = self.merge_rows(table, head)
+                shared = []
+                if len(spanned) >= 2:
+                    rows = self.grid(table)
+                    group = {c.id for r in spanned for c in rows.get(r, []) if c.info["col"] == head.info["col"]}
+                    answer_rows = {r for r, ids in held.get(id(table), {}).items() if ids - group}
+                    shared = self.shared_rows(table, head, answer_rows)
+                verdicts[head.id] = (head, shared)
+            return verdicts[head.id]
+
+        def shared_cell(slots):
+            for slot in slots:
+                node = slot
+                while node is not None:
+                    if node.kind == "tc":
+                        head, shared = verdict(node)
+                        if shared:
+                            return head
+                    node = node.parent
+            return None
+        withdrawn, kept = [], []
+        for area in self.areas:
+            cell = shared_cell(places[id(area)])
             if cell is None:
                 continue
             if area.protection or area.kind in SIGNING_KINDS:
@@ -2202,24 +2271,27 @@ class Detector:
             self.areas.remove(area)
             self.withdrawn_areas.append(area)
             self.layout_candidates[:] = [c for c in self.layout_candidates if c[2] is not area]
-        kept_cells = {cell.id for _, cell in kept}
         noted = []
         for _, cell in withdrawn + kept:
             if cell.id in noted:
                 continue
             noted.append(cell.id)
-            shared = verdicts[cell.id]
-            rows = "; ".join("'%s'" % label[:80] for label in shared[:6])
-            if any(c.id == cell.id for _, c in withdrawn):
-                note = ("The answer cell at %s is one vertically merged cell beside %d printed rows (%s), so it was NOT "
-                        "mapped: the merge hides which answer belongs to which row. Unmerge the answer cell, or add a "
-                        "field for it by hand on this page." % (cell.id, len(shared), rows))
-                if cell.id in kept_cells:
+            shared = verdicts[cell.id][1]
+            rows = "; ".join(shared[:6])
+            gone = [area for area, c in withdrawn if c.id == cell.id]
+            if gone:
+                note = ("The answer cell at %s is one vertically merged cell beside %d rows (%s), so it was NOT mapped: "
+                        "the merge hides which answer belongs to which row. Unmerge the answer cell, or add a field for "
+                        "it by hand on this page." % (cell.id, len(shared), rows))
+                logs = ["%d-%d" % (min(a.target["rows"]) + 1, max(a.target["rows"]) + 1) for a in gone
+                        if a.target.get("type") == "table_rows" and a.target.get("rows")]
+                if logs:
+                    note += " The log rows that write into it (table rows %s) were not mapped either." % ", ".join(logs)
+                if any(c.id == cell.id for _, c in kept):
                     note += " Its signing or protected area is kept as printed and completed by hand."
             else:
-                note = ("The cell at %s is one vertically merged cell beside %d printed rows (%s). Its signing or "
-                        "protected area is kept as printed and completed by hand; no answer is mapped there." % (
-                            cell.id, len(shared), rows))
+                note = ("The cell at %s is one vertically merged cell beside %d rows (%s). Its signing or protected area "
+                        "is kept as printed and completed by hand; no answer is mapped there." % (cell.id, len(shared), rows))
             self.notes.append(note)
 
     def qualify_sides(self):

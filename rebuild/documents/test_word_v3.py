@@ -2224,12 +2224,83 @@ class RoundThree(unittest.TestCase):
 
 # ─── round 4: the refutation of be743e94 (refute-wec-r3) - EC4 and EC5 withdrawn, EC3 extended fail-closed ────────────
 
+def _vmerge(cell, val=None):
+    """Mark python-docx cell `cell` as a vertical-merge continuation (or `val`, e.g. 'restart'), as raw XML."""
+    element = OxmlElement("w:vMerge")
+    if val:
+        element.set(qn("w:val"), val)
+    cell._tc.get_or_add_tcPr().append(element)
+
+
+def _raw_cell(table, row, col):
+    """The cell at XML position (row, col): python-docx's own lookup refuses a first-row continuation."""
+    from docx.table import _Cell
+    return _Cell(table._tbl.tr_lst[row].tc_lst[col], table)
+
+
+def _knees(answer=None, *, merge="restart", place="restart"):
+    """'Right knee' / 'Left knee' beside ONE vertically merged answer cell, then a separate Plan table. `merge`: 'restart'
+    (Word's own shape), 'plain' (a plain cell continued below, no restart) or 'continue' (both cells continuations, no
+    restart anywhere). `answer(cell)` fills the merge's first cell, or its continuation with place='continuation'."""
+    doc = Document()
+    doc.add_paragraph("Synthetic knee form")
+    table = doc.add_table(rows=2, cols=2)
+    table.style = doc.styles["Table Grid"]
+    table.cell(0, 0).text = "Right knee"
+    table.cell(1, 0).text = "Left knee"
+    if merge != "plain":
+        _vmerge(_raw_cell(table, 0, 1), None if merge == "continue" else merge)
+    _vmerge(_raw_cell(table, 1, 1))
+    if answer:
+        answer(_raw_cell(table, 0 if place == "restart" else 1, 1))
+    plan = doc.add_table(rows=1, cols=2)
+    plan.cell(0, 0).text = "Plan"
+    return docx_bytes(doc)
+
+
+def _log(heads, rows, col, first, last):
+    """A blank log under the header row `heads` with `rows` data rows, the cells of column `col` merged from data row
+    `first` to `last` (Word's restart + continuation), then a separate Plan table."""
+    doc = Document()
+    doc.add_paragraph("Synthetic chart")
+    table = doc.add_table(rows=rows + 1, cols=len(heads))
+    table.style = doc.styles["Table Grid"]
+    for c, text in enumerate(heads):
+        table.cell(0, c).text = text
+    table.cell(first, col).merge(table.cell(last, col))
+    plan = doc.add_table(rows=1, cols=2)
+    plan.cell(0, 0).text = "Plan"
+    return docx_bytes(doc)
+
+
 class RoundFour(unittest.TestCase):
-    """The refutation of be743e94. EC4 and EC5 are withdrawn: their finding inputs read as on b01e9cfa."""
+    """The refutation of be743e94. EC4 and EC5 are withdrawn: their finding inputs read as on b01e9cfa. EC3 is extended
+    in the fail-closed direction: a merge with no explicit restart is one merge (WEC3-m-2, m-4); an answer place in a
+    merge's continuation is in the merged cell (m-3); a merged cell across two answer rows of a log or of blank rows is
+    shared too, and a log that writes into it is withdrawn (m-1); a header copy is a place of its area (R3P-2)."""
     inspect = RefutationRepairs.inspect
     labels = RefutationRepairs.labels
     merged_rows = RefutationRepairs.merged_rows
     assert_shared = RefutationRepairs.assert_shared
+
+    def assert_unmapped(self, data, rows, col, *, names=(), table=0):
+        """No area writes into the merged cell (rows x col of table `table`), and the inspection says so once."""
+        info = self.inspect(data)
+        cells = ["b/tbl[%d]/tr[%d]/tc[%d]" % (table, r, col) for r in rows]
+        for f in info["fields"]:
+            target = f["locator"]["target"]
+            if target.get("type") == "table_rows":
+                self.assertFalse(target["table"] == "b/tbl[%d]" % table and set(target["rows"]) & set(rows)
+                                 and col in target["columns"], (f["label"], target))
+            else:
+                places = [f["locator"]["slot"]] + [c["slot"] for c in target.get("copies", [])]
+                self.assertFalse([p for p in places for cell in cells if p == cell or p.startswith(cell + "/")],
+                                 (f["label"], places))
+        notes = [n for n in info["notes"] if "merged" in n]
+        self.assertEqual(len(notes), 1, info["notes"])
+        for name in names:
+            self.assertIn(name, notes[0])
+        return info
 
     # EC4 / EC5 withdrawn ─ the round-3 finding inputs read as on b01e9cfa
     def test_wr3s1_inline_numbered_blanks_keep_their_bare_markers(self):
@@ -2249,6 +2320,119 @@ class RoundFour(unittest.TestCase):
         fields = self.inspect(docx_bytes(doc))["fields"]
         logs = [f for f in fields if f["kind"] == "table_rows"]
         self.assertEqual([f["locator"]["target"]["rows"] for f in logs], [[1, 2, 3, 4]], [(f["label"], f["kind"]) for f in fields])
+
+    # WEC3-m-1 ─ a merged cell across two answer rows of a log is mapped for neither, and the log writing into it is not
+    def test_wec3_m1_a_merged_cell_across_log_rows_is_mapped_for_no_row(self):
+        for name, heads, rows, col, first, last in (
+                ("comments rows 2-3", ("Time", "BP", "Pulse", "Comments"), 6, 3, 2, 3),
+                ("dose rows 1-2", ("Date", "Drug", "Dose"), 6, 2, 1, 2),
+                ("drug rows 2-3", ("Date", "Drug", "Dose"), 6, 1, 2, 3),
+                ("dose rows 2-4", ("Date", "Drug", "Dose"), 6, 2, 2, 4),
+                ("dose, last two rows", ("Date", "Drug", "Dose"), 4, 2, 3, 4),
+                ("date (first column) rows 2-3", ("Date", "Drug", "Dose"), 6, 0, 2, 3)):
+            with self.subTest(name):
+                self.assert_unmapped(_log(heads, rows, col, first, last), range(first, last + 1), col)
+
+    def test_wec3_m1_control_the_log_rows_clear_of_the_merge_stay_a_log(self):
+        info = self.inspect(_log(("Time", "BP", "Pulse", "Comments"), 6, 3, 2, 3))
+        self.assertIn([4, 5, 6], [f["locator"]["target"]["rows"] for f in info["fields"] if f["kind"] == "table_rows"])
+
+    # WEC3-m-2 ─ a merge with no explicit restart is one merge, as merged_restart reads it
+    def test_wec3_m2_a_merge_without_a_restart_is_still_one_shared_cell(self):
+        def control(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+
+        def underscores(cell):
+            cell.paragraphs[0].add_run("Effusion: ________________")
+
+        def glyphs(cell):
+            cell.paragraphs[0].add_run("☐ Effusion   ☐ Swelling")
+        for merge in ("plain", "continue"):
+            for name, answer in (("empty", None), ("control", control), ("underscores", underscores), ("glyphs", glyphs)):
+                if merge == "continue" and answer is None:
+                    continue   # no area at all: rule (d) never maps a continuation (b01e9cfa); see the control below
+                with self.subTest(merge=merge, answer=name):
+                    self.assert_unmapped(_knees(answer, merge=merge), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    def test_wec3_m2_control_an_empty_merge_of_continuations_maps_nothing(self):
+        info = self.inspect(_knees(None, merge="continue"))
+        self.assertFalse([f for f in info["fields"] if "knee" in f["label"]], [f["label"] for f in info["fields"]])
+
+    # WEC3-m-3 ─ an answer place in the merge's continuation is in the merged cell
+    def test_wec3_m3_an_answer_place_in_the_continuation_is_withdrawn(self):
+        def control(cell):
+            cell.paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+
+        def underscores(cell):
+            cell.paragraphs[0].add_run("Effusion: ________________")
+
+        def glyphs(cell):
+            cell.paragraphs[0].add_run("☐ Yes   ☐ No")
+
+        def form_field(cell):
+            ff_text_field(cell.paragraphs[0], name="Effusion")
+        for name, answer in (("control", control), ("underscores", underscores), ("glyphs", glyphs),
+                             ("form field", form_field)):
+            with self.subTest(answer=name):
+                self.assert_unmapped(_knees(answer, place="continuation"), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    def test_wec3_m3_a_printed_restart_with_a_control_in_the_continuation_is_withdrawn(self):
+        def printed(cell):
+            cell.paragraphs[0].add_run("Effusion")
+        doc = Document()
+        doc.add_paragraph("Synthetic knee form")
+        table = doc.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Right knee"
+        table.cell(1, 0).text = "Left knee"
+        table.cell(0, 1).merge(table.cell(1, 1))
+        printed(_raw_cell(table, 0, 1))
+        _raw_cell(table, 1, 1).paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+        self.assert_unmapped(docx_bytes(doc), (0, 1), 1, names=("Right knee", "Left knee"))
+
+    # WEC3-m-4 ─ a continued label with no restart above is its merge's first cell's question
+    def test_wec3_m4_a_continued_label_without_a_restart_counts_as_its_question(self):
+        for answer in ("control",):
+            with self.subTest(answer=answer):
+                doc = Document()
+                doc.add_paragraph("Synthetic knee form")
+                table = doc.add_table(rows=3, cols=2)
+                table.style = doc.styles["Table Grid"]
+                table.cell(2, 0).text = "Left knee"
+                _vmerge(_raw_cell(table, 0, 0))
+                _raw_cell(table, 0, 0).paragraphs[0].add_run("Right knee")
+                _vmerge(_raw_cell(table, 1, 0))
+                _vmerge(_raw_cell(table, 1, 1), "restart")
+                _vmerge(_raw_cell(table, 2, 1))
+                if answer == "control":
+                    _raw_cell(table, 1, 1).paragraphs[0]._p.append(_sdt("text", placeholder="Click here to enter text."))
+                plan = doc.add_table(rows=1, cols=2)
+                plan.cell(0, 0).text = "Plan"
+                info = self.assert_unmapped(docx_bytes(doc), (1, 2), 1, names=("Right knee", "Left knee"))
+                # the first row's own answer cell is not part of the merge and stays mapped
+                self.assertIn("b/tbl[0]/tr[0]/tc[1]", [f["locator"]["slot"] for f in info["fields"]])
+
+    # R3P-2 ─ a header copy is a place of its area: the outcome never depends on which header part comes first
+    def test_r3p2_a_header_copy_in_a_shared_merged_cell_withdraws_the_answer_in_either_order(self):
+        for merged_header in ("first page", "default"):
+            with self.subTest(merged_header=merged_header):
+                doc = Document()
+                section = doc.sections[0]
+                section.different_first_page_header_footer = True
+                for header, merge in ((section.header, merged_header == "default"),
+                                      (section.first_page_header, merged_header == "first page")):
+                    header.is_linked_to_previous = False
+                    table = header.add_table(rows=2, cols=2, width=section.page_width - section.left_margin - section.right_margin)
+                    table.cell(0, 0).text = "Patient name"
+                    table.cell(1, 0).text = "Date of birth"
+                    if merge:
+                        table.cell(0, 1).merge(table.cell(1, 1))
+                _underlined_tab(doc.add_paragraph("Reason for visit:"))
+                info = self.inspect(docx_bytes(doc))
+                self.assertNotIn("Patient name", [f["label"] for f in info["fields"]],
+                                 [(f["label"], f["locator"]["part"], f["locator"]["slot"], f["locator"]["target"].get("copies"))
+                                  for f in info["fields"]])
+                notes = [n for n in info["notes"] if "merged" in n]
+                self.assertEqual(len(notes), 1, info["notes"])
 
     # R3P-M5 ─ two rows printing the same words are two rows (identity is the cell, not its text)
     def test_r3pm5_two_rows_printing_the_same_words_share_the_cell(self):
